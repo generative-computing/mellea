@@ -229,6 +229,29 @@ def test_adapter_scope_is_noop():
         pass  # must not raise
 
 
+def test_adapter_scope_raises_for_a_shim_backed_adapter():
+    """adapter_scope now activates real weights, so a shim-backed adapter raises.
+
+    Deliberate behaviour change from Phase 1 (issue #1140), where `adapter_scope`
+    was `yield` unconditionally regardless of `adapter.weights`. `resolve_adapter()`
+    still returns `IntrinsicAdapter`/`LocalHFAdapter` shims carrying
+    `_ShimWeightsBinding`, whose `.activate()` raises `NotImplementedError` — so
+    `with backend.adapter_scope(backend.resolve_adapter(name)):` goes from a
+    no-op to a hard failure for every adapter the public API currently hands
+    out. Nothing in the codebase calls `adapter_scope` with a resolved adapter
+    yet (#1465 is the tracked cutover), but this pins the change as
+    deliberate rather than incidental — if #1465 needs `adapter_scope` to
+    tolerate shim/unprepared bindings instead, that decision should update
+    this test, not silently contradict it.
+    """
+    mock_backend = MagicMock(spec=AdapterMixin)
+    adapter = _make_intrinsic_adapter("answerability")
+
+    with pytest.raises(NotImplementedError, match="Phase 2"):
+        with AdapterMixin.adapter_scope(mock_backend, adapter):
+            pytest.fail("body must not run when the shim's activate() raises")
+
+
 def test_resolve_adapter_returns_existing_by_capability():
     """resolve_adapter must return an already-registered adapter without creating a new one."""
     existing = _make_intrinsic_adapter("answerability")
