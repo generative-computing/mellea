@@ -62,6 +62,16 @@ class Backend(abc.ABC):
     _provider: str
     """Provider name (e.g. 'openai', 'ollama'). Must be set by every backend implementation."""
 
+    # `action` is passed separately from `ctx` rather than appended to it so
+    # shared context stays referentially equal across calls — no deep copy
+    # needed when multiple requests (rejection sampling iterations, parallel
+    # requirement checks) run over the same context. This head/tail split is
+    # specific to the current linear-context stdlib patterns and doesn't
+    # generalize to a poset of possible generation points, which span-based
+    # backends will need to express; the signature may need to change again
+    # once that lands. Contexts are not actually immutable, so callers must
+    # take care about when a context gets modified — this may eventually
+    # need synchronization once concurrent mutation becomes possible.
     @final
     async def generate_from_context(
         self,
@@ -75,16 +85,7 @@ class Backend(abc.ABC):
         """Generates a model output from a context. May not mutate the context. This must be called from a running event loop as it creates a task to run the generation request.
 
         Args:
-            action: The component to generate from. Passed separately from `ctx` rather
-                than appended to it so that shared context is referentially equal across
-                calls — no deep copy is needed when multiple requests (e.g. rejection
-                sampling iterations, parallel requirement checks) run over the same
-                context. This also lets the backend see the exact generation target
-                without having to extract it from the context tail. This head/tail split
-                is specific to the current linear-context stdlib patterns; it does not
-                generalize to a poset of possible generation points, which span-based
-                backends will need to express, so the signature may need to change again
-                once that work lands.
+            action: The component to generate from, passed separately from `ctx`.
             ctx: The rest of the context, excluding `action`.
             format: A response format to used for structured outputs / constrained decoding.
             model_options: Any model options to upsert into the defaults for this call.

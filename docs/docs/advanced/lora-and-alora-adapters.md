@@ -116,7 +116,12 @@ m alora upload ./checkpoints/my_adapter \
 
 ## Use the adapter in Mellea
 
-Load the trained adapter into a `LocalHFBackend` using `CustomIntrinsicAdapter`:
+Load the trained adapter into a `LocalHFBackend` using `CustomIntrinsicAdapter`.
+
+> **Note:** `CustomIntrinsicAdapter` is deprecated in favor of the `Adapter` /
+> `WeightsBinding` model, but is still the only working way to load a
+> locally-trained custom adapter — `Adapter`'s weight-loading is not yet
+> implemented. This example will move to `Adapter` once that lands; see #1144.
 
 ```python
 from mellea.backends.huggingface import LocalHFBackend
@@ -130,10 +135,15 @@ backend = LocalHFBackend(model_id="ibm-granite/granite-3.2-8b-instruct")
 adapter = CustomIntrinsicAdapter(
     model_id="your-org/my-adapter",       # HF repo ID or local checkpoint path
     base_model_name="granite-3.2-8b-instruct",
+    intrinsic_name="requirement-check",   # must match this for plain req() to find it
 )
 backend.add_adapter(adapter)
 
 m = MelleaSession(backend, ctx=ChatContext())
+
+# A UserWarning about "requirement-check" not being a known capability is
+# expected and benign here — it's advisory, checked against catalog entries
+# for built-in adapter functions, and doesn't apply to custom ones like this.
 
 failure_check = req("The failure mode must not be 'no_failure'.")
 result = m.instruct(
@@ -167,8 +177,9 @@ adapter is preferred whenever one is loaded, with three exceptions:
 
 If you want to force the adapter path even when using `generate_from_context`
 directly (bypassing the normal `validate()` call), use `ALoraRequirement` from
-`mellea.stdlib.requirements` — routing through the adapter is then guaranteed
-regardless of `default_to_constraint_checking_alora`.
+`mellea.stdlib.requirements` — this bypasses `default_to_constraint_checking_alora`,
+but still requires a matching adapter to actually be registered. If none is found,
+Mellea logs a warning and falls back to regular generation rather than erroring.
 
 ## Disable adapter validation
 
