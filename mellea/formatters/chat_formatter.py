@@ -38,6 +38,11 @@ class ChatFormatter(Formatter):
         Returns:
             list[Message]: A list of `Message` objects ready for submission to
                 a chat completion endpoint.
+
+        Raises:
+            ValueError: If a component declares a `role` (via its
+                `TemplateRepresentation`) outside `Message.Role`; role
+                validation is deferred to `Message`/`ToolMessage`.
         """
 
         def _to_msg(c: Span) -> Message:
