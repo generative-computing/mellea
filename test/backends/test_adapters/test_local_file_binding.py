@@ -7,6 +7,7 @@ Uses a fake AdapterMixin-conforming backend double throughout — no real HF
 model or network access.
 """
 
+import threading
 from collections.abc import Coroutine
 from unittest.mock import MagicMock, patch
 
@@ -148,6 +149,53 @@ def test_deactivate_delegates_to_backend_verb():
     binding.deactivate()
 
     backend.deactivate_peft_adapter.assert_called_once_with(binding.qualified_name)
+
+
+def test_activate_holds_the_backends_activation_lock():
+    """`activate()` must hold whatever lock `_adapter_activation_lock()` returns.
+
+    `activate_peft_adapter`/`deactivate_peft_adapter` document "must be called
+    while holding `_generation_lock`" as a precondition on the backend side;
+    `_adapter_activation_lock()` is the only thing satisfying that precondition
+    on this path (`adapter_scope` holds no lock of its own). A real
+    `threading.Lock` proves it's actually held during the call, not just
+    entered-and-exited around a no-op.
+    """
+    backend = _fake_backend()
+    lock = threading.Lock()
+    backend._adapter_activation_lock.return_value = lock
+    binding = LocalFileBinding(name="answerability")
+    binding.bind_backend(backend)
+    binding.prepare()
+
+    observed_locked = {}
+    backend.activate_peft_adapter.side_effect = lambda _name: (
+        observed_locked.setdefault("during_call", lock.locked())
+    )
+
+    binding.activate()
+
+    assert observed_locked["during_call"] is True
+    assert not lock.locked()
+
+
+def test_deactivate_holds_the_backends_activation_lock():
+    backend = _fake_backend()
+    lock = threading.Lock()
+    backend._adapter_activation_lock.return_value = lock
+    binding = LocalFileBinding(name="answerability")
+    binding.bind_backend(backend)
+    binding.prepare()
+
+    observed_locked = {}
+    backend.deactivate_peft_adapter.side_effect = lambda _name: (
+        observed_locked.setdefault("during_call", lock.locked())
+    )
+
+    binding.deactivate()
+
+    assert observed_locked["during_call"] is True
+    assert not lock.locked()
 
 
 def test_release_without_prepare_is_noop():

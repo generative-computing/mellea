@@ -62,3 +62,26 @@ def test_no_backend_implements_server_mediated_reality():
     """set_request_adapter has no concrete implementation anywhere yet."""
     assert "set_request_adapter" not in vars(LocalHFBackend)
     assert "set_request_adapter" not in vars(OpenAIBackend)
+
+
+def test_default_adapter_activation_lock_is_a_noop():
+    """The mixin default is a no-op context manager, not a real lock.
+
+    Backends whose activation verbs mutate shared, non-thread-safe state
+    override this; a backend that doesn't (nothing to protect) gets a
+    `nullcontext` for free rather than having to implement one.
+    """
+    mock_backend = MagicMock(spec=AdapterMixin)
+
+    with AdapterMixin._adapter_activation_lock(mock_backend):
+        pass
+
+
+def test_hf_backend_overrides_adapter_activation_lock():
+    """LocalHFBackend overrides the lock (it has shared PEFT model state to protect)."""
+    assert "_adapter_activation_lock" in vars(LocalHFBackend)
+
+
+def test_openai_backend_does_not_override_adapter_activation_lock():
+    """OpenAIBackend has no PEFT model state, so it keeps the mixin's no-op default."""
+    assert "_adapter_activation_lock" not in vars(OpenAIBackend)

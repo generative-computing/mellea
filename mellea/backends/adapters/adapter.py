@@ -336,6 +336,32 @@ def get_adapter_for_intrinsic(
     return adapter
 
 
+def _fire_phase_complete_hook(name: str, phase: str, duration_ms: float) -> None:
+    """Fire the `adapter_function_phase_complete` metric hook for a phase that already ran.
+
+    Split out of `_run_adapter_phase` so a caller that must guarantee cleanup
+    after a phase's side effect — e.g. `adapter_scope` guaranteeing
+    `deactivate()` runs once `activate()` has succeeded — can run the side
+    effect and this hook fire under separate exception handling, rather than
+    a hook-dispatch failure masquerading as "the side effect never happened".
+
+    Args:
+        name: Adapter function name, used as the metric's `name` field.
+        phase: Lifecycle phase name; must be a valid
+            `AdapterFunctionPhaseCompletePayload.phase` value.
+        duration_ms: Wall-clock duration of the phase, in milliseconds.
+    """
+    if not has_plugins(HookType.ADAPTER_FUNCTION_PHASE_COMPLETE):
+        return
+    from ...plugins.hooks.adapter_function import AdapterFunctionPhaseCompletePayload
+
+    payload = AdapterFunctionPhaseCompletePayload(
+        name=name, phase=phase, duration_ms=duration_ms
+    )
+    hook_coro = invoke_hook(HookType.ADAPTER_FUNCTION_PHASE_COMPLETE, payload)
+    _run_async_in_thread(hook_coro)
+
+
 def _run_adapter_phase(name: str, phase: str, phase_fn: Callable[[], None]) -> None:
     """Run one lifecycle phase and fire its phase-complete metric hook.
 
@@ -357,16 +383,7 @@ def _run_adapter_phase(name: str, phase: str, phase_fn: Callable[[], None]) -> N
     """
     started_at = time.monotonic()
     phase_fn()
-
-    if not has_plugins(HookType.ADAPTER_FUNCTION_PHASE_COMPLETE):
-        return
-    from ...plugins.hooks.adapter_function import AdapterFunctionPhaseCompletePayload
-
-    payload = AdapterFunctionPhaseCompletePayload(
-        name=name, phase=phase, duration_ms=(time.monotonic() - started_at) * 1000.0
-    )
-    hook_coro = invoke_hook(HookType.ADAPTER_FUNCTION_PHASE_COMPLETE, payload)
-    _run_async_in_thread(hook_coro)
+    _fire_phase_complete_hook(name, phase, (time.monotonic() - started_at) * 1000.0)
 
 
 def _fire_invocation_complete(
@@ -687,6 +704,12 @@ class AdapterMixin(Backend, abc.ABC):
         a plugin to open a span on. See `docs/dev/adapter_observability.md` for the
         metric schema.
 
+        `deactivate()` is guarded on `activate()`'s own side effect having
+        completed, not on the activate phase's hook dispatch also succeeding.
+        If a plugin subscribed to `ADAPTER_FUNCTION_PHASE_COMPLETE` raises after
+        `activate()` already flipped the adapter on, `deactivate()` still runs —
+        telemetry must not be able to strand the adapter active.
+
         Args:
             adapter: The adapter to activate, or `None` (no-op).
         """
@@ -701,12 +724,19 @@ class AdapterMixin(Backend, abc.ABC):
 
         outcome: Literal["success", "schema_error", "error"] = "success"
         exception: BaseException | None = None
+        activated = False
         try:
-            _run_adapter_phase(name, "activate", adapter.weights.activate)
+            started_at = time.monotonic()
             try:
+                adapter.weights.activate()
+                activated = True
+                _fire_phase_complete_hook(
+                    name, "activate", (time.monotonic() - started_at) * 1000.0
+                )
                 yield
             finally:
-                _run_adapter_phase(name, "deactivate", adapter.weights.deactivate)
+                if activated:
+                    _run_adapter_phase(name, "deactivate", adapter.weights.deactivate)
         except AdapterSchemaMismatchError as exc:
             # Distinct from a generic error: this is the schema-drift signal the
             # `parse_failures` counter exists to detect, so collapsing it into

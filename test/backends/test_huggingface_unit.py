@@ -312,6 +312,20 @@ def test_deactivate_peft_adapter_reraises_other_value_errors():
         backend.deactivate_peft_adapter("my_adapter")
 
 
+def test_adapter_activation_lock_is_the_generation_lock():
+    """`_adapter_activation_lock()` reuses `_generation_lock`, not a separate lock.
+
+    `LocalFileBinding.activate()`/`.deactivate()` (driven by `adapter_scope()`)
+    hold no lock of their own and rely on this method for the exclusivity
+    `_generate_with_adapter_lock` otherwise gets from holding `_generation_lock`
+    directly. If this ever returned a different lock, the two callers would no
+    longer be mutually exclusive.
+    """
+    backend = _make_backend()
+
+    assert backend._adapter_activation_lock() is backend._generation_lock
+
+
 def test_list_adapters_reflects_registration_not_just_loading():
     """list_adapters() must include adapters registered via add_adapter, even
     if they've never been loaded (aligns HF's semantics with OpenAI's).

@@ -9,7 +9,7 @@ metric hooks only and opens no spans, so no exporter is involved; the hook
 dispatch safely no-ops when no plugins are registered.
 """
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -80,6 +80,39 @@ def test_adapter_scope_deactivates_even_when_activate_raises():
             pytest.fail("body must not run when activate() raises")
 
     weights.deactivate.assert_not_called()
+
+
+def test_adapter_scope_deactivates_even_when_activate_phase_hook_raises():
+    """A telemetry-hook failure right after `activate()` succeeds must not skip `deactivate()`.
+
+    Regression guard: `activate()`'s side effect and its phase-complete hook fire
+    used to share one failure path, so a hook-dispatch exception looked
+    identical to `activate()` itself failing and skipped `deactivate()` —
+    stranding the adapter active. Here only the hook fails; `weights.activate()`
+    itself succeeds. Patches `invoke_hook` (present before and after the fix)
+    rather than the post-fix `_fire_phase_complete_hook` helper, so this guard
+    is meaningful against the pre-fix implementation too.
+    """
+    mock_backend = MagicMock(spec=AdapterMixin)
+    adapter, weights = _make_adapter()
+
+    def _raise_on_activate_hook(hook_type: object, payload: object) -> None:
+        if getattr(payload, "phase", None) == "activate":
+            raise RuntimeError("plugin dispatch blew up")
+
+    with (
+        patch("mellea.backends.adapters.adapter.has_plugins", return_value=True),
+        patch(
+            "mellea.backends.adapters.adapter.invoke_hook",
+            side_effect=_raise_on_activate_hook,
+        ),
+    ):
+        with pytest.raises(RuntimeError, match="plugin dispatch blew up"):
+            with AdapterMixin.adapter_scope(mock_backend, adapter):
+                pytest.fail("body must not run when the activate hook raises")
+
+    weights.activate.assert_called_once()
+    weights.deactivate.assert_called_once()
 
 
 def test_adapter_scope_propagates_deactivate_error_over_body_success():
