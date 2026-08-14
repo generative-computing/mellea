@@ -434,7 +434,13 @@ class LocalFileBinding(WeightsBinding):
                     "`release()` is terminal and does not free the name for re-use "
                     "(see #1528)."
                 )
-        self.backend.load_peft_adapter(self.qualified_name)
+        # `load_peft_adapter` mutates the backend's underlying PEFT model, the
+        # same shared state `activate_peft_adapter`/`deactivate_peft_adapter`
+        # document "must be called while holding `_generation_lock`" for.
+        # `prepare()`/`release()` aren't driven through `adapter_scope`, so
+        # nothing else takes this lock on their behalf.
+        with self.backend._adapter_activation_lock():
+            self.backend.load_peft_adapter(self.qualified_name)
         self._loaded = True
         self._fire_phase_complete("prepare", time.monotonic() - started_at)
 
@@ -488,7 +494,11 @@ class LocalFileBinding(WeightsBinding):
         if self.backend is None:
             return
 
-        self.backend.unload_peft_adapter(self.qualified_name)
+        # See the matching comment in `prepare()`: this mutates the same
+        # shared PEFT model state `activate_peft_adapter`/
+        # `deactivate_peft_adapter` require the lock for.
+        with self.backend._adapter_activation_lock():
+            self.backend.unload_peft_adapter(self.qualified_name)
 
         self.backend = None
         self.path = None

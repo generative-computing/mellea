@@ -735,6 +735,22 @@ class AdapterMixin(Backend, abc.ABC):
         `activate()` already flipped the adapter on, `deactivate()` still runs —
         telemetry must not be able to strand the adapter active.
 
+        Not atomic across the whole scope: `_adapter_activation_lock()` is
+        held only inside each of `activate()`/`deactivate()`'s own verb calls
+        (see `LocalFileBinding.activate`), not for the `with` body in between.
+        Two concurrent `adapter_scope()` calls on one backend can therefore
+        interleave — one thread's body can run while a different adapter is
+        active, activated by another thread's call. Widening the lock to span
+        the whole scope was tried and reverted: it deadlocks the moment the
+        body does real async generation (confirmed against
+        `test_local_file_e2e.py`), because that work runs on the shared
+        event-loop thread while this thread holds the lock — a same-thread
+        `RLock` doesn't help across threads. No caller combines concurrent
+        `adapter_scope()` calls today (nothing outside tests calls it at all),
+        so this is latent, not reachable — but #1465 (wiring real generation
+        through this scope) has to solve the atomicity and the threading
+        interaction together, not layer one fix on top of the other.
+
         Args:
             adapter: The adapter to activate, or `None` (no-op).
         """
