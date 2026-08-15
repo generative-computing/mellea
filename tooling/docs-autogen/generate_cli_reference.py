@@ -165,9 +165,9 @@ def _parse_two_column_block(content: str) -> list[tuple[str, str]] | None:
 
     Example input::
 
-        add-await-result  Adds await_result=True to each call.
-                          Continuation of the description.
-        add-stream-loop   Inserts a while loop after each call.
+        first-mode   Description of the first mode.
+                     Continuation of the description.
+        second-mode  Description of the second mode.
     """
     pairs: list[tuple[str, str]] = []
     current_name: str | None = None

@@ -7,7 +7,8 @@
 variants for a model (Hugging Face, Ollama, WatsonX, MLX, OpenAI, Bedrock) so that
 a single constant can be passed to any backend without manual string translation.
 The module also ships a curated catalog of ready-to-use constants for popular
-open-weight models including IBM Granite 4, Meta Llama 4, Mistral, and Qwen families.
+open-weight models including IBM Granite 4, Meta Llama 4, Mistral, Qwen, and
+NVIDIA Nemotron families.
 """
 
 import dataclasses
@@ -26,9 +27,19 @@ class ModelIdentifier:
         ollama_name (str | None): Ollama model tag (e.g. `"granite3.3:8b"`).
         watsonx_name (str | None): WatsonX AI model ID (e.g. `"ibm/granite-3-2b-instruct"`).
         mlx_name (str | None): MLX model identifier for Apple Silicon inference.
-        openai_name (str | None): OpenAI API model name (e.g. `"gpt-5.1"`).
+        openai_name (str | None): Model name for an OpenAI-compatible chat completions API
+            (e.g. `"gpt-5.1"`). Not necessarily a model hosted by OpenAI — see the note below.
         bedrock_name (str | None): AWS Bedrock model ID (e.g. `"openai.gpt-oss-20b"`).
         hf_tokenizer_name (str | None): Hugging Face tokenizer ID; defaults to `hf_model_name` if `None`.
+
+    Note:
+        `openai_name` means "name for an OpenAI-compatible endpoint", not "hosted by OpenAI".
+        Open-weight models in this catalog use it for the provider that hosts them — the
+        `NVIDIA_*` constants, for example, carry their NVIDIA-hosted NIM names, served from
+        `https://integrate.api.nvidia.com/v1`. Such a name will 404 against the default
+        `https://api.openai.com/v1`, so set `base_url` to match the provider. Self-hosted
+        servers such as vLLM serve a model under whatever name it was launched with, which
+        by default is `hf_model_name`, not `openai_name`.
 
     """
 
@@ -276,6 +287,113 @@ QWEN3_14B = ModelIdentifier(
     hf_model_name="Qwen/Qwen3-14B",  # Qwen 14B
     ollama_name="qwen3:14b",  # Ollama
     context_length=40960,
+)
+
+#######################
+#### NVIDIA models ####
+#######################
+
+# `openai_name` below is the NVIDIA-hosted NIM name, served from
+# `https://integrate.api.nvidia.com/v1` — an OpenAI-compatible endpoint, but *not* OpenAI.
+# Pass a matching `base_url` (and an NVIDIA API key) when using these with `OpenAIBackend`.
+# These names do not apply to self-hosted vLLM/SGLang, which serve under whatever
+# `--served-model-name` they were launched with (by default, the `hf_model_name` repo id).
+
+#### Nemotron 3 models (hybrid Mamba-Transformer, current generation) ####
+# HF publishes one repo per precision; the BF16 repos are the reference weights.
+NVIDIA_NEMOTRON_3_NANO_4B = ModelIdentifier(
+    hf_model_name="nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16",
+    ollama_name="nemotron-3-nano:4b",
+    mlx_name="mlx-community/NVIDIA-Nemotron-3-Nano-4B-4bit",
+    # No NIM or Bedrock endpoint: this size ships for local/edge inference only.
+    context_length=262144,
+)
+
+NVIDIA_NEMOTRON_3_NANO_30B_A3B = ModelIdentifier(
+    hf_model_name="nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16",
+    ollama_name="nemotron-3-nano:30b",
+    mlx_name="mlx-community/NVIDIA-Nemotron-3-Nano-30B-A3B-4bit",
+    openai_name="nvidia/nemotron-3-nano-30b-a3b",
+    bedrock_name="nvidia.nemotron-nano-3-30b",
+    bedrock_litellm_name="bedrock/converse/nvidia.nemotron-nano-3-30b",
+    context_length=262144,
+)
+
+NVIDIA_NEMOTRON_3_SUPER_120B_A12B = ModelIdentifier(
+    hf_model_name="nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-BF16",
+    ollama_name="nemotron-3-super:120b",
+    mlx_name="mlx-community/NVIDIA-Nemotron-3-Super-120B-A12B-4bit",
+    openai_name="nvidia/nemotron-3-super-120b-a12b",
+    bedrock_name="nvidia.nemotron-super-3-120b",
+    bedrock_litellm_name="bedrock/converse/nvidia.nemotron-super-3-120b",
+    context_length=262144,
+)
+
+NVIDIA_NEMOTRON_3_ULTRA_550B_A55B = ModelIdentifier(
+    hf_model_name="nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B-BF16",
+    ollama_name="nemotron-3-ultra:cloud",  # Ollama ships this size cloud-only; no local weights.
+    openai_name="nvidia/nemotron-3-ultra-550b-a55b",
+    context_length=262144,
+)
+
+# Nemotron 3 Nano Omni: video, audio, image, and text understanding.
+NVIDIA_NEMOTRON_3_NANO_OMNI_30B_A3B = ModelIdentifier(
+    hf_model_name="nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning-BF16",
+    ollama_name="nemotron3:33b",
+    openai_name="nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+    context_length=131072,  # Multimodal max_sequence_length; the text tower alone allows 262144.
+)
+
+#### Nemotron Nano v2 models ####
+NVIDIA_NEMOTRON_NANO_9B_V2 = ModelIdentifier(
+    hf_model_name="nvidia/NVIDIA-Nemotron-Nano-9B-v2",
+    mlx_name="mlx-community/NVIDIA-Nemotron-Nano-9B-v2-4bits",
+    openai_name="nvidia/nvidia-nemotron-nano-9b-v2",  # Doubled prefix is NVIDIA's own naming.
+    bedrock_name="nvidia.nemotron-nano-9b-v2",
+    bedrock_litellm_name="bedrock/converse/nvidia.nemotron-nano-9b-v2",
+    context_length=131072,
+)
+
+# No hosted endpoint for the text-only 12B v2. NVIDIA and AWS both host only the
+# vision-language variant (NIM `nvidia/nemotron-nano-12b-v2-vl`, Bedrock
+# `nvidia.nemotron-nano-12b-v2`), which is a different model than the repo below.
+NVIDIA_NEMOTRON_NANO_12B_V2 = ModelIdentifier(
+    hf_model_name="nvidia/NVIDIA-Nemotron-Nano-12B-v2", context_length=131072
+)
+
+#### Llama-Nemotron models ####
+NVIDIA_LLAMA_3_1_NEMOTRON_NANO_8B = ModelIdentifier(
+    hf_model_name="nvidia/Llama-3.1-Nemotron-Nano-8B-v1",
+    openai_name="nvidia/llama-3.1-nemotron-nano-8b-v1",
+    context_length=131072,
+)
+
+NVIDIA_LLAMA_3_3_NEMOTRON_SUPER_49B = ModelIdentifier(
+    hf_model_name="nvidia/Llama-3_3-Nemotron-Super-49B-v1_5",
+    openai_name="nvidia/llama-3.3-nemotron-super-49b-v1.5",
+    context_length=131072,
+)
+
+NVIDIA_LLAMA_3_1_NEMOTRON_ULTRA_253B = ModelIdentifier(
+    hf_model_name="nvidia/Llama-3_1-Nemotron-Ultra-253B-v1",
+    openai_name="nvidia/llama-3.1-nemotron-ultra-253b-v1",
+    context_length=131072,
+)
+
+NVIDIA_LLAMA_3_1_NEMOTRON_70B = ModelIdentifier(
+    hf_model_name="nvidia/Llama-3.1-Nemotron-70B-Instruct-HF",
+    ollama_name="nemotron:70b",
+    mlx_name="mlx-community/Llama-3.1-Nemotron-70B-Instruct-HF-4bit",
+    openai_name="nvidia/llama-3.1-nemotron-70b-instruct",
+    context_length=131072,
+)
+
+#### Nemotron Mini ####
+NVIDIA_NEMOTRON_MINI_4B = ModelIdentifier(
+    hf_model_name="nvidia/Nemotron-Mini-4B-Instruct",
+    ollama_name="nemotron-mini:4b",
+    openai_name="nvidia/nemotron-mini-4b-instruct",
+    context_length=4096,
 )
 
 ###########################
