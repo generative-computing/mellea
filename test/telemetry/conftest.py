@@ -34,6 +34,7 @@ def reset_metrics_state() -> None:
     metrics._token_usage_histogram = None
     metrics._duration_histogram = None
     metrics._ttfb_histogram = None
+    metrics._time_per_output_chunk_histogram = None
     metrics._error_counter = None
     metrics._cost_counter = None
     metrics._sampling_attempts_counter = None

@@ -19,6 +19,7 @@ from mellea.plugins.hooks.generation import (
     GenerationBatchErrorPayload,
     GenerationBatchPostCallPayload,
     GenerationErrorPayload,
+    GenerationEventPayload,
     GenerationPostCallPayload,
 )
 from mellea.plugins.hooks.sampling import (
@@ -328,6 +329,63 @@ async def test_batch_latency_missing_model_provider(latency_plugin):
             operation="text_completion",
             streaming=False,
         )
+
+
+@pytest.mark.asyncio
+async def test_chunk_interval_records_time_per_output_chunk(latency_plugin):
+    """A chunk_processed event with an interval records the metric (ms -> s)."""
+    payload = GenerationEventPayload(
+        generation_id="gid-ev",
+        event_name="chunk_processed",
+        model="gpt-4",
+        provider="openai",
+        data={
+            "chunk_index": 2,
+            "chunk_text_length": 5,
+            "time_since_last_chunk_ms": 40.0,
+        },
+    )
+
+    with patch("mellea.telemetry.metrics.record_time_per_output_chunk") as mock_record:
+        await latency_plugin.record_chunk_interval_metrics(payload, {})
+
+        mock_record.assert_called_once_with(
+            time_s=0.04, model="gpt-4", provider="openai", operation="chat"
+        )
+
+
+@pytest.mark.asyncio
+async def test_chunk_interval_skips_first_chunk(latency_plugin):
+    """The first chunk carries no interval (None) and records nothing."""
+    payload = GenerationEventPayload(
+        generation_id="gid-ev",
+        event_name="chunk_processed",
+        model="gpt-4",
+        provider="openai",
+        data={
+            "chunk_index": 0,
+            "chunk_text_length": 5,
+            "time_since_last_chunk_ms": None,
+        },
+    )
+
+    with patch("mellea.telemetry.metrics.record_time_per_output_chunk") as mock_record:
+        await latency_plugin.record_chunk_interval_metrics(payload, {})
+
+        mock_record.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_chunk_interval_ignores_other_events(latency_plugin):
+    """A non-chunk_processed generation_event records nothing."""
+    payload = GenerationEventPayload(
+        generation_id="gid-ev", event_name="something_else", data={}
+    )
+
+    with patch("mellea.telemetry.metrics.record_time_per_output_chunk") as mock_record:
+        await latency_plugin.record_chunk_interval_metrics(payload, {})
+
+        mock_record.assert_not_called()
 
 
 # ErrorMetricsPlugin tests

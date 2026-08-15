@@ -628,6 +628,7 @@ def test_metric_instruments_lazy_initialization(enable_metrics):
         _sampling_attempts_counter,
         _sampling_failures_counter,
         _sampling_successes_counter,
+        _time_per_output_chunk_histogram,
         _token_usage_histogram,
         _tool_calls_counter,
         _ttfb_histogram,
@@ -637,6 +638,7 @@ def test_metric_instruments_lazy_initialization(enable_metrics):
     assert _token_usage_histogram is None
     assert _duration_histogram is None
     assert _ttfb_histogram is None
+    assert _time_per_output_chunk_histogram is None
     assert _cost_counter is None
     assert _sampling_attempts_counter is None
     assert _sampling_successes_counter is None
@@ -658,6 +660,7 @@ def test_metric_instruments_lazy_initialization(enable_metrics):
         record_requirement_failure,
         record_sampling_attempt,
         record_sampling_outcome,
+        record_time_per_output_chunk,
         record_token_usage_metrics,
         record_tool_call,
     )
@@ -671,6 +674,9 @@ def test_metric_instruments_lazy_initialization(enable_metrics):
     )
     record_request_duration(
         duration_s=1.0, model="llama2:7b", provider="ollama", operation="chat"
+    )
+    record_time_per_output_chunk(
+        time_s=0.05, model="llama2:7b", provider="ollama", operation="chat"
     )
     record_cost(cost=0.001, model="llama2:7b", provider="ollama", operation="chat")
     record_sampling_attempt("RejectionSamplingStrategy")
@@ -700,6 +706,7 @@ def test_metric_instruments_lazy_initialization(enable_metrics):
         _sampling_attempts_counter,
         _sampling_failures_counter,
         _sampling_successes_counter,
+        _time_per_output_chunk_histogram,
         _token_usage_histogram,
         _tool_calls_counter,
         _ttfb_histogram,
@@ -707,6 +714,7 @@ def test_metric_instruments_lazy_initialization(enable_metrics):
 
     assert _token_usage_histogram is not None
     assert _duration_histogram is not None
+    assert _time_per_output_chunk_histogram is not None
     assert _adapter_function_invocations_counter is not None
     assert _adapter_function_phase_duration_histogram is not None
     assert _adapter_function_parse_failures_counter is not None
@@ -732,6 +740,7 @@ def test_record_metrics_noop_when_disabled(clean_metrics_env):
         record_requirement_failure,
         record_sampling_attempt,
         record_sampling_outcome,
+        record_time_per_output_chunk,
         record_token_usage_metrics,
         record_tool_call,
     )
@@ -745,6 +754,9 @@ def test_record_metrics_noop_when_disabled(clean_metrics_env):
     )
     record_request_duration(
         duration_s=1.0, model="llama2:7b", provider="ollama", operation="chat"
+    )
+    record_time_per_output_chunk(
+        time_s=0.05, model="llama2:7b", provider="ollama", operation="chat"
     )
     record_error(
         error_type="timeout",
@@ -770,6 +782,7 @@ def test_record_metrics_noop_when_disabled(clean_metrics_env):
         _sampling_attempts_counter,
         _sampling_failures_counter,
         _sampling_successes_counter,
+        _time_per_output_chunk_histogram,
         _token_usage_histogram,
         _tool_calls_counter,
         _ttfb_histogram,
@@ -778,6 +791,7 @@ def test_record_metrics_noop_when_disabled(clean_metrics_env):
     assert _token_usage_histogram is None
     assert _duration_histogram is None
     assert _ttfb_histogram is None
+    assert _time_per_output_chunk_histogram is None
     assert _error_counter is None
     assert _cost_counter is None
     assert _sampling_attempts_counter is None
@@ -797,6 +811,7 @@ def test_record_functions_exported_in_public_api():
         record_requirement_failure,
         record_sampling_attempt,
         record_sampling_outcome,
+        record_time_per_output_chunk,
         record_token_usage_metrics,
         record_tool_call,
         record_ttfb,
@@ -805,6 +820,7 @@ def test_record_functions_exported_in_public_api():
     assert callable(record_token_usage_metrics)
     assert callable(record_request_duration)
     assert callable(record_ttfb)
+    assert callable(record_time_per_output_chunk)
     assert callable(record_cost)
     assert callable(record_sampling_attempt)
     assert callable(record_sampling_outcome)

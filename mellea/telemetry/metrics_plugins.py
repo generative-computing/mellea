@@ -35,6 +35,7 @@ if TYPE_CHECKING:
         GenerationBatchErrorPayload,
         GenerationBatchPostCallPayload,
         GenerationErrorPayload,
+        GenerationEventPayload,
         GenerationPostCallPayload,
     )
     from mellea.plugins.hooks.sampling import (
@@ -173,6 +174,38 @@ class LatencyMetricsPlugin(Plugin, name="latency_metrics", priority=1051):
             provider=payload.provider or "unknown",
             operation="text_completion",
             streaming=False,
+        )
+
+    @hook("generation_event", mode=PluginMode.FIRE_AND_FORGET)
+    async def record_chunk_interval_metrics(
+        self, payload: GenerationEventPayload, context: dict[str, Any]
+    ) -> None:
+        """Record inter-chunk timing from `chunk_processed` events.
+
+        Each streamed chunk after the first carries an interval; the first has
+        none and is skipped. `chunk_processed` events are opt-in via
+        `MELLEA_GENERATION_CHUNK_EVENTS`, so the
+        `gen_ai.client.operation.time_per_output_chunk` histogram stays empty
+        unless that flag is set.
+
+        Args:
+            payload: A `generation_event`; the `chunk_processed` variant carries
+                `time_since_last_chunk_ms` in `data`.
+            context: Plugin context (unused).
+        """
+        if payload.event_name != "chunk_processed":
+            return
+        time_since_last_chunk_ms = payload.data.get("time_since_last_chunk_ms")
+        if time_since_last_chunk_ms is None:
+            return
+
+        from mellea.telemetry.metrics import record_time_per_output_chunk
+
+        record_time_per_output_chunk(
+            time_s=time_since_last_chunk_ms / 1000.0,
+            model=payload.model or "unknown",
+            provider=payload.provider or "unknown",
+            operation="chat",
         )
 
 

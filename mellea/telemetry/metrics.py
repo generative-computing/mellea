@@ -58,7 +58,7 @@ Example - Multiple exporters:
 
 Built-in metrics (auto-recorded via plugins when metrics are enabled):
 - Token usage histogram: gen_ai.client.token.usage (unit: {token}), split by gen_ai.token.type (input/output)
-- Latency histograms: gen_ai.client.operation.duration (unit: s), gen_ai.client.operation.time_to_first_chunk (unit: s, streaming only)
+- Latency histograms: gen_ai.client.operation.duration (unit: s), gen_ai.client.operation.time_to_first_chunk (unit: s, streaming only), gen_ai.client.operation.time_per_output_chunk (unit: s, streaming only, opt-in via MELLEA_GENERATION_CHUNK_EVENTS)
 - Error counter: mellea.llm.errors (unit: {error}), categorized by semantic error type
 - Cost counter: mellea.llm.cost.usd (unit: USD), estimated cost when pricing data is available
 - Sampling counters: mellea.sampling.attempts, mellea.sampling.successes, mellea.sampling.failures (unit: {attempt}/{sample}/{failure})
@@ -305,6 +305,27 @@ def _setup_meter_provider() -> Any:
         ),
         View(  # type: ignore
             instrument_name="gen_ai.client.operation.time_to_first_chunk",
+            aggregation=ExplicitBucketHistogramAggregation(  # type: ignore
+                [
+                    0.01,
+                    0.02,
+                    0.04,
+                    0.08,
+                    0.16,
+                    0.32,
+                    0.64,
+                    1.28,
+                    2.56,
+                    5.12,
+                    10.24,
+                    20.48,
+                    40.96,
+                    81.92,
+                ]
+            ),
+        ),
+        View(  # type: ignore
+            instrument_name="gen_ai.client.operation.time_per_output_chunk",
             aggregation=ExplicitBucketHistogramAggregation(  # type: ignore
                 [
                     0.01,
@@ -626,6 +647,7 @@ def record_token_usage_metrics(
 # These are lazily initialized on first use and kept internal
 _duration_histogram: Any = None
 _ttfb_histogram: Any = None
+_time_per_output_chunk_histogram: Any = None
 
 
 def _get_latency_histograms() -> tuple[Any, Any]:
@@ -737,6 +759,49 @@ def record_ttfb(ttfb_s: float, model: str, provider: str, operation: str) -> Non
         "gen_ai.operation.name": operation,
     }
     ttfb_hist.record(ttfb_s, attributes)
+
+
+def _get_time_per_output_chunk_histogram() -> Any:
+    """Get or create the time-per-output-chunk histogram (internal use only)."""
+    global _time_per_output_chunk_histogram
+
+    if _time_per_output_chunk_histogram is None:
+        _time_per_output_chunk_histogram = create_histogram(
+            "gen_ai.client.operation.time_per_output_chunk",
+            description=(
+                "Time per output chunk, recorded for each chunk received after "
+                "the first one, measured as the time elapsed from the end of the "
+                "previous chunk to the end of the current chunk."
+            ),
+            unit="s",
+        )
+    return _time_per_output_chunk_histogram
+
+
+def record_time_per_output_chunk(
+    time_s: float, model: str, provider: str, operation: str
+) -> None:
+    """Record the inter-arrival time between consecutive streamed output chunks.
+
+    This is a no-op when metrics are disabled, ensuring zero overhead.
+
+    Args:
+        time_s: Seconds between the previous chunk and this one.
+        model: Model identifier (e.g., "gpt-4", "llama2:7b")
+        provider: Provider name (e.g., "openai", "ollama", "watsonx")
+        operation: GenAI operation name (e.g. "chat", "text_completion")
+    """
+    if _meter is None:
+        return
+
+    _get_time_per_output_chunk_histogram().record(
+        time_s,
+        {
+            "gen_ai.request.model": model,
+            "gen_ai.provider.name": _normalize_provider_name(provider),
+            "gen_ai.operation.name": operation,
+        },
+    )
 
 
 # ---------------------------------------------------------------------------

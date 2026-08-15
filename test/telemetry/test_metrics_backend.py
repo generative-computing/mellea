@@ -92,6 +92,7 @@ def _setup_metrics_provider(metrics_module, metric_reader):
     metrics_module._token_usage_histogram = None
     metrics_module._duration_histogram = None
     metrics_module._ttfb_histogram = None
+    metrics_module._time_per_output_chunk_histogram = None
     metrics_module._error_counter = None
     metrics_module._sampling_attempts_counter = None
     metrics_module._sampling_successes_counter = None
@@ -161,12 +162,15 @@ def get_metric_value(metrics_data, metric_name, attributes=None):
 @pytest.mark.asyncio
 @pytest.mark.ollama
 @pytest.mark.parametrize("stream", [False, True], ids=["non-streaming", "streaming"])
-async def test_ollama_token_metrics_integration(enable_metrics, metric_reader, stream):
+async def test_ollama_token_metrics_integration(
+    enable_metrics, metric_reader, monkeypatch, stream
+):
     """Test that Ollama backend records token metrics correctly."""
     from mellea.backends.model_options import ModelOption
     from mellea.backends.ollama import OllamaModelBackend
     from mellea.telemetry import metrics as metrics_module
 
+    monkeypatch.setenv("MELLEA_GENERATION_CHUNK_EVENTS", "true")
     provider = _setup_metrics_provider(metrics_module, metric_reader)
 
     backend = OllamaModelBackend(model_id=IBM_GRANITE_4_1_3B.ollama_name)  # type: ignore
@@ -216,6 +220,18 @@ async def test_ollama_token_metrics_integration(enable_metrics, metric_reader, s
         )
         assert ttfb_dp is not None, "TTFB should be recorded for streaming requests"
         assert ttfb_dp.sum > 0, "TTFB should be > 0"
+
+        # With MELLEA_GENERATION_CHUNK_EVENTS enabled, each chunk after the
+        # first records an inter-chunk interval.
+        tpoc_dp = _find_histogram_data_point(
+            metrics_data, "gen_ai.client.operation.time_per_output_chunk"
+        )
+        assert tpoc_dp is not None, (
+            "time_per_output_chunk should be recorded when chunk events are enabled"
+        )
+        assert tpoc_dp.count >= 1, (
+            "at least one inter-chunk interval should be recorded"
+        )
 
 
 @pytest.mark.asyncio

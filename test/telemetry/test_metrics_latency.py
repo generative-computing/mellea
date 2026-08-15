@@ -44,6 +44,7 @@ def _setup_in_memory_provider(metrics_module):
     metrics_module._meter = provider.get_meter("mellea")
     metrics_module._duration_histogram = None
     metrics_module._ttfb_histogram = None
+    metrics_module._time_per_output_chunk_histogram = None
     return reader, provider
 
 
@@ -167,6 +168,30 @@ def test_record_request_duration_negative_skipped(clean_metrics_env):
         reader.get_metrics_data(), "gen_ai.client.operation.duration"
     )
     assert data_points == []
+
+
+def test_record_time_per_output_chunk(clean_metrics_env):
+    """The time-per-output-chunk histogram is populated with correct attributes."""
+    from mellea.telemetry import metrics as metrics_module
+
+    reader, provider = _setup_in_memory_provider(metrics_module)
+
+    from mellea.telemetry.metrics import record_time_per_output_chunk
+
+    record_time_per_output_chunk(
+        time_s=0.05, model="gpt-4", provider="openai", operation="chat"
+    )
+
+    provider.force_flush()
+    data_points = _find_histogram(
+        reader.get_metrics_data(), "gen_ai.client.operation.time_per_output_chunk"
+    )
+
+    assert len(data_points) == 1
+    attrs = dict(data_points[0].attributes)
+    assert attrs["gen_ai.request.model"] == "gpt-4"
+    assert attrs["gen_ai.provider.name"] == "openai"
+    assert attrs["gen_ai.operation.name"] == "chat"
 
 
 def test_record_ttfb(clean_metrics_env):
