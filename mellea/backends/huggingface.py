@@ -1766,8 +1766,10 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             # Construct a per-MOT GenerateDecoderOnlyOutput slice holding clones of row i.
             # past_key_values, attentions, and hidden_states are shared across the batch
             # and cannot be sliced per MOT, so they are omitted.
-            if isinstance(outputs.sequences, torch.Tensor):
-                mot_scores: tuple[torch.Tensor, ...] | None = None
+            if isinstance(outputs, GenerateDecoderOnlyOutput) and isinstance(
+                outputs.sequences, torch.Tensor
+            ):
+                mot_scores: tuple | None = None
                 if outputs.scores is not None:
                     mot_scores = tuple(
                         s[i : i + 1, :].detach().clone() for s in outputs.scores
@@ -1792,8 +1794,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                         "torch.LongTensor",
                         outputs.sequences[i : i + 1, :].detach().clone(),
                     ),
-                    scores=mot_scores,
-                    logits=mot_logits_raw,
+                    scores=cast("tuple[torch.FloatTensor] | None", mot_scores),
+                    logits=cast("tuple[torch.FloatTensor] | None", mot_logits_raw),
                     attentions=None,
                     hidden_states=None,
                     past_key_values=None,
@@ -1827,15 +1829,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             result._generate_log = generate_log
             results.append(result)
 
-        # Drop the shared batch output — per-MOT views in raw.response keep the
-        # underlying tensor storage alive
-        import gc
-
-        if torch.cuda.is_available():
-            MelleaLogger.get_logger().debug(
-                "GPU memory before raw batch cleanup: %d bytes allocated",
-                torch.cuda.memory_allocated(),
-            )
+        # Drop the shared batch output — per-MOT clones in raw.response own their
+        # own storage, so releasing the batch frees its memory.
         if hasattr(outputs, "sequences") and outputs.sequences is not None:
             del outputs.sequences
         if hasattr(outputs, "scores") and outputs.scores is not None:
@@ -1848,12 +1843,18 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             del outputs.hidden_states
         if hasattr(outputs, "past_key_values") and outputs.past_key_values is not None:
             del outputs.past_key_values
-        gc.collect()
-        torch.cuda.empty_cache()
         if torch.cuda.is_available():
+            import gc
+
             MelleaLogger.get_logger().debug(
-                "GPU memory after raw batch cleanup: %d bytes allocated",
-                torch.cuda.memory_allocated(),
+                "GPU memory before raw batch cleanup: %d bytes reserved",
+                torch.cuda.memory_reserved(),
+            )
+            gc.collect()
+            torch.cuda.empty_cache()
+            MelleaLogger.get_logger().debug(
+                "GPU memory after raw batch cleanup: %d bytes reserved",
+                torch.cuda.memory_reserved(),
             )
 
         usage: dict[str, Any] | None = (

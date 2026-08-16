@@ -1072,12 +1072,12 @@ async def test_generate_from_raw_raw_response_set_per_mot():
 
 
 @pytest.mark.asyncio
-async def test_generate_from_raw_raw_response_scores_are_views_when_logits_requested():
-    """raw.response.scores is a tuple of views when ModelOption.LOGITS is set.
+async def test_generate_from_raw_raw_response_scores_are_clones_when_logits_requested():
+    """raw.response.scores is a tuple of clones when ModelOption.LOGITS is set.
 
-    Each tensor in raw.response.scores must share storage with the corresponding
-    step tensor in the original batch scores (view, not clone), distinct from
-    generation.logits which holds clones.
+    Each tensor in raw.response.scores must own compact per-row storage and must
+    not share storage with the corresponding batch step tensor — consistent with
+    generation.logits which also holds clones.
     """
     batch_size = 2
     vocab_size = 32000
