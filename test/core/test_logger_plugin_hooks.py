@@ -29,8 +29,6 @@ import datetime
 # ---------------------------------------------------------------------------
 # Minimal mock backend (avoids real LLM calls)
 # ---------------------------------------------------------------------------
-from unittest.mock import MagicMock
-
 from mellea.core.backend import Backend
 from mellea.core.base import (
     CBlock,
@@ -38,8 +36,6 @@ from mellea.core.base import (
     GenerateLog,
     GenerateType,
     ModelOutputThunk,
-    _CallInfo,
-    _GenerationState,
 )
 from mellea.core.utils import (
     MelleaLogger,
@@ -60,20 +56,11 @@ class _MockBackend(Backend):
         self._provider: str = "mock-provider"
 
     async def _generate_from_context(self, action, ctx, **kwargs):
-        mot = MagicMock(spec=ModelOutputThunk)
-        mot._gen = _GenerationState()
-        mot._call = _CallInfo()
+        mot = ModelOutputThunk(value="mocked output")
         glog = GenerateLog()
         glog.prompt = "mocked prompt"
         mot._generate_log = glog
-        mot.parsed_repr = None
         mot._gen.start = datetime.datetime.now()
-
-        async def _avalue():
-            return "mocked output"
-
-        mot.avalue = _avalue
-        mot.value = "mocked output"
         return mot, SimpleContext()
 
     async def _generate_from_raw(self, actions, ctx, **kwargs):

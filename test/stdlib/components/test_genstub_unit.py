@@ -7,7 +7,8 @@ Covers describe_function, get_argument, bind_function_arguments,
 create_response_format, GenerativeStub.format_for_llm, and @generative routing.
 """
 
-from typing import Literal
+import inspect
+from typing import Any, Literal, get_type_hints
 
 import pytest
 
@@ -26,7 +27,11 @@ from mellea.stdlib.components.genstub import (
     get_argument,
 )
 from mellea.stdlib.requirements.requirement import reqify
-from test.stdlib.components._pep563_fixtures import extract_requirements, greet
+from test.stdlib.components._postponed_annotation_samples import (
+    extract_requirements,
+    greet,
+    price_item,
+)
 
 # --- describe_function ---
 
@@ -80,12 +85,50 @@ def test_describe_function_resolves_postponed_annotations():
     assert "'list[Requirement]'" not in result["signature"]
     assert "product_description: str" in result["signature"]
     assert (
-        "list[test.stdlib.components._pep563_fixtures.Requirement]"
+        "list[test.stdlib.components._postponed_annotation_samples.Requirement]"
         in result["signature"]
     )
 
 
+def test_describe_function_type_checking_only_return_annotation():
+    # Regression test: resolving the whole signature with `eval_str=True` also
+    # evaluates the return annotation, so a return type imported only under
+    # `if TYPE_CHECKING:` raised NameError and no prompt could be built at all.
+    # Parameters must still resolve; the unresolvable return stays a postponed
+    # string and renders quoted, which still names the type for the model.
+    # Guard the preconditions: the annotation must still be postponed, and the
+    # whole-signature path must still fail, or this stops testing the fallback.
+    assert price_item.__annotations__["return"] == "Decimal"
+    with pytest.raises(NameError):
+        inspect.signature(price_item, eval_str=True)
+
+    signature = describe_function(price_item)["signature"]
+
+    # Parameters resolved: no quoted parameter annotations.
+    assert "quantity: int" in signature
+    assert "'int'" not in signature
+    assert (
+        "item: test.stdlib.components._postponed_annotation_samples.Requirement"
+        in signature
+    )
+    # Return left postponed, so the model still sees the type name.
+    assert signature.endswith("-> 'Decimal'")
+
+
 # --- get_argument ---
+
+
+def test_get_argument_type_checking_only_return_annotation():
+    # Regression test: `get_argument` reads only the named parameter's
+    # annotation, but resolved the whole signature, so an unresolvable return
+    # type raised NameError even though the parameter resolved cleanly.
+    # Guard the precondition: same reasoning as the describe_function case.
+    with pytest.raises(NameError):
+        inspect.signature(price_item, eval_str=True)
+
+    arg = get_argument(price_item, "quantity", 3)
+    assert arg._argument_dict["value"] == 3
+    assert "int" in str(arg._argument_dict["annotation"])
 
 
 def test_get_argument_string_value_quoted():
@@ -186,6 +229,37 @@ def test_create_response_format_literal_type():
     model = create_response_format(classify)
     instance = model(result="pos")
     assert instance.result == "pos"
+
+
+def test_create_response_format_type_checking_only_return_falls_back_to_any():
+    # Regression test: `get_type_hints` resolves every annotation, so a return
+    # type imported only under `if TYPE_CHECKING:` raised NameError here. This
+    # runs from `GenerativeStub.__init__`, i.e. at decoration time, so the
+    # failure made the whole module unimportable rather than degrading anything.
+    # Guard the precondition: resolution must still fail, or this tests nothing.
+    with pytest.raises(NameError):
+        get_type_hints(price_item)
+
+    model = create_response_format(price_item)
+
+    # Degrades to `Any` — the same fallback an unannotated function already
+    # gets — rather than failing the decoration.
+    assert model.model_fields["result"].annotation is Any
+    instance = model(result="anything")
+    assert instance.result == "anything"
+
+
+def test_generative_decoration_survives_type_checking_only_return():
+    # The user-facing path: `@generative` calls `create_response_format` and
+    # `describe_function` during construction, so both must tolerate a return
+    # annotation that cannot be resolved.
+    stub = generative(price_item)
+
+    assert stub._response_model.model_fields["result"].annotation is Any
+    # Parameters still resolve for the prompt; only the return stays postponed.
+    signature = stub._function._function_dict["signature"]
+    assert "quantity: int" in signature
+    assert signature.endswith("-> 'Decimal'")
 
 
 # --- GenerativeStub.format_for_llm ---

@@ -13,7 +13,6 @@ Supports Ollama and OpenAI-compatible inference backends.
 """
 
 import re
-from enum import StrEnum
 from typing import Literal, NotRequired, TypedDict
 
 from mellea import MelleaSession
@@ -21,6 +20,7 @@ from mellea.backends import ModelOption
 from mellea.backends.ollama import OllamaModelBackend
 from mellea.backends.openai import OpenAIBackend
 
+from ._types import DecompBackend as DecompBackend  # re-exported for callers
 from .logging import LogMode, configure_logging, get_logger, log_section
 from .prompt_modules import (
     constraint_extractor,
@@ -122,18 +122,6 @@ class DecompPipelineResult(TypedDict):
     identified_constraints: list[ConstraintResult]
     subtasks: list[DecompSubtasksResult]
     final_response: NotRequired[str]
-
-
-class DecompBackend(StrEnum):
-    """Inference backends supported by the decomposition pipeline.
-
-    Attributes:
-        ollama: Local Ollama inference server backend.
-        openai: OpenAI-compatible HTTP API backend.
-    """
-
-    ollama = "ollama"
-    openai = "openai"
 
 
 RE_JINJA_VAR = re.compile(r"\{\{\s*(.*?)\s*\}\}")

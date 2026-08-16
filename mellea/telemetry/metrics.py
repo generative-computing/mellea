@@ -81,6 +81,11 @@ Programmatic usage:
         unit="s"
     )
     latency_histogram.record(1.5, {"backend": "ollama"})
+
+Consumption boundary:
+    This is a public API for external consumers. Code outside
+    `mellea/telemetry/` records metrics via hook plugins (`metrics_plugins.py`),
+    not by calling these functions. No exceptions.
 """
 
 import asyncio

@@ -21,6 +21,7 @@ from typing import Annotated, Any, Literal, ParamSpec, TypeVar, overload
 from pydantic import BaseModel, ConfigDict, Field
 
 from mellea.core.utils import MelleaLogger
+from mellea.helpers.annotation_helpers import resolve_signature_annotations
 from mellea.helpers.event_loop_helper import _run_async_in_thread
 
 from ..core import Component, Span, TemplateRepresentation
@@ -1344,15 +1345,20 @@ def convert_function_to_ollama_tool(
     """
     doc_string_hash = str(hash(inspect.getdoc(func)))
     parsed_docstring = _parse_docstring(inspect.getdoc(func))
+    # Under `from __future__ import annotations` (PEP 563) every annotation is
+    # a string, which Pydantic cannot resolve for non-builtin parameter types.
+    # This schema never consumes the return annotation, so an unresolvable one
+    # is left as a string rather than being allowed to fail the conversion.
+    sig = resolve_signature_annotations(func)
     schema = type(
         func.__name__,
         (BaseModel,),
         {
             "__annotations__": {
                 k: v.annotation if v.annotation != inspect._empty else str
-                for k, v in inspect.signature(func).parameters.items()
+                for k, v in sig.parameters.items()
             },
-            "__signature__": inspect.signature(func),
+            "__signature__": sig,
             "__doc__": parsed_docstring[doc_string_hash],
         },
     ).model_json_schema()  # type: ignore
