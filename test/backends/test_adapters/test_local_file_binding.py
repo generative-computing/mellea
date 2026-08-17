@@ -9,6 +9,7 @@ model or network access.
 
 import threading
 from collections.abc import Coroutine
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -115,6 +116,31 @@ def test_prepare_is_idempotent():
 
     backend.add_adapter.assert_called_once()
     backend.load_peft_adapter.assert_called_once()
+
+
+def test_prepare_ignores_phase_hook_dispatch_failure():
+    """A prepare hook failure must not make successfully loaded weights unusable."""
+    backend = _fake_backend()
+    binding = LocalFileBinding(name="answerability")
+    binding.bind_backend(backend)
+
+    with (
+        patch("mellea.backends.adapters._core.has_plugins", return_value=True),
+        patch(
+            "mellea.plugins.hooks.adapter_function.AdapterFunctionPhaseCompletePayload",
+            side_effect=lambda **kwargs: SimpleNamespace(**kwargs),
+        ),
+        patch(
+            "mellea.backends.adapters._core.invoke_hook",
+            side_effect=RuntimeError("plugin dispatch blew up"),
+        ),
+    ):
+        binding.prepare()
+
+    assert binding._loaded
+    binding.activate()
+    backend.load_peft_adapter.assert_called_once_with(binding.qualified_name)
+    backend.activate_peft_adapter.assert_called_once_with(binding.qualified_name)
 
 
 def test_prepare_retries_only_the_load_after_a_load_failure():

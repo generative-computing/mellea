@@ -342,8 +342,9 @@ def _fire_phase_complete_hook(name: str, phase: str, duration_ms: float) -> None
     Split out of `_run_adapter_phase` so a caller that must guarantee cleanup
     after a phase's side effect — e.g. `adapter_scope` guaranteeing
     `deactivate()` runs once `activate()` has succeeded — can run the side
-    effect and this hook fire under separate exception handling, rather than
-    a hook-dispatch failure masquerading as "the side effect never happened".
+    effect and this hook fire under separate exception handling. A hook-dispatch
+    failure is logged and ignored: observability must not turn a completed
+    lifecycle phase into an operation failure.
 
     Args:
         name: Adapter function name, used as the metric's `name` field.
@@ -358,8 +359,16 @@ def _fire_phase_complete_hook(name: str, phase: str, duration_ms: float) -> None
     payload = AdapterFunctionPhaseCompletePayload(
         name=name, phase=phase, duration_ms=duration_ms
     )
-    hook_coro = invoke_hook(HookType.ADAPTER_FUNCTION_PHASE_COMPLETE, payload)
-    _run_async_in_thread(hook_coro)
+    try:
+        hook_coro = invoke_hook(HookType.ADAPTER_FUNCTION_PHASE_COMPLETE, payload)
+        _run_async_in_thread(hook_coro)
+    except Exception:
+        MelleaLogger.get_logger().warning(
+            f"adapter_function_phase_complete hook dispatch failed for {name!r} "
+            f"during {phase!r}; ignoring so it does not turn a completed phase "
+            "into an operation failure.",
+            exc_info=True,
+        )
 
 
 def _run_adapter_phase(name: str, phase: str, phase_fn: Callable[[], None]) -> None:

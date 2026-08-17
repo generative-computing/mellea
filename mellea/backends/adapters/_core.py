@@ -29,7 +29,7 @@ import warnings
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar, Literal
 
-from ...core import Component
+from ...core import Component, MelleaLogger
 from ...helpers.event_loop_helper import _run_async_in_thread
 from ...plugins.manager import has_plugins, invoke_hook
 from ...plugins.types import HookType
@@ -525,11 +525,19 @@ class LocalFileBinding(WeightsBinding):
             AdapterFunctionPhaseCompletePayload,
         )
 
-        payload = AdapterFunctionPhaseCompletePayload(
-            name=self.name, phase=phase, duration_ms=duration_s * 1000.0
-        )
-        hook_coro = invoke_hook(HookType.ADAPTER_FUNCTION_PHASE_COMPLETE, payload)
-        _run_async_in_thread(hook_coro)
+        try:
+            payload = AdapterFunctionPhaseCompletePayload(
+                name=self.name, phase=phase, duration_ms=duration_s * 1000.0
+            )
+            hook_coro = invoke_hook(HookType.ADAPTER_FUNCTION_PHASE_COMPLETE, payload)
+            _run_async_in_thread(hook_coro)
+        except Exception:
+            MelleaLogger.get_logger().warning(
+                f"adapter_function_phase_complete hook dispatch failed for {self.name!r} "
+                f"during {phase!r}; ignoring so it does not turn a completed phase "
+                "into an operation failure.",
+                exc_info=True,
+            )
 
 
 class EmbeddedBinding(WeightsBinding):

@@ -9,6 +9,7 @@ metric hooks only and opens no spans, so no exporter is involved; the hook
 dispatch safely no-ops when no plugins are registered.
 """
 
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -88,35 +89,32 @@ def test_adapter_scope_deactivates_even_when_activate_raises():
     weights.deactivate.assert_not_called()
 
 
-def test_adapter_scope_deactivates_even_when_activate_phase_hook_raises():
-    """A telemetry-hook failure right after `activate()` succeeds must not skip `deactivate()`.
-
-    Regression guard: `activate()`'s side effect and its phase-complete hook fire
-    used to share one failure path, so a hook-dispatch exception looked
-    identical to `activate()` itself failing and skipped `deactivate()` —
-    stranding the adapter active. Here only the hook fails; `weights.activate()`
-    itself succeeds. Patches `invoke_hook` (present before and after the fix)
-    rather than the post-fix `_fire_phase_complete_hook` helper, so this guard
-    is meaningful against the pre-fix implementation too.
-    """
+@pytest.mark.parametrize("failing_phase", ["activate", "deactivate"])
+def test_adapter_scope_ignores_phase_hook_dispatch_failures(failing_phase: str):
+    """A phase-hook failure must not break an otherwise successful scope."""
     mock_backend = MagicMock(spec=AdapterMixin)
     adapter, weights = _make_adapter()
+    body_ran = False
 
-    def _raise_on_activate_hook(hook_type: object, payload: object) -> None:
-        if getattr(payload, "phase", None) == "activate":
+    def _raise_on_phase_hook(hook_type: object, payload: object) -> None:
+        if getattr(payload, "phase", None) == failing_phase:
             raise RuntimeError("plugin dispatch blew up")
 
     with (
         patch("mellea.backends.adapters.adapter.has_plugins", return_value=True),
         patch(
+            "mellea.plugins.hooks.adapter_function.AdapterFunctionPhaseCompletePayload",
+            side_effect=lambda **kwargs: SimpleNamespace(**kwargs),
+        ),
+        patch(
             "mellea.backends.adapters.adapter.invoke_hook",
-            side_effect=_raise_on_activate_hook,
+            side_effect=_raise_on_phase_hook,
         ),
     ):
-        with pytest.raises(RuntimeError, match="plugin dispatch blew up"):
-            with AdapterMixin.adapter_scope(mock_backend, adapter):
-                pytest.fail("body must not run when the activate hook raises")
+        with AdapterMixin.adapter_scope(mock_backend, adapter):
+            body_ran = True
 
+    assert body_ran
     weights.activate.assert_called_once()
     weights.deactivate.assert_called_once()
 
