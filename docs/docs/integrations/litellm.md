@@ -5,7 +5,7 @@ sidebar_label: "LiteLLM"
 # diataxis: how-to
 ---
 
-The [`LiteLLMBackend`](../reference/glossary#litellm--litellmbackend) gives Mellea a
+The [`LiteLLMBackend`](../reference/glossary.md#litellm--litellmbackend) gives Mellea a
 single code path to 100+ model providers (Anthropic, AWS Bedrock, Azure OpenAI, IBM
 WatsonX, Google Vertex AI, and more) by delegating provider auth and request
 translation to [LiteLLM](https://docs.litellm.ai/). You switch providers by changing
