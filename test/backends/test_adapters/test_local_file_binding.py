@@ -348,6 +348,57 @@ def test_release_requires_deactivation_after_activation():
     backend.unload_peft_adapter.assert_called_once_with(binding.qualified_name)
 
 
+def test_release_cannot_race_activation_after_the_backend_selects_weights():
+    backend = _fake_backend()
+    lock = threading.Lock()
+    activate_exited_lock = threading.Event()
+    allow_activate_to_finish = threading.Event()
+    delayed_exits = [0]
+
+    class _ActivationLock:
+        def __enter__(self) -> None:
+            lock.acquire()
+
+        def __exit__(self, *_args: object) -> None:
+            lock.release()
+            if delayed_exits[0]:
+                delayed_exits[0] -= 1
+                activate_exited_lock.set()
+                allow_activate_to_finish.wait()
+
+    backend._adapter_activation_lock.return_value = _ActivationLock()
+    binding = LocalFileBinding(name="answerability")
+    binding.bind_backend(backend)
+    binding.prepare()
+    delayed_exits[0] = 1
+
+    activate_thread = threading.Thread(target=binding.activate)
+    activate_thread.start()
+    assert activate_exited_lock.wait(timeout=1)
+
+    release_error: list[BaseException] = []
+
+    def release() -> None:
+        try:
+            binding.release()
+        except BaseException as exc:
+            release_error.append(exc)
+
+    release_thread = threading.Thread(target=release)
+    release_thread.start()
+    allow_activate_to_finish.set()
+    activate_thread.join(timeout=1)
+    release_thread.join(timeout=1)
+
+    assert not activate_thread.is_alive()
+    assert not release_thread.is_alive()
+    assert len(release_error) == 1
+    assert isinstance(release_error[0], RuntimeError)
+    assert binding.backend is backend
+    assert binding._active
+    backend.unload_peft_adapter.assert_not_called()
+
+
 def test_release_retries_after_unload_failure():
     backend = _fake_backend()
     backend.unload_peft_adapter.side_effect = [

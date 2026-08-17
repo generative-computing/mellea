@@ -762,6 +762,11 @@ class AdapterMixin(Backend, abc.ABC):
 
         Args:
             adapter: The adapter to activate, or `None` (no-op).
+
+        Raises:
+            BaseException: An error raised by activation, the `with` body, or
+                deactivation. If both the body and deactivation fail, the body
+                error remains primary and the deactivation error is chained.
         """
         if adapter is None:
             yield

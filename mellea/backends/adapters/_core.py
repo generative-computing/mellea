@@ -459,13 +459,18 @@ class LocalFileBinding(WeightsBinding):
                 not complete (registered with the backend but the weights
                 load itself failed or hasn't been retried yet).
         """
-        if self.backend is None or not self._loaded:
+        backend = self.backend
+        if backend is None or not self._loaded:
             raise RuntimeError(
                 "LocalFileBinding.activate() requires prepare() to be called first."
             )
-        with self.backend._adapter_activation_lock():
-            self.backend.activate_peft_adapter(self.qualified_name)
-        self._active = True
+        with backend._adapter_activation_lock():
+            if self.backend is not backend or not self._loaded:
+                raise RuntimeError(
+                    "LocalFileBinding.activate() requires prepare() to be called first."
+                )
+            backend.activate_peft_adapter(self.qualified_name)
+            self._active = True
 
     def deactivate(self) -> None:
         """Deselects the adapter so generation uses the base model.
@@ -475,13 +480,18 @@ class LocalFileBinding(WeightsBinding):
                 not complete (registered with the backend but the weights
                 load itself failed or hasn't been retried yet).
         """
-        if self.backend is None or not self._loaded:
+        backend = self.backend
+        if backend is None or not self._loaded:
             raise RuntimeError(
                 "LocalFileBinding.deactivate() requires prepare() to be called first."
             )
-        with self.backend._adapter_activation_lock():
-            self.backend.deactivate_peft_adapter(self.qualified_name)
-        self._active = False
+        with backend._adapter_activation_lock():
+            if self.backend is not backend or not self._loaded:
+                raise RuntimeError(
+                    "LocalFileBinding.deactivate() requires prepare() to be called first."
+                )
+            backend.deactivate_peft_adapter(self.qualified_name)
+            self._active = False
 
     def release(self) -> None:
         """Unloads the adapter's weights from the backend and clears local state.
@@ -498,30 +508,36 @@ class LocalFileBinding(WeightsBinding):
         for the backend's lifetime and no later binding can register under it.
         Tracked in #1528, which also asks whether re-registration should be
         supported at all given the terminal contract.
+
+        Raises:
+            RuntimeError: The binding is active; call `deactivate()` before
+                releasing its weights.
         """
         if self._released:
             return
-        if self.backend is None:
+        backend = self.backend
+        if backend is None:
             self._staged_backend = None
             self._released = True
             return
-        if self._active:
-            raise RuntimeError(
-                "LocalFileBinding.release() requires deactivate() to be called first."
-            )
 
         # See the matching comment in `prepare()`: this mutates the same
         # shared PEFT model state `activate_peft_adapter`/
         # `deactivate_peft_adapter` require the lock for.
-        with self.backend._adapter_activation_lock():
-            self.backend.unload_peft_adapter(self.qualified_name)
-
-        self.backend = None
-        self.path = None
-        self._staged_backend = None
-        self._loaded = False
-        self._active = False
-        self._released = True
+        with backend._adapter_activation_lock():
+            if self.backend is not backend:
+                return
+            if self._active:
+                raise RuntimeError(
+                    "LocalFileBinding.release() requires deactivate() to be called first."
+                )
+            backend.unload_peft_adapter(self.qualified_name)
+            self.backend = None
+            self.path = None
+            self._staged_backend = None
+            self._loaded = False
+            self._active = False
+            self._released = True
 
     def _fire_phase_complete(self, phase: str, duration_s: float) -> None:
         """Fires `adapter_function_phase_complete` for a phase this binding owns.
