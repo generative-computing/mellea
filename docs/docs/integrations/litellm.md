@@ -66,8 +66,8 @@ print(str(result))
 > the correct endpoint from the `model_id` prefix. Only set `base_url` when you target
 > a proxy or a local server (see [Self-hosted LiteLLM Proxy](#self-hosted-litellm-proxy)).
 
-For full control, construct the [`Backend`](../reference/glossary#backend) directly and
-pass it to [`MelleaSession`](../reference/glossary#melleasession):
+For full control, construct the [`Backend`](../reference/glossary.md#backend) directly and
+pass it to [`MelleaSession`](../reference/glossary.md#melleasession):
 
 ```python
 # Requires: mellea[litellm]
