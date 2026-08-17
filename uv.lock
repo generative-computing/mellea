@@ -3440,7 +3440,7 @@ requires-dist = [
     { name = "mellea", extras = ["hooks"], marker = "extra == 'telemetry'", editable = "." },
     { name = "mellea", extras = ["watsonx", "hf", "litellm"], marker = "extra == 'backends'", editable = "." },
     { name = "mistletoe", specifier = ">=1.4.0" },
-    { name = "nltk", specifier = ">=3.9" },
+    { name = "nltk", specifier = ">=3.9,!=3.10.1" },
     { name = "ollama", specifier = ">=0.5.1" },
     { name = "omegaconf", marker = "extra == 'docling'", specifier = ">=2.1" },
     { name = "openai" },
