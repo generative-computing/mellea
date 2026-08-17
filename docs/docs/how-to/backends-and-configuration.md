@@ -30,7 +30,7 @@ The following table shows all available backends, their class names, import path
 
 | Backend | Class | Import | Required extras | `start_session()` |
 | ------- | ----- | ------ | --------------- | ----------------- |
-| [Ollama](../integrations/ollama) | `OllamaModelBackend` | `mellea.backends.ollama` | base | `backend_name="ollama"` |
+| [Ollama](../integrations/ollama.md) | `OllamaModelBackend` | `mellea.backends.ollama` | base | `backend_name="ollama"` |
 | [OpenAI](../integrations/openai.md) | `OpenAIBackend` | `mellea.backends.openai` | base | `backend_name="openai"` |
 | [LiteLLM](../integrations/litellm.md) | `LiteLLMBackend` | `mellea.backends.litellm` | `mellea[litellm]` | `backend_name="litellm"` |
 | [Hugging Face](../integrations/huggingface) | `LocalHFBackend` | `mellea.backends.huggingface` | `mellea[hf]` | `backend_name="hf"` |
