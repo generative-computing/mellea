@@ -273,7 +273,7 @@ the full list and any provider-specific variables.
 
 ## Model options
 
-Pass generation parameters with [`ModelOption`](../reference/glossary#modeloption), the
+Pass generation parameters with [`ModelOption`](../reference/glossary.md#modeloption), the
 same as any other backend. Options set at construction apply to all calls; options
 passed to `instruct()` or `chat()` apply to that call only and take precedence:
 
