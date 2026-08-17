@@ -58,4 +58,3 @@ with start_session() as m:
 ## Related Documentation
 
 - See `mellea/stdlib/components/genstub.py` for implementation
-- See `docs/dev/mellea_library.md` for design philosophy

@@ -95,4 +95,3 @@ ctx = WindowCompactor(size=0).compact(ctx)                      # drop body, kee
 - See `mellea/stdlib/context/` for context and compactor implementations
 - See `mellea/stdlib/sampling/` for sampling strategies
 - See `mellea/stdlib/frameworks/react.py` for the ReACT loop
-- See `docs/dev/spans.md` for context architecture details
