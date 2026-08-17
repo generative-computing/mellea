@@ -307,14 +307,14 @@ applicable:
 
 | Attribute | Description |
 | --------- | ----------- |
-| `mellea.model_id` | Model identifier used for the call |
-| `mellea.backend` | Backend identifier (e.g. `"ollama"`) |
-| `mellea.action_type` | Component type (e.g. `generative`, `instruct`) |
-| `mellea.context_size` | Number of context items passed |
-| `mellea.has_requirements` | Whether requirements were specified |
-| `mellea.strategy_type` | Sampling strategy used |
-| `mellea.tool_calls` | Whether tool calling was enabled |
-| `mellea.format_type` | Response format class |
+| `gen_ai.request.model` | Model identifier used for the call |
+| `gen_ai.provider.name` | Provider name (e.g. `"ollama"`) |
+| `mellea.component.type` | Component type (e.g. `generative`, `instruct`) |
+| `mellea.request.context_size` | Number of context items passed |
+| `mellea.action.has_requirements` | Whether requirements were specified |
+| `mellea.sampling.strategy_type` | Sampling strategy used |
+| `mellea.action.tool_calls` | Whether tool calling was enabled |
+| `mellea.request.format_type` | Response format class |
 
 ## What to try next
 

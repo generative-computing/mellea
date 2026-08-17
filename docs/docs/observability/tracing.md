@@ -112,9 +112,9 @@ Covers the lifetime of a session used as a context manager.
 
 | Attribute | Description |
 | --------- | ----------- |
-| `mellea.session_id` | UUID identifying this session |
-| `mellea.context_type` | Context class name (e.g., `SimpleContext`) |
-| `mellea.backend` | Backend identifier (e.g., `"ollama"`); set when known |
+| `mellea.session.id` | UUID identifying this session |
+| `mellea.session.context_type` | Context class name (e.g., `SimpleContext`) |
+| `gen_ai.provider.name` | Resolved provider name (e.g., `"ollama"`); set when known |
 
 #### `start_session` span
 
@@ -122,9 +122,10 @@ Covers session construction (backend setup and model resolution).
 
 | Attribute | Description |
 | --------- | ----------- |
-| `mellea.backend` | Backend identifier (e.g., `"ollama"`) |
-| `mellea.model_id` | Resolved model id string |
-| `mellea.context_type` | Context class name |
+| `mellea.session.id` | UUID identifying this session |
+| `mellea.session.backend_name` | Requested backend name (e.g., `"ollama"`, `"hf"`), before resolution |
+| `gen_ai.request.model` | Resolved model id string |
+| `mellea.session.context_type` | Context class name |
 
 #### `action` span
 
@@ -132,16 +133,16 @@ One per `m.act()`, `m.instruct()`, `m.chat()`, or `@generative` call.
 
 | Attribute | Description |
 | --------- | ----------- |
-| `mellea.action_type` | Component class being executed (e.g., `Instruction`) |
-| `mellea.has_requirements` | Whether requirements were supplied |
-| `mellea.has_strategy` | Whether a sampling strategy was supplied |
-| `mellea.strategy_type` | Sampling strategy class name when present |
-| `mellea.has_format` | Whether a format constraint was specified |
-| `mellea.tool_calls` | Whether tool calling is enabled |
-| `mellea.num_generate_logs` | Number of generation attempts (>1 means retries occurred) |
-| `mellea.sampling_success` | Whether the sampling strategy succeeded |
-| `mellea.response` | Model response truncated to 500 characters; recorded only when `MELLEA_TRACES_CONTENT=true` |
-| `mellea.response_length` | Length of the model response (always recorded) |
+| `mellea.component.type` | Component class being executed (e.g., `Instruction`) |
+| `mellea.action.has_requirements` | Whether requirements were supplied |
+| `mellea.action.has_strategy` | Whether a sampling strategy was supplied |
+| `mellea.sampling.strategy_type` | Sampling strategy class name when present |
+| `mellea.action.has_format` | Whether a format constraint was specified |
+| `mellea.action.tool_calls` | Whether tool calling is enabled |
+| `mellea.action.num_generate_logs` | Number of generation attempts (>1 means retries occurred) |
+| `mellea.sampling.success` | Whether the sampling strategy succeeded |
+| `mellea.action.response` | Model response truncated to 500 characters; recorded only when `MELLEA_TRACES_CONTENT=true` |
+| `mellea.action.response_length` | Length of the model response (always recorded) |
 
 #### `execute_tool {name}` span
 
@@ -170,12 +171,12 @@ produces a passing sample or exhausts its budget.
 
 | Attribute | Description |
 | --------- | ----------- |
-| `mellea.strategy_type` | Sampling strategy class name (e.g., `RejectionSamplingStrategy`) |
-| `mellea.loop_budget` | Maximum iterations per subsample |
-| `mellea.requirement_count` | Number of requirements validated each iteration |
-| `mellea.sampling_success` | Whether at least one attempt passed all requirements |
-| `mellea.iterations_used` | Total iterations that completed across subsamples |
-| `mellea.failure_reason` | Human-readable reason when `mellea.sampling_success` is `false` |
+| `mellea.sampling.strategy_type` | Sampling strategy class name (e.g., `RejectionSamplingStrategy`) |
+| `mellea.sampling.loop_budget` | Maximum iterations per subsample |
+| `mellea.sampling.requirement_count` | Number of requirements validated each iteration |
+| `mellea.sampling.success` | Whether at least one attempt passed all requirements |
+| `mellea.sampling.iterations_used` | Total iterations that completed across subsamples |
+| `mellea.sampling.failure_reason` | Human-readable reason when `mellea.sampling.success` is `false` |
 
 It also records an `iteration` span event per attempt and a `repair` span event
 per repair.
@@ -186,11 +187,11 @@ One per requirement-validation batch, wherever requirements are checked.
 
 | Attribute | Description |
 | --------- | ----------- |
-| `mellea.requirement_count` | Number of requirements validated |
-| `mellea.validation_passed` | Whether every requirement passed |
-| `mellea.passed_count` | Number of requirements that passed |
-| `mellea.failed_count` | Number of requirements that failed |
-| `mellea.failure_reasons` | List of failing requirements' reasons; recorded only when `MELLEA_TRACES_CONTENT=true` |
+| `mellea.validation.requirement_count` | Number of requirements validated |
+| `mellea.validation.passed` | Whether every requirement passed |
+| `mellea.validation.passed_count` | Number of requirements that passed |
+| `mellea.validation.failed_count` | Number of requirements that failed |
+| `mellea.validation.failure_reasons` | List of failing requirements' reasons; recorded only when `MELLEA_TRACES_CONTENT=true` |
 
 #### `stream_with_chunking` span
 
@@ -199,10 +200,10 @@ per-chunk validation.
 
 | Attribute | Description |
 | --------- | ----------- |
-| `mellea.has_requirements` | Whether requirements were supplied |
-| `mellea.requirement_count` | Number of requirements supplied |
-| `mellea.chunking_strategy` | `ChunkingStrategy` class name (e.g., `SentenceChunker`) |
-| `mellea.full_text_length` | Length of the accumulated text at completion |
+| `mellea.streaming.has_requirements` | Whether requirements were supplied |
+| `mellea.streaming.requirement_count` | Number of requirements supplied |
+| `mellea.streaming.chunking_strategy` | `ChunkingStrategy` class name (e.g., `SentenceChunker`) |
+| `mellea.streaming.full_text_length` | Length of the accumulated text at completion |
 | `gen_ai.request.model` | Model ID, when known |
 | `gen_ai.provider.name` | Provider name, when known |
 
@@ -234,11 +235,11 @@ Mellea also adds context-specific attributes to backend spans:
 
 | Attribute | Description |
 | --------- | ----------- |
-| `mellea.action_type` | Component type being executed |
-| `mellea.context_size` | Number of items in context |
-| `mellea.format_type` | Response format class name |
-| `mellea.tool_calls_enabled` | Whether tool calling is enabled |
-| `mellea.num_actions` | Number of actions in batch (for `generate_from_raw`) |
+| `mellea.component.type` | Component type being executed |
+| `mellea.request.context_size` | Number of items in context |
+| `mellea.request.format_type` | Response format class name |
+| `mellea.action.tool_calls` | Whether tool calling is enabled |
+| `mellea.request.num_actions` | Number of actions in batch (for `generate_from_raw`) |
 | `mellea.usage.total_tokens` | Total tokens reported by the backend; a Mellea extension, since semconv defines only input/output |
 
 When `MELLEA_GENERATION_CHUNK_EVENTS=true`, backend spans also record a `chunk_processed`
@@ -251,21 +252,21 @@ Backend spans nest inside application spans:
 
 ```text
 start_session             (mellea.application)
-                          [mellea.backend=ollama]
-                          [mellea.model_id=granite4.1:3b]
+                          [gen_ai.provider.name=ollama]
+                          [gen_ai.request.model=granite4.1:3b]
 
 session                   (mellea.application)
 ├── action                (mellea.application)
-│   │                     [mellea.action_type=Instruction]
+│   │                     [mellea.component.type=Instruction]
 │   └── sampling          (mellea.application)
-│       │                 [mellea.strategy_type=RejectionSamplingStrategy]
+│       │                 [mellea.sampling.strategy_type=RejectionSamplingStrategy]
 │       ├── chat          (mellea.backend)
 │       │                 [gen_ai.provider.name=ollama]
 │       │                 [gen_ai.request.model=granite4.1:3b]
 │       │                 [gen_ai.usage.input_tokens=150]
 │       │                 [gen_ai.usage.output_tokens=42]
 │       └── validation    (mellea.application)
-│                         [mellea.requirement_count=2]
+│                         [mellea.validation.requirement_count=2]
 ├── execute_tool search   (mellea.application)
 │                         [gen_ai.tool.name=search]
 │                         [mellea.tool.status=success]
@@ -274,7 +275,7 @@ session                   (mellea.application)
 │                         [gen_ai.provider.name=openai]
 │                         [gen_ai.request.model=gpt-4o]
 └── validation            (mellea.application)   ← final m.validate() check
-                          [mellea.requirement_count=2]
+                          [mellea.validation.requirement_count=2]
 ```
 
 Tool execution happens after the generating call completes, so `execute_tool`
@@ -287,7 +288,7 @@ spans:
 
 ```text
 stream_with_chunking      (mellea.application)
-│                         [mellea.chunking_strategy=SentenceChunker]
+│                         [mellea.streaming.chunking_strategy=SentenceChunker]
 ├── chat                  (mellea.backend)    ← streaming generation
 │                         [gen_ai.request.model=granite4.1:3b]
 └── chat                  (mellea.backend)    ← per-chunk validation
@@ -312,8 +313,8 @@ has accumulated many previous messages. Use
 
 **Repeated `validation` spans beneath one `sampling` span.** The model is
 retrying because requirements keep failing. Each `sampling` span records
-`mellea.iterations_used` (how many attempts ran); open a failing attempt's
-`validation` span and read `mellea.failure_reasons` to see why validation is
+`mellea.sampling.iterations_used` (how many attempts ran); open a failing attempt's
+`validation` span and read `mellea.validation.failure_reasons` to see why validation is
 failing (recorded as available when content capture is enabled).
 
 **Long gaps between spans.** A gap between the start of a backend `chat` span

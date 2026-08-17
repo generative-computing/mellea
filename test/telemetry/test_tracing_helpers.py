@@ -203,7 +203,7 @@ def test_set_mellea_attrs_action_class_name_from_action():
     mot._call.context = None
     set_mellea_attrs(span, mot)
     attrs = _attrs(span)
-    assert attrs["mellea.action_type"] == "MyAction"
+    assert attrs["mellea.component.type"] == "MyAction"
 
 
 def test_set_mellea_attrs_skips_action_type_when_no_action():
@@ -211,7 +211,7 @@ def test_set_mellea_attrs_skips_action_type_when_no_action():
     mot = MagicMock(spec=[])  # No _action attribute
     set_mellea_attrs(span, mot)
     attrs = _attrs(span)
-    assert "mellea.action_type" not in attrs
+    assert "mellea.component.type" not in attrs
 
 
 def test_set_mellea_attrs_context_size():
@@ -221,12 +221,12 @@ def test_set_mellea_attrs_context_size():
     mot._call.action = None
     mot._call.context = [1, 2, 3]
     set_mellea_attrs(span, mot)
-    assert _attrs(span)["mellea.context_size"] == 3
+    assert _attrs(span)["mellea.request.context_size"] == 3
 
     span = MagicMock()
     mot._call.context = None
     set_mellea_attrs(span, mot)
-    assert _attrs(span)["mellea.context_size"] == 0
+    assert _attrs(span)["mellea.request.context_size"] == 0
 
 
 # set_conversation_id

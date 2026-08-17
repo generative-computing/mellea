@@ -156,10 +156,10 @@ def set_mellea_attrs(span: Any, mot: Any) -> None:
     call = getattr(mot, "_call", None)
     action = getattr(call, "action", None)
     if action is not None:
-        span.set_attribute("mellea.action_type", action.__class__.__name__)
+        span.set_attribute("mellea.component.type", action.__class__.__name__)
 
     ctx = getattr(call, "context", None)
-    span.set_attribute("mellea.context_size", len(ctx) if ctx else 0)
+    span.set_attribute("mellea.request.context_size", len(ctx) if ctx else 0)
 
 
 def set_conversation_id(span: Any) -> None:
