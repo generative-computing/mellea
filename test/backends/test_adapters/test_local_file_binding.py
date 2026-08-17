@@ -118,6 +118,54 @@ def test_prepare_is_idempotent():
     backend.load_peft_adapter.assert_called_once()
 
 
+def test_prepare_and_release_are_linearized_before_registration():
+    backend = _fake_backend()
+    registration_started = threading.Event()
+    allow_registration = threading.Event()
+    release_finished = threading.Event()
+    errors: list[BaseException] = []
+
+    def register(binding: LocalFileBinding) -> None:
+        registration_started.set()
+        allow_registration.wait(timeout=1)
+        binding.backend = backend
+
+    def release(binding: LocalFileBinding) -> None:
+        try:
+            binding.release()
+        except BaseException as exc:
+            errors.append(exc)
+        finally:
+            release_finished.set()
+
+    backend.add_adapter.side_effect = register
+    binding = LocalFileBinding(name="answerability")
+    binding.bind_backend(backend)
+
+    prepare_thread = threading.Thread(target=binding.prepare)
+    prepare_thread.start()
+    assert registration_started.wait(timeout=1)
+
+    release_thread = threading.Thread(target=release, args=(binding,))
+    release_thread.start()
+    try:
+        assert not release_finished.wait(timeout=0.1)
+    finally:
+        allow_registration.set()
+
+    prepare_thread.join(timeout=1)
+    release_thread.join(timeout=1)
+
+    assert not prepare_thread.is_alive()
+    assert not release_thread.is_alive()
+    assert not errors
+    backend.load_peft_adapter.assert_called_once_with(binding.qualified_name)
+    backend.unload_peft_adapter.assert_called_once_with(binding.qualified_name)
+    assert binding._released
+    assert binding.backend is None
+    assert not binding._loaded
+
+
 def test_bind_backend_rejects_a_different_backend_after_registration():
     backend = _fake_backend()
     other_backend = _fake_backend()

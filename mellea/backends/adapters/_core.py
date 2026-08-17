@@ -24,6 +24,7 @@ Note:
 
 import abc
 import json
+import threading
 import time
 import warnings
 from dataclasses import dataclass
@@ -285,6 +286,8 @@ class LocalFileBinding(WeightsBinding):
         self._loaded = False
         self._active = False
         self._released = False
+        # Keeps one binding from being released while it registers or loads.
+        self._lifecycle_lock = threading.Lock()
 
     @property
     def qualified_name(self) -> str:
@@ -367,18 +370,19 @@ class LocalFileBinding(WeightsBinding):
             RuntimeError: This binding has already been `release()`d, or is
                 registered with a different backend.
         """
-        if self._released:
-            raise RuntimeError(
-                "LocalFileBinding.bind_backend() called after release(): "
-                "release() is terminal per the WeightsBinding contract and does "
-                "not revive the binding. Construct a new LocalFileBinding instead."
-            )
-        if self.backend is not None and backend is not self.backend:
-            raise RuntimeError(
-                "LocalFileBinding.bind_backend() cannot change the backend after "
-                "registration. Release this binding and construct a new one instead."
-            )
-        self._staged_backend = backend
+        with self._lifecycle_lock:
+            if self._released:
+                raise RuntimeError(
+                    "LocalFileBinding.bind_backend() called after release(): "
+                    "release() is terminal per the WeightsBinding contract and does "
+                    "not revive the binding. Construct a new LocalFileBinding instead."
+                )
+            if self.backend is not None and backend is not self.backend:
+                raise RuntimeError(
+                    "LocalFileBinding.bind_backend() cannot change the backend after "
+                    "registration. Release this binding and construct a new one instead."
+                )
+            self._staged_backend = backend
 
     def prepare(self) -> None:
         """Downloads the adapter weights and loads them into the staged backend.
@@ -402,53 +406,53 @@ class LocalFileBinding(WeightsBinding):
                 the binding was already `release()`d, or the backend refused
                 the registration.
         """
-        if self.backend is not None and self._loaded:
-            return
-        if self._released:
-            raise RuntimeError(
-                "LocalFileBinding.prepare() called after release(): release() is "
-                "terminal per the WeightsBinding contract and does not revive the "
-                "binding. Construct a new LocalFileBinding instead."
-            )
-
         started_at = time.monotonic()
-        if self.backend is None:
-            if self._staged_backend is None:
+        with self._lifecycle_lock:
+            if self._released:
                 raise RuntimeError(
-                    "LocalFileBinding.prepare() requires bind_backend() to be called first."
+                    "LocalFileBinding.prepare() called after release(): release() is "
+                    "terminal per the WeightsBinding contract and does not revive the "
+                    "binding. Construct a new LocalFileBinding instead."
                 )
-            if not self.name:
-                raise RuntimeError(
-                    "LocalFileBinding.prepare() requires a non-empty name. A "
-                    "default-constructed LocalFileBinding() is an unconfigured "
-                    "placeholder — build one with LocalFileBinding.from_catalog(name) "
-                    "instead."
-                )
-
-            self._staged_backend.add_adapter(self)
-            # `add_adapter` signals success by setting `.backend`; it has early-return
-            # paths (notably: a different object already registered under this
-            # `qualified_name`) that log a warning and leave it unset. Without this
-            # check `prepare()` would go on to load the *other* adapter's weights and
-            # leave `.backend` None, so a later `activate()` would raise "requires
-            # prepare() to be called first" despite `prepare()` having run. Fail here
-            # instead, where the cause is still visible.
+            if self.backend is not None and self._loaded:
+                return
             if self.backend is None:
-                raise RuntimeError(
-                    f"Backend refused to register adapter {self.qualified_name!r}; see the "
-                    "backend's warning log. Either another adapter is already registered "
-                    "under this qualified name, or this binding was previously released — "
-                    "`release()` is terminal and does not free the name for re-use "
-                    "(see #1528)."
-                )
-        # `load_peft_adapter` mutates the backend's underlying PEFT model, the
-        # same shared state `activate_peft_adapter`/`deactivate_peft_adapter`
-        # document "must be called while holding `_generation_lock`" for.
-        # `prepare()`/`release()` aren't driven through `adapter_scope`, so
-        # nothing else takes this lock on their behalf.
-        with self.backend._adapter_activation_lock():
-            self.backend.load_peft_adapter(self.qualified_name)
-        self._loaded = True
+                if self._staged_backend is None:
+                    raise RuntimeError(
+                        "LocalFileBinding.prepare() requires bind_backend() to be called first."
+                    )
+                if not self.name:
+                    raise RuntimeError(
+                        "LocalFileBinding.prepare() requires a non-empty name. A "
+                        "default-constructed LocalFileBinding() is an unconfigured "
+                        "placeholder — build one with LocalFileBinding.from_catalog(name) "
+                        "instead."
+                    )
+
+                self._staged_backend.add_adapter(self)
+                # `add_adapter` signals success by setting `.backend`; it has early-return
+                # paths (notably: a different object already registered under this
+                # `qualified_name`) that log a warning and leave it unset. Without this
+                # check `prepare()` would go on to load the *other* adapter's weights and
+                # leave `.backend` None, so a later `activate()` would raise "requires
+                # prepare() to be called first" despite `prepare()` having run. Fail here
+                # instead, where the cause is still visible.
+                if self.backend is None:
+                    raise RuntimeError(
+                        f"Backend refused to register adapter {self.qualified_name!r}; see the "
+                        "backend's warning log. Either another adapter is already registered "
+                        "under this qualified name, or this binding was previously released — "
+                        "`release()` is terminal and does not free the name for re-use "
+                        "(see #1528)."
+                    )
+            # `load_peft_adapter` mutates the backend's underlying PEFT model, the
+            # same shared state `activate_peft_adapter`/`deactivate_peft_adapter`
+            # document "must be called while holding `_generation_lock`" for.
+            # `prepare()`/`release()` aren't driven through `adapter_scope`, so
+            # nothing else takes this lock on their behalf.
+            with self.backend._adapter_activation_lock():
+                self.backend.load_peft_adapter(self.qualified_name)
+            self._loaded = True
         self._fire_phase_complete("prepare", time.monotonic() - started_at)
 
     def activate(self) -> None:
@@ -513,31 +517,32 @@ class LocalFileBinding(WeightsBinding):
             RuntimeError: The binding is active; call `deactivate()` before
                 releasing its weights.
         """
-        if self._released:
-            return
-        backend = self.backend
-        if backend is None:
-            self._staged_backend = None
-            self._released = True
-            return
-
-        # See the matching comment in `prepare()`: this mutates the same
-        # shared PEFT model state `activate_peft_adapter`/
-        # `deactivate_peft_adapter` require the lock for.
-        with backend._adapter_activation_lock():
-            if self.backend is not backend:
+        with self._lifecycle_lock:
+            if self._released:
                 return
-            if self._active:
-                raise RuntimeError(
-                    "LocalFileBinding.release() requires deactivate() to be called first."
-                )
-            backend.unload_peft_adapter(self.qualified_name)
-            self.backend = None
-            self.path = None
-            self._staged_backend = None
-            self._loaded = False
-            self._active = False
-            self._released = True
+            backend = self.backend
+            if backend is None:
+                self._staged_backend = None
+                self._released = True
+                return
+
+            # See the matching comment in `prepare()`: this mutates the same
+            # shared PEFT model state `activate_peft_adapter`/
+            # `deactivate_peft_adapter` require the lock for.
+            with backend._adapter_activation_lock():
+                if self.backend is not backend:
+                    return
+                if self._active:
+                    raise RuntimeError(
+                        "LocalFileBinding.release() requires deactivate() to be called first."
+                    )
+                backend.unload_peft_adapter(self.qualified_name)
+                self.backend = None
+                self.path = None
+                self._staged_backend = None
+                self._loaded = False
+                self._active = False
+                self._released = True
 
     def _fire_phase_complete(self, phase: str, duration_s: float) -> None:
         """Fires `adapter_function_phase_complete` for a phase this binding owns.

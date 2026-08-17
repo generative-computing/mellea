@@ -816,7 +816,10 @@ class AdapterMixin(Backend, abc.ABC):
                     except BaseException as deactivate_exc:
                         if body_exception is None:
                             raise
-                        raise body_exception from deactivate_exc
+                        body_exception.add_note(
+                            "Adapter deactivation also failed: "
+                            f"{type(deactivate_exc).__name__}: {deactivate_exc}"
+                        )
         except AdapterSchemaMismatchError as exc:
             # Distinct from a generic error: this is the schema-drift signal the
             # `parse_failures` counter exists to detect, so collapsing it into

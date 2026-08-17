@@ -82,16 +82,20 @@ def test_adapter_scope_preserves_body_error_when_deactivate_also_raises():
     mock_backend = MagicMock(spec=AdapterMixin)
     adapter, weights = _make_adapter()
     body_error = ValueError("body failed")
+    original_cause = KeyError("original cause")
     deactivate_error = RuntimeError("deactivation failed")
     weights.deactivate.side_effect = deactivate_error
 
     with capture_adapter_hooks() as mock_invoke:
         with pytest.raises(ValueError, match="body failed") as exc_info:
             with AdapterMixin.adapter_scope(mock_backend, adapter):
-                raise body_error
+                raise body_error from original_cause
 
     assert exc_info.value is body_error
-    assert exc_info.value.__cause__ is deactivate_error
+    assert exc_info.value.__cause__ is original_cause
+    assert any(
+        "RuntimeError: deactivation failed" in note for note in exc_info.value.__notes__
+    )
     weights.deactivate.assert_called_once()
     invocations = invocation_payloads(mock_invoke)
     assert [p.outcome for p in invocations] == ["error"]
