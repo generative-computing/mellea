@@ -207,9 +207,10 @@ class Streamer:
     Attributes:
         failed_early: `True` if a requirement returned `"fail"` during streaming
             and the stream stopped before natural completion.
-        completed_normally: `True` only if the stream reached its natural end.
-            `False` on requirement failure, an early `break`, or an exception —
-            unlike `not failed_early`, which stays `True` after an early `break`.
+        completed_normally: `True` only if the stream reached its natural end,
+            prior to final validation. `False` on requirement failure, an early
+            `break`, or an exception — unlike `not failed_early`, which stays
+            `True` after an early `break`.
         failure_reason: Human-readable reason when `failed_early` is `True`.
         streaming_failures: `(Requirement, PartialValidationResult)` pairs for
             every requirement that failed the offending chunk.

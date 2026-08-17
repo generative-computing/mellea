@@ -610,7 +610,6 @@ async def test_cancel_generation_invoked_on_fail() -> None:
     assert streamer._mot.is_computed() is True
 
 
-@pytest.mark.asyncio
 class _FailOnSecondReq(Requirement):
     """Passes the first chunk, fails the second — to drive early exit mid-stream."""
 

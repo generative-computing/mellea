@@ -365,8 +365,9 @@ class Chunker:
             a later `feed()` completes it or `flush()` releases it.
 
         Raises:
-            ValueError: If the strategy's `split()` returns a chunk that is not a
-                verbatim substring of the buffered text (i.e. it mutated the text).
+            ValueError: If the strategy's `split()` returns an empty chunk or one
+                that is not a verbatim substring of the buffered text (i.e. it
+                mutated the text).
         """
         self._pending += delta
         chunks = self._strategy.split(self._pending)
@@ -378,6 +379,11 @@ class Chunker:
         # string-subtracting, then keep the raw suffix as the new pending fragment.
         cursor = 0
         for c in chunks:
+            if not c:
+                raise ValueError(
+                    f"{type(self._strategy).__name__}.split() returned an empty "
+                    "chunk; split() must return only non-empty substrings."
+                )
             pos = self._pending.find(c, cursor)
             if pos < 0:
                 raise ValueError(
