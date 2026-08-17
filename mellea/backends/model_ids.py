@@ -151,6 +151,16 @@ IBM_GRANITE_3_3_VISION_2B = ModelIdentifier(
     context_length=131072,
 )
 
+# Granite 4.1 Vision Model (4B). Not in the Ollama library; the `hf.co/...` tag
+# pulls IBM's official GGUF build (which ships the `mmproj` projector needed for
+# image input) straight from Hugging Face.
+IBM_GRANITE_VISION_4_1_4B = ModelIdentifier(
+    hf_model_name="ibm-granite/granite-vision-4.1-4b",
+    ollama_name="hf.co/ibm-granite/granite-vision-4.1-4b-GGUF:Q4_K_M",
+    watsonx_name=None,
+    context_length=131072,
+)
+
 IBM_GRANITE_GUARDIAN_3_0_2B = ModelIdentifier(
     hf_model_name="ibm-granite/granite-guardian-3.0-2b",
     ollama_name="granite3-guardian:2b",

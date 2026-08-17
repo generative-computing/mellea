@@ -55,7 +55,10 @@ response = m.chat(
 
 ## Supported Models
 
-- **Ollama**: granite3.2-vision, llava, bakllava, llava-phi3, moondream, qwen2.5vl:7b
+- **Ollama**: granite3.2-vision, llava, bakllava, llava-phi3, moondream,
+  qwen2.5vl:7b, and granite-vision-4.1 as
+  `hf.co/ibm-granite/granite-vision-4.1-4b-GGUF:Q4_K_M` (pulled from Hugging
+  Face rather than the Ollama library, so the full tag is required)
 - **OpenAI**: gpt-4-vision-preview, gpt-4o
 - **LiteLLM**: Various vision models through unified interface
 
@@ -66,6 +69,10 @@ Pull a vision-capable model before running these examples:
 ```bash
 ollama pull granite3.2-vision    # ~2.4 GB — primary recommended model
 ollama pull qwen2.5vl:7b         # ~4.7 GB — used in vision_openai_examples.py
+
+# granite-vision-4.1 is the current-generation Granite vision model. It is not in
+# the Ollama library, so pull IBM's official GGUF build from Hugging Face:
+ollama pull hf.co/ibm-granite/granite-vision-4.1-4b-GGUF:Q4_K_M   # ~3.3 GB
 ```
 
 ## Related Documentation

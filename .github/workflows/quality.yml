@@ -122,12 +122,28 @@ jobs:
       - name: Start serving ollama
         run: nohup ollama serve &
       - name: Pull models
+        # granite-vision-4.1 is not in the Ollama library, so it is pulled from
+        # IBM's official GGUF repo on Hugging Face (that build ships the mmproj
+        # projector Ollama needs for image input). Drop the hf.co prefix if the
+        # model is ever published to the Ollama library directly.
         run: |
-          for i in 1 2 3 4 5; do
-            ollama pull granite4.1:3b && break
-            echo "Attempt $i failed, retrying in 20s..."
-            sleep 20
+          for model in granite4.1:3b hf.co/ibm-granite/granite-vision-4.1-4b-GGUF:Q4_K_M; do
+            pulled=false
+            for i in 1 2 3 4 5; do
+              ollama pull "$model" && { pulled=true; break; }
+              echo "Attempt $i to pull $model failed, retrying in 20s..."
+              sleep 20
+            done
+            # Without this the loop exits 0 after exhausting every attempt: the
+            # `&&` above puts the failure in a tested context, so `bash -e` does
+            # not fire, and the loop's status comes from `sleep`. The step would
+            # go green and the miss would surface 20 minutes later as a test
+            # failure instead of an infra one.
+            $pulled || { echo "::error::failed to pull $model after 5 attempts"; exit 1; }
           done
+          # The names below are what the tests match against; print them so a
+          # tag-name mismatch is diagnosable from the log alone.
+          ollama list
       - name: Run Tests
         id: tests
         env:
