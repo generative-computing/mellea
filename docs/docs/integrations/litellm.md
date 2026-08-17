@@ -44,7 +44,7 @@ run; Mellea talks to the proxy, and the proxy talks to the providers.
 
 ## Direct mode
 
-The quickest path is [`start_session()`](../reference/glossary#melleasession) with
+The quickest path is [`start_session()`](../reference/glossary.md#melleasession) with
 `backend_name="litellm"`. The `model_id` is a LiteLLM model string of the form
 `<provider>/<model>`:
 
