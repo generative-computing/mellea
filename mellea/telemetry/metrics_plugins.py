@@ -476,10 +476,8 @@ class AdapterFunctionMetricsPlugin(
     """Records adapter function invocation and phase-duration metrics.
 
     Hooks into `adapter_function_invocation_complete` and
-    `adapter_function_phase_complete`. No production call site fires these
-    hooks yet — real `prepare`/`activate`/`generate`/`parse`/`deactivate`
-    wiring lands with the LocalFileBinding and EmbeddedBinding lifecycle work
-    (Epic #929 Phase 2 follow-ups).
+    `adapter_function_phase_complete`. `phase` is one of the values in
+    `AdapterFunctionPhaseCompletePayload`'s `phase` field.
     """
 
     @hook("adapter_function_invocation_complete", mode=PluginMode.FIRE_AND_FORGET)

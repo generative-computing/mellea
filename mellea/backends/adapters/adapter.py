@@ -18,14 +18,26 @@ import abc
 import contextlib
 import pathlib
 import re
+import time
 import warnings
+from collections.abc import Callable
 from typing import Literal, TypeAlias, TypeVar, cast
 
 import yaml
 
-from ...core import Backend
+from ...core import Backend, MelleaLogger
 from ...formatters.granite import intrinsics as intrinsics
-from ._core import Adapter as _AdapterCore, Identity, IOContract, WeightsBinding
+from ...helpers.event_loop_helper import _run_async_in_thread
+from ...plugins.manager import has_plugins, invoke_hook
+from ...plugins.types import HookType
+from ._core import (
+    Adapter as _AdapterCore,
+    AdapterSchemaMismatchError,
+    Identity,
+    IOContract,
+    LocalFileBinding,
+    WeightsBinding,
+)
 from .catalog import AdapterType, fetch_intrinsic_metadata
 
 
@@ -225,12 +237,11 @@ class IntrinsicAdapter(LocalHFAdapter, _AdapterCore):
                 f"{adapter_type} not supported"
             )
             is_alora = self.adapter_type == AdapterType.ALORA
-            # TODO(phase-2.2): pass revision=self.intrinsic_metadata.revision
-            # once revision-aware prepare() is merged (issue #1141 / epic #929).
             config_file = intrinsics.obtain_io_yaml(
                 self.intrinsic_name,
                 self.base_model_name,
                 self.intrinsic_metadata.repo_id,
+                revision=self.intrinsic_metadata.revision,
                 alora=is_alora,
             )
         if config_file:
@@ -283,13 +294,12 @@ class IntrinsicAdapter(LocalHFAdapter, _AdapterCore):
             a path to the files
         """
         is_alora = self.adapter_type == AdapterType.ALORA
-        # TODO(phase-2.2): pass revision=self.intrinsic_metadata.revision once
-        # revision-aware prepare() is merged (issue #1141 / epic #929).
         return str(
             intrinsics.obtain_lora(
                 self.intrinsic_name,
                 base_model_name,
                 self.intrinsic_metadata.repo_id,
+                revision=self.intrinsic_metadata.revision,
                 alora=is_alora,
             )
         )
@@ -326,6 +336,102 @@ def get_adapter_for_intrinsic(
     return adapter
 
 
+def _fire_phase_complete_hook(name: str, phase: str, duration_ms: float) -> None:
+    """Fire the `adapter_function_phase_complete` metric hook for a phase that already ran.
+
+    Split out of `_run_adapter_phase` so a caller that must guarantee cleanup
+    after a phase's side effect — e.g. `adapter_scope` guaranteeing
+    `deactivate()` runs once `activate()` has succeeded — can run the side
+    effect and this hook fire under separate exception handling. A hook-dispatch
+    failure is logged and ignored: observability must not turn a completed
+    lifecycle phase into an operation failure.
+
+    Args:
+        name: Adapter function name, used as the metric's `name` field.
+        phase: Lifecycle phase name; must be a valid
+            `AdapterFunctionPhaseCompletePayload.phase` value.
+        duration_ms: Wall-clock duration of the phase, in milliseconds.
+    """
+    if not has_plugins(HookType.ADAPTER_FUNCTION_PHASE_COMPLETE):
+        return
+    from ...plugins.hooks.adapter_function import AdapterFunctionPhaseCompletePayload
+
+    payload = AdapterFunctionPhaseCompletePayload(
+        name=name, phase=phase, duration_ms=duration_ms
+    )
+    try:
+        hook_coro = invoke_hook(HookType.ADAPTER_FUNCTION_PHASE_COMPLETE, payload)
+        _run_async_in_thread(hook_coro)
+    except Exception:
+        MelleaLogger.get_logger().warning(
+            f"adapter_function_phase_complete hook dispatch failed for {name!r} "
+            f"during {phase!r}; ignoring so it does not turn a completed phase "
+            "into an operation failure.",
+            exc_info=True,
+        )
+
+
+def _run_adapter_phase(name: str, phase: str, phase_fn: Callable[[], None]) -> None:
+    """Run one lifecycle phase and fire its phase-complete metric hook.
+
+    Fires the hook only; it does not open a span. Span production belongs to a
+    plugin (#1464, #1466), not to code under `mellea/backends/`.
+
+    The hook fires **only when the phase succeeds**, matching the name of
+    `ADAPTER_FUNCTION_PHASE_COMPLETE`: a phase that raised did not complete. If
+    `phase_fn` raises, the exception propagates and no phase event is emitted, so
+    a consumer reconciling phase counts against invocation counts will see the
+    failure only at invocation level, where `outcome` and `error` carry it.
+
+    Args:
+        name: Adapter function name, used as the metric's `name` field.
+        phase: Lifecycle phase name; must be a valid
+            `AdapterFunctionPhaseCompletePayload.phase` value.
+        phase_fn: The zero-argument callable implementing the phase (e.g.
+            `adapter.weights.activate`).
+    """
+    started_at = time.monotonic()
+    phase_fn()
+    _fire_phase_complete_hook(name, phase, (time.monotonic() - started_at) * 1000.0)
+
+
+def _fire_invocation_complete(
+    *,
+    name: str,
+    revision: str | None,
+    binding_type: str,
+    adapter_type: str,
+    outcome: Literal["success", "schema_error", "error"],
+    error: BaseException | None,
+) -> None:
+    """Fire the `adapter_function_invocation_complete` metric hook.
+
+    Args:
+        name: Adapter function name.
+        revision: Catalog revision of the adapter, or `None` if unpinned.
+        binding_type: Weight-binding reality the adapter ran under.
+        adapter_type: Adapter mechanism (e.g. `"lora"`, `"alora"`).
+        outcome: Invocation outcome.
+        error: The exception raised during invocation, or `None` on success.
+    """
+    if not has_plugins(HookType.ADAPTER_FUNCTION_INVOCATION_COMPLETE):
+        return
+    from ...plugins.hooks.adapter_function import (
+        AdapterFunctionInvocationCompletePayload,
+    )
+
+    payload = AdapterFunctionInvocationCompletePayload(
+        name=name,
+        revision=revision,
+        binding_type=binding_type,
+        adapter_type=adapter_type,
+        outcome=outcome,
+        error=error,
+    )
+    hook_coro = invoke_hook(HookType.ADAPTER_FUNCTION_INVOCATION_COMPLETE, payload)
+    _run_async_in_thread(hook_coro)
+
+
 # The full adapter-input surface `add_adapter` advertises. The legacy abc
 # `Adapter` (LocalFile/PEFT) and the core dataclass adapter (`_AdapterCore`,
 # Embedded/ServerMediated) are disjoint hierarchies, so the accepted type is
@@ -333,7 +439,7 @@ def get_adapter_for_intrinsic(
 # adapter realities they do not implement — the same "reject unsupported reality"
 # contract the reality-specific verbs use. See the module note on the mixin-vs-
 # generic trade-off for why this is a runtime, not a type-parameter, guarantee.
-AdapterInput: TypeAlias = Adapter | _AdapterCore
+AdapterInput: TypeAlias = Adapter | _AdapterCore | LocalFileBinding
 
 
 class AdapterMixin(Backend, abc.ABC):
@@ -428,6 +534,58 @@ class AdapterMixin(Backend, abc.ABC):
         raise NotImplementedError(
             f"Backend type {type(self)} does not support unload_peft_adapter()."
         )
+
+    def activate_peft_adapter(self, adapter_qualified_name: str) -> None:
+        """Switch a previously loaded PEFT adapter on for subsequent generation.
+
+        LocalFile/PEFT reality only (e.g. a locally hosted Hugging Face
+        model). The adapter must have been loaded via `load_peft_adapter`
+        before calling this method.
+
+        Args:
+            adapter_qualified_name (str): The `adapter.qualified_name` of the
+                adapter to activate.
+
+        Raises:
+            NotImplementedError: If this backend's adapter reality is not
+                LocalFile/PEFT.
+        """
+        raise NotImplementedError(
+            f"Backend type {type(self)} does not support activate_peft_adapter()."
+        )
+
+    def deactivate_peft_adapter(self, adapter_qualified_name: str) -> None:
+        """Switch off any active PEFT adapter so generation uses the base model.
+
+        LocalFile/PEFT reality only (e.g. a locally hosted Hugging Face
+        model).
+
+        Args:
+            adapter_qualified_name (str): The `adapter.qualified_name` of the
+                adapter to deactivate. Accepted for symmetry with
+                `activate_peft_adapter`; the underlying primitive clears all
+                active PEFT adapters regardless of name.
+
+        Raises:
+            NotImplementedError: If this backend's adapter reality is not
+                LocalFile/PEFT.
+        """
+        raise NotImplementedError(
+            f"Backend type {type(self)} does not support deactivate_peft_adapter()."
+        )
+
+    def _adapter_activation_lock(
+        self,
+    ) -> contextlib.AbstractContextManager[bool | None]:
+        """Exclusivity lock to hold while calling activate/deactivate verbs.
+
+        Default is a no-op (`contextlib.nullcontext()`). Backends whose
+        activation verbs mutate shared, non-thread-safe state (e.g.
+        `LocalHFBackend`'s underlying PEFT model) override this to return
+        their own lock, so callers like `LocalFileBinding.activate()` get
+        the same exclusivity `_generate_with_adapter_lock` relies on.
+        """
+        return contextlib.nullcontext()
 
     def render_controls(self, adapter_qualified_name: str, active: bool) -> None:
         """Render or clear the control tokens for a baked-in embedded adapter.
@@ -537,19 +695,166 @@ class AdapterMixin(Backend, abc.ABC):
         if found is not None:
             return found
 
+        # `_find_adapter` only matches `_AdapterCore` entries. If registration
+        # above silently failed because a `LocalFileBinding` already claims a
+        # colliding qualified name (they share `f"{name}_{type}"` with
+        # `IntrinsicAdapter`), say so — the alternative is an opaque KeyError
+        # that gives no hint the two registration paths collided.
+        added = getattr(self, "_added_adapters", {})
+        blocking = next(
+            (
+                v
+                for k, v in added.items()
+                if k.startswith(f"{name}_") and not isinstance(v, _AdapterCore)
+            ),
+            None,
+        )
+        if blocking is not None:
+            blocking_name = getattr(blocking, "qualified_name", None)
+            raise KeyError(
+                f"Adapter {name!r} not found after registration: a "
+                f"{type(blocking).__name__} is already registered under "
+                f"{blocking_name!r}, which collides with {name!r}'s auto-registration "
+                "path. LocalFileBinding and resolve_adapter()/intrinsic-helper "
+                "registrations share the same qualified-name key space on this "
+                "backend and cannot both claim it."
+            )
+
         raise KeyError(f"Adapter {name!r} not found after registration")
 
     @contextlib.contextmanager
     def adapter_scope(self, adapter: "_AdapterCore | None"):  # type: ignore[type-arg]
         """Context manager wrapping adapter activation and deactivation.
 
-        Phase 1 stub — yields immediately (no-op). Phase 2 (see epic #929) wires
-        in `adapter.weights.activate()` and `adapter.weights.deactivate()`.
+        A no-op when `adapter` is `None`. Otherwise: activates
+        `adapter.weights`, yields, then always deactivates — even if the `with`
+        body raises. Each phase fires `ADAPTER_FUNCTION_PHASE_COMPLETE`, and
+        `ADAPTER_FUNCTION_INVOCATION_COMPLETE` fires on the way out, carrying the
+        overall outcome.
+
+        This method fires hooks only; it does not open spans. Span production is a
+        plugin's job (see #1464 for the rule and #1466 for the adapter-function
+        spans), and the `ADAPTER_FUNCTION_*` family currently has no start hook for
+        a plugin to open a span on. See `docs/dev/adapter_observability.md` for the
+        metric schema.
+
+        `deactivate()` is guarded on `activate()`'s own side effect having
+        completed, not on the activate phase's hook dispatch also succeeding.
+        If a plugin subscribed to `ADAPTER_FUNCTION_PHASE_COMPLETE` raises after
+        `activate()` already flipped the adapter on, `deactivate()` still runs —
+        telemetry must not be able to strand the adapter active.
+
+        Not atomic across the whole scope: `_adapter_activation_lock()` is
+        held only inside each of `activate()`/`deactivate()`'s own verb calls
+        (see `LocalFileBinding.activate`), not for the `with` body in between.
+        Two concurrent `adapter_scope()` calls on one backend can therefore
+        interleave — one thread's body can run while a different adapter is
+        active, activated by another thread's call. Widening the lock to span
+        the whole scope was tried and reverted: it deadlocks the moment the
+        body does real async generation (confirmed against
+        `test_local_file_e2e.py`), because that work runs on the shared
+        event-loop thread while this thread holds the lock — a same-thread
+        `RLock` doesn't help across threads. No caller combines concurrent
+        `adapter_scope()` calls today (nothing outside tests calls it at all),
+        so this is latent, not reachable — but #1465 (wiring real generation
+        through this scope) has to solve the atomicity and the threading
+        interaction together, not layer one fix on top of the other.
 
         Args:
-            adapter: The adapter to activate, or `None` (no-op in Phase 1).
+            adapter: The adapter to activate, or `None` (no-op).
+
+        Raises:
+            BaseException: An error raised by activation, the `with` body, or
+                deactivation. If both the body and deactivation fail, the body
+                error remains primary and the deactivation error is chained.
         """
-        yield
+        if adapter is None:
+            yield
+            return
+
+        name = adapter.identity.name
+        # Prefer `resolved_revision()` over the raw `.revision` attribute: a
+        # lazily-resolved binding (`revision=None`) still downloads and runs
+        # against the catalogue's pinned SHA, so reporting the unresolved
+        # `None` would mislabel an effectively-pinned invocation as unpinned.
+        # `resolved_revision()` only exists on `LocalFileBinding`, not the
+        # `WeightsBinding` base, so both the lookup and the call are guarded.
+        revision: str | None
+        if isinstance(adapter.weights, LocalFileBinding):
+            try:
+                revision = adapter.weights.resolved_revision()
+            except Exception:
+                revision = adapter.weights.revision
+        else:
+            revision = cast(str | None, getattr(adapter.weights, "revision", None))
+        binding_type = adapter.weights.binding_type
+        adapter_type = adapter.identity.adapter_type
+
+        outcome: Literal["success", "schema_error", "error"] = "success"
+        exception: BaseException | None = None
+        activated = False
+        body_exception: BaseException | None = None
+        try:
+            started_at = time.monotonic()
+            try:
+                adapter.weights.activate()
+                activated = True
+                _fire_phase_complete_hook(
+                    name, "activate", (time.monotonic() - started_at) * 1000.0
+                )
+                try:
+                    yield
+                except BaseException as exc:
+                    body_exception = exc
+                    raise
+            finally:
+                if activated:
+                    try:
+                        _run_adapter_phase(
+                            name, "deactivate", adapter.weights.deactivate
+                        )
+                    except BaseException as deactivate_exc:
+                        if body_exception is None:
+                            raise
+                        body_exception.add_note(
+                            "Adapter deactivation also failed: "
+                            f"{type(deactivate_exc).__name__}: {deactivate_exc}"
+                        )
+        except AdapterSchemaMismatchError as exc:
+            # Distinct from a generic error: this is the schema-drift signal the
+            # `parse_failures` counter exists to detect, so collapsing it into
+            # "error" would leave that counter permanently at zero. Reachable
+            # today — `adapter_scope` is public, so a caller can parse inside the
+            # scope — and it becomes the common case once #1465 moves generation
+            # and parsing in here.
+            outcome = "schema_error"
+            exception = exc
+            raise
+        except BaseException as exc:
+            outcome = "error"
+            exception = exc
+            raise
+        finally:
+            # A hook-dispatch failure here must not replace or mask the real
+            # outcome computed above — that would turn a clean `with` block
+            # into a thrown error, or swap a genuine body exception for a
+            # telemetry-plumbing one. Log and swallow instead.
+            try:
+                _fire_invocation_complete(
+                    name=name,
+                    revision=revision,
+                    binding_type=binding_type,
+                    adapter_type=adapter_type,
+                    outcome=outcome,
+                    error=exception,
+                )
+            except Exception:
+                MelleaLogger.get_logger().warning(
+                    f"adapter_function_invocation_complete hook dispatch failed for "
+                    f"{name!r}; ignoring so it doesn't mask the real outcome "
+                    f"({outcome!r}).",
+                    exc_info=True,
+                )
 
     def _find_adapter(
         self, capability: str, adapter_types: tuple[str, ...] | None = None

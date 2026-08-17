@@ -72,9 +72,7 @@ class IntrinsicsCatalogEntry(pydantic.BaseModel):
         revision (str): Hugging Face revision — branch name, tag, or commit SHA.
             Catalogue entries pin to commit SHAs by convention so loads are
             reproducible; the validator itself only requires a non-empty string.
-            Note: this field is stored in the catalogue but not yet forwarded to
-            the Hugging Face download call; wiring it through is deferred to a
-            subsequent phase of the adapter-lifecycle epic (#929).
+            The revision is forwarded to Hugging Face download calls.
         adapter_types (tuple[AdapterType, ...]): Adapter types known to be
             available for this adapter function; defaults to
             `(AdapterType.LORA, AdapterType.ALORA)`.

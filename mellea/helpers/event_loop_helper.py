@@ -78,20 +78,56 @@ class _EventLoopHandler:
         The caller's `contextvars` snapshot is applied inside the new Task so
         contextvar-backed state is visible to the coroutine. One-way:
         mutations inside the Task don't leak back.
+
+        `_reinit_if_forked`/`get_current_event_loop` run before the coroutine
+        is scheduled, so an exception there (or a failure to schedule) would
+        otherwise leave `co` unawaited and emit a "coroutine was never
+        awaited" warning on top of whatever raised. `co.close()` covers that:
+        if scheduling never succeeded, `co` hasn't started and closing it is
+        a clean no-op; if `.result()` raised the task's own exception instead,
+        the future is only marked done after the scheduled task has fully
+        finished running `co`, so closing an already-completed coroutine is
+        also a no-op.
+
+        Deliberately `except Exception`, not `BaseException`: a `Future.result()`
+        with no timeout blocks on a `threading.Condition`, and a `KeyboardInterrupt`
+        delivered to this (calling) thread can unblock that wait before the task
+        on the event-loop thread has actually finished — `co` may still be running
+        there. Closing it from here at that point would run `co`'s `GeneratorExit`
+        handling in this thread while the event loop thread is concurrently
+        stepping the same frame, which is not safe. Excluding
+        `KeyboardInterrupt`/`SystemExit` means that rare case leaks the
+        unawaited-coroutine warning instead of risking that race.
+
+        `_wrapped()`'s own coroutine object needs the same treatment as `co`:
+        if scheduling fails before `run_coroutine_threadsafe` hands it to the
+        loop, `_wrapped()` never starts and never gets to `await co` — leaking
+        both `_wrapped()`'s and (via the outer `except`) `co`'s "coroutine was
+        never awaited" warnings otherwise.
         """
-        self._reinit_if_forked()
-        if self._event_loop == get_current_event_loop():
-            # If this gets called from the same event loop, launch in a separate thread to prevent blocking.
-            return _EventLoopHandler()(co)
+        wrapped_co: Coroutine[Any, Any, R] | None = None
+        try:
+            self._reinit_if_forked()
+            if self._event_loop == get_current_event_loop():
+                # If this gets called from the same event loop, launch in a separate thread to prevent blocking.
+                return _EventLoopHandler()(co)
 
-        parent_ctx = contextvars.copy_context()
+            parent_ctx = contextvars.copy_context()
 
-        async def _wrapped() -> R:
-            for var, value in parent_ctx.items():
-                var.set(value)
-            return await co
+            async def _wrapped() -> R:
+                for var, value in parent_ctx.items():
+                    var.set(value)
+                return await co
 
-        return asyncio.run_coroutine_threadsafe(_wrapped(), self._event_loop).result()
+            wrapped_co = _wrapped()
+            return asyncio.run_coroutine_threadsafe(
+                wrapped_co, self._event_loop
+            ).result()
+        except Exception:
+            co.close()
+            if wrapped_co is not None:
+                wrapped_co.close()
+            raise
 
 
 # Instantiate this class once. It will not be re-instantiated.
