@@ -129,7 +129,7 @@ print(str(result))
 # Output will vary — LLM responses depend on model and temperature.
 ```
 
-See the [LiteLLM integration](../integrations/litellm) for direct-mode vs proxy usage,
+See the [LiteLLM integration](../integrations/litellm.md) for direct-mode vs proxy usage,
 self-hosted proxy setup, per-provider configuration examples, an environment variable
 reference, and the WatsonX migration path.
 
