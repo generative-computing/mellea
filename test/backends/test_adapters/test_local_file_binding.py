@@ -118,6 +118,20 @@ def test_prepare_is_idempotent():
     backend.load_peft_adapter.assert_called_once()
 
 
+def test_bind_backend_rejects_a_different_backend_after_registration():
+    backend = _fake_backend()
+    other_backend = _fake_backend()
+    binding = LocalFileBinding(name="answerability")
+    binding.bind_backend(backend)
+    binding.prepare()
+
+    with pytest.raises(RuntimeError, match="cannot change the backend"):
+        binding.bind_backend(other_backend)
+
+    assert binding.backend is backend
+    assert binding._staged_backend is backend
+
+
 def test_prepare_ignores_phase_hook_dispatch_failure():
     """A prepare hook failure must not make successfully loaded weights unusable."""
     backend = _fake_backend()
@@ -317,6 +331,23 @@ def test_release_unloads_and_clears_state():
     assert binding._staged_backend is None
 
 
+def test_release_requires_deactivation_after_activation():
+    backend = _fake_backend()
+    binding = LocalFileBinding(name="answerability")
+    binding.bind_backend(backend)
+    binding.prepare()
+    binding.activate()
+
+    with pytest.raises(RuntimeError, match="requires deactivate"):
+        binding.release()
+
+    backend.unload_peft_adapter.assert_not_called()
+    binding.deactivate()
+    binding.release()
+
+    backend.unload_peft_adapter.assert_called_once_with(binding.qualified_name)
+
+
 def test_release_retries_after_unload_failure():
     backend = _fake_backend()
     backend.unload_peft_adapter.side_effect = [
@@ -337,6 +368,7 @@ def test_release_retries_after_unload_failure():
     assert binding._staged_backend is backend
     assert binding._loaded
     binding.activate()
+    binding.deactivate()
 
     binding.release()
 

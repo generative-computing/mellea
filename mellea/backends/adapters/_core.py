@@ -9,9 +9,9 @@ Introduces the composable `Adapter` dataclass and its three parts:
 - :class:`IOContract` — ABC for prompt building and output parsing
 - :class:`WeightsBinding` — pluggable ABC for weights lifecycle management
 
-Also provides three stub :class:`WeightsBinding` subclasses
-(:class:`LocalFileBinding`, :class:`EmbeddedBinding`,
-:class:`ServerMediatedBinding`) and :class:`AdapterSchemaMismatchError`.
+Also provides :class:`LocalFileBinding`, two stub :class:`WeightsBinding`
+subclasses (:class:`EmbeddedBinding`, :class:`ServerMediatedBinding`), and
+:class:`AdapterSchemaMismatchError`.
 
 Note:
     The existing :class:`~mellea.backends.adapters.adapter.Adapter` ABC in
@@ -283,6 +283,7 @@ class LocalFileBinding(WeightsBinding):
         self.path: str | None = None
         self._staged_backend: AdapterMixin | None = None
         self._loaded = False
+        self._active = False
         self._released = False
 
     @property
@@ -363,13 +364,19 @@ class LocalFileBinding(WeightsBinding):
             backend: The backend to register with on the next `prepare()` call.
 
         Raises:
-            RuntimeError: This binding has already been `release()`d.
+            RuntimeError: This binding has already been `release()`d, or is
+                registered with a different backend.
         """
         if self._released:
             raise RuntimeError(
                 "LocalFileBinding.bind_backend() called after release(): "
                 "release() is terminal per the WeightsBinding contract and does "
                 "not revive the binding. Construct a new LocalFileBinding instead."
+            )
+        if self.backend is not None and backend is not self.backend:
+            raise RuntimeError(
+                "LocalFileBinding.bind_backend() cannot change the backend after "
+                "registration. Release this binding and construct a new one instead."
             )
         self._staged_backend = backend
 
@@ -445,7 +452,7 @@ class LocalFileBinding(WeightsBinding):
         self._fire_phase_complete("prepare", time.monotonic() - started_at)
 
     def activate(self) -> None:
-        """Loads the adapter weights into the backend for generation.
+        """Selects already-loaded adapter weights for generation.
 
         Raises:
             RuntimeError: `prepare()` was not called first, or called but did
@@ -458,9 +465,10 @@ class LocalFileBinding(WeightsBinding):
             )
         with self.backend._adapter_activation_lock():
             self.backend.activate_peft_adapter(self.qualified_name)
+        self._active = True
 
     def deactivate(self) -> None:
-        """Unloads the adapter weights from the backend.
+        """Deselects the adapter so generation uses the base model.
 
         Raises:
             RuntimeError: `prepare()` was not called first, or called but did
@@ -473,6 +481,7 @@ class LocalFileBinding(WeightsBinding):
             )
         with self.backend._adapter_activation_lock():
             self.backend.deactivate_peft_adapter(self.qualified_name)
+        self._active = False
 
     def release(self) -> None:
         """Unloads the adapter's weights from the backend and clears local state.
@@ -496,6 +505,10 @@ class LocalFileBinding(WeightsBinding):
             self._staged_backend = None
             self._released = True
             return
+        if self._active:
+            raise RuntimeError(
+                "LocalFileBinding.release() requires deactivate() to be called first."
+            )
 
         # See the matching comment in `prepare()`: this mutates the same
         # shared PEFT model state `activate_peft_adapter`/
@@ -507,6 +520,7 @@ class LocalFileBinding(WeightsBinding):
         self.path = None
         self._staged_backend = None
         self._loaded = False
+        self._active = False
         self._released = True
 
     def _fire_phase_complete(self, phase: str, duration_s: float) -> None:
