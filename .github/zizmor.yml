@@ -11,27 +11,6 @@
 
 rules:
 
-  # --- ref-version-mismatch ---------------------------------------------------
-  # Version comments on SHA-pinned actions are stale (e.g. "# v6" should be
-  # "# v6.0.2"). SHAs are correct and immutable; comments are cosmetic only.
-  # Fix tracked in: https://github.com/generative-computing/mellea/issues/1533
-  ref-version-mismatch:
-    ignore:
-      - cut-release-branch.yml:40
-      - docs-publish.yml:69
-      - docs-publish.yml:266
-      - pr-update.yml:29
-      - publish-dev-from-main.yml:49
-      - publish-release.yml:73
-      - publish-release.yml:116
-      - publish-release.yml:168
-      - pypi.yml:30
-      - pypi.yml:65
-      - quality.yml:24
-      - quality.yml:35
-      - quality.yml:54
-      - quality.yml:66
-
   # --- unpinned-uses ----------------------------------------------------------
   # actions/create-github-app-token is referenced by tag (@v1) rather than a
   # commit SHA across all release workflows. These workflows are
