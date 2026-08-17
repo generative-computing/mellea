@@ -20,7 +20,6 @@ heading structure, citation presence, or overall paragraph quality.
 """
 
 import asyncio
-from typing import Any
 
 from mellea.core.backend import Backend
 from mellea.core.base import Context
@@ -29,7 +28,6 @@ from mellea.core.requirement import (
     Requirement,
     ValidationResult,
 )
-from mellea.plugins import hook, register
 from mellea.stdlib.components import Instruction
 from mellea.stdlib.streaming import (
     ChunkEvent,
@@ -101,42 +99,34 @@ async def main() -> None:
     )
     req = ParagraphLengthReq(max_words=_MAX_PARAGRAPH_WORDS)
 
-    @hook("streaming_event")
-    async def print_events(payload: Any, ctx: Any) -> None:
-        event = payload.event
-        match event:
-            case ChunkEvent():
-                word_count = len(event.text.split())
-                preview = event.text[:80].replace("\n", "↵")
-                print(
-                    f"  PARAGRAPH[{event.chunk_index}]: {word_count} words — "
-                    f"{preview!r}..."
-                )
-            case QuickCheckEvent(passed=False):
-                print(
-                    f"  QUICK_CHECK[para {event.chunk_index}]: FAIL — "
-                    f"{event.results[0].reason if event.results else 'unknown'}"
-                )
-            case QuickCheckEvent():
-                print(f"  QUICK_CHECK[para {event.chunk_index}]: pass")
-            case StreamingDoneEvent():
-                print(f"  STREAMING_DONE: {len(event.full_text)} chars accumulated")
-            case FullValidationEvent():
-                print(f"  FULL_VALIDATION: {'PASS' if event.passed else 'FAIL'}")
-            case CompletedEvent():
-                print(f"  COMPLETED: success={event.success}")
-            case _:
-                pass
-
-    register(print_events)
-
-    print("Stream events as they arrive (one per paragraph):")
+    print("Stream events as they arrive (one ChunkEvent per paragraph):")
     async with await stream(
-        action, backend, ctx, requirements=[req], chunking="paragraph"
+        action, backend, ctx, requirements=[req], chunking="paragraph", as_events=True
     ) as streamer:
-        # Draining the stream fires the events; the hook does the printing.
-        async for _paragraph in streamer:
-            pass
+        async for event in streamer:
+            match event:
+                case ChunkEvent():
+                    word_count = len(event.text.split())
+                    preview = event.text[:80].replace("\n", "↵")
+                    print(
+                        f"  PARAGRAPH[{event.chunk_index}]: {word_count} words — "
+                        f"{preview!r}..."
+                    )
+                case QuickCheckEvent(passed=False):
+                    print(
+                        f"  QUICK_CHECK[para {event.chunk_index}]: FAIL — "
+                        f"{event.results[0].reason if event.results else 'unknown'}"
+                    )
+                case QuickCheckEvent():
+                    print(f"  QUICK_CHECK[para {event.chunk_index}]: pass")
+                case StreamingDoneEvent():
+                    print(f"  STREAMING_DONE: {len(event.full_text)} chars accumulated")
+                case FullValidationEvent():
+                    print(f"  FULL_VALIDATION: {'PASS' if event.passed else 'FAIL'}")
+                case CompletedEvent():
+                    print(f"  COMPLETED: success={event.success}")
+                case _:
+                    pass
 
     print(f"\nCompleted normally: {streamer.completed_normally}")
     if streamer.streaming_failures:

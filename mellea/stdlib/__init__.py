@@ -16,7 +16,9 @@ Streaming chunking strategies (for use with streaming validation) are available 
 `mellea.stdlib.chunking` and re-exported here for convenience, alongside the
 `Chunker` that drives them over a stream.  The core streaming primitive `stream()`
 and its async-iterable handle `Streamer` are also re-exported here, alongside the
-full `StreamEvent` vocabulary for typed event observation.
+full `StreamEvent` vocabulary for typed event observation.  Passing `as_events=True`
+to `stream()` yields an `EventStreamer` that iterates those events in place of
+chunks.
 
 Low-level primitives for tool execution are available in `mellea.stdlib.functional`:
 `call_tools` and `acall_tools` for executing model-requested tool calls with full
@@ -36,6 +38,7 @@ from .streaming import (
     ChunkEvent,
     CompletedEvent,
     ErrorEvent,
+    EventStreamer,
     FullValidationEvent,
     QuickCheckEvent,
     Streamer,
@@ -50,6 +53,7 @@ __all__ = [
     "ChunkingStrategy",
     "CompletedEvent",
     "ErrorEvent",
+    "EventStreamer",
     "FullValidationEvent",
     "ParagraphChunking",
     "QuickCheckEvent",
