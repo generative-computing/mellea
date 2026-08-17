@@ -34,7 +34,7 @@ The following table shows all available backends, their class names, import path
 | [OpenAI](../integrations/openai.md) | `OpenAIBackend` | `mellea.backends.openai` | base | `backend_name="openai"` |
 | [LiteLLM](../integrations/litellm.md) | `LiteLLMBackend` | `mellea.backends.litellm` | `mellea[litellm]` | `backend_name="litellm"` |
 | [Hugging Face](../integrations/huggingface.md) | `LocalHFBackend` | `mellea.backends.huggingface` | `mellea[hf]` | `backend_name="hf"` |
-| [WatsonX](../integrations/watsonx) | `WatsonxAIBackend` | `mellea.backends.watsonx` | `mellea[watsonx]` | `backend_name="watsonx"` (deprecated) |
+| [WatsonX](../integrations/watsonx.md) | `WatsonxAIBackend` | `mellea.backends.watsonx` | `mellea[watsonx]` | `backend_name="watsonx"` (deprecated) |
 
 > **Note:** Vertex AI uses the LiteLLM backend with appropriate model IDs. See the [Vertex AI integration](../integrations/vertex-ai) for details. For detailed setup instructions, click the backend name in the table above.
 
