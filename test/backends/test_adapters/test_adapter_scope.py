@@ -77,6 +77,27 @@ def test_adapter_scope_deactivates_even_when_body_raises():
     weights.deactivate.assert_called_once()
 
 
+def test_adapter_scope_preserves_body_error_when_deactivate_also_raises():
+    """The body's exception remains primary when cleanup also fails."""
+    mock_backend = MagicMock(spec=AdapterMixin)
+    adapter, weights = _make_adapter()
+    body_error = ValueError("body failed")
+    deactivate_error = RuntimeError("deactivation failed")
+    weights.deactivate.side_effect = deactivate_error
+
+    with capture_adapter_hooks() as mock_invoke:
+        with pytest.raises(ValueError, match="body failed") as exc_info:
+            with AdapterMixin.adapter_scope(mock_backend, adapter):
+                raise body_error
+
+    assert exc_info.value is body_error
+    assert exc_info.value.__cause__ is deactivate_error
+    weights.deactivate.assert_called_once()
+    invocations = invocation_payloads(mock_invoke)
+    assert [p.outcome for p in invocations] == ["error"]
+    assert invocations[0].error is body_error
+
+
 def test_adapter_scope_deactivates_even_when_activate_raises():
     mock_backend = MagicMock(spec=AdapterMixin)
     adapter, weights = _make_adapter()

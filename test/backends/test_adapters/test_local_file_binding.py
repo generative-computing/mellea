@@ -291,6 +291,18 @@ def test_release_without_prepare_is_noop():
     binding.release()  # must not raise
 
 
+def test_release_after_bind_before_prepare_clears_staged_backend():
+    backend = _fake_backend()
+    binding = LocalFileBinding(name="answerability")
+    binding.bind_backend(backend)
+
+    binding.release()
+
+    assert binding._staged_backend is None
+    assert binding._released
+    backend.unload_peft_adapter.assert_not_called()
+
+
 def test_release_unloads_and_clears_state():
     backend = _fake_backend()
     binding = LocalFileBinding(name="answerability")
@@ -303,6 +315,37 @@ def test_release_unloads_and_clears_state():
     assert binding.backend is None
     assert binding.path is None
     assert binding._staged_backend is None
+
+
+def test_release_retries_after_unload_failure():
+    backend = _fake_backend()
+    backend.unload_peft_adapter.side_effect = [
+        RuntimeError("transient unload failure"),
+        None,
+    ]
+    binding = LocalFileBinding(name="answerability")
+    binding.bind_backend(backend)
+    binding.prepare()
+    binding.path = "/fake/adapter"
+
+    with pytest.raises(RuntimeError, match="transient unload failure"):
+        binding.release()
+
+    assert not binding._released
+    assert binding.backend is backend
+    assert binding.path == "/fake/adapter"
+    assert binding._staged_backend is backend
+    assert binding._loaded
+    binding.activate()
+
+    binding.release()
+
+    assert backend.unload_peft_adapter.call_count == 2
+    assert binding._released
+    assert binding.backend is None
+    assert binding.path is None
+    assert binding._staged_backend is None
+    assert not binding._loaded
 
 
 def test_release_is_idempotent():

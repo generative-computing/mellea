@@ -310,8 +310,19 @@ def test_resolve_adapter_names_the_conflict_when_a_binding_blocks_registration()
     # `_added_adapters`.
     mock_backend.add_adapter.side_effect = lambda a: None
 
-    with pytest.raises(KeyError, match=r"LocalFileBinding.*answerability_lora"):
-        AdapterMixin.resolve_adapter(mock_backend, "answerability")
+    with (
+        patch(
+            "mellea.backends.adapters.adapter.fetch_intrinsic_metadata",
+            return_value=_MOCK_CATALOG_ENTRY,
+        ),
+        patch(
+            "mellea.backends.adapters.adapter.intrinsics.obtain_io_yaml",
+            return_value="/fake/adapter.yaml",
+        ),
+        patch("builtins.open", mock_open(read_data="key: value")),
+    ):
+        with pytest.raises(KeyError, match=r"LocalFileBinding.*answerability_lora"):
+            AdapterMixin.resolve_adapter(mock_backend, "answerability")
 
 
 def test_resolve_adapter_raises_without_base_model():

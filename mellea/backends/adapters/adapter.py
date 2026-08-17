@@ -788,6 +788,7 @@ class AdapterMixin(Backend, abc.ABC):
         outcome: Literal["success", "schema_error", "error"] = "success"
         exception: BaseException | None = None
         activated = False
+        body_exception: BaseException | None = None
         try:
             started_at = time.monotonic()
             try:
@@ -796,10 +797,21 @@ class AdapterMixin(Backend, abc.ABC):
                 _fire_phase_complete_hook(
                     name, "activate", (time.monotonic() - started_at) * 1000.0
                 )
-                yield
+                try:
+                    yield
+                except BaseException as exc:
+                    body_exception = exc
+                    raise
             finally:
                 if activated:
-                    _run_adapter_phase(name, "deactivate", adapter.weights.deactivate)
+                    try:
+                        _run_adapter_phase(
+                            name, "deactivate", adapter.weights.deactivate
+                        )
+                    except BaseException as deactivate_exc:
+                        if body_exception is None:
+                            raise
+                        raise body_exception from deactivate_exc
         except AdapterSchemaMismatchError as exc:
             # Distinct from a generic error: this is the schema-drift signal the
             # `parse_failures` counter exists to detect, so collapsing it into

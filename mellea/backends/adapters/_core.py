@@ -490,8 +490,11 @@ class LocalFileBinding(WeightsBinding):
         Tracked in #1528, which also asks whether re-registration should be
         supported at all given the terminal contract.
         """
-        self._released = True
+        if self._released:
+            return
         if self.backend is None:
+            self._staged_backend = None
+            self._released = True
             return
 
         # See the matching comment in `prepare()`: this mutates the same
@@ -504,6 +507,7 @@ class LocalFileBinding(WeightsBinding):
         self.path = None
         self._staged_backend = None
         self._loaded = False
+        self._released = True
 
     def _fire_phase_complete(self, phase: str, duration_s: float) -> None:
         """Fires `adapter_function_phase_complete` for a phase this binding owns.
