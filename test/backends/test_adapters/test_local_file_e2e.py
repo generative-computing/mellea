@@ -14,7 +14,11 @@ called directly (bypassing `generate_from_context()`'s standard path, which
 always deactivates adapters first via `_generate_with_adapter_lock("", ...)`)
 so the active-adapter assertion straddling the generate call is a genuine
 proof that generation ran with the adapter active, not a smoke test that
-generation merely succeeded afterwards.
+generation merely succeeded afterwards. A separate `generate_from_context()`
+call after the scope exits is the composition smoke test: mellea's own
+generation path must still work cleanly against a backend that has a
+scoped-and-released adapter registered — it does not exercise the adapter
+itself, since the standard path always deactivates first.
 
 Assertions are structural/functional only (adapter registered, real model
 reports it active during and after generation, adapter cleanly released), per
@@ -48,7 +52,8 @@ from mellea.backends.adapters._core import (
     LocalFileBinding,
 )
 from mellea.backends.huggingface import LocalHFBackend
-from mellea.core import Component
+from mellea.core import CBlock, Component
+from mellea.stdlib.context import SimpleContext
 from test.conftest import cleanup_gpu_backend, hf_skip
 
 
@@ -109,8 +114,18 @@ async def test_local_file_binding_full_lifecycle_against_real_model(backend):
         value = backend._tokenizer.decode(out_ids[0], skip_special_tokens=True)  # type: ignore[union-attr]
 
     assert binding.qualified_name not in backend._model.active_adapters()  # type: ignore[union-attr]
-    assert isinstance(value, str)
-    assert len(value) > 0
+    assert value.strip()
+
+    # Composition smoke test: generate_from_context() must still work once the
+    # scope has exited (see module docstring — it does not exercise the
+    # adapter itself, since the standard path always deactivates first).
+    ctx = SimpleContext().add(CBlock("Is the sky blue?"))
+    mot, _ = await backend.generate_from_context(
+        CBlock("Is the sky blue?"), ctx, model_options={}
+    )
+    composed_value = await mot.avalue()
+    assert isinstance(composed_value, str)
+    assert len(composed_value) > 0
 
     binding.release()
     assert binding.backend is None

@@ -471,6 +471,9 @@ def test_generate_intrinsic_with_adapter_scope_activates_during_generation():
     assert out == "output"
     assert seen_during_generation == [[adapter.qualified_name]]
     assert backend._model.active_adapters() == []
+    # Asserts the real verb ran deactivation, not just that _wire_fake_peft_model's
+    # `active_adapters()` mock still happens to read back empty.
+    backend._model.set_adapter.assert_any_call([])  # type: ignore[attr-defined]
 
 
 def test_generate_intrinsic_with_adapter_scope_fires_hooks_with_correct_payload():
@@ -523,6 +526,7 @@ def test_generate_intrinsic_with_adapter_scope_deactivates_on_error():
         backend._generate_intrinsic_with_adapter_scope(adapter, failing_generate)
 
     assert backend._model.active_adapters() == []
+    backend._model.set_adapter.assert_any_call([])  # type: ignore[attr-defined]
 
 
 def test_concurrent_intrinsic_calls_cannot_observe_each_others_adapter():
@@ -556,7 +560,7 @@ def test_concurrent_intrinsic_calls_cannot_observe_each_others_adapter():
 
         try:
             backend._generate_intrinsic_with_adapter_scope(adapter, fake_generate)
-        except BaseException as exc:  # surfaced via `errors`, not swallowed
+        except Exception as exc:  # surfaced via `errors`, not swallowed
             errors.append(exc)
 
     threads = [
