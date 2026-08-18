@@ -479,11 +479,18 @@ class LocalFileBinding(WeightsBinding):
             except BaseException as exc:
                 error = exc
                 raise
+            else:
+                # Fires before `_fire_invocation_complete` below so hook order
+                # matches `AdapterMixin.adapter_scope`'s (phase-complete, then
+                # invocation-complete) — firing this after the `with` block
+                # instead put it after invocation-complete, which made the
+                # dangling-child cleanup in `finish_adapter_function_span` the
+                # only path that ever closed `adapter_function.prepare`'s span.
+                self._fire_phase_complete(
+                    "prepare", time.monotonic() - started_at, invocation_id
+                )
             finally:
                 self._fire_invocation_complete(invocation_id, revision, error)
-        self._fire_phase_complete(
-            "prepare", time.monotonic() - started_at, invocation_id
-        )
 
     def activate(self) -> None:
         """Selects already-loaded adapter weights for generation.

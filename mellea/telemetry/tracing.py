@@ -1104,7 +1104,6 @@ def start_adapter_function_span(
     revision: str | None,
     binding_type: str,
     adapter_type: str,
-    attach_context: bool = False,
 ) -> Span | None:
     """Open the `adapter_function` parent span for one adapter-function invocation.
 
@@ -1112,9 +1111,10 @@ def start_adapter_function_span(
     concern, not a user-facing operation (see
     `docs/docs/observability/tracing.md`).
 
-    `attach_context` defaults to `False`, unlike every other `start_*_span`
-    helper. `ADAPTER_FUNCTION_INVOCATION_START`/`_PHASE_START` fire from sync
-    code (`AdapterMixin.adapter_scope`, `LocalFileBinding.prepare`) via
+    Never attached as the ambient OTel context, unlike every other
+    `start_*_span` helper — deliberately, not as an oversight.
+    `ADAPTER_FUNCTION_INVOCATION_START`/`_PHASE_START` fire from sync code
+    (`AdapterMixin.adapter_scope`, `LocalFileBinding.prepare`) via
     `_run_async_in_thread`, which runs each hook as an independent task on a
     shared background event loop, seeded from a *fresh* `contextvars.copy_context()`
     snapshot of the calling thread taken at that call — mutations inside one
@@ -1122,10 +1122,12 @@ def start_adapter_function_span(
     calling thread and so are invisible to the *next* `_run_async_in_thread`
     call's snapshot. Ambient attach/detach across two such calls therefore
     can't establish a parent/child edge (and mismatched attach/detach tasks
-    trigger "Detaching an OTel context token across asyncio tasks" warnings)
-    — `start_adapter_function_phase_span` instead parents explicitly via
-    `trace.set_span_in_context` using the span object looked up by
-    `invocation_id`, which needs no ambient context at all.
+    would trigger "Detaching an OTel context token across asyncio tasks"
+    warnings) — `start_adapter_function_phase_span` instead parents explicitly
+    via `trace.set_span_in_context` using the span object looked up by
+    `invocation_id`, which needs no ambient context at all. Exposing an
+    `attach_context` parameter here (as the sibling helpers do) would only
+    offer a setting that breaks whenever used, so there isn't one.
 
     Args:
         invocation_id: Correlation key for the matching `finish_adapter_function_span` call.
@@ -1134,8 +1136,6 @@ def start_adapter_function_span(
         binding_type: Weight-binding reality the adapter is running under (e.g.
             `"local_file"`, `"embedded"`, `"server_mediated"`).
         adapter_type: Adapter mechanism (e.g. `"lora"`, `"alora"`).
-        attach_context: Whether to attach the span as the ambient OTel context.
-            Left `False` by every current caller — see above.
 
     Returns:
         The span, or `None` if tracing is disabled.
@@ -1150,8 +1150,7 @@ def start_adapter_function_span(
     set_attribute_safe(span, "mellea.adapter_function.binding_type", binding_type)
     set_attribute_safe(span, "mellea.adapter_function.adapter_type", adapter_type)
 
-    token = _attach_span_context(span, attach=attach_context)
-    _in_flight_spans[invocation_id] = (span, token, _current_task())
+    _in_flight_spans[invocation_id] = (span, None, _current_task())
     return span
 
 
@@ -1173,43 +1172,38 @@ def finish_adapter_function_span(
         outcome: `"success"`, `"schema_error"`, or `"error"`.
         exception: The exception raised during the invocation, or `None` on success.
     """
+    # `list(...)` snapshots the keys in one call before filtering, so a
+    # concurrent insert from another thread (e.g. a different invocation's
+    # sync-dispatched hook, on the shared `_run_async_in_thread` background
+    # loop) can't trigger a "dictionary changed size during iteration" error
+    # here — the first site in this module to iterate `_in_flight_spans`
+    # rather than do a keyed lookup.
     prefix = f"{invocation_id}{_ADAPTER_FUNCTION_PHASE_KEY_INFIX}"
-    for key in [k for k in _in_flight_spans if k.startswith(prefix)]:
+    for key in [k for k in list(_in_flight_spans) if k.startswith(prefix)]:
         entry = _in_flight_spans.pop(key, None)
         if entry is None:
             continue
-        phase_span, phase_token, phase_attach_task = entry
-        try:
-            if exception is not None:
-                phase_span.record_exception(exception)
-                phase_span.set_status(
-                    trace.Status(trace.StatusCode.ERROR, str(exception))
-                )
-        finally:
-            _safe_detach(phase_token, phase_attach_task)
-            phase_span.end()
+        phase_span, _phase_token, _phase_attach_task = entry
+        if exception is not None:
+            phase_span.record_exception(exception)
+            phase_span.set_status(trace.Status(trace.StatusCode.ERROR, str(exception)))
+            phase_span.set_attribute("error.type", type(exception).__name__)
+        phase_span.end()
 
     entry = _in_flight_spans.pop(invocation_id, None)
     if entry is None:
         return
-    span, token, attach_task = entry
-    try:
-        set_attribute_safe(span, "mellea.adapter_function.outcome", outcome)
-        if exception is not None:
-            span.record_exception(exception)
-            span.set_status(trace.Status(trace.StatusCode.ERROR, str(exception)))
-            span.set_attribute("error.type", type(exception).__name__)
-    finally:
-        _safe_detach(token, attach_task)
-        span.end()
+    span, _token, _attach_task = entry
+    set_attribute_safe(span, "mellea.adapter_function.outcome", outcome)
+    if exception is not None:
+        span.record_exception(exception)
+        span.set_status(trace.Status(trace.StatusCode.ERROR, str(exception)))
+        span.set_attribute("error.type", type(exception).__name__)
+    span.end()
 
 
 def start_adapter_function_phase_span(
-    invocation_id: str,
-    phase: str,
-    *,
-    revision: str | None = None,
-    attach_context: bool = False,
+    invocation_id: str, phase: str, *, revision: str | None = None
 ) -> Span | None:
     """Open an `adapter_function.<phase>` child span, explicitly parented under the invocation span.
 
@@ -1228,8 +1222,6 @@ def start_adapter_function_phase_span(
         revision: Catalog revision of the adapter, or `None` if unpinned. Recorded
             directly on this phase span — e.g. `adapter_function.prepare` records
             the resolved Hugging Face SHA here, not just on the parent.
-        attach_context: Whether to attach the span as the ambient OTel context.
-            Left `False` by every current caller — see `start_adapter_function_span`.
 
     Returns:
         The span, or `None` if tracing is disabled.
@@ -1246,10 +1238,9 @@ def start_adapter_function_phase_span(
     set_attribute_safe(span, "mellea.adapter_function.phase", phase)
     set_attribute_safe(span, "mellea.adapter_function.revision", revision)
 
-    token = _attach_span_context(span, attach=attach_context)
     _in_flight_spans[_adapter_function_phase_key(invocation_id, phase)] = (
         span,
-        token,
+        None,
         _current_task(),
     )
     return span
@@ -1270,8 +1261,7 @@ def finish_adapter_function_phase_span(invocation_id: str, phase: str) -> None:
     )
     if entry is None:
         return
-    span, token, attach_task = entry
-    _safe_detach(token, attach_task)
+    span, _token, _attach_task = entry
     span.end()
 
 

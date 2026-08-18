@@ -21,7 +21,6 @@ Three layers, mirroring `test_tracing_application.py`:
    registry drains to zero.
 """
 
-from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -466,6 +465,36 @@ def test_activate_raising_still_drains_registry_and_marks_error(span_exporter):
 
 
 @pytest.mark.integration
+def test_prepare_raising_drains_registry_and_marks_error(span_exporter):
+    """A failing `prepare()` still closes both spans and drains the registry.
+
+    `prepare()`'s own invocation-start/complete pair (unlike `adapter_scope`'s)
+    has never been exercised at the span level before — only via mocked hook
+    counts in `test_local_file_binding.py`. This is the direct span-level
+    counterpart to `test_activate_raising_still_drains_registry_and_marks_error`.
+    """
+    from opentelemetry.trace import StatusCode
+
+    backend = MagicMock()
+    backend.add_adapter.side_effect = lambda binding: setattr(
+        binding, "backend", backend
+    )
+    backend.load_peft_adapter.side_effect = RuntimeError("load boom")
+    binding = LocalFileBinding(name="answerability")
+    binding.bind_backend(backend)
+
+    with pytest.raises(RuntimeError, match="load boom"):
+        binding.prepare()
+
+    by_name = _spans_by_name(span_exporter)
+    assert "adapter_function" in by_name
+    assert "adapter_function.prepare" in by_name
+    assert by_name["adapter_function"].status.status_code == StatusCode.ERROR
+    assert by_name["adapter_function.prepare"].status.status_code == StatusCode.ERROR
+    assert tracing._in_flight_spans == {}
+
+
+@pytest.mark.integration
 def test_prepare_emits_its_own_invocation_and_records_resolved_revision(span_exporter):
     """`LocalFileBinding.prepare()` opens its own `adapter_function` invocation.
 
@@ -520,13 +549,8 @@ def test_prepare_and_activate_open_independent_invocations(span_exporter):
     binding.bind_backend(backend)
     binding.prepare()
 
-    from mellea.backends.adapters._core import (
-        Adapter as _AdapterCore,
-        Identity as _Identity,
-    )
-
-    adapter = _AdapterCore(
-        identity=_Identity(name="answerability", adapter_type="lora"),
+    adapter = Adapter(
+        identity=Identity(name="answerability", adapter_type="lora"),
         io_contract=_Contract(),
         weights=binding,
     )

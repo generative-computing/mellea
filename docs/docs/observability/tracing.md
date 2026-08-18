@@ -289,7 +289,7 @@ instead, so the in-flight span registry still drains to zero.
 
 **Nesting is unconditional, unlike every other span pair in this document.**
 Every other family nests via ambient OTel context attach, which needs
-Python 3.12+ (see the note at the end of this section) — `adapter_function`
+Python 3.12+ (see the note under "Span hierarchy" below) — `adapter_function`
 children instead parent explicitly via `trace.set_span_in_context`, because
 `ADAPTER_FUNCTION_*_START`/`_COMPLETE` fire from **synchronous** code
 (`adapter_scope`, `prepare()`) through `_run_async_in_thread`, under which
@@ -301,10 +301,13 @@ Python 3.11 and 3.12+.
 **Known gap: no exemplar linkage to `mellea.adapter_function.phase_duration`.**
 Because no span in this family is attached as ambient context (see above), the
 `AdapterFunctionMetricsPlugin` histogram sample (a separate plugin subscribed
-to the same hooks) has no ambiently-current span to sample as an exemplar,
-regardless of the two plugins' firing order. Fixing this would mean recording
-the metric from inside `AdapterFunctionTracingPlugin` itself, so it can pass
-the span's context explicitly — a larger change left for a follow-up.
+to the same hooks) never has the `adapter_function`/`adapter_function.<phase>`
+span ambiently current when it records — at best it would sample whatever
+*enclosing application span* happens to be ambient (e.g. `action`), not the
+adapter-function span the metric is actually about — regardless of the two
+plugins' firing order. Fixing this would mean recording the metric from inside
+`AdapterFunctionTracingPlugin` itself, so it can pass the span's context
+explicitly — a larger change left for a follow-up.
 
 ### Span hierarchy
 

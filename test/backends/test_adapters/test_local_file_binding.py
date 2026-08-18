@@ -517,8 +517,57 @@ def test_prepare_fires_phase_complete_metric_when_plugins_present():
         hook_coro.close()
 
 
+def test_prepare_fires_hooks_in_start_then_complete_order():
+    """Regression guard: phase-complete must fire before invocation-complete.
+
+    Guards against an ordering inversion where `prepare()`'s phase-complete
+    hook fired *after* invocation-complete, silently making the defensive
+    dangling-child-span close in `finish_adapter_function_span` the only path
+    that ever closed `adapter_function.prepare`'s span on a *successful*
+    prepare() — contradicting `AdapterMixin.adapter_scope`'s own hook order
+    (phase-complete before invocation-complete for both activate and
+    deactivate) and this file's own
+    `test_prepare_fires_phase_complete_metric_when_plugins_present` docstring,
+    which asserted the correct order in prose without a test able to catch a
+    reversal.
+    """
+    pytest.importorskip("cpex", reason="cpex not installed — install mellea[hooks]")
+    from mellea.backends.adapters._core import invoke_hook as _real_invoke_hook
+    from mellea.plugins.types import HookType
+
+    backend = _fake_backend()
+    binding = LocalFileBinding(name="answerability")
+    binding.bind_backend(backend)
+
+    fired_hook_types: list[HookType] = []
+
+    def _record_and_dispatch(hook_type, payload):
+        fired_hook_types.append(hook_type)
+        return _real_invoke_hook(hook_type, payload)
+
+    with (
+        patch("mellea.backends.adapters._core.has_plugins", return_value=True),
+        patch(
+            "mellea.backends.adapters._core.invoke_hook",
+            new_callable=MagicMock,
+            side_effect=_record_and_dispatch,
+        ),
+        patch("mellea.backends.adapters._core._run_async_in_thread") as mock_run,
+    ):
+        binding.prepare()
+
+    assert fired_hook_types == [
+        HookType.ADAPTER_FUNCTION_INVOCATION_START,
+        HookType.ADAPTER_FUNCTION_PHASE_START,
+        HookType.ADAPTER_FUNCTION_PHASE_COMPLETE,
+        HookType.ADAPTER_FUNCTION_INVOCATION_COMPLETE,
+    ]
+    for call in mock_run.call_args_list:
+        call.args[0].close()
+
+
 def test_release_does_not_fire_phase_complete_metric():
-    # "release" is not a valid AdapterFunctionPhaseCompletePayload.phase value.
+    # release() fires no hooks at all — it runs outside any invocation.
     pytest.importorskip("cpex", reason="cpex not installed — install mellea[hooks]")
     backend = _fake_backend()
     binding = LocalFileBinding(name="answerability")

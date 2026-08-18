@@ -347,7 +347,7 @@ def _fire_phase_start_hook(
 
     Args:
         invocation_id: Correlation id of the enclosing invocation.
-        name: Adapter function name, used as the metric's `name` field.
+        name: Adapter function name, recorded as a span attribute.
         phase: Lifecycle phase name; must be a valid
             `AdapterFunctionPhaseStartPayload.phase` value.
         revision: Catalog revision of the adapter, or `None` if unpinned.
@@ -356,10 +356,10 @@ def _fire_phase_start_hook(
         return
     from ...plugins.hooks.adapter_function import AdapterFunctionPhaseStartPayload
 
-    payload = AdapterFunctionPhaseStartPayload(
-        invocation_id=invocation_id, name=name, phase=phase, revision=revision
-    )
     try:
+        payload = AdapterFunctionPhaseStartPayload(
+            invocation_id=invocation_id, name=name, phase=phase, revision=revision
+        )
         hook_coro = invoke_hook(HookType.ADAPTER_FUNCTION_PHASE_START, payload)
         _run_async_in_thread(hook_coro)
     except Exception:
@@ -815,15 +815,16 @@ class AdapterMixin(Backend, abc.ABC):
 
         A no-op when `adapter` is `None`. Otherwise: activates
         `adapter.weights`, yields, then always deactivates — even if the `with`
-        body raises. Each phase fires `ADAPTER_FUNCTION_PHASE_COMPLETE`, and
-        `ADAPTER_FUNCTION_INVOCATION_COMPLETE` fires on the way out, carrying the
-        overall outcome.
+        body raises. Fires `ADAPTER_FUNCTION_INVOCATION_START` on the way in;
+        each phase fires `ADAPTER_FUNCTION_PHASE_START` then
+        `ADAPTER_FUNCTION_PHASE_COMPLETE`; `ADAPTER_FUNCTION_INVOCATION_COMPLETE`
+        fires on the way out, carrying the overall outcome.
 
-        This method fires hooks only; it does not open spans. Span production is a
-        plugin's job (see #1464 for the rule and #1466 for the adapter-function
-        spans), and the `ADAPTER_FUNCTION_*` family currently has no start hook for
-        a plugin to open a span on. See `docs/dev/adapter_observability.md` for the
-        metric schema.
+        This method fires hooks only; it does not open spans itself. Span
+        production is a plugin's job (see #1464 for the rule) —
+        `AdapterFunctionTracingPlugin` (`mellea/telemetry/tracing_plugins.py`)
+        turns these hooks into the `adapter_function` span tree. See
+        `docs/docs/observability/tracing.md` for the span schema.
 
         `deactivate()` is guarded on `activate()`'s own side effect having
         completed, not on the activate phase's hook dispatch also succeeding.
