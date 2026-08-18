@@ -84,7 +84,7 @@ def test_session_tool_calls_emit_parented_spans_per_call(span_exporter):
     """A turn that calls two tools emits one `execute_tool` span per call, each
     parented under the session span, with per-call success/error status.
 
-    Only inference (`act`) is faked; the real `transform` -> `_call_tools` ->
+    Only inference (`act`) is faked; the real `transform` -> `call_tools` ->
     `tool_*_invoke` hooks -> `ToolTracingPlugin` path runs and emits the spans.
     """
 
