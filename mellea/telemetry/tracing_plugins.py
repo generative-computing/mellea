@@ -677,6 +677,18 @@ class AdapterFunctionTracingPlugin(
     parent/child edge (see `start_adapter_function_span`'s docstring).
     `start_adapter_function_phase_span` parents each child explicitly instead,
     so nesting works identically on every Python version.
+
+    Exemplar linkage (SKILL.md §3) is **not** established for these spans, and
+    can't be with the current architecture: an OTel histogram exemplar samples
+    whatever span is *ambiently* current at the moment the metric is recorded,
+    but no span in this family is ever attached as ambient context (see above)
+    — there is nothing for `AdapterFunctionMetricsPlugin`
+    (`mellea/telemetry/metrics_plugins.py`, a separate plugin subscribed to the
+    same hooks) to sample regardless of firing order between the two plugins.
+    This is a known, structural gap, not an oversight: fixing it would need the
+    metric recorded from inside this plugin (so it can pass the span's context
+    explicitly) rather than from a same-hook sibling plugin, which is a larger
+    change than adding spans and is left for a follow-up.
     """
 
     @hook("adapter_function_invocation_start")

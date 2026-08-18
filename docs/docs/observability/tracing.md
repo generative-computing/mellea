@@ -298,6 +298,14 @@ hook call gets an independent `contextvars` snapshot of the calling thread).
 So `adapter_function.<phase>` nests under `adapter_function` the same way on
 Python 3.11 and 3.12+.
 
+**Known gap: no exemplar linkage to `mellea.adapter_function.phase_duration`.**
+Because no span in this family is attached as ambient context (see above), the
+`AdapterFunctionMetricsPlugin` histogram sample (a separate plugin subscribed
+to the same hooks) has no ambiently-current span to sample as an exemplar,
+regardless of the two plugins' firing order. Fixing this would mean recording
+the metric from inside `AdapterFunctionTracingPlugin` itself, so it can pass
+the span's context explicitly — a larger change left for a follow-up.
+
 ### Span hierarchy
 
 Backend spans nest inside application spans:
