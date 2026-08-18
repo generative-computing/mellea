@@ -1525,12 +1525,25 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             self.cache_put(cache_key, cache_info)
 
             # Clear KV cache and scores from HF output; retained via LRU cache above.
-            hf_output.past_key_values = None
-            hf_output.scores = None
+            # `ModelOutput` (`OrderedDict` subclass) does not sync `None` writes back
+            # to the mapping, so plain attribute assignment leaves the dict entry — and
+            # its tensor — alive.
+            for _field in ("past_key_values", "scores"):
+                if _field in hf_output:
+                    dict.__delitem__(hf_output, _field)
+                try:
+                    object.__delattr__(hf_output, _field)
+                except AttributeError:
+                    pass
 
         # Clear the raw logits tensor (scores already cleared above if cached).
         if isinstance(hf_output, GenerateDecoderOnlyOutput):
-            hf_output.logits = None
+            if "logits" in hf_output:
+                dict.__delitem__(hf_output, "logits")
+            try:
+                object.__delattr__(hf_output, "logits")
+            except AttributeError:
+                pass
 
         # Only scan for tools if we are not doing structured output and tool calls were provided to the model.
         if _format is None and tool_calls:
@@ -1608,20 +1621,26 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         if not self._use_caches and isinstance(
             mot.raw.response, GenerateDecoderOnlyOutput
         ):
-            import gc
-
             hf_out = mot.raw.response
-            if hasattr(hf_out, "sequences") and hf_out.sequences is not None:
-                del hf_out.sequences
-            if hasattr(hf_out, "scores") and hf_out.scores is not None:
-                del hf_out.scores
-            if hasattr(hf_out, "logits") and hf_out.logits is not None:
-                del hf_out.logits
+            # GenerateDecoderOnlyOutput is a ModelOutput (OrderedDict subclass).
+            # ModelOutput.__setattr__ skips the dict write when value is None, and
+            # ModelOutput defines no __delattr__, so both `out.f = None` and
+            # `del out.f` leave the mapping entry — and its tensor — alive.
+            # Clear both the dict entry and the instance attribute to release them.
+            for field in ("sequences", "scores", "logits"):
+                if field in hf_out:
+                    dict.__delitem__(hf_out, field)
+                try:
+                    object.__delattr__(hf_out, field)
+                except AttributeError:
+                    pass
             mot.raw.response = None
 
-            # Force Python GC and return CUDA memory to device
-            gc.collect()
-            torch.cuda.empty_cache()
+            if torch.cuda.is_available():
+                import gc
+
+                gc.collect()
+                torch.cuda.empty_cache()
 
         # Generate the log for this ModelOutputThunk.
         generate_log = GenerateLog()
@@ -1766,23 +1785,40 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             result.generation.provider = self._provider
             result.raw.provider = self._provider
 
+            # Extract per-MOT tensors once. These are shared by generation
+            # and, where supported, raw.response.
+            mot_scores: tuple[torch.Tensor, ...] | None = None
+            if outputs.scores is not None:
+                mot_scores = tuple(
+                    score[i].detach().clone() for score in outputs.scores
+                )
+
+            mot_logits_raw: tuple[torch.Tensor, ...] | None = None
+            if outputs.logits is not None:
+                mot_logits_raw = tuple(
+                    logits[i].detach().clone() for logits in outputs.logits
+                )
+
             # Construct a per-MOT GenerateDecoderOnlyOutput slice holding clones of row i.
             # past_key_values, attentions, and hidden_states are shared across the batch
             # and cannot be sliced per MOT, so they are omitted.
-            if isinstance(outputs, GenerateDecoderOnlyOutput) and isinstance(
-                outputs.sequences, torch.Tensor
+            # Note: beam-search outputs (GenerateBeamDecoderOnlyOutput) are not supported here;
+            # mot.raw.response will be None.
+            if (
+                self._use_caches
+                and isinstance(outputs, GenerateDecoderOnlyOutput)
+                and isinstance(outputs.sequences, torch.Tensor)
             ):
-                mot_scores: tuple | None = None
-                if outputs.scores is not None:
-                    mot_scores = tuple(
-                        s[i : i + 1, :].detach().clone() for s in outputs.scores
-                    )
-                mot_logits_raw: tuple[torch.Tensor, ...] | None = None
-                if outputs.logits is not None:
-                    mot_logits_raw = tuple(
-                        step_logits[i : i + 1, :].detach().clone()
-                        for step_logits in outputs.logits
-                    )
+                response_scores = (
+                    tuple(score.unsqueeze(0) for score in mot_scores)
+                    if mot_scores is not None
+                    else None
+                )
+                response_logits = (
+                    tuple(logits.unsqueeze(0) for logits in mot_logits_raw)
+                    if mot_logits_raw is not None
+                    else None
+                )
 
                 if "raw_batch_response_fields_omitted" not in self._warned_about:
                     self._warned_about.add("raw_batch_response_fields_omitted")
@@ -1797,23 +1833,27 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                         "torch.LongTensor",
                         outputs.sequences[i : i + 1, :].detach().clone(),
                     ),
-                    scores=cast("tuple[torch.FloatTensor] | None", mot_scores),
-                    logits=cast("tuple[torch.FloatTensor] | None", mot_logits_raw),
+                    scores=cast("tuple[torch.FloatTensor] | None", response_scores),
+                    logits=cast("tuple[torch.FloatTensor] | None", response_logits),
                     attentions=None,
                     hidden_states=None,
                     past_key_values=None,
                 )
+            elif self._use_caches:
+                # Beam search slicing is not feasible — raw.response is not populated.
+                warn_key = "raw_batch_beam_search_unsupported"
+                if warn_key not in self._warned_about:
+                    self._warned_about.add(warn_key)
+                    MelleaLogger.get_logger().debug(
+                        "mot.raw.response is not available on the raw batch and will be None."
+                    )
 
-            if want_logits and outputs.scores is not None:
-                # Clone each slice so this MOT does not hold a view into the shared batch allocation.
-                result.generation.logits = tuple(
-                    step_scores[i].detach().clone() for step_scores in outputs.scores
-                )
+            # Reuse the cloned tensors.
+            if want_logits and mot_scores is not None:
+                result.generation.logits = mot_scores
 
-            if want_raw_logits and outputs.logits is not None:
-                result.generation.raw_logits = tuple(
-                    step_logits[i].detach().clone() for step_logits in outputs.logits
-                )
+            if want_raw_logits and mot_logits_raw is not None:
+                result.generation.raw_logits = mot_logits_raw
 
             action = actions[i]
             result.parsed_repr = (
@@ -1832,20 +1872,14 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             result._generate_log = generate_log
             results.append(result)
 
-        # Drop the shared batch output — per-MOT clones in raw.response own their
-        # own storage, so releasing the batch frees its memory.
-        if hasattr(outputs, "sequences") and outputs.sequences is not None:
-            del outputs.sequences
-        if hasattr(outputs, "scores") and outputs.scores is not None:
-            del outputs.scores
-        if hasattr(outputs, "logits") and outputs.logits is not None:
-            del outputs.logits
-        if hasattr(outputs, "attentions") and outputs.attentions is not None:
-            del outputs.attentions
-        if hasattr(outputs, "hidden_states") and outputs.hidden_states is not None:
-            del outputs.hidden_states
-        if hasattr(outputs, "past_key_values") and outputs.past_key_values is not None:
-            del outputs.past_key_values
+        # Drop all references that might pin the shared batch tensors.
+        # `sequences_to_decode` holds slice views of `outputs.sequences`, and
+        # `outputs` is a `GenerateDecoderOnlyOutput` — a `ModelOutput`, which
+        # subclasses `OrderedDict`. `del obj.attr` only removes the `__dict__`
+        # slot; the `OrderedDict` entry keeps a strong reference to the tensor.
+        # Setting `outputs = None` drops the whole container at once
+        del sequences_to_decode
+        outputs = None
         if torch.cuda.is_available():
             import gc
 
