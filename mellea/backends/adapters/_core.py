@@ -189,6 +189,65 @@ class _DictContract(IOContract):
         return data
 
 
+class _ListContract(IOContract):
+    """Validate list-of-dicts adapter output and wrap it under key `"items"`.
+
+    Each item in the list is checked for the declared required keys.  The
+    validated list is returned wrapped in `{"items": [...]}` so that
+    :func:`~mellea.stdlib.components.intrinsic._util.call_intrinsic` can always
+    return a plain `dict`.
+
+    Args:
+        name: Adapter capability name; included in
+            :class:`~mellea.backends.adapters.AdapterSchemaMismatchError` messages.
+        required_item_keys: Keys that must be present in every item dict.
+    """
+
+    def __init__(self, name: str, required_item_keys: frozenset[str]) -> None:
+        self._name = name
+        self._required_item_keys = required_item_keys
+
+    def build_prompt(self, **_kwargs: object) -> Component:
+        raise NotImplementedError(
+            "build_prompt is not used in Phase 1; implemented in Phase 2."
+        )
+
+    def parse(self, raw: str) -> dict[str, object]:
+        """Parse and validate a list-of-dicts adapter output.
+
+        Args:
+            raw (str): Raw JSON string from the model.
+
+        Returns:
+            dict[str, object]: `{"items": [list of validated dicts]}`.
+                An empty list parses to `{"items": []}`.
+
+        Raises:
+            ValueError: When *raw* is not valid JSON, is not a JSON array, or
+                contains a non-object element.
+            AdapterSchemaMismatchError: When any item is missing a required key.
+        """
+        data = json.loads(raw)
+        if not isinstance(data, list):
+            raise ValueError(
+                f"Adapter '{self._name}' output must be a JSON array, "
+                f"got {type(data).__name__}."
+            )
+        for item in data:
+            if not isinstance(item, dict):
+                raise ValueError(
+                    f"Adapter '{self._name}' output array must contain only JSON "
+                    f"objects, got a {type(item).__name__} element."
+                )
+            observed = frozenset(item.keys())
+            missing = self._required_item_keys - observed
+            if missing:
+                raise AdapterSchemaMismatchError(
+                    self._name, observed, self._required_item_keys
+                )
+        return {"items": data}
+
+
 class WeightsBinding(abc.ABC):
     """Abstract lifecycle interface for adapter weights.
 
