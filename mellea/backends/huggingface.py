@@ -16,7 +16,7 @@ import functools
 import json
 import threading
 from collections.abc import Callable, Coroutine, Sequence
-from typing import Any, cast
+from typing import Any, ClassVar, cast
 
 import jinja2
 import jinja2.meta
@@ -77,7 +77,13 @@ from ..stdlib.requirements import ALoraRequirement, LLMaJRequirement
 from ..telemetry.context import generate_request_id, with_context
 from ._options import resolve_model_options
 from .adapters import AdapterMixin, IntrinsicAdapter, LocalHFAdapter
-from .adapters._core import LocalFileBinding
+from .adapters._core import (
+    Adapter as _AdapterCore,
+    Identity,
+    IOContract,
+    LocalFileBinding,
+    WeightsBinding,
+)
 from .adapters.adapter import AdapterInput
 from .backend import FormatterBackend
 from .cache import Cache, SimpleLRUCache
@@ -450,8 +456,17 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         self._added_adapters: dict[str, LocalHFAdapter | LocalFileBinding] = {}
         self._loaded_adapters: dict[str, LocalHFAdapter | LocalFileBinding] = {}
 
-        self._generation_lock = threading.Lock()
-        """Used to force generation requests to be non-concurrent. Necessary for preventing issues with adapters."""
+        self._generation_lock = threading.RLock()
+        """Forces generation requests to be non-concurrent, and guards adapter
+        activation (`_adapter_activation_lock()` returns this same lock).
+
+        Reentrant (`threading.RLock`, not `threading.Lock`) because
+        `_generate_intrinsic_with_adapter_scope` holds it for a whole
+        activate -> generate -> deactivate critical section, and
+        `adapter_scope()`'s `activate()`/`deactivate()` re-acquire it from
+        inside that section, on the same thread, via `_adapter_activation_lock()`.
+        A plain `Lock` deadlocks on that same-thread re-acquisition (#1465).
+        """
 
     def _make_dc_cache(self, toks, **model_options):
         dc = DynamicCache()
@@ -575,6 +590,63 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             out = generate_func(*args, **kwargs)
             _assert_correct_adapters(adapter_name, self._model)
             return out
+
+    def _generate_intrinsic_with_adapter_scope(
+        self, adapter: IntrinsicAdapter, generate_func: Callable, *args, **kwargs
+    ):
+        """Runs `generate_func` with `adapter` active, inside `AdapterMixin.adapter_scope`.
+
+        Replaces the old direct load-then-activate-then-generate sequence
+        `_generate_from_intrinsic` used to run through `_generate_with_adapter_lock`
+        (#1465): the model call now runs inside `adapter_scope`, so activation and
+        deactivation fire the `ADAPTER_FUNCTION_PHASE_COMPLETE`/
+        `ADAPTER_FUNCTION_INVOCATION_COMPLETE` hooks, and deactivation is
+        guaranteed even if `generate_func` raises.
+
+        `IntrinsicAdapter` (the legacy shim `adapter` is expected to be) carries
+        an inert `_ShimWeightsBinding` that raises on every verb, so it can't be
+        handed to `adapter_scope()` directly. This method builds a fresh
+        `_AdapterCore` wrapping a `_IntrinsicPeftBinding` instead, which drives
+        this backend's own `load_peft_adapter`/`activate_peft_adapter`/
+        `deactivate_peft_adapter` verbs — the same verbs
+        `_generate_with_adapter_lock` used to call directly.
+
+        Holds `_generation_lock` for the *entire* activate -> generate ->
+        deactivate section, not just around activation, so a concurrent
+        caller's `activate()` can never interleave with this call's generation
+        — the atomicity gap `adapter_scope()`'s own docstring flags as
+        unresolved for real concurrent callers. This is safe specifically
+        because this method only ever runs inside a single `asyncio.to_thread`
+        worker thread (see its call site in `_generate_from_intrinsic`): the
+        inner re-acquisition of `_generation_lock` inside `adapter_scope()`'s
+        `activate()`/`deactivate()` (via `_adapter_activation_lock()`) is
+        same-thread, so it's reentrant rather than a cross-thread deadlock.
+
+        Args:
+            adapter: The (legacy) `IntrinsicAdapter` to activate for this call.
+            generate_func: The synchronous generation callable to invoke while
+                `adapter` is active.
+            *args: Positional arguments forwarded to `generate_func`.
+            **kwargs: Keyword arguments forwarded to `generate_func`.
+
+        Returns:
+            Whatever `generate_func` returns.
+        """
+        scope_adapter = _AdapterCore(
+            identity=Identity(
+                name=adapter.name,
+                adapter_type=adapter.adapter_type.value,
+                capability=adapter.name,
+            ),
+            io_contract=_NoIntrinsicIOContract(),
+            weights=_IntrinsicPeftBinding(self, adapter.qualified_name),
+        )
+        with self._generation_lock:
+            with self.adapter_scope(scope_adapter):
+                _assert_correct_adapters(adapter.qualified_name, self._model)
+                out = generate_func(*args, **kwargs)
+                _assert_correct_adapters(adapter.qualified_name, self._model)
+                return out
 
     async def _generate_from_intrinsic(
         self,
@@ -770,8 +842,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             model_arg = _CapturingModelProxy()  # type: ignore[assignment]
 
         chat_response = asyncio.to_thread(
-            self._generate_with_adapter_lock,
-            adapter.qualified_name,
+            self._generate_intrinsic_with_adapter_scope,
+            adapter,
             granite_formatters.base.util.generate_with_transformers,  # type: ignore
             # Passed as args/kwargs to generate.
             self._tokenizer,
@@ -2145,23 +2217,27 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         """Reuse `_generation_lock` for exclusivity around adapter activation.
 
         `activate_peft_adapter`/`deactivate_peft_adapter` document "must be called
-        while holding `_generation_lock`" as a precondition, and they have two
+        while holding `_generation_lock`" as a precondition, and they have three
         callers:
 
-        1. `_generate_with_adapter_lock`, which takes `_generation_lock` itself.
+        1. `_generate_with_adapter_lock`, which takes `_generation_lock` itself
+           (for the standard, non-intrinsic generation path).
         2. `LocalFileBinding.activate()`/`.deactivate()` (driven by
            `AdapterMixin.adapter_scope()`), which holds no lock of its own.
+        3. `_generate_intrinsic_with_adapter_scope`, which also holds
+           `_generation_lock` itself, for the whole activate -> generate ->
+           deactivate section — and calls into caller 2's path via
+           `adapter_scope()` from inside that section (#1465).
 
-        This exists for caller 2 — so it is not a duplicate of the lock caller 1
-        takes, it is the only thing satisfying the precondition on that path.
+        This method exists for caller 2 — so it is not a duplicate of the lock
+        callers 1 and 3 take, it is the only thing satisfying the precondition
+        on that path.
 
-        TODO(#1465): `_generation_lock` is a plain non-reentrant `threading.Lock`.
-        Nothing nests these two callers today, because generation still runs
-        outside `adapter_scope`. When #1465 moves the model call inside the scope,
-        `activate()` will re-acquire this lock while `_generate_with_adapter_lock`
-        already holds it and deadlock. #1465 owns the fix (make it reentrant, or
-        restructure so the scope takes the lock once); it must not be resolved by
-        dropping the lock here, which would leave caller 2's precondition unmet.
+        Caller 3 nests inside caller 2's lock acquisition on the same thread
+        (see `_generate_intrinsic_with_adapter_scope`'s docstring), which is
+        exactly why `_generation_lock` is a `threading.RLock`: a plain
+        `threading.Lock` would deadlock on that same-thread re-acquisition
+        (this was #1465's known lock-reentrancy issue).
         """
         return self._generation_lock
 
@@ -2206,3 +2282,66 @@ def _assert_correct_adapters(expected_state: str, model: PreTrainedModel):
             )
         else:
             raise e
+
+
+class _NoIntrinsicIOContract(IOContract):
+    """Placeholder `IOContract` for `_generate_intrinsic_with_adapter_scope`'s `_AdapterCore`.
+
+    `_generate_from_intrinsic` builds its own I/O handling directly (the
+    rewriter/result-processor pipeline driven by `adapter.config`) and only
+    needs `adapter_scope()` for its activate/deactivate lifecycle hooks —
+    `adapter_scope()` never reads `Adapter.io_contract`, so this slot is filled
+    only to satisfy the dataclass's required field.
+    """
+
+    def build_prompt(self, **kwargs: object) -> Component:
+        raise NotImplementedError(
+            "not used on the intrinsic generation path (#1465): "
+            "_generate_from_intrinsic builds prompts via IntrinsicsRewriter."
+        )
+
+    def parse(self, raw: str) -> dict[str, object]:
+        raise NotImplementedError(
+            "not used on the intrinsic generation path (#1465): "
+            "_generate_from_intrinsic parses output via IntrinsicsResultProcessor."
+        )
+
+
+class _IntrinsicPeftBinding(WeightsBinding):
+    """Drives already-registered PEFT verbs for one intrinsic-generation call.
+
+    `IntrinsicAdapter` (the legacy shim, see `mellea.backends.adapters.adapter`)
+    carries an inert `_ShimWeightsBinding` that raises on every verb, so it
+    can't be handed to `adapter_scope()` directly.
+    `_generate_intrinsic_with_adapter_scope` builds one of these fresh per call
+    instead, and it drives the backend's own `load_peft_adapter`/
+    `activate_peft_adapter`/`deactivate_peft_adapter` verbs — the same verbs
+    `_generate_with_adapter_lock` used to call directly, before generation was
+    routed through `adapter_scope` (#1465).
+
+    `prepare()`/`release()` are no-ops: registration and the weights download
+    already happened in `add_adapter()` when the intrinsic adapter was
+    resolved (see `AdapterMixin.resolve_adapter`), and this binding doesn't own
+    that lifecycle — it only exists for the duration of one generate call.
+    """
+
+    binding_type: ClassVar[str] = "intrinsic_legacy"
+
+    def __init__(self, backend: LocalHFBackend, qualified_name: str) -> None:
+        self._backend = backend
+        self._qualified_name = qualified_name
+
+    def prepare(self) -> None:
+        return
+
+    def activate(self) -> None:
+        with self._backend._adapter_activation_lock():
+            self._backend.load_peft_adapter(self._qualified_name)
+            self._backend.activate_peft_adapter(self._qualified_name)
+
+    def deactivate(self) -> None:
+        with self._backend._adapter_activation_lock():
+            self._backend.deactivate_peft_adapter(self._qualified_name)
+
+    def release(self) -> None:
+        return
