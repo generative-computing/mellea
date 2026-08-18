@@ -227,6 +227,64 @@ For OpenAI backends with Granite Switch, adapters are loaded from the model's
 Hugging Face repository configuration instead of the adapter function catalog.
 Output format is task-specific — `requirement-check` returns `{"requirement_check": {"score": <float>}}`.
 
+## Composable adapter construction (advanced)
+
+> **Advanced:** `Adapter` composes an `Identity`, an `IOContract`, and a weights
+> binding. Most callers should use the wrapper functions above; construct an
+> `Adapter` directly when writing a new backend integration or adapter function.
+
+Each weights binding models how its deployment turns an adapter on. `LocalFileBinding`
+downloads and loads LoRA/aLoRA weights, so it exposes a `prepare`/`activate`/
+`deactivate`/`release` lifecycle. `EmbeddedBinding` has no weights to manage — the
+adapter is already part of the served base model — so it exposes a single method,
+`apply_activation`, that edits the outgoing request instead:
+
+```python
+# Requires: mellea[hf]
+from mellea.backends.adapters import Adapter, EmbeddedBinding, Identity, IOContract, LocalFileBinding
+from mellea.backends.huggingface import LocalHFBackend
+from mellea.backends.openai import OpenAIBackend
+from mellea.core import Component
+
+
+class AnswerabilityContract(IOContract):
+    def build_prompt(self, **kwargs: object) -> Component:
+        raise NotImplementedError  # request formatting lands with #1516
+
+    def parse(self, raw: str) -> dict[str, object]:
+        import json
+
+        return json.loads(raw)
+
+
+# LocalFile/PEFT reality — LocalHFBackend downloads and loads the weights.
+hf_backend = LocalHFBackend(model_id="ibm-granite/granite-4.1-3b")
+hf_adapter = Adapter(
+    identity=Identity(name="answerability", adapter_type="alora"),
+    io_contract=AnswerabilityContract(),
+    weights=LocalFileBinding.from_catalog("answerability"),
+)
+
+# Embedded/Granite Switch reality — the adapter is already in the served model.
+switch_backend = OpenAIBackend(
+    model_id="granite-switch", base_url="http://localhost:8000/v1"
+)
+switch_adapter = Adapter(
+    identity=Identity(name="answerability", adapter_type="alora"),
+    io_contract=AnswerabilityContract(),
+    weights=EmbeddedBinding.from_base_model(switch_backend),
+)
+```
+
+Backend support for each weights binding today:
+
+| Backend | `LocalFileBinding` (LocalFile/PEFT) | `EmbeddedBinding` (Embedded/Granite Switch) | `ServerMediatedBinding` |
+| --- | --- | --- | --- |
+| `LocalHFBackend` | ✅ shipping | 🔜 planned (#1018) | — |
+| `OpenAIBackend` | — | ✅ shipping (Granite Switch) | — |
+
+`ServerMediatedBinding` has no backend implementation yet — see discussion #1486.
+
 ---
 
 ## Guardian adapter functions
