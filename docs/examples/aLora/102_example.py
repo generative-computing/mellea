@@ -1,5 +1,5 @@
 # pytest: skip, huggingface, e2e
-# SKIP REASON: Requires user input; tests same functionality as 101_example.py.
+# SKIP REASON: Requires user input (blocks on stdin in an infinite loop).
 
 from stembolts_intrinsic import (
     async_stembolt_failure_analysis,

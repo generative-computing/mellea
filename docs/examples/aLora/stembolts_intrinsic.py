@@ -1,13 +1,13 @@
 # type: ignore
 """Helper functions for loading and calling a fully custom, non-catalog adapter.
 
-`stembolts` (Hugging Face: `nfulton/stembolts`) is a custom aLoRA adapter for
-`granite-3.3-2b-instruct` with its own output schema
-(`{"defective_part": str, "diag_likelihood": float, ...}`) rather than the
-generic `{"requirement_check": {"score": ...}}` shape most catalog adapters use.
-It is invoked directly via `Intrinsic`/`mfuncs.act()` and the raw JSON is parsed
-by the caller — it is not a pass/fail `ALoraRequirement` validator. Consumed by
-`102_example.py` in this directory.
+`stembolts` (Hugging Face: `nfulton/stembolts`) is a custom aLoRA adapter trained
+against several base models (`base_model_name` is a constructor argument here,
+not fixed) with its own output schema (`{"defective_part": str, "diag_likelihood":
+float}`) rather than the generic `{"requirement_check": {"score": ...}}` shape
+most catalog adapters use. It is invoked directly via `Intrinsic`/`mfuncs.act()`
+and the raw JSON is returned to the caller — it is not a pass/fail
+`ALoraRequirement` validator. Consumed by `102_example.py` in this directory.
 """
 
 import mellea.stdlib.functional as mfuncs

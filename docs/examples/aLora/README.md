@@ -117,12 +117,14 @@ backend.add_adapter(StemboltAdapter(base_model_name="granite-4.1-3b"))
 ## Example Files
 
 ### 101_example.py
-Basic example of using a trained aLoRA adapter as a requirement.
+Comparing aLoRA-backed requirement validation against LLM-as-a-judge, using the
+catalog-native `requirement-check` adapter (not a custom one — see
+`stembolts_intrinsic.py` for loading your own).
 
 Demonstrates:
-- Loading a custom adapter
-- Using adapter with requirements
-- Validating adapter output
+- Registering a catalog adapter as an aLoRA
+- `ALoraRequirement` vs `LLMaJRequirement` routing
+- Timing both validation paths
 
 ### 102_example.py
 Advanced example with multiple adapters and composition.
