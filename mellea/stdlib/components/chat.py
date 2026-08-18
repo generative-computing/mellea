@@ -58,6 +58,11 @@ class Message(Component["Message"]):
             back to the assistant tool call that produced it (issue #1389).
             `ToolMessage` sources this from its `ModelToolCall` instead; set it
             directly only when constructing a bare `role="tool"` `Message`.
+        tool_name (str | None): Optional name of the tool whose result a
+            `role="tool"` message carries. Some backends (e.g. Ollama) key their
+            tool-result turn on the tool name rather than a call id. A component
+            declaring `role="tool"` can supply it directly; `ToolMessage` instead
+            carries it as `.name`.
         thinking (str | None): Optional reasoning trace produced by a thinking
             model on the turn that generated this message. Populated by `_parse`
             from `ModelOutputThunk.thinking`; carried through `as_chat_history`
@@ -83,9 +88,10 @@ class Message(Component["Message"]):
         documents: None | Iterable[str | Document] = None,
         tool_calls: list[dict[str, Any]] | None = None,
         tool_call_id: str | None = None,
+        tool_name: str | None = None,
         thinking: str | None = None,
     ):
-        """Initialize a Message with a role, text content, optional images, audio, documents, tool calls, an optional tool-call id, and an optional reasoning trace."""
+        """Initialize a Message with a role, text content, optional images, audio, documents, tool calls, an optional tool-call id, an optional tool name, and an optional reasoning trace."""
         if role not in get_args(Message.Role):
             raise ValueError(
                 f"Invalid role {role!r}. Must be one of: {list(get_args(Message.Role))}"
@@ -99,6 +105,7 @@ class Message(Component["Message"]):
         self._docs = _coerce_to_documents(documents)
         self._tool_calls = tool_calls
         self._tool_call_id = tool_call_id
+        self._tool_name = tool_name
 
     @property
     def images(self) -> None | list[ImageBlock | ImageUrlBlock]:
@@ -119,6 +126,11 @@ class Message(Component["Message"]):
     def tool_call_id(self) -> str | None:
         """Returns the tool-call id this `role="tool"` message references, if any."""
         return self._tool_call_id
+
+    @property
+    def tool_name(self) -> str | None:
+        """Returns the name of the tool whose result this `role="tool"` message carries, if any."""
+        return self._tool_name
 
     def parts(self) -> list[Span]:
         """Return the constituent parts of this message, including content, documents, images, and audio.
@@ -156,6 +168,7 @@ class Message(Component["Message"]):
             thinking=self.thinking,
             tool_calls=self._tool_calls,
             tool_call_id=self._tool_call_id,
+            tool_name=self._tool_name,
         )
 
     def __repr__(self) -> str:
@@ -306,7 +319,7 @@ def message_from_template_representation(
     conversion paths. The representation's `role` overrides `default_role` when set;
     role validation is deferred to `Message`, which raises `ValueError` for anything
     outside `Message.Role`. `thinking`, `tool_calls`, and (for `role="tool"`)
-    `tool_call_id` are carried onto the resulting message.
+    `tool_call_id`/`tool_name` are carried onto the resulting message.
 
     Args:
         tr: The template representation returned by the component's `format_for_llm`.
@@ -324,6 +337,7 @@ def message_from_template_representation(
         audio=tr.audio,
         tool_calls=tr.tool_calls,
         tool_call_id=tr.tool_call_id,
+        tool_name=tr.tool_name,
         thinking=tr.thinking,
     )
 

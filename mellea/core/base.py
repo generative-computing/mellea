@@ -1967,6 +1967,9 @@ class TemplateRepresentation:
             tool calls to carry onto the serialized message. Defaults to `None`.
         tool_call_id (str | None): For a `role="tool"` component, the provider-supplied
             tool-call id, when available. Defaults to `None`.
+        tool_name (str | None): For a `role="tool"` component, the name of the tool
+            whose result this message carries (e.g. Ollama's tool-result turn keys on
+            it). Defaults to `None`.
 
     """
 
@@ -1987,6 +1990,7 @@ class TemplateRepresentation:
     thinking: str | None = None
     tool_calls: list[dict[str, Any]] | None = None
     tool_call_id: str | None = None
+    tool_name: str | None = None
 
 
 @dataclass

@@ -6,6 +6,7 @@
 import asyncio
 import datetime
 import functools
+import json
 from collections.abc import AsyncIterator, Coroutine, Sequence
 from typing import Any
 
@@ -66,6 +67,37 @@ def _strip_data_uri_prefix(images: list[str]) -> list[str]:
             img = img.split("base64,")[1]
         stripped.append(img)
     return stripped
+
+
+def _to_ollama_tool_calls(openai_tool_calls: list[dict[str, Any]]) -> list[dict]:
+    """Translate OpenAI-shaped assistant tool calls into Ollama's native shape.
+
+    `Message.tool_calls` stores the OpenAI shape (`{"id", "type", "function":
+    {"name", "arguments": <JSON string>}}`). Ollama's native SDK diverges: each
+    assistant tool call is `{"function": {"name", "arguments": <dict>}}` with no
+    `id`/`type` and `arguments` parsed back into a dict.
+
+    Args:
+        openai_tool_calls: Assistant tool calls in the OpenAI-compatible shape.
+
+    Returns:
+        The same tool calls in Ollama's native shape.
+    """
+    translated: list[dict] = []
+    for tc in openai_tool_calls:
+        fn = tc.get("function", {}) or {}
+        raw_args = fn.get("arguments", {})
+        if isinstance(raw_args, str):
+            try:
+                args = json.loads(raw_args) if raw_args else {}
+            except json.JSONDecodeError:
+                args = {}
+        elif isinstance(raw_args, dict):
+            args = raw_args
+        else:
+            args = {}
+        translated.append({"function": {"name": fn.get("name"), "arguments": args}})
+    return translated
 
 
 class OllamaModelBackend(FormatterBackend):
@@ -466,6 +498,14 @@ class OllamaModelBackend(FormatterBackend):
             # `chunk.message.thinking` on capture), not `reasoning_content`.
             if replay and m.thinking:
                 message_dict["thinking"] = m.thinking
+            # Honor component-declared tool metadata, translated to Ollama's native
+            # shape (dict args, no id/type; tool-result turns key on `tool_name`).
+            if m.tool_calls:
+                message_dict["tool_calls"] = _to_ollama_tool_calls(m.tool_calls)
+            if m.role == "tool":
+                tool_name = m.tool_name or getattr(m, "name", None)
+                if tool_name is not None:
+                    message_dict["tool_name"] = tool_name
             conversation.append(message_dict)
 
         # Append tool call information if applicable.

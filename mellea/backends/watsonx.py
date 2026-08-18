@@ -422,6 +422,14 @@ class WatsonxAIBackend(FormatterBackend):
                 "role": m.role,
                 "content": self.formatter.print(m),
             }
+            # Honor component-declared tool metadata. Watsonx is OpenAI-compatible,
+            # so `Message.tool_calls` (built by `build_tool_calls`) is passed
+            # verbatim, and a `role="tool"` turn references its originating call via
+            # `tool_call_id` (mirrors `message_to_openai_message`).
+            if m.tool_calls:
+                message_dict["tool_calls"] = m.tool_calls
+            if m.tool_call_id:
+                message_dict["tool_call_id"] = m.tool_call_id
             if replay and m.thinking:
                 message_dict["reasoning_content"] = m.thinking
             conversation.append(message_dict)

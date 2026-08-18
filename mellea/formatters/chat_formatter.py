@@ -27,8 +27,8 @@ class ChatFormatter(Formatter):
         `CBlock` objects default to the `user` role. A `Component` may override
         this positional guess by setting `role` on the `TemplateRepresentation`
         returned from its `format_for_llm`, and a component with `role="tool"`
-        may additionally declare `tool_name`/`tool_args`/`tool_call_id` to be
-        rendered as a `ToolMessage`. Image attachments and parsed structured
+        may additionally declare `tool_call_id`/`tool_name`, which are carried
+        onto the resulting `Message`. Image attachments and parsed structured
         outputs are handled transparently.
 
         Args:
