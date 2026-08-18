@@ -166,7 +166,7 @@ def test_meter_remains_functional_after_repeated_resets(monkeypatch):
     for cycle in range(3):
         reset_metrics_state()
         metrics_module.record_token_usage_metrics(
-            input_tokens=10, output_tokens=5, model="m", provider="p"
+            input_tokens=10, output_tokens=5, model="m", provider="p", operation="chat"
         )
         metrics_module._meter_provider.force_flush()
         data = readers[-1].get_metrics_data()
@@ -176,7 +176,7 @@ def test_meter_remains_functional_after_repeated_resets(monkeypatch):
             for sm in rm.scope_metrics
             for m in sm.metrics
         ]
-        assert "mellea.llm.tokens.input" in recorded, (
+        assert "gen_ai.client.token.usage" in recorded, (
             f"cycle {cycle}: token recording vanished — _meter is bound to "
             f"a stale/shutdown MeterProvider"
         )
@@ -623,22 +623,22 @@ def test_metric_instruments_lazy_initialization(enable_metrics):
         _adapter_function_phase_duration_histogram,
         _cost_counter,
         _duration_histogram,
-        _input_token_counter,
-        _output_token_counter,
         _requirement_checks_counter,
         _requirement_failures_counter,
         _sampling_attempts_counter,
         _sampling_failures_counter,
         _sampling_successes_counter,
+        _time_per_output_chunk_histogram,
+        _token_usage_histogram,
         _tool_calls_counter,
         _ttfb_histogram,
     )
 
     # All initially None
-    assert _input_token_counter is None
-    assert _output_token_counter is None
+    assert _token_usage_histogram is None
     assert _duration_histogram is None
     assert _ttfb_histogram is None
+    assert _time_per_output_chunk_histogram is None
     assert _cost_counter is None
     assert _sampling_attempts_counter is None
     assert _sampling_successes_counter is None
@@ -660,15 +660,25 @@ def test_metric_instruments_lazy_initialization(enable_metrics):
         record_requirement_failure,
         record_sampling_attempt,
         record_sampling_outcome,
+        record_time_per_output_chunk,
         record_token_usage_metrics,
         record_tool_call,
     )
 
     record_token_usage_metrics(
-        input_tokens=100, output_tokens=50, model="llama2:7b", provider="ollama"
+        input_tokens=100,
+        output_tokens=50,
+        model="llama2:7b",
+        provider="ollama",
+        operation="chat",
     )
-    record_request_duration(duration_s=1.0, model="llama2:7b", provider="ollama")
-    record_cost(cost=0.001, model="llama2:7b", provider="ollama")
+    record_request_duration(
+        duration_s=1.0, model="llama2:7b", provider="ollama", operation="chat"
+    )
+    record_time_per_output_chunk(
+        time_s=0.05, model="llama2:7b", provider="ollama", operation="chat"
+    )
+    record_cost(cost=0.001, model="llama2:7b", provider="ollama", operation="chat")
     record_sampling_attempt("RejectionSamplingStrategy")
     record_sampling_outcome("RejectionSamplingStrategy", success=True)
     record_sampling_outcome("RejectionSamplingStrategy", success=False)
@@ -691,20 +701,20 @@ def test_metric_instruments_lazy_initialization(enable_metrics):
         _adapter_function_phase_duration_histogram,
         _cost_counter,
         _duration_histogram,
-        _input_token_counter,
-        _output_token_counter,
         _requirement_checks_counter,
         _requirement_failures_counter,
         _sampling_attempts_counter,
         _sampling_failures_counter,
         _sampling_successes_counter,
+        _time_per_output_chunk_histogram,
+        _token_usage_histogram,
         _tool_calls_counter,
         _ttfb_histogram,
     )
 
-    assert _input_token_counter is not None
-    assert _output_token_counter is not None
+    assert _token_usage_histogram is not None
     assert _duration_histogram is not None
+    assert _time_per_output_chunk_histogram is not None
     assert _adapter_function_invocations_counter is not None
     assert _adapter_function_phase_duration_histogram is not None
     assert _adapter_function_parse_failures_counter is not None
@@ -730,21 +740,32 @@ def test_record_metrics_noop_when_disabled(clean_metrics_env):
         record_requirement_failure,
         record_sampling_attempt,
         record_sampling_outcome,
+        record_time_per_output_chunk,
         record_token_usage_metrics,
         record_tool_call,
     )
 
     record_token_usage_metrics(
-        input_tokens=100, output_tokens=50, model="llama2:7b", provider="ollama"
+        input_tokens=100,
+        output_tokens=50,
+        model="llama2:7b",
+        provider="ollama",
+        operation="chat",
     )
-    record_request_duration(duration_s=1.0, model="llama2:7b", provider="ollama")
+    record_request_duration(
+        duration_s=1.0, model="llama2:7b", provider="ollama", operation="chat"
+    )
+    record_time_per_output_chunk(
+        time_s=0.05, model="llama2:7b", provider="ollama", operation="chat"
+    )
     record_error(
         error_type="timeout",
         model="llama2:7b",
         provider="ollama",
         exception_class="TimeoutError",
+        operation="chat",
     )
-    record_cost(cost=0.001, model="llama2:7b", provider="ollama")
+    record_cost(cost=0.001, model="llama2:7b", provider="ollama", operation="chat")
     record_sampling_attempt("RejectionSamplingStrategy")
     record_sampling_outcome("RejectionSamplingStrategy", success=True)
     record_requirement_check("LLMaJRequirement")
@@ -756,21 +777,21 @@ def test_record_metrics_noop_when_disabled(clean_metrics_env):
         _cost_counter,
         _duration_histogram,
         _error_counter,
-        _input_token_counter,
-        _output_token_counter,
         _requirement_checks_counter,
         _requirement_failures_counter,
         _sampling_attempts_counter,
         _sampling_failures_counter,
         _sampling_successes_counter,
+        _time_per_output_chunk_histogram,
+        _token_usage_histogram,
         _tool_calls_counter,
         _ttfb_histogram,
     )
 
-    assert _input_token_counter is None
-    assert _output_token_counter is None
+    assert _token_usage_histogram is None
     assert _duration_histogram is None
     assert _ttfb_histogram is None
+    assert _time_per_output_chunk_histogram is None
     assert _error_counter is None
     assert _cost_counter is None
     assert _sampling_attempts_counter is None
@@ -790,6 +811,7 @@ def test_record_functions_exported_in_public_api():
         record_requirement_failure,
         record_sampling_attempt,
         record_sampling_outcome,
+        record_time_per_output_chunk,
         record_token_usage_metrics,
         record_tool_call,
         record_ttfb,
@@ -798,6 +820,7 @@ def test_record_functions_exported_in_public_api():
     assert callable(record_token_usage_metrics)
     assert callable(record_request_duration)
     assert callable(record_ttfb)
+    assert callable(record_time_per_output_chunk)
     assert callable(record_cost)
     assert callable(record_sampling_attempt)
     assert callable(record_sampling_outcome)
@@ -815,7 +838,11 @@ def test_record_token_usage_metrics_with_valid_tokens(enable_metrics):
 
     # Should not raise
     record_token_usage_metrics(
-        input_tokens=150, output_tokens=50, model="gpt-4", provider="openai"
+        input_tokens=150,
+        output_tokens=50,
+        model="gpt-4",
+        provider="openai",
+        operation="chat",
     )
 
 
@@ -825,7 +852,11 @@ def test_record_token_usage_metrics_with_none_tokens(enable_metrics):
 
     # Should not raise
     record_token_usage_metrics(
-        input_tokens=None, output_tokens=None, model="llama2:7b", provider="ollama"
+        input_tokens=None,
+        output_tokens=None,
+        model="llama2:7b",
+        provider="ollama",
+        operation="chat",
     )
 
 
@@ -835,5 +866,9 @@ def test_record_token_usage_metrics_with_zero_tokens(enable_metrics):
 
     # Should not raise, but won't record zeros
     record_token_usage_metrics(
-        input_tokens=0, output_tokens=0, model="llama2:7b", provider="ollama"
+        input_tokens=0,
+        output_tokens=0,
+        model="llama2:7b",
+        provider="ollama",
+        operation="chat",
     )

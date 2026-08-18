@@ -116,14 +116,14 @@ Open http://localhost:16686 in your browser and select "mellea-example" service.
 
 Each span includes rich metadata:
 
-- **mellea.model_id**: Model identifier
-- **mellea.backend**: Backend class name
-- **mellea.action_type**: Component type
-- **mellea.context_size**: Number of context items
-- **mellea.has_requirements**: Whether requirements are specified
-- **mellea.strategy_type**: Sampling strategy used
-- **mellea.tool_calls**: Whether tool calling is enabled
-- **mellea.format_type**: Response format class
+- **gen_ai.request.model**: Model identifier
+- **gen_ai.provider.name**: Provider name
+- **mellea.component.type**: Component type
+- **mellea.request.context_size**: Number of context items
+- **mellea.action.has_requirements**: Whether requirements are specified
+- **mellea.sampling.strategy_type**: Sampling strategy used
+- **mellea.action.tool_calls**: Whether tool calling is enabled
+- **mellea.request.format_type**: Response format class
 
 ## Performance Impact
 

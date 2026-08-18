@@ -67,9 +67,9 @@ def test_start_streaming_span_stamps_attrs_and_stashes_under_id(enabled_tracing)
     fake_tracer.start_span.assert_called_once_with("stream_with_chunking")
     assert "sid-1" in tracing._in_flight_spans
     attrs = _attrs(fake_span)
-    assert attrs["mellea.has_requirements"] is True
-    assert attrs["mellea.requirement_count"] == 2
-    assert attrs["mellea.chunking_strategy"] == "SentenceChunker"
+    assert attrs["mellea.streaming.has_requirements"] is True
+    assert attrs["mellea.streaming.requirement_count"] == 2
+    assert attrs["mellea.streaming.chunking_strategy"] == "SentenceChunker"
     # The correlation id is the in-flight key, not a span attribute.
     assert "mellea.streaming_id" not in attrs
 
@@ -92,7 +92,7 @@ def test_finish_streaming_span_success_records_completed_attrs(enabled_tracing):
 
     fake_span.end.assert_called_once()
     attrs = _attrs(fake_span)
-    assert attrs["mellea.full_text_length"] == 11
+    assert attrs["mellea.streaming.full_text_length"] == 11
     assert attrs["gen_ai.request.model"] == "gpt-4o"
     assert attrs["gen_ai.provider.name"] == "openai"
     fake_span.record_exception.assert_not_called()
@@ -465,7 +465,7 @@ async def test_stream_with_chunking_chat_span_nests_under_streaming_span(span_ex
     spans = _finished_spans(span_exporter)
     streaming_span = next((s for s in spans if s.name == "stream_with_chunking"), None)
     assert streaming_span is not None, "stream_with_chunking span not emitted"
-    chat_span = next((s for s in spans if s.name == "chat"), None)
+    chat_span = next((s for s in spans if s.name == "chat test-model"), None)
     assert chat_span is not None, "chat span not emitted"
 
     assert streaming_span.parent is None, "streaming span should be a root"
@@ -496,7 +496,7 @@ async def test_stream_with_chunking_validation_chat_span_is_sibling_of_generatio
     spans = _finished_spans(span_exporter)
     streaming_span = next((s for s in spans if s.name == "stream_with_chunking"), None)
     assert streaming_span is not None, "stream_with_chunking span not emitted"
-    chat_spans = [s for s in spans if s.name == "chat"]
+    chat_spans = [s for s in spans if s.name == "chat test-model"]
     assert len(chat_spans) == 2, f"expected 2 chat spans, got {len(chat_spans)}"
 
     streaming_id = streaming_span.context.span_id

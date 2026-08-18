@@ -72,6 +72,7 @@ def test_record_error_basic(clean_metrics_env):
         model="gpt-4",
         provider="openai",
         exception_class="RateLimitError",
+        operation="chat",
     )
 
     provider.force_flush()
@@ -79,10 +80,11 @@ def test_record_error_basic(clean_metrics_env):
 
     assert len(data_points) == 1
     attrs = dict(data_points[0].attributes)
-    assert attrs["error_type"] == "rate_limit"
+    assert attrs["mellea.error.category"] == "rate_limit"
     assert attrs["gen_ai.request.model"] == "gpt-4"
     assert attrs["gen_ai.provider.name"] == "openai"
     assert attrs["error.type"] == "RateLimitError"
+    assert attrs["gen_ai.operation.name"] == "chat"
     assert data_points[0].value == 1
 
 
@@ -94,9 +96,9 @@ def test_record_error_accumulation(clean_metrics_env):
 
     from mellea.telemetry.metrics import record_error
 
-    record_error("timeout", "llama2:7b", "ollama", "TimeoutError")
-    record_error("timeout", "llama2:7b", "ollama", "TimeoutError")
-    record_error("timeout", "llama2:7b", "ollama", "TimeoutError")
+    record_error("timeout", "llama2:7b", "ollama", "TimeoutError", "chat")
+    record_error("timeout", "llama2:7b", "ollama", "TimeoutError", "chat")
+    record_error("timeout", "llama2:7b", "ollama", "TimeoutError", "chat")
 
     provider.force_flush()
     data_points = _find_error_data_points(reader.get_metrics_data())
@@ -113,13 +115,15 @@ def test_record_error_multiple_types(clean_metrics_env):
 
     from mellea.telemetry.metrics import record_error
 
-    record_error("rate_limit", "gpt-4", "openai", "RateLimitError")
-    record_error("timeout", "gpt-4", "openai", "APITimeoutError")
-    record_error("auth", "gpt-4", "openai", "AuthenticationError")
+    record_error("rate_limit", "gpt-4", "openai", "RateLimitError", "chat")
+    record_error("timeout", "gpt-4", "openai", "APITimeoutError", "chat")
+    record_error("auth", "gpt-4", "openai", "AuthenticationError", "chat")
 
     provider.force_flush()
     data_points = _find_error_data_points(reader.get_metrics_data())
 
     assert len(data_points) == 3
-    error_types = {dict(dp.attributes)["error_type"] for dp in data_points}
-    assert error_types == {"rate_limit", "timeout", "auth"}
+    error_categories = {
+        dict(dp.attributes)["mellea.error.category"] for dp in data_points
+    }
+    assert error_categories == {"rate_limit", "timeout", "auth"}

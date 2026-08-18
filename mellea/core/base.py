@@ -770,6 +770,9 @@ class _GenerationState:
         post_process: Backend coroutine run once after the value is complete.
         on_computed: Coroutine run when the thunk becomes computed.
         start: Wall-clock start time of generation, for latency metrics.
+        last_chunk_time: Wall-clock time the previous streamed chunk was
+            processed, for per-chunk inter-arrival timing. `None` until the
+            first chunk is processed.
     """
 
     queue: asyncio.Queue = field(default_factory=lambda: asyncio.Queue(maxsize=20))
@@ -784,6 +787,7 @@ class _GenerationState:
     post_process: Callable[[ModelOutputThunk], Coroutine] | None = None
     on_computed: Callable[[ModelOutputThunk], Coroutine] | None = None
     start: datetime.datetime | None = None
+    last_chunk_time: datetime.datetime | None = None
 
 
 class ModelOutputThunk(Generic[S]):
@@ -847,6 +851,12 @@ class ModelOutputThunk(Generic[S]):
         # MOT instead of raising. Sibling to `_cancelled`.
         self._error: Exception | None = None
 
+    def _elapsed_ms(self) -> float:
+        """Milliseconds since generation start, or -1 if start was never set."""
+        if self._gen.start is None:
+            return -1
+        return (datetime.datetime.now() - self._gen.start).total_seconds() * 1000
+
     def _record_ttfb(self) -> None:
         """Record time-to-first-byte if streaming and not yet recorded."""
         if (
@@ -854,9 +864,7 @@ class ModelOutputThunk(Generic[S]):
             and not self._gen.first_chunk_received
             and self._gen.start is not None
         ):
-            self.generation.ttfb_ms = (
-                datetime.datetime.now() - self._gen.start
-            ).total_seconds() * 1000
+            self.generation.ttfb_ms = self._elapsed_ms()
             self._gen.first_chunk_received = True
 
     async def _emit_event(self, event_name: str, **data: Any) -> None:
@@ -865,7 +873,11 @@ class ModelOutputThunk(Generic[S]):
             from ..plugins.hooks.generation import GenerationEventPayload
 
             event_payload = GenerationEventPayload(
-                generation_id=self._call.generation_id, event_name=event_name, data=data
+                generation_id=self._call.generation_id,
+                event_name=event_name,
+                model=self.generation.model,
+                provider=self.generation.provider,
+                data=data,
             )
             await invoke_hook(HookType.GENERATION_EVENT, event_payload)
 
@@ -964,6 +976,7 @@ class ModelOutputThunk(Generic[S]):
                     exception=recorded,
                     model_output=self,
                     generation_id=self._call.generation_id,
+                    latency_ms=self._elapsed_ms(),
                 ),
             )
 
@@ -1164,6 +1177,7 @@ class ModelOutputThunk(Generic[S]):
                     exception=chunks[-1],
                     model_output=self,
                     generation_id=self._call.generation_id,
+                    latency_ms=self._elapsed_ms(),
                 )
                 await invoke_hook(HookType.GENERATION_ERROR, err_payload)
 
@@ -1177,10 +1191,18 @@ class ModelOutputThunk(Generic[S]):
             prev_len = len(str(self._underlying_value or ""))
             await self._gen.process(self, chunk)
             if emit_chunk_events:
+                now = datetime.datetime.now()
+                time_since_last_chunk_ms = (
+                    (now - self._gen.last_chunk_time).total_seconds() * 1000
+                    if self._gen.last_chunk_time is not None
+                    else None
+                )
+                self._gen.last_chunk_time = now
                 await self._emit_event(
                     "chunk_processed",
                     chunk_index=self._gen.processed_chunk_index,
                     chunk_text_length=len(str(self._underlying_value or "")) - prev_len,
+                    time_since_last_chunk_ms=time_since_last_chunk_ms,
                 )
             self._gen.processed_chunk_index += 1
 
@@ -1218,15 +1240,10 @@ class ModelOutputThunk(Generic[S]):
 
                 glog = self._generate_log
                 prompt = glog.prompt if glog and glog.prompt else ""
-                latency_ms = (
-                    (datetime.datetime.now() - self._gen.start).total_seconds() * 1000
-                    if self._gen.start
-                    else -1
-                )
                 post_payload = GenerationPostCallPayload(
                     prompt=prompt,
                     model_output=self,
-                    latency_ms=latency_ms,
+                    latency_ms=self._elapsed_ms(),
                     generation_id=self._call.generation_id,
                 )
                 await invoke_hook(HookType.GENERATION_POST_CALL, post_payload)

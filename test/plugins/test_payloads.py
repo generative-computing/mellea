@@ -66,10 +66,15 @@ class TestSessionPreInitPayload:
 class TestGenerationPreCallPayload:
     def test_creation(self):
         payload = GenerationPreCallPayload(
-            model_options={"max_tokens": 100}, format=None
+            model_options={"max_tokens": 100},
+            format=None,
+            model="granite4.1:3b",
+            provider="ollama",
         )
         assert payload.model_options == {"max_tokens": 100}
         assert payload.format is None
+        assert payload.model == "granite4.1:3b"
+        assert payload.provider == "ollama"
 
 
 # ---------------------------------------------------------------------------
