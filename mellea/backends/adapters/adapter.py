@@ -123,7 +123,7 @@ class _ShimWeightsBinding(WeightsBinding):
 class IntrinsicAdapter(LocalHFAdapter, _AdapterCore):
     """Deprecated shim for adapters that implement adapter functions.
 
-    .. deprecated::
+    Deprecated:
         Use :class:`~mellea.backends.adapters.Adapter` directly.
         `IntrinsicAdapter` will be removed in a future release (Epic #929,
         issue #1144).
@@ -881,7 +881,7 @@ class AdapterMixin(Backend, abc.ABC):
 class EmbeddedIntrinsicAdapter(_AdapterCore):
     """Deprecated shim for adapter functions embedded in a Granite Switch model.
 
-    .. deprecated::
+    Deprecated:
         Use :class:`~mellea.backends.adapters.Adapter` directly.
         `EmbeddedIntrinsicAdapter` will be removed in a future release
         (Epic #929, issue #1144).

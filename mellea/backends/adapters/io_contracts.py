@@ -36,7 +36,8 @@ class _PolicyGuardrailsContract(IOContract):
 
     def build_prompt(self, **_kwargs: object) -> Component:
         raise NotImplementedError(
-            "build_prompt is not used in Phase 1; implemented in Phase 2."
+            "build_prompt is not implemented; request construction still goes "
+            "through the legacy formatter/rewriter path, not IOContract."
         )
 
     def parse(self, raw: str) -> dict[str, object]:
@@ -60,6 +61,10 @@ class _PolicyGuardrailsContract(IOContract):
             )
         has_label = "label" in data
         has_score = "score" in data
+        # Both branches raise the same exception shape; `observed_keys` (all of
+        # `data`'s keys) is what distinguishes them when printed — neither
+        # "label" nor "score" appears for the missing-both case, and both do
+        # for the has-both case.
         if not has_label and not has_score:
             raise AdapterSchemaMismatchError(
                 "policy-guardrails",
@@ -84,7 +89,8 @@ class _GuardianCheckContract(IOContract):
 
     def build_prompt(self, **_kwargs: object) -> Component:
         raise NotImplementedError(
-            "build_prompt is not used in Phase 1; implemented in Phase 2."
+            "build_prompt is not implemented; request construction still goes "
+            "through the legacy formatter/rewriter path, not IOContract."
         )
 
     def parse(self, raw: str) -> dict[str, object]:
@@ -126,15 +132,17 @@ class _GuardianCheckContract(IOContract):
 class _RequirementCheckContract(IOContract):
     """Validate requirement-check output: `{"requirement_check": {"score": <0.0-1.0 float>}}`.
 
-    Consolidates the score-range validation `requirement_check()` (in
-    `mellea.stdlib.components.intrinsic.core`) previously hand-rolled after each call —
-    mirroring `requirement_check_to_bool()` in `requirement.py` — into a declared contract,
-    per issue #1516.
+    Consolidates the score-range validation that both production consumers of this
+    capability's output — `core.requirement_check()`
+    (`mellea/stdlib/components/intrinsic/core.py`) and `requirement_check_to_bool()`
+    (`mellea/stdlib/requirements/requirement.py`) — used to hand-roll independently,
+    into one declared contract, per issue #1516.
     """
 
     def build_prompt(self, **_kwargs: object) -> Component:
         raise NotImplementedError(
-            "build_prompt is not used in Phase 1; implemented in Phase 2."
+            "build_prompt is not implemented; request construction still goes "
+            "through the legacy formatter/rewriter path, not IOContract."
         )
 
     def parse(self, raw: str) -> dict[str, object]:
@@ -257,19 +265,25 @@ def get_io_contract(name: str) -> IOContract:
     """Return the canonical output contract for an adapter function.
 
     Args:
-        name (str): Catalog name of the adapter function (e.g. `"answerability"`),
-            i.e. the same string passed to
+        name (str): Catalog name of the adapter function (e.g. `"answerability"`,
+            `"guardian-core"`) — :attr:`~mellea.backends.adapters.catalog.IntrinsicsCatalogEntry.name`,
+            never :attr:`~mellea.backends.adapters.catalog.IntrinsicsCatalogEntry.effective_capability`.
+            This is the same string passed to
             :func:`~mellea.stdlib.components.intrinsic._util.call_intrinsic` and
             :meth:`~mellea.backends.adapters.AdapterMixin.resolve_adapter`.
 
     Returns:
         IOContract: The contract declared in :data:`_INTRINSIC_IO_CONTRACTS` for
             `name`. Adapter functions outside the catalog (e.g. one registered
-            through the deprecated `CustomIntrinsicAdapter`) fall back to a
-            permissive dict contract with no required keys, since Mellea has no
-            declared schema for them.
+            through the deprecated `CustomIntrinsicAdapter`) fall back to a dict
+            contract with no required keys — permissive about *which* keys are
+            present, but still requires the parsed JSON to be an object; a
+            top-level array or scalar still raises `ValueError`, since Mellea has
+            no declared schema for these adapter functions to relax that far.
     """
     contract = _INTRINSIC_IO_CONTRACTS.get(name)
     if contract is not None:
         return contract
+    # Custom/user-defined adapters outside the catalog have no declared schema;
+    # accept any JSON object rather than rejecting on an arbitrary key set.
     return _DictContract(name, frozenset())

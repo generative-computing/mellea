@@ -15,6 +15,12 @@ Also provides:
 - :class:`EmbeddedBinding` — stub :class:`WeightsBinding` subclass
 - :class:`ServerMediatedBinding` — stub :class:`WeightsBinding` subclass
 - :class:`AdapterSchemaMismatchError`
+- :class:`_DictContract`, :class:`_ListContract` — generic, capability-agnostic
+  :class:`IOContract` implementations that validate required keys on a JSON
+  object or a JSON array of objects, respectively. Capability-*specific*
+  contracts (e.g. the guardian adapters' nested-key shapes) live in
+  :mod:`~mellea.backends.adapters.io_contracts` instead, alongside the
+  registry that maps every catalogued adapter function to its contract.
 
 Note:
     The existing :class:`~mellea.backends.adapters.adapter.Adapter` ABC in
@@ -160,7 +166,8 @@ class _DictContract(IOContract):
 
     def build_prompt(self, **_kwargs: object) -> Component:
         raise NotImplementedError(
-            "build_prompt is not used in Phase 1; implemented in Phase 2."
+            "build_prompt is not implemented; request construction still goes "
+            "through the legacy formatter/rewriter path, not IOContract."
         )
 
     def parse(self, raw: str) -> dict[str, object]:
@@ -209,7 +216,8 @@ class _ListContract(IOContract):
 
     def build_prompt(self, **_kwargs: object) -> Component:
         raise NotImplementedError(
-            "build_prompt is not used in Phase 1; implemented in Phase 2."
+            "build_prompt is not implemented; request construction still goes "
+            "through the legacy formatter/rewriter path, not IOContract."
         )
 
     def parse(self, raw: str) -> dict[str, object]:

@@ -10,6 +10,7 @@ replaced `core.requirement_check`'s hand-rolled post-call validation.
 
 import json
 import math
+import pathlib
 
 import pytest
 
@@ -18,6 +19,14 @@ from mellea.backends.adapters.catalog import known_intrinsic_names
 from mellea.backends.adapters.io_contracts import (
     _INTRINSIC_IO_CONTRACTS,
     get_io_contract,
+)
+
+_INTRINSIC_TESTDATA = (
+    pathlib.Path(__file__).resolve().parents[2]
+    / "stdlib"
+    / "components"
+    / "intrinsic"
+    / "testdata"
 )
 
 # ---------------------------------------------------------------------------
@@ -137,3 +146,24 @@ def test_boundary_score_one(contract):
 def test_requirement_check_rejects_non_dict_output(contract):
     with pytest.raises(ValueError, match="must be a JSON object"):
         contract.parse(json.dumps(["not", "a", "dict"]))
+
+
+# ---------------------------------------------------------------------------
+# context-attribution — recorded model output against the real _ListContract
+#
+# The GPU-gated equivalents (test_find_context_attributions and
+# test_find_context_attributions_resolve in test_core.py) are xfail(strict=False)
+# for unrelated non-determinism, so they give no CI signal on schema drift. This
+# feeds the exact recorded output through the contract without a GPU.
+# ---------------------------------------------------------------------------
+
+
+def test_context_attribution_contract_accepts_recorded_model_output():
+    fixture = _INTRINSIC_TESTDATA / "output_json" / "context-attribution.json"
+    completion = json.loads(fixture.read_text(encoding="utf-8"))
+    raw = completion["choices"][0]["message"]["content"]
+
+    result = _INTRINSIC_IO_CONTRACTS["context-attribution"].parse(raw)
+
+    assert len(result["items"]) == 7  # type: ignore[arg-type]
+    assert result["items"][0]["attribution_msg_index"] is None  # type: ignore[index]

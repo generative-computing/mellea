@@ -281,5 +281,5 @@ def test_dict_contract_reports_all_missing_multi_key():
 
 def test_dict_contract_build_prompt_not_implemented():
     contract = _DictContract("answerability", frozenset({"answerability"}))
-    with pytest.raises(NotImplementedError, match="Phase 1"):
+    with pytest.raises(NotImplementedError, match="build_prompt is not implemented"):
         contract.build_prompt()
