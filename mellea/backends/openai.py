@@ -53,6 +53,7 @@ from ..stdlib.components import Intrinsic, Message
 from ..stdlib.requirements import LLMaJRequirement
 from ..telemetry.context import generate_request_id, with_context
 from ._options import resolve_model_options
+from .adapters._core import EmbeddedActivationRequest, EmbeddedBinding
 from .adapters.adapter import AdapterInput, AdapterMixin, EmbeddedIntrinsicAdapter
 from .backend import FormatterBackend
 from .model_options import ModelOption
@@ -324,21 +325,6 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             )
         adapter.backend = self
         self._added_adapters[adapter.qualified_name] = adapter
-
-    def render_controls(self, adapter_qualified_name: str, active: bool) -> None:
-        """No-op for embedded adapters — weights are baked into the model.
-
-        Args:
-            adapter_qualified_name (str): The `adapter.qualified_name` of the
-                adapter to activate or deactivate.
-            active (bool): `True` to activate the adapter, `False` to
-                deactivate it.
-        """
-        MelleaLogger.get_logger().debug(
-            "render_controls is a no-op for OpenAIBackends (adapter: %s, active: %s)",
-            adapter_qualified_name,
-            active,
-        )
 
     def list_adapters(self) -> list[str]:
         """Return qualified names of all registered adapters.
@@ -782,14 +768,13 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         if rewriter.parameters:
             api_params.update(rewriter.parameters)
 
-        # Embedded adapters activate via control tokens in the chat template.
-        if isinstance(adapter, EmbeddedIntrinsicAdapter):
-            chat_template_kwargs = extra_body.pop("chat_template_kwargs", {}) or {}
-            chat_template_kwargs["adapter_name"] = action.intrinsic_name
-            extra_body["chat_template_kwargs"] = chat_template_kwargs
-            # The rewriter config may set `model` to the adapter name, but
-            # for embedded adapters the actual model is self._model_id.
-            api_params.pop("model", None)
+        # Embedded adapters activate via control tokens in the chat template;
+        # the binding owns the request edit (issue #1142).
+        if isinstance(adapter.weights, EmbeddedBinding):
+            activation_request = EmbeddedActivationRequest(
+                extra_body=extra_body, api_params=api_params
+            )
+            adapter.weights.apply_activation(activation_request, adapter.identity)
 
         # Collect tools if tool_calls is enabled.
         tools: dict[str, AbstractMelleaTool] = dict()
