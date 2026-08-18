@@ -447,7 +447,7 @@ class AdapterMixin(Backend, abc.ABC):
 
     Three verbs are universal across every adapter reality (LocalFile/PEFT,
     Embedded/Granite Switch, ServerMediated): `base_model_name`,
-    `add_adapter`, and `list_adapters`. The remaining four verbs are
+    `add_adapter`, and `list_adapters`. The remaining seven verbs are
     reality-specific — a concrete backend overrides only the verb(s) matching
     its own reality; the others keep raising `NotImplementedError`.
 
@@ -721,11 +721,13 @@ class AdapterMixin(Backend, abc.ABC):
         # colliding qualified name (they share `f"{name}_{type}"` with
         # `IntrinsicAdapter`), say so — the alternative is an opaque KeyError
         # that gives no hint the two registration paths collided.
-        added = getattr(self, "_added_adapters", {})
+        # list(...): same concurrent-mutation hazard as `_find_adapter` — snapshot
+        # before iterating rather than holding a live view over `_added_adapters`.
+        added = list(getattr(self, "_added_adapters", {}).items())
         blocking = next(
             (
                 v
-                for k, v in added.items()
+                for k, v in added
                 if k.startswith(f"{name}_") and not isinstance(v, _AdapterCore)
             ),
             None,
@@ -892,14 +894,19 @@ class AdapterMixin(Backend, abc.ABC):
         Returns:
             _AdapterCore | None: Matching adapter, or `None` if not found.
         """
-        adapters = getattr(self, "_added_adapters", {})
+        # Snapshot into a list: `_added_adapters` is no longer insert-only since
+        # `remove_adapter()` (#1528) can delete from it. A concurrent `release()`
+        # mutating the dict while this loop holds a live `.values()` view would
+        # raise "dictionary changed size during iteration"; iterating a list
+        # copy instead is immune to a mutation of the underlying dict.
+        adapters = list(getattr(self, "_added_adapters", {}).values())
         if adapter_types is None:
-            for a in adapters.values():
+            for a in adapters:
                 if isinstance(a, _AdapterCore) and a.identity.capability == capability:
                     return a
             return None
         for preferred_type in adapter_types:
-            for a in adapters.values():
+            for a in adapters:
                 if (
                     isinstance(a, _AdapterCore)
                     and a.identity.capability == capability

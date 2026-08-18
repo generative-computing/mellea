@@ -31,18 +31,29 @@ def _fake_backend_with_registry():
     """An AdapterMixin-conforming double with real `LocalHFBackend.add_adapter`/
     `remove_adapter` registration semantics, so tests can exercise the #1528
     re-registration contract without a real model.
+
+    Mirrors both of `LocalHFBackend.add_adapter`'s guards — the
+    `binding.backend is not None` early-return (huggingface.py:2012-2017), not
+    just the duplicate-qualified-name refusal — so a `remove_adapter()` that
+    forgot to clear `.backend`/`.path` would show up here as a re-registration
+    failure, not just at the real-backend level (#1554 review finding 1).
     """
     backend = MagicMock()
     registry: dict[str, LocalFileBinding] = {}
 
     def add_adapter(binding: LocalFileBinding) -> None:
+        if binding.backend is not None:
+            return  # mirrors LocalHFBackend's "already added" early-return
         if binding.qualified_name in registry:
             return  # mirrors LocalHFBackend's refusal-with-warning path
         binding.backend = backend
         registry[binding.qualified_name] = binding
 
     def remove_adapter(qualified_name: str) -> None:
-        registry.pop(qualified_name, None)
+        removed = registry.pop(qualified_name, None)
+        if removed is not None:
+            removed.backend = None
+            removed.path = None
 
     backend.add_adapter.side_effect = add_adapter
     backend.remove_adapter.side_effect = remove_adapter
@@ -386,6 +397,7 @@ def test_release_after_bind_before_prepare_clears_staged_backend():
     assert binding._staged_backend is None
     assert binding._released
     backend.unload_peft_adapter.assert_not_called()
+    backend.remove_adapter.assert_not_called()
 
 
 def test_release_unloads_and_clears_state():
@@ -427,6 +439,34 @@ def test_release_frees_the_qualified_name_for_a_fresh_binding():
 
     assert second.backend is backend
     assert second.qualified_name in backend.list_adapters()
+
+
+def test_release_degrades_gracefully_when_backend_lacks_remove_adapter():
+    """release() must fully complete even if the backend predates remove_adapter().
+
+    Regression guard for #1554 review finding 4: `AdapterMixin.remove_adapter`
+    defaults to `raise NotImplementedError` (mellea/backends/adapters/adapter.py).
+    A backend supporting the LocalFile/PEFT reality (`unload_peft_adapter`, etc.)
+    but not overriding `remove_adapter` used to have `release()` propagate that
+    exception mid-teardown, leaving `_released` False forever — every retry just
+    re-raised. `release()` must catch it, log, and finish releasing anyway (the
+    qualified_name simply stays claimed for that backend's lifetime, same as
+    before #1528).
+    """
+    backend = _fake_backend()
+    backend.remove_adapter.side_effect = NotImplementedError(
+        "Backend type <fake> does not support remove_adapter()."
+    )
+    binding = LocalFileBinding(name="answerability")
+    binding.bind_backend(backend)
+    binding.prepare()
+
+    binding.release()  # must not raise
+
+    backend.unload_peft_adapter.assert_called_once_with(binding.qualified_name)
+    assert binding._released
+    assert binding.backend is None
+    assert binding.path is None
 
 
 def test_release_requires_deactivation_after_activation():
@@ -540,6 +580,7 @@ def test_release_is_idempotent():
     binding.release()
 
     backend.unload_peft_adapter.assert_called_once()
+    backend.remove_adapter.assert_called_once()
 
 
 def test_prepare_fires_phase_complete_metric_when_plugins_present():

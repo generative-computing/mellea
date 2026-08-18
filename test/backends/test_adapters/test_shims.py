@@ -286,6 +286,60 @@ def test_find_adapter_honours_type_preference_order():
     assert result is alora, "alora must win over lora regardless of insertion order"
 
 
+class _MutatingCapability:
+    """Capability sentinel whose `__eq__` deletes an entry from the registry
+    it is compared against, simulating a concurrent `release()` mutating
+    `_added_adapters` mid-iteration (#1554 review finding 3).
+
+    `_find_adapter` compares `a.identity.capability == capability` for each
+    registered adapter in turn; a real `str.__eq__` against this sentinel
+    returns `NotImplemented`, so Python falls back to this class's reflected
+    `__eq__` — firing the side effect from inside the loop, deterministically,
+    with no actual threading required.
+    """
+
+    def __init__(self, registry: dict, key_to_remove: str) -> None:
+        self._registry = registry
+        self._key_to_remove = key_to_remove
+        self.fired = False
+
+    def __eq__(self, other: object) -> bool:
+        if not self.fired:
+            self.fired = True
+            self._registry.pop(self._key_to_remove, None)
+        return False
+
+    def __hash__(self) -> int:
+        return hash("mutating-capability-sentinel")
+
+
+def test_find_adapter_survives_concurrent_removal_during_iteration():
+    """`_find_adapter` must not iterate a live view over `_added_adapters`.
+
+    Regression guard for #1554 review finding 3: before this PR,
+    `_added_adapters` was insert-only, so iterating it was always safe.
+    `remove_adapter()` (#1528) made it the first-ever runtime deletion site,
+    and a concurrent `release()` mutating the dict while `_find_adapter`
+    holds a live `.values()` view raises `RuntimeError: dictionary changed
+    size during iteration`. `_find_adapter` must snapshot into a list first.
+    """
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        first = EmbeddedIntrinsicAdapter("answerability", config={}, technology="lora")
+        second = EmbeddedIntrinsicAdapter("uncertainty", config={}, technology="lora")
+
+    mock_backend = MagicMock(spec=AdapterMixin)
+    registry = {first.qualified_name: first, second.qualified_name: second}
+    mock_backend._added_adapters = registry
+
+    capability = _MutatingCapability(registry, second.qualified_name)
+    result = AdapterMixin._find_adapter(mock_backend, capability)  # must not raise
+
+    assert capability.fired, "the mutation must have fired during iteration"
+    assert result is None
+    assert second.qualified_name not in registry
+
+
 def test_resolve_adapter_names_the_conflict_when_a_binding_blocks_registration():
     """resolve_adapter's KeyError should name the collision, not just say "not found".
 
