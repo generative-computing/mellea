@@ -7,8 +7,13 @@ import collections.abc
 import warnings
 from typing import cast
 
-from ....backends.adapters import Adapter, AdapterMixin, Identity, LocalFileBinding
-from ....backends.adapters.io_contracts import get_io_contract
+from ....backends.adapters import (
+    Adapter,
+    AdapterMixin,
+    Identity,
+    LocalFileBinding,
+    get_io_contract,
+)
 from ...components import Document
 from ...context import ChatContext
 from ..chat import Message

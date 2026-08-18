@@ -6,37 +6,32 @@
 import collections.abc
 from typing import cast
 
-from ....backends.adapters import Adapter, AdapterMixin, Identity, LocalFileBinding
-from ....backends.adapters.io_contracts import get_io_contract
+from ....backends.adapters import (
+    Adapter,
+    AdapterMixin,
+    Identity,
+    LocalFileBinding,
+    get_io_contract,
+)
 from ...components import Document, Message
 from ...context import ChatContext
 from ..docs.document import _coerce_to_documents
 from ._util import _resolve_response, call_intrinsic
 
 # ---------------------------------------------------------------------------
-# Module-level Adapter constants (one per helper)
-#
-# io_contract is read from the same registry `resolve_adapter()` uses
-# (mellea.backends.adapters.io_contracts) rather than declared here — a second,
-# independent declaration is exactly the parallel-argument problem issue #1516
+# _REQUIREMENT_CHECK_ADAPTER: a test-visible handle onto the `requirement-check`
+# capability's canonical Adapter, used by test_core_schema.py to stub
+# `resolve_adapter`'s return value. `check_certainty` and `find_context_attributions`
+# have no equivalent constant — nothing outside a test needs one, since their
+# io_contract is looked up by resolve_adapter() at call time
+# (mellea.backends.adapters.io_contracts), never declared here. Declaring one
+# unused by any caller is exactly the parallel-declaration problem issue #1516
 # closes.
 # ---------------------------------------------------------------------------
-
-_UNCERTAINTY_ADAPTER = Adapter(
-    identity=Identity("uncertainty", "alora", capability="uncertainty"),
-    io_contract=get_io_contract("uncertainty"),
-    weights=LocalFileBinding(),
-)
 
 _REQUIREMENT_CHECK_ADAPTER = Adapter(
     identity=Identity("requirement-check", "alora", capability="requirement_check"),
     io_contract=get_io_contract("requirement-check"),
-    weights=LocalFileBinding(),
-)
-
-_CONTEXT_ATTRIBUTION_ADAPTER = Adapter(
-    identity=Identity("context-attribution", "alora", capability="context_attribution"),
-    io_contract=get_io_contract("context-attribution"),
     weights=LocalFileBinding(),
 )
 

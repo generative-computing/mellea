@@ -6,9 +6,11 @@
 Issue #1516 replaced the hand-rolled score-range validation `requirement_check` used
 to run after `call_intrinsic` with the `requirement-check` capability's declared
 `IOContract`, obtained from the adapter `resolve_adapter` returns rather than passed
-as a parallel argument. These tests exercise that real path — `call_intrinsic`,
-`resolve_adapter`, and `IOContract.parse` all run — by mocking only `mfuncs.act` (the
-actual model call), not `call_intrinsic` itself.
+as a parallel argument. These tests exercise that real path — `call_intrinsic` and
+`IOContract.parse` both run against a stubbed `resolve_adapter` return value — by
+mocking `mfuncs.act` (the actual model call) and `backend.resolve_adapter` (a bare
+`MagicMock`), not `call_intrinsic` itself. `resolve_adapter`'s own lazy-registration
+and catalogue-lookup logic is exercised separately in `test/backends/test_adapters/`.
 
 Score-range edge cases (NaN, bool, out-of-range, ...) are covered directly against
 the contract in `test/backends/test_adapters/test_io_contracts.py`; this file checks

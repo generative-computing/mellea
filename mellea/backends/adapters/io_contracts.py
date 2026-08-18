@@ -24,6 +24,7 @@ import math
 
 from ...core import Component
 from ._core import AdapterSchemaMismatchError, IOContract, _DictContract, _ListContract
+from .catalog import known_intrinsic_names
 
 
 class _PolicyGuardrailsContract(IOContract):
@@ -240,7 +241,16 @@ _INTRINSIC_IO_CONTRACTS: dict[str, IOContract] = {
 """Canonical output contract for every catalogued adapter function, keyed by its
 catalog `name` (see module docstring). Kept exhaustive over
 :func:`~mellea.backends.adapters.catalog.known_intrinsic_names` by
-`test/backends/test_adapters/test_io_contracts.py`."""
+`test/backends/test_adapters/test_io_contracts.py`, and enforced below at import
+time — mirroring the duplicate-`effective_capability` check in `catalog.py`."""
+
+_missing_contracts = set(known_intrinsic_names()) - set(_INTRINSIC_IO_CONTRACTS)
+if _missing_contracts:
+    raise ValueError(
+        f"Catalogued adapter functions with no declared IOContract: "
+        f"{_missing_contracts}"
+    )
+del _missing_contracts
 
 
 def get_io_contract(name: str) -> IOContract:
