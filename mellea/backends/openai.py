@@ -53,7 +53,7 @@ from ..stdlib.components import Intrinsic, Message
 from ..stdlib.requirements import LLMaJRequirement
 from ..telemetry.context import generate_request_id, with_context
 from ._options import resolve_model_options
-from .adapters._core import EmbeddedActivationRequest, EmbeddedBinding
+from .adapters import EmbeddedActivationRequest, EmbeddedBinding
 from .adapters.adapter import AdapterInput, AdapterMixin, EmbeddedIntrinsicAdapter
 from .backend import FormatterBackend
 from .model_options import ModelOption
@@ -324,6 +324,8 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 f"Got: {type(adapter).__name__}"
             )
         adapter.backend = self
+        if isinstance(adapter.weights, EmbeddedBinding):
+            adapter.weights.source = self.base_model_name
         self._added_adapters[adapter.qualified_name] = adapter
 
     def list_adapters(self) -> list[str]:
@@ -690,7 +692,9 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         Raises:
             ValueError: If no embedded adapter is registered for the requested
                 intrinsic.
-            TypeError: If the adapter isn't an EmbeddedIntrinsicAdapter.
+            TypeError: If the adapter isn't an EmbeddedIntrinsicAdapter, or its
+                `weights` isn't an EmbeddedBinding (only reachable if a caller
+                reassigns `.weights` after construction).
         """
         if not ctx.is_chat_context:
             raise NotImplementedError("Intrinsics require a chat context.")
@@ -769,12 +773,21 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             api_params.update(rewriter.parameters)
 
         # Embedded adapters activate via control tokens in the chat template;
-        # the binding owns the request edit (issue #1142).
+        # the binding owns the request edit (issue #1142). `adapter.weights` is
+        # always an EmbeddedBinding here — EmbeddedIntrinsicAdapter.__init__
+        # constructs one unconditionally — but the shim permits attribute
+        # mutation, so a caller reassigning `.weights` must fail loudly here
+        # rather than silently skip activation and send an unactivated request.
         if isinstance(adapter.weights, EmbeddedBinding):
             activation_request = EmbeddedActivationRequest(
                 extra_body=extra_body, api_params=api_params
             )
-            adapter.weights.apply_activation(activation_request, adapter.identity)
+            await adapter.weights.apply_activation(activation_request, adapter.identity)
+        else:
+            raise TypeError(
+                f"EmbeddedIntrinsicAdapter.weights must be an EmbeddedBinding; "
+                f"got {type(adapter.weights).__name__}. Activation cannot proceed."
+            )
 
         # Collect tools if tool_calls is enabled.
         tools: dict[str, AbstractMelleaTool] = dict()

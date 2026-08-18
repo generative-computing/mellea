@@ -336,6 +336,30 @@ def test_adapter_scope_raises_for_a_shim_backed_adapter():
             pytest.fail("body must not run when the shim's activate() raises")
 
 
+def test_adapter_scope_rejects_an_embedded_binding():
+    """adapter_scope drives the WeightsBinding lifecycle; EmbeddedBinding has none.
+
+    Deliberate behaviour change from #1142: `adapter_scope` used to raise
+    `NotImplementedError` from `_ShimWeightsBinding.activate()` for an
+    `EmbeddedIntrinsicAdapter` and fire `invocation_complete(outcome="error")`;
+    it now raises `TypeError` before entering the try/finally and fires
+    nothing. This pins the new guard (`adapter.py`'s `isinstance(adapter.weights,
+    WeightsBinding)` check) rather than leaving it to surface as an
+    `AttributeError` from `adapter.weights.activate()` the next time someone
+    wires embedded generation through this scope.
+    """
+    mock_backend = MagicMock(spec=AdapterMixin)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        adapter = EmbeddedIntrinsicAdapter(
+            "answerability", config={}, technology="alora"
+        )
+
+    with pytest.raises(TypeError, match=r"have no activate\(\)/deactivate\(\)"):
+        with AdapterMixin.adapter_scope(mock_backend, adapter):
+            pytest.fail("body must not run for a binding with no lifecycle")
+
+
 def test_resolve_adapter_returns_existing_by_capability():
     """resolve_adapter must return an already-registered adapter without creating a new one."""
     existing = _make_intrinsic_adapter("answerability")

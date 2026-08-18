@@ -751,7 +751,7 @@ class EmbeddedBinding:
         """
         return cls(source=backend.base_model_name)
 
-    def apply_activation(
+    async def apply_activation(
         self, request: EmbeddedActivationRequest, identity: "Identity"
     ) -> None:
         """Edits `request` so the served model activates `identity`'s adapter.
@@ -763,9 +763,28 @@ class EmbeddedBinding:
         real model is the base model already being served, so that value is
         dropped here rather than sent to the API.
 
-        Fires `adapter_function_phase_complete` (phase `"activate"`) and
-        `adapter_function_invocation_complete`, so Embedded calls are counted
-        by `AdapterFunctionMetricsPlugin` like every other binding.
+        Fires `adapter_function_phase_complete` (phase `"activate"`), so
+        Embedded calls contribute to the `mellea.adapter_function.phase_duration`
+        metric like every other binding. Does **not** fire
+        `adapter_function_invocation_complete`: unlike `LocalFileBinding`'s
+        verbs (driven by `adapter_scope`, which wraps the whole call and
+        knows the real outcome), this method only edits a request — the
+        actual generation and parsing happen later, asynchronously, once the
+        caller awaits the resulting `ModelOutputThunk`. Firing an
+        invocation-complete event here would have to guess an `outcome` that
+        this method cannot know, which is worse than not firing it: it would
+        report `outcome="success"` for calls that go on to fail. Wiring a
+        real invocation-complete signal in requires the caller (currently
+        `OpenAIBackend._generate_from_intrinsic`) to fire it once generation
+        and parsing resolve — tracked as a follow-up, not part of this method.
+
+        This method is `async` (unlike the rest of `EmbeddedBinding`'s
+        surface) purely because hook dispatch (`invoke_hook`) is async; its
+        own work is synchronous. Its one caller,
+        `OpenAIBackend._generate_from_intrinsic`, is already a coroutine, so
+        `await`ing here — rather than bridging through
+        `_run_async_in_thread`, which is for calling async code from sync
+        code — avoids spawning a throwaway event loop and thread per call.
 
         Args:
             request: The outgoing request state to edit; both of its dicts
@@ -779,11 +798,17 @@ class EmbeddedBinding:
         request.api_params.pop("model", None)
         duration_s = time.monotonic() - started_at
 
-        self._fire_phase_complete(identity.name, duration_s)
-        self._fire_invocation_complete(identity)
+        await self._fire_activate_phase_complete(identity.name, duration_s)
 
-    def _fire_phase_complete(self, name: str, duration_s: float) -> None:
+    async def _fire_activate_phase_complete(self, name: str, duration_s: float) -> None:
         """Fires `adapter_function_phase_complete` for the activate phase.
+
+        `duration_s` is the cost of editing a dict, not of an adapter
+        activation in the sense `LocalFileBinding`'s real PEFT activation is —
+        the resulting `phase_duration` samples for `binding_type="embedded"`
+        are not comparable to `binding_type="local_file"` samples for the
+        same adapter name; the histogram carries no `binding_type` attribute
+        to separate them.
 
         Args:
             name: Adapter function name, used as the metric's `name` field.
@@ -800,47 +825,12 @@ class EmbeddedBinding:
             payload = AdapterFunctionPhaseCompletePayload(
                 name=name, phase="activate", duration_ms=duration_s * 1000.0
             )
-            hook_coro = invoke_hook(HookType.ADAPTER_FUNCTION_PHASE_COMPLETE, payload)
-            _run_async_in_thread(hook_coro)
+            await invoke_hook(HookType.ADAPTER_FUNCTION_PHASE_COMPLETE, payload)
         except Exception:
             MelleaLogger.get_logger().warning(
                 f"adapter_function_phase_complete hook dispatch failed for {name!r} "
                 "during 'activate'; ignoring so it does not turn a completed "
                 "request edit into an operation failure.",
-                exc_info=True,
-            )
-
-    def _fire_invocation_complete(self, identity: "Identity") -> None:
-        """Fires `adapter_function_invocation_complete` for a completed activation.
-
-        Args:
-            identity: Identifies the adapter that was activated.
-        """
-        if not has_plugins(HookType.ADAPTER_FUNCTION_INVOCATION_COMPLETE):
-            return
-
-        from ...plugins.hooks.adapter_function import (
-            AdapterFunctionInvocationCompletePayload,
-        )
-
-        try:
-            payload = AdapterFunctionInvocationCompletePayload(
-                name=identity.name,
-                revision=None,
-                binding_type=self.binding_type,
-                adapter_type=identity.adapter_type,
-                outcome="success",
-                error=None,
-            )
-            hook_coro = invoke_hook(
-                HookType.ADAPTER_FUNCTION_INVOCATION_COMPLETE, payload
-            )
-            _run_async_in_thread(hook_coro)
-        except Exception:
-            MelleaLogger.get_logger().warning(
-                "adapter_function_invocation_complete hook dispatch failed for "
-                f"{identity.name!r}; ignoring so it does not turn a completed "
-                "activation into an operation failure.",
                 exc_info=True,
             )
 
@@ -875,8 +865,9 @@ class ServerMediatedBinding(WeightsBinding):
 class Adapter:
     """Composable adapter dataclass (Epic #929 Phase 0).
 
-    Composes an :class:`Identity`, an :class:`IOContract`, and a
-    :class:`WeightsBinding` into a single, inspectable object.
+    Composes an :class:`Identity`, an :class:`IOContract`, and a weights
+    binding (a :class:`WeightsBinding` or :class:`EmbeddedBinding`) into a
+    single, inspectable object.
 
     Attributes:
         identity (Identity): Name, type, and capability for this adapter.

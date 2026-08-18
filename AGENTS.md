@@ -220,10 +220,10 @@ two shapes — a `WeightsBinding` lifecycle for weights you stage yourself, or
 `EmbeddedBinding.apply_activation` for weights already in the served model. The
 post-activation shape each produces:
 
-| Binding | Reality | Activation call | Normalized post-activation state | Lifecycle verbs |
-|---------|---------|------------------|-----------------------------------|------------------|
-| `LocalFileBinding` | LocalFile/PEFT | `activate()` / `deactivate()` | Backend-internal PEFT adapter state toggled; the outgoing request is untouched | `prepare` / `activate` / `deactivate` / `release` |
-| `EmbeddedBinding` | Embedded/Granite Switch | `apply_activation(request, identity)` | `request.extra_body["chat_template_kwargs"]["adapter_name"]` set; `request.api_params["model"]` removed if present | none — weights are already in the served model |
+| Binding | Reality | Lifecycle verbs | Caller invokes | Normalized post-activation state |
+|---------|---------|------------------|-----------------|-----------------------------------|
+| `LocalFileBinding` | LocalFile/PEFT | `prepare` / `activate` / `deactivate` / `release` | `activate()` / `deactivate()`, via `adapter_scope` | Backend-internal PEFT adapter state toggled; the outgoing request is untouched |
+| `EmbeddedBinding` | Embedded/Granite Switch | none — weights are already in the served model | `apply_activation(request, identity)` | `request.extra_body["chat_template_kwargs"]["adapter_name"]` set; `request.api_params["model"]` removed if present |
 
 ### Project Resources
 

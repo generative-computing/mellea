@@ -230,14 +230,16 @@ Output format is task-specific — `requirement-check` returns `{"requirement_ch
 ## Composable adapter construction (advanced)
 
 > **Advanced:** `Adapter` composes an `Identity`, an `IOContract`, and a weights
-> binding. Most callers should use the wrapper functions above; construct an
-> `Adapter` directly when writing a new backend integration or adapter function.
+> binding into a single, inspectable object. It's scaffolding for a future
+> backend-integration surface (Epic #929) — today, `LocalHFBackend.add_adapter`
+> and `OpenAIBackend.add_adapter` accept a weights binding or a shim class
+> directly, not a composed `Adapter`. The construction below is illustrative
+> of the binding shapes; write a new backend integration against the bindings
+> themselves.
 
-Each weights binding models how its deployment turns an adapter on. `LocalFileBinding`
-downloads and loads LoRA/aLoRA weights, so it exposes a `prepare`/`activate`/
-`deactivate`/`release` lifecycle. `EmbeddedBinding` has no weights to manage — the
-adapter is already part of the served base model — so it exposes a single method,
-`apply_activation`, that edits the outgoing request instead:
+Each weights binding models how its deployment turns an adapter on.
+`LocalFileBinding` downloads and loads LoRA/aLoRA weights, so it exposes a
+`prepare`/`activate`/`deactivate`/`release` lifecycle:
 
 ```python
 # Requires: mellea[hf]
@@ -259,13 +261,21 @@ class AnswerabilityContract(IOContract):
 
 # LocalFile/PEFT reality — LocalHFBackend downloads and loads the weights.
 hf_backend = LocalHFBackend(model_id="ibm-granite/granite-4.1-3b")
+hf_binding = LocalFileBinding.from_catalog("answerability")
+hf_binding.bind_backend(hf_backend)
+# hf_binding.prepare() downloads the weights and loads them into hf_backend.
 hf_adapter = Adapter(
     identity=Identity(name="answerability", adapter_type="alora"),
     io_contract=AnswerabilityContract(),
-    weights=LocalFileBinding.from_catalog("answerability"),
+    weights=hf_binding,
 )
+```
 
-# Embedded/Granite Switch reality — the adapter is already in the served model.
+`EmbeddedBinding` has no weights to manage — the adapter is already part of
+the served base model — so it exposes a single method, `apply_activation`,
+that edits the outgoing request instead of a lifecycle:
+
+```python
 switch_backend = OpenAIBackend(
     model_id="granite-switch", base_url="http://localhost:8000/v1"
 )
@@ -276,12 +286,13 @@ switch_adapter = Adapter(
 )
 ```
 
-Backend support for each weights binding today:
+Weights-binding support by backend today — this tracks the binding
+implementations, not whether a composed `Adapter` can be registered directly:
 
 | Backend | `LocalFileBinding` (LocalFile/PEFT) | `EmbeddedBinding` (Embedded/Granite Switch) | `ServerMediatedBinding` |
 | --- | --- | --- | --- |
-| `LocalHFBackend` | ✅ shipping | 🔜 planned (#1018) | — |
-| `OpenAIBackend` | — | ✅ shipping (Granite Switch) | — |
+| `LocalHFBackend` | ✅ shipping — `add_adapter` accepts a `LocalFileBinding` directly | 🔜 planned (#1018) | — |
+| `OpenAIBackend` | — | ✅ shipping, via the deprecated `EmbeddedIntrinsicAdapter` shim above, which builds an `EmbeddedBinding` internally | — |
 
 `ServerMediatedBinding` has no backend implementation yet — see discussion #1486.
 

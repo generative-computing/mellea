@@ -119,10 +119,9 @@ def test_weights_binding_abc_enforcement():
         PartialBinding()  # type: ignore[abstract]
 
 
-@pytest.mark.parametrize("cls", [ServerMediatedBinding])
 @pytest.mark.parametrize("verb", ["prepare", "activate", "deactivate", "release"])
-def test_stub_binding_subclasses_raise_not_implemented(cls, verb):
-    binding = cls()
+def test_server_mediated_binding_raises_not_implemented(verb):
+    binding = ServerMediatedBinding()
     with pytest.raises(NotImplementedError, match="Phase 0 stub"):
         getattr(binding, verb)()
 
