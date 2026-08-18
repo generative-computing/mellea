@@ -89,7 +89,7 @@ after each LLM call. No code changes are required.
 | ----------- | ---- | ---- | ----------- |
 | `gen_ai.client.operation.duration` | Histogram | `s` | Total request duration, from call to full response |
 | `gen_ai.client.operation.time_to_first_chunk` | Histogram | `s` | Time to first chunk (streaming requests only) |
-| `gen_ai.client.operation.time_per_output_chunk` | Histogram | `s` | Time between consecutive streamed chunks (streaming only; opt-in, see below) |
+| `gen_ai.client.operation.time_per_output_chunk` | Histogram | `s` | Approximate time between consecutive streamed chunks (streaming only; opt-in, see below) |
 
 ### Latency attributes
 
@@ -118,6 +118,8 @@ Bucket boundaries follow the Gen-AI semantic conventions:
 - **`gen_ai.client.operation.time_per_output_chunk`**: Recorded per streamed chunk after the
   first, measuring the gap since the previous chunk. Opt-in — the histogram stays empty unless
   `MELLEA_GENERATION_CHUNK_EVENTS=true`, since it relies on the per-chunk events that flag enables.
+  The gap is measured between chunk *processing* completions, an approximation of the
+  receive-to-receive interval the OTel GenAI spec defines.
 
 Access latency data directly from a `ModelOutputThunk`:
 

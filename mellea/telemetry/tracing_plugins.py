@@ -162,6 +162,9 @@ class BackendTracingPlugin(Plugin, name="backend_tracing", priority=1040):
                     "mellea.generation.chunk_text_length": payload.data.get(
                         "chunk_text_length"
                     ),
+                    "mellea.generation.time_since_last_chunk_ms": payload.data.get(
+                        "time_since_last_chunk_ms"
+                    ),
                 },
             )
 

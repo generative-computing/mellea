@@ -234,7 +234,11 @@ async def test_event_records_chunk_processed_on_in_flight_span(
     payload = GenerationEventPayload(
         generation_id="gid-ev",
         event_name="chunk_processed",
-        data={"chunk_index": 2, "chunk_text_length": 5},
+        data={
+            "chunk_index": 2,
+            "chunk_text_length": 5,
+            "time_since_last_chunk_ms": 40.0,
+        },
     )
     await backend_plugin.on_generation_event(payload, {})
 
@@ -244,6 +248,7 @@ async def test_event_records_chunk_processed_on_in_flight_span(
     assert name == "chunk_processed"
     assert attrs["mellea.generation.chunk_index"] == 2
     assert attrs["mellea.generation.chunk_text_length"] == 5
+    assert attrs["mellea.generation.time_since_last_chunk_ms"] == 40.0
     # The event does not close the span.
     fake_span.end.assert_not_called()
 

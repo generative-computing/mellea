@@ -243,7 +243,8 @@ Mellea also adds context-specific attributes to backend spans:
 | `mellea.usage.total_tokens` | Total tokens reported by the backend; a Mellea extension, since semconv defines only input/output |
 
 When `MELLEA_GENERATION_CHUNK_EVENTS=true`, backend spans also record a `chunk_processed`
-span event per streamed chunk, carrying its index and added text length. This is
+span event per streamed chunk, carrying its index, added text length, and the approximate
+time since the previous chunk (omitted on the first chunk). This is
 opt-in and off by default, since a long response produces one event per chunk.
 
 ### Span hierarchy

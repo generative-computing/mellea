@@ -781,9 +781,11 @@ def _get_time_per_output_chunk_histogram() -> Any:
 def record_time_per_output_chunk(
     time_s: float, model: str, provider: str, operation: str
 ) -> None:
-    """Record the inter-arrival time between consecutive streamed output chunks.
+    """Record the time between consecutive streamed output chunks.
 
-    This is a no-op when metrics are disabled, ensuring zero overhead.
+    Measured between chunk *processing* completions, an approximation of the
+    receive-to-receive interval the OTel GenAI spec defines. No-op when metrics
+    are disabled.
 
     Args:
         time_s: Seconds between the previous chunk and this one.
