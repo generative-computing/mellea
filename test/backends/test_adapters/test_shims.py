@@ -289,7 +289,7 @@ def test_find_adapter_honours_type_preference_order():
 class _MutatingCapability:
     """Capability sentinel whose `__eq__` deletes an entry from the registry
     it is compared against, simulating a concurrent `release()` mutating
-    `_added_adapters` mid-iteration (#1554 review finding 3).
+    `_added_adapters` mid-iteration.
 
     `_find_adapter` compares `a.identity.capability == capability` for each
     registered adapter in turn; a real `str.__eq__` against this sentinel
@@ -316,12 +316,11 @@ class _MutatingCapability:
 def test_find_adapter_survives_concurrent_removal_during_iteration():
     """`_find_adapter` must not iterate a live view over `_added_adapters`.
 
-    Regression guard for #1554 review finding 3: before this PR,
-    `_added_adapters` was insert-only, so iterating it was always safe.
-    `remove_adapter()` (#1528) made it the first-ever runtime deletion site,
-    and a concurrent `release()` mutating the dict while `_find_adapter`
-    holds a live `.values()` view raises `RuntimeError: dictionary changed
-    size during iteration`. `_find_adapter` must snapshot into a list first.
+    `_added_adapters` was insert-only until `remove_adapter()` (#1528) added
+    the first runtime deletion from it. A concurrent `release()` mutating the
+    dict while `_find_adapter` holds a live `.values()` view raises
+    `RuntimeError: dictionary changed size during iteration`. `_find_adapter`
+    must snapshot into a list first.
     """
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", DeprecationWarning)

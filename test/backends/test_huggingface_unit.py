@@ -420,9 +420,8 @@ def test_remove_adapter_clears_backend_and_path_references():
 def test_add_adapter_after_remove_adapter_allows_reregistering_the_same_object():
     """A removed adapter object, not just a fresh one, must be re-addable.
 
-    Regression guard for #1554 review finding 1: before `remove_adapter()`
-    cleared `.backend`, re-adding the *same* object hit the `adapter.backend
-    is self` early-return in `add_adapter()`
+    Before `remove_adapter()` cleared `.backend`, re-adding the *same* object
+    hit the `adapter.backend is self` early-return in `add_adapter()`
     (mellea/backends/huggingface.py:2012-2017) — a silent no-op, never
     re-registered, with no exception raised.
     """
@@ -442,15 +441,14 @@ def test_add_adapter_after_remove_adapter_allows_reregistering_the_same_object()
 def test_remove_adapter_raises_if_still_loaded():
     """remove_adapter() must refuse to free a name that is still loaded.
 
-    Regression guard for #1554 review finding 2: `load_peft_adapter()`
-    deliberately swallows PEFT's "Adapter with name X already exists."
-    (mellea/backends/huggingface.py:2068-2073) — safe only because a
-    qualified_name, once claimed, could never be reclaimed. Freeing the name
-    while it is still loaded lets a later `load_peft_adapter()` call for a
-    *different* adapter object hit that swallow and silently keep running on
-    the old weights. `unload_peft_adapter()` (which `release()` always calls
-    first) must clear `_loaded_adapters` before `remove_adapter()` can
-    succeed.
+    `load_peft_adapter()` deliberately swallows PEFT's "Adapter with name X
+    already exists." (mellea/backends/huggingface.py:2068-2073) — safe only
+    because a qualified_name, once claimed, could never be reclaimed. Freeing
+    the name while it is still loaded lets a later `load_peft_adapter()` call
+    for a *different* adapter object hit that swallow and silently keep
+    running on the old weights. `unload_peft_adapter()` (which `release()`
+    always calls first) must clear `_loaded_adapters` before `remove_adapter()`
+    can succeed.
     """
     backend = _make_backend()
     adapter = _make_intrinsic_adapter_stub()
