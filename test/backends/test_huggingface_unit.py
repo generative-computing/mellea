@@ -350,6 +350,48 @@ def test_add_non_local_hf_adapter_raises():
         backend.add_adapter(mock_adapter)
 
 
+def test_remove_adapter_removes_from_added_adapters():
+    """remove_adapter() is the inverse of add_adapter() (#1528)."""
+    backend = _make_backend()
+    adapter = _make_intrinsic_adapter_stub()
+    adapter.backend = None
+    adapter.get_local_hf_path = lambda base_model_name: "/fake/path"
+    backend.add_adapter(adapter)
+    assert adapter.qualified_name in backend.list_adapters()
+
+    backend.remove_adapter(adapter.qualified_name)
+
+    assert adapter.qualified_name not in backend.list_adapters()
+    assert adapter.qualified_name not in backend._added_adapters
+
+
+def test_remove_adapter_unregistered_name_is_noop():
+    """remove_adapter() on a name that was never added must not raise."""
+    backend = _make_backend()
+    backend.remove_adapter("never_registered_lora")  # must not raise
+
+
+def test_add_adapter_after_remove_adapter_allows_a_fresh_registration():
+    """#1528: removing an adapter frees its qualified_name for a different
+    adapter object to register under — the name is no longer burned for the
+    backend's lifetime.
+    """
+    backend = _make_backend()
+    first = _make_intrinsic_adapter_stub()
+    first.backend = None
+    first.get_local_hf_path = lambda base_model_name: "/fake/path"
+    backend.add_adapter(first)
+    backend.remove_adapter(first.qualified_name)
+
+    second = _make_intrinsic_adapter_stub()
+    second.backend = None
+    second.get_local_hf_path = lambda base_model_name: "/fake/path-2"
+    backend.add_adapter(second)
+
+    assert second.backend is backend
+    assert backend._added_adapters[second.qualified_name] is second
+
+
 def test_seed_forces_do_sample_true(stub_backend):
     """Issue #40: a seed alone must flip do_sample=True so it isn't ignored."""
     out = _call(stub_backend, {ModelOption.SEED: 42})

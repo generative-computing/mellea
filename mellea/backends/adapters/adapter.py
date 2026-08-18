@@ -535,6 +535,27 @@ class AdapterMixin(Backend, abc.ABC):
             f"Backend type {type(self)} does not support unload_peft_adapter()."
         )
 
+    def remove_adapter(self, adapter_qualified_name: str) -> None:
+        """Deregister a previously added adapter, freeing its qualified name for reuse.
+
+        The inverse of `add_adapter()`. LocalFile/PEFT reality only today
+        (#1528) — `LocalFileBinding.release()` calls this after
+        `unload_peft_adapter()` so a released `qualified_name` becomes
+        claimable by a fresh binding rather than staying claimed for the
+        backend's lifetime.
+
+        Args:
+            adapter_qualified_name (str): The `adapter.qualified_name` of the
+                adapter to deregister.
+
+        Raises:
+            NotImplementedError: If this backend's adapter reality does not
+                support deregistration.
+        """
+        raise NotImplementedError(
+            f"Backend type {type(self)} does not support remove_adapter()."
+        )
+
     def activate_peft_adapter(self, adapter_qualified_name: str) -> None:
         """Switch a previously loaded PEFT adapter on for subsequent generation.
 

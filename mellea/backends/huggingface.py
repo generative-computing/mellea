@@ -2102,6 +2102,26 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         # Remove the adapter from the list of loaded adapters.
         del self._loaded_adapters[adapter.qualified_name]
 
+    def remove_adapter(self, adapter_qualified_name: str) -> None:
+        """Deregister a previously added adapter, freeing its qualified name for reuse.
+
+        The inverse of `add_adapter()`. If the adapter is not currently
+        registered, a log message is emitted and the method returns without
+        error.
+
+        Args:
+            adapter_qualified_name (str): The `adapter.qualified_name` of the
+                adapter to deregister.
+        """
+        if adapter_qualified_name not in self._added_adapters:
+            MelleaLogger.get_logger().info(
+                f"could not remove adapter {adapter_qualified_name} for backend {self}: "
+                "adapter was not registered"
+            )
+            return
+
+        del self._added_adapters[adapter_qualified_name]
+
     def activate_peft_adapter(self, adapter_qualified_name: str) -> None:
         """Switch a previously loaded PEFT adapter on for subsequent generation.
 

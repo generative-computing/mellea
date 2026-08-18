@@ -27,6 +27,29 @@ def _fake_backend():
     return backend
 
 
+def _fake_backend_with_registry():
+    """An AdapterMixin-conforming double with real `LocalHFBackend.add_adapter`/
+    `remove_adapter` registration semantics, so tests can exercise the #1528
+    re-registration contract without a real model.
+    """
+    backend = MagicMock()
+    registry: dict[str, LocalFileBinding] = {}
+
+    def add_adapter(binding: LocalFileBinding) -> None:
+        if binding.qualified_name in registry:
+            return  # mirrors LocalHFBackend's refusal-with-warning path
+        binding.backend = backend
+        registry[binding.qualified_name] = binding
+
+    def remove_adapter(qualified_name: str) -> None:
+        registry.pop(qualified_name, None)
+
+    backend.add_adapter.side_effect = add_adapter
+    backend.remove_adapter.side_effect = remove_adapter
+    backend.list_adapters.side_effect = lambda: list(registry.keys())
+    return backend
+
+
 def test_construction_defaults():
     binding = LocalFileBinding()
     assert binding.name == ""
@@ -374,9 +397,36 @@ def test_release_unloads_and_clears_state():
     binding.release()
 
     backend.unload_peft_adapter.assert_called_once_with(binding.qualified_name)
+    backend.remove_adapter.assert_called_once_with(binding.qualified_name)
     assert binding.backend is None
     assert binding.path is None
     assert binding._staged_backend is None
+
+
+def test_release_frees_the_qualified_name_for_a_fresh_binding():
+    """A different LocalFileBinding can claim a released qualified_name.
+
+    Regression guard for #1528: `release()` now calls the backend's
+    `remove_adapter()` inverse verb, so the `qualified_name` no longer stays
+    claimed for the backend's lifetime once the original binding tears down.
+    The original binding itself stays terminal — only the *name* is freed.
+    """
+    backend = _fake_backend_with_registry()
+    first = LocalFileBinding(name="answerability")
+    first.bind_backend(backend)
+    first.prepare()
+    first.release()
+
+    assert first.qualified_name not in backend.list_adapters()
+    with pytest.raises(RuntimeError, match="release"):
+        first.prepare()
+
+    second = LocalFileBinding(name="answerability")
+    second.bind_backend(backend)
+    second.prepare()  # must not raise "Backend refused to register"
+
+    assert second.backend is backend
+    assert second.qualified_name in backend.list_adapters()
 
 
 def test_release_requires_deactivation_after_activation():
@@ -472,6 +522,7 @@ def test_release_retries_after_unload_failure():
     binding.release()
 
     assert backend.unload_peft_adapter.call_count == 2
+    backend.remove_adapter.assert_called_once_with(binding.qualified_name)
     assert binding._released
     assert binding.backend is None
     assert binding.path is None
