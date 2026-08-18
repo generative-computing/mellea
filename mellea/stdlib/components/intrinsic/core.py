@@ -4,14 +4,41 @@
 """Adapter functions for core model capabilities."""
 
 import collections.abc
-import math
 from typing import cast
 
-from ....backends.adapters import AdapterMixin, AdapterSchemaMismatchError
+from ....backends.adapters import Adapter, AdapterMixin, Identity, LocalFileBinding
+from ....backends.adapters.io_contracts import get_io_contract
 from ...components import Document, Message
 from ...context import ChatContext
 from ..docs.document import _coerce_to_documents
 from ._util import _resolve_response, call_intrinsic
+
+# ---------------------------------------------------------------------------
+# Module-level Adapter constants (one per helper)
+#
+# io_contract is read from the same registry `resolve_adapter()` uses
+# (mellea.backends.adapters.io_contracts) rather than declared here — a second,
+# independent declaration is exactly the parallel-argument problem issue #1516
+# closes.
+# ---------------------------------------------------------------------------
+
+_UNCERTAINTY_ADAPTER = Adapter(
+    identity=Identity("uncertainty", "alora", capability="uncertainty"),
+    io_contract=get_io_contract("uncertainty"),
+    weights=LocalFileBinding(),
+)
+
+_REQUIREMENT_CHECK_ADAPTER = Adapter(
+    identity=Identity("requirement-check", "alora", capability="requirement_check"),
+    io_contract=get_io_contract("requirement-check"),
+    weights=LocalFileBinding(),
+)
+
+_CONTEXT_ATTRIBUTION_ADAPTER = Adapter(
+    identity=Identity("context-attribution", "alora", capability="context_attribution"),
+    io_contract=get_io_contract("context-attribution"),
+    weights=LocalFileBinding(),
+)
 
 
 def check_certainty(
@@ -23,6 +50,9 @@ def check_certainty(
     assistant's response to a user's question. The context should end with
     a user question followed by an assistant answer.
 
+    Output contract — required key: `certainty`.  Missing the key raises
+    `AdapterSchemaMismatchError`; extra optional keys do not raise (forward-compatible).
+
     Args:
         context: Chat context containing user question and assistant answer.
         backend: Backend instance that supports LoRA/aLoRA adapters.
@@ -32,6 +62,11 @@ def check_certainty(
 
     Returns:
         Certainty score as a float (higher = more certain).
+
+    Raises:
+        ValueError: When the model output is not valid JSON.
+        AdapterSchemaMismatchError: When the model output is missing the required
+            `certainty` field.
     """
     result_json = call_intrinsic(
         "uncertainty", context, backend, model_options=model_options
@@ -52,6 +87,10 @@ def requirement_check(
     `io.yaml` `instruction` template via `IntrinsicsRewriter`, which
     appends the formatted evaluation prompt as a new user message.
 
+    Output contract — required shape: `{"requirement_check": {"score": <float>}}`,
+    with `score` a finite number (not a `bool`) in the closed range `[0.0, 1.0]`.
+    Any deviation raises `AdapterSchemaMismatchError`.
+
     Args:
         context: Chat context containing user question and assistant answer.
         backend: Backend instance that supports LoRA/aLoRA adapters.
@@ -64,6 +103,7 @@ def requirement_check(
         Score as a float between 0.0 and 1.0 (higher = more likely satisfied).
 
     Raises:
+        ValueError: When the model output is not valid JSON.
         AdapterSchemaMismatchError: If the adapter output does not match the
             expected `{"requirement_check": {"score": <float>}}` contract, or
             if the score is not a finite number in the range 0.0-1.0.
@@ -75,27 +115,9 @@ def requirement_check(
         kwargs={"requirement": requirement},
         model_options=model_options,
     )
-    # Mirrors the validation in requirement_check_to_bool() in requirement.py; Phase 2 will consolidate via IOContract.
-    req_check = result_json.get("requirement_check")
-    if not isinstance(req_check, dict):
-        raise AdapterSchemaMismatchError(
-            name="requirement-check",
-            observed_keys=frozenset(result_json.keys()),
-            expected_keys=frozenset({"requirement_check"}),
-        )
-    score = req_check.get("score")
-    if (
-        not isinstance(score, (int, float))
-        or isinstance(score, bool)  # bool subclasses int; exclude it explicitly
-        or not math.isfinite(score)
-        or not 0.0 <= score <= 1.0
-    ):
-        raise AdapterSchemaMismatchError(
-            name="requirement-check",
-            observed_keys=frozenset(req_check.keys()),
-            expected_keys=frozenset({"score"}),
-        )
-    return score
+    return cast(
+        float, cast(dict[str, object], result_json["requirement_check"])["score"]
+    )
 
 
 def find_context_attributions(
@@ -110,6 +132,12 @@ def find_context_attributions(
     Adapter function that finds sentences in prior conversation messages and RAG
     documents that were most important to the LLM in generating each sentence in the
     assistant response.
+
+    Output contract — each record must contain: `response_begin`, `response_end`,
+    `response_text`, `attribution_doc_id`, `attribution_msg_index`,
+    `attribution_begin`, `attribution_end`, `attribution_text`.  A record missing
+    any of these keys raises `AdapterSchemaMismatchError`; extra optional keys do
+    not raise (forward-compatible).
 
     Args:
         response (str | None): Assistant response. When `None`, extracted from the
@@ -133,6 +161,11 @@ def find_context_attributions(
             `attribution_begin`, `attribution_end`, and `attribution_text`.
             Begin and end offsets are character offsets into their respective
             UTF-8 strings.
+
+    Raises:
+        ValueError: When the model output is not valid JSON.
+        AdapterSchemaMismatchError: When any record in the output is missing a
+            required field.
     """
     response, context = _resolve_response(response, context)
     result_json = call_intrinsic(
@@ -147,4 +180,4 @@ def find_context_attributions(
         backend,
         model_options=model_options,
     )
-    return cast(list[dict], result_json)
+    return cast(list[dict], result_json["items"])

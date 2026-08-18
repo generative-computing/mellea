@@ -107,3 +107,40 @@ def test_call_intrinsic_rejects_empty_chat_context(monkeypatch):
 
     backend.resolve_adapter.assert_not_called()
     assert calls == []
+
+
+def test_call_intrinsic_parses_via_resolved_adapters_io_contract(monkeypatch):
+    """The output contract must come from resolve_adapter's return value, not a
+    parallel argument (issue #1516)."""
+    calls: list[dict | None] = []
+    monkeypatch.setattr(_util.mfuncs, "act", _fake_act_capturing(calls))
+
+    resolved_adapter = MagicMock()
+    resolved_adapter.io_contract.parse.return_value = {"parsed": "by-resolved-adapter"}
+    backend = MagicMock()
+    backend.resolve_adapter.return_value = resolved_adapter
+    context = ChatContext().add(Message("user", "hi"))
+
+    result = _util.call_intrinsic("answerability", context, backend)
+
+    resolved_adapter.io_contract.parse.assert_called_once_with(
+        json.dumps({"result": "ok"})
+    )
+    assert result == {"parsed": "by-resolved-adapter"}
+
+
+def test_call_intrinsic_no_longer_accepts_io_contract_kwarg(monkeypatch):
+    """A caller can no longer pass a separate, possibly-mismatched io_contract."""
+    calls: list[dict | None] = []
+    monkeypatch.setattr(_util.mfuncs, "act", _fake_act_capturing(calls))
+
+    backend = MagicMock()
+    context = ChatContext().add(Message("user", "hi"))
+
+    with pytest.raises(TypeError, match="io_contract"):
+        _util.call_intrinsic(
+            "answerability",
+            context,
+            backend,
+            io_contract=MagicMock(),  # type: ignore[call-arg]
+        )

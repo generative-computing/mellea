@@ -13,20 +13,11 @@ resolved kwargs through.
 """
 
 import collections.abc
-import json
 import warnings
 from typing import cast
 
-from ....backends.adapters import (
-    Adapter,
-    AdapterMixin,
-    AdapterSchemaMismatchError,
-    Identity,
-    IOContract,
-    LocalFileBinding,
-)
-from ....backends.adapters._core import _DictContract
-from ....core import Component
+from ....backends.adapters import Adapter, AdapterMixin, Identity, LocalFileBinding
+from ....backends.adapters.io_contracts import get_io_contract
 from ....core.utils import MelleaLogger
 from ...components import Document
 from ...context import ChatContext
@@ -43,119 +34,23 @@ _TARGET_ROLE_TO_SCHEMA = {"user": "user_prompt", "assistant": "assistant_respons
 
 
 # ---------------------------------------------------------------------------
-# IOContract implementations
-# ---------------------------------------------------------------------------
-
-
-class _PolicyGuardrailsContract(IOContract):
-    """Validate policy-guardrails adapter output: exactly one of `label` or `score`.
-
-    The adapter returns either `{"label": "Yes"|"No"|"Ambiguous"}` or
-    `{"score": "Yes"|"No"|"Ambiguous"}` — never both, never neither.
-    """
-
-    def build_prompt(self, **_kwargs: object) -> Component:
-        raise NotImplementedError(
-            "build_prompt is not used in Phase 1; implemented in Phase 2."
-        )
-
-    def parse(self, raw: str) -> dict[str, object]:
-        """Parse and validate policy-guardrails output.
-
-        Args:
-            raw (str): Raw JSON string from the model.
-
-        Returns:
-            dict[str, object]: Parsed output dict with exactly one of `label` or `score`.
-
-        Raises:
-            ValueError: When *raw* is not valid JSON or is not a JSON object.
-            AdapterSchemaMismatchError: When neither or both of `label` / `score` are present.
-        """
-        data = json.loads(raw)
-        if not isinstance(data, dict):
-            raise ValueError(
-                f"Adapter 'policy-guardrails' output must be a JSON object, "
-                f"got {type(data).__name__}."
-            )
-        has_label = "label" in data
-        has_score = "score" in data
-        if not has_label and not has_score:
-            raise AdapterSchemaMismatchError(
-                "policy-guardrails",
-                frozenset(data.keys()),
-                frozenset({"label", "score"}),
-            )
-        if has_label and has_score:
-            raise AdapterSchemaMismatchError(
-                "policy-guardrails",
-                frozenset(data.keys()),
-                frozenset({"label", "score"}),
-            )
-        return data
-
-
-class _GuardianCheckContract(IOContract):
-    """Validate guardian-core adapter output: `{"guardian": {"score": <float>}}`.
-
-    Checks that the outer `guardian` key is present and that it contains
-    a nested `score` key.
-    """
-
-    def build_prompt(self, **_kwargs: object) -> Component:
-        raise NotImplementedError(
-            "build_prompt is not used in Phase 1; implemented in Phase 2."
-        )
-
-    def parse(self, raw: str) -> dict[str, object]:
-        """Parse and validate guardian-core output.
-
-        Args:
-            raw (str): Raw JSON string from the model.
-
-        Returns:
-            dict[str, object]: Parsed output dict containing `{"guardian": {"score": ...}}`.
-
-        Raises:
-            ValueError: When *raw* is not valid JSON or is not a JSON object.
-            AdapterSchemaMismatchError: When `guardian` key is absent or `guardian.score`
-                is absent.
-        """
-        data = json.loads(raw)
-        if not isinstance(data, dict):
-            raise ValueError(
-                f"Adapter 'guardian-core' output must be a JSON object, "
-                f"got {type(data).__name__}."
-            )
-        if "guardian" not in data:
-            raise AdapterSchemaMismatchError(
-                "guardian-core", frozenset(data.keys()), frozenset({"guardian"})
-            )
-        guardian_val = data["guardian"]
-        if not isinstance(guardian_val, dict) or "score" not in guardian_val:
-            raise AdapterSchemaMismatchError(
-                "guardian-core",
-                frozenset(guardian_val.keys())
-                if isinstance(guardian_val, dict)
-                else frozenset(data.keys()),
-                frozenset({"score"}),
-            )
-        return data
-
-
-# ---------------------------------------------------------------------------
 # Module-level Adapter constants (one per helper)
+#
+# io_contract is read from the same registry `resolve_adapter()` uses
+# (mellea.backends.adapters.io_contracts) rather than declared here — a second,
+# independent declaration is exactly the parallel-argument problem issue #1516
+# closes. See test_guardian_io_contract.py for contract-enforcement tests.
 # ---------------------------------------------------------------------------
 
 _POLICY_GUARDRAILS_ADAPTER = Adapter(
     identity=Identity("policy-guardrails", "alora", capability="policy_guardrails"),
-    io_contract=_PolicyGuardrailsContract(),
+    io_contract=get_io_contract("policy-guardrails"),
     weights=LocalFileBinding(),
 )
 
 _GUARDIAN_CHECK_ADAPTER = Adapter(
     identity=Identity("guardian-core", "alora", capability="guardian_core"),
-    io_contract=_GuardianCheckContract(),
+    io_contract=get_io_contract("guardian-core"),
     weights=LocalFileBinding(),
 )
 
@@ -163,7 +58,7 @@ _FACTUALITY_DETECTION_ADAPTER = Adapter(
     identity=Identity(
         "factuality-detection", "alora", capability="factuality_detection"
     ),
-    io_contract=_DictContract("factuality-detection", frozenset({"score"})),
+    io_contract=get_io_contract("factuality-detection"),
     weights=LocalFileBinding(),
 )
 
@@ -171,7 +66,7 @@ _FACTUALITY_CORRECTION_ADAPTER = Adapter(
     identity=Identity(
         "factuality-correction", "alora", capability="factuality_correction"
     ),
-    io_contract=_DictContract("factuality-correction", frozenset({"correction"})),
+    io_contract=get_io_contract("factuality-correction"),
     weights=LocalFileBinding(),
 )
 
@@ -212,7 +107,6 @@ def policy_guardrails(
         backend,
         kwargs={"policy_text": policy_text},
         model_options=model_options,
-        io_contract=_POLICY_GUARDRAILS_ADAPTER.io_contract,
     )
 
     if "label" in result_json:
@@ -412,7 +306,6 @@ def guardian_check(
         backend,
         kwargs={"criteria": criteria_text, "scoring_schema": scoring_schema_text},
         model_options=model_options,
-        io_contract=_GUARDIAN_CHECK_ADAPTER.io_contract,
     )
     return cast(float, cast(dict[str, object], result_json["guardian"])["score"])
 
@@ -469,11 +362,7 @@ def factuality_detection(
     if documents is not None:
         context = _inject_documents(context, documents)
     result_json = call_intrinsic(
-        "factuality-detection",
-        context,
-        backend,
-        model_options=model_options,
-        io_contract=_FACTUALITY_DETECTION_ADAPTER.io_contract,
+        "factuality-detection", context, backend, model_options=model_options
     )
     return cast(str, result_json["score"])
 
@@ -530,11 +419,7 @@ def factuality_correction(
     if documents is not None:
         context = _inject_documents(context, documents)
     result_json = call_intrinsic(
-        "factuality-correction",
-        context,
-        backend,
-        model_options=model_options,
-        io_contract=_FACTUALITY_CORRECTION_ADAPTER.io_contract,
+        "factuality-correction", context, backend, model_options=model_options
     )
     return cast(str, result_json["correction"])
 

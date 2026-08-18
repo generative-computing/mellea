@@ -720,5 +720,8 @@ class Adapter:
     # and `guardian.py` pair an `alora` identity with a bare, deliberately
     # unconfigured `LocalFileBinding()` that defaults to LoRA. Every catalogue
     # entry supports both types, so those are placeholders rather than genuine
-    # conflicts, and the check fired on "not configured yet". Enforce it once
-    # #1516 gives those constants real bindings.
+    # conflicts, and the check fired on "not configured yet". #1516 gave those
+    # constants real `io_contract`s (the capability axis) but deliberately left
+    # `weights` untouched — the alora-vs-lora binding question is the deployment
+    # axis, out of #1516's scope and still open. Enforce this check once a
+    # follow-up gives those constants real bindings.

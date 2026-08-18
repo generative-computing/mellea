@@ -207,9 +207,7 @@ def test_factuality_correction_error_mentions_adapter_name() -> None:
 def test_policy_guardrails_score_branch(monkeypatch) -> None:
     """policy_guardrails returns the `score` value when the adapter omits `label`."""
 
-    def fake_call_intrinsic(
-        name, context, backend, /, kwargs=None, model_options=None, io_contract=None
-    ):
+    def fake_call_intrinsic(name, context, backend, /, kwargs=None, model_options=None):
         return {"score": "No"}
 
     monkeypatch.setattr(guardian, "call_intrinsic", fake_call_intrinsic)

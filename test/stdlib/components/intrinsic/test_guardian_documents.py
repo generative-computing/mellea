@@ -20,9 +20,7 @@ def capture_intrinsic(monkeypatch):
     """Spy that replaces call_intrinsic and captures what it receives."""
     captured: dict = {}
 
-    def fake_call_intrinsic(
-        name, context, backend, /, kwargs=None, model_options=None, io_contract=None
-    ):
+    def fake_call_intrinsic(name, context, backend, /, kwargs=None, model_options=None):
         captured["name"] = name
         captured["context"] = context
         return {"score": "yes", "correction": "corrected"}
@@ -215,7 +213,7 @@ def _make_capture(monkeypatch, result: dict):
     """Patch call_intrinsic to capture (name, model_options) and return result."""
     calls: list[tuple] = []
 
-    def _fake(name, ctx, backend, /, kwargs=None, model_options=None, io_contract=None):
+    def _fake(name, ctx, backend, /, kwargs=None, model_options=None):
         calls.append((name, model_options))
         return result
 

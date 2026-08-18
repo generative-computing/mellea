@@ -4,20 +4,11 @@
 """Adapter functions related to retrieval-augmented generation."""
 
 import collections.abc
-import json
 import warnings
 from typing import cast
 
-from ....backends.adapters import (
-    Adapter,
-    AdapterMixin,
-    AdapterSchemaMismatchError,
-    Identity,
-    IOContract,
-    LocalFileBinding,
-)
-from ....backends.adapters._core import _DictContract
-from ....core import Component
+from ....backends.adapters import Adapter, AdapterMixin, Identity, LocalFileBinding
+from ....backends.adapters.io_contracts import get_io_contract
 from ...components import Document
 from ...context import ChatContext
 from ..chat import Message
@@ -25,112 +16,41 @@ from ..docs.document import _coerce_to_document, _coerce_to_documents
 from ._util import _resolve_question, _resolve_response, call_intrinsic
 
 # ---------------------------------------------------------------------------
-# IOContract implementations
-# ---------------------------------------------------------------------------
-
-
-class _ListContract(IOContract):
-    """Validate list-of-dicts adapter output and wrap it under key `"items"`.
-
-    Each item in the list is checked for the declared required keys.  The
-    validated list is returned wrapped in `{"items": [...]}` so that
-    :func:`call_intrinsic` can always return a plain `dict`.
-
-    Args:
-        name: Adapter capability name; included in
-            :class:`~mellea.backends.adapters.AdapterSchemaMismatchError` messages.
-        required_item_keys: Keys that must be present in every item dict.
-    """
-
-    def __init__(self, name: str, required_item_keys: frozenset[str]) -> None:
-        self._name = name
-        self._required_item_keys = required_item_keys
-
-    def build_prompt(self, **_kwargs: object) -> Component:
-        raise NotImplementedError(
-            "build_prompt is not used in Phase 1; implemented in Phase 2."
-        )
-
-    def parse(self, raw: str) -> dict[str, object]:
-        """Parse and validate a list-of-dicts adapter output.
-
-        Args:
-            raw (str): Raw JSON string from the model.
-
-        Returns:
-            dict[str, object]: `{"items": [list of validated dicts]}`.
-                An empty list parses to `{"items": []}`.
-
-        Raises:
-            ValueError: When *raw* is not valid JSON, is not a JSON array, or
-                contains a non-object element.
-            AdapterSchemaMismatchError: When any item is missing a required key.
-        """
-        data = json.loads(raw)
-        if not isinstance(data, list):
-            raise ValueError(
-                f"Adapter '{self._name}' output must be a JSON array, "
-                f"got {type(data).__name__}."
-            )
-        for item in data:
-            if not isinstance(item, dict):
-                raise ValueError(
-                    f"Adapter '{self._name}' output array must contain only JSON "
-                    f"objects, got a {type(item).__name__} element."
-                )
-            observed = frozenset(item.keys())
-            missing = self._required_item_keys - observed
-            if missing:
-                raise AdapterSchemaMismatchError(
-                    self._name, observed, self._required_item_keys
-                )
-        return {"items": data}
-
-
-# ---------------------------------------------------------------------------
 # Module-level Adapter constants (one per helper)
+#
+# io_contract is read from the same registry `resolve_adapter()` uses
+# (mellea.backends.adapters.io_contracts) rather than declared here — a second,
+# independent declaration is exactly the parallel-argument problem issue #1516
+# closes. See test_rag_contracts.py for contract-enforcement tests.
 # ---------------------------------------------------------------------------
 
 _ANSWERABILITY_ADAPTER = Adapter(
     identity=Identity("answerability", "alora", capability="answerability"),
-    io_contract=_DictContract("answerability", frozenset({"answerability"})),
+    io_contract=get_io_contract("answerability"),
     weights=LocalFileBinding(),
 )
 
 _QUERY_REWRITE_ADAPTER = Adapter(
     identity=Identity("query_rewrite", "alora", capability="query_rewrite"),
-    io_contract=_DictContract("query_rewrite", frozenset({"rewritten_question"})),
+    io_contract=get_io_contract("query_rewrite"),
     weights=LocalFileBinding(),
 )
 
 _QUERY_CLARIFY_ADAPTER = Adapter(
     identity=Identity("query_clarification", "alora", capability="query_clarification"),
-    io_contract=_DictContract("query_clarification", frozenset({"clarification"})),
+    io_contract=get_io_contract("query_clarification"),
     weights=LocalFileBinding(),
 )
 
 _CITATIONS_ADAPTER = Adapter(
     identity=Identity("citations", "alora", capability="citations"),
-    io_contract=_ListContract(
-        "citations",
-        frozenset(
-            {
-                "response_begin",
-                "response_end",
-                "response_text",
-                "citation_doc_id",
-                "citation_begin",
-                "citation_end",
-                "citation_text",
-            }
-        ),
-    ),
+    io_contract=get_io_contract("citations"),
     weights=LocalFileBinding(),
 )
 
 _CONTEXT_RELEVANCE_ADAPTER = Adapter(
     identity=Identity("context_relevance", "alora", capability="context_relevance"),
-    io_contract=_DictContract("context_relevance", frozenset({"context_relevance"})),
+    io_contract=get_io_contract("context_relevance"),
     weights=LocalFileBinding(),
 )
 
@@ -138,18 +58,7 @@ _HALLUCINATION_ADAPTER = Adapter(
     identity=Identity(
         "hallucination_detection", "alora", capability="hallucination_detection"
     ),
-    io_contract=_ListContract(
-        "hallucination_detection",
-        frozenset(
-            {
-                "response_begin",
-                "response_end",
-                "response_text",
-                "faithfulness",
-                "explanation",
-            }
-        ),
-    ),
+    io_contract=get_io_contract("hallucination_detection"),
     weights=LocalFileBinding(),
 )
 
@@ -205,7 +114,6 @@ def check_answerability(
             Message("user", question, documents=_coerce_to_documents(documents))
         ),
         backend,
-        io_contract=_ANSWERABILITY_ADAPTER.io_contract,
         model_options=model_options,
     )
     return cast(str, result["answerability"])
@@ -250,7 +158,6 @@ def rewrite_question(
         "query_rewrite",
         context.add(Message("user", question)),
         backend,
-        io_contract=_QUERY_REWRITE_ADAPTER.io_contract,
         model_options=model_options,
     )
     return cast(str, result["rewritten_question"])
@@ -303,7 +210,6 @@ def clarify_query(
             Message("user", question, documents=_coerce_to_documents(documents))
         ),
         backend,
-        io_contract=_QUERY_CLARIFY_ADAPTER.io_contract,
         model_options=model_options,
     )
     return cast(str, result["clarification"])
@@ -367,7 +273,6 @@ def find_citations(
             )
         ),
         backend,
-        io_contract=_CITATIONS_ADAPTER.io_contract,
         model_options=model_options,
     )
     return cast(list[dict], result["items"])
@@ -436,7 +341,6 @@ def check_context_relevance(
         context.add(Message("user", question)),
         backend,
         kwargs={"document_content": document.text},
-        io_contract=_CONTEXT_RELEVANCE_ADAPTER.io_contract,
         model_options=model_options,
     )
     return cast(str, result["context_relevance"])
@@ -496,7 +400,6 @@ def flag_hallucinated_content(
             Message("assistant", response, documents=_coerce_to_documents(documents))
         ),
         backend,
-        io_contract=_HALLUCINATION_ADAPTER.io_contract,
         model_options=model_options,
     )
     return cast(list[dict], result["items"])
