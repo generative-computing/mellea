@@ -735,8 +735,10 @@ class AdapterMixin(Backend, abc.ABC):
         This method fires hooks only; it does not open spans. Span production is a
         plugin's job (see #1464 for the rule and #1466 for the adapter-function
         spans), and the `ADAPTER_FUNCTION_*` family currently has no start hook for
-        a plugin to open a span on. See `docs/dev/adapter_observability.md` for the
-        metric schema.
+        a plugin to open a span on. Hook dispatch (`_run_async_in_thread`, no
+        timeout) runs synchronously on the calling thread, so a slow or
+        blocking-mode `ADAPTER_FUNCTION_*` subscriber delays whatever holds this
+        scope open.
 
         `deactivate()` is guarded on `activate()`'s own side effect having
         completed, not on the activate phase's hook dispatch also succeeding.
@@ -744,21 +746,27 @@ class AdapterMixin(Backend, abc.ABC):
         `activate()` already flipped the adapter on, `deactivate()` still runs —
         telemetry must not be able to strand the adapter active.
 
-        Not atomic across the whole scope: `_adapter_activation_lock()` is
-        held only inside each of `activate()`/`deactivate()`'s own verb calls
+        Not atomic across the whole scope **by itself**: `_adapter_activation_lock()`
+        is held only inside each of `activate()`/`deactivate()`'s own verb calls
         (see `LocalFileBinding.activate`), not for the `with` body in between.
         Two concurrent `adapter_scope()` calls on one backend can therefore
         interleave — one thread's body can run while a different adapter is
-        active, activated by another thread's call. Widening the lock to span
-        the whole scope was tried and reverted: it deadlocks the moment the
-        body does real async generation (confirmed against
-        `test_local_file_e2e.py`), because that work runs on the shared
-        event-loop thread while this thread holds the lock — a same-thread
-        `RLock` doesn't help across threads. No caller combines concurrent
-        `adapter_scope()` calls today (nothing outside tests calls it at all),
-        so this is latent, not reachable — but #1465 (wiring real generation
-        through this scope) has to solve the atomicity and the threading
-        interaction together, not layer one fix on top of the other.
+        active, activated by another thread's call — unless the caller closes
+        that gap itself. Widening *this method's own* lock to span the whole
+        scope was tried and reverted: it deadlocks the moment the body does
+        real async generation from the thread that opened the scope, because
+        that work runs on the shared event-loop thread while this thread holds
+        the lock — a same-thread `RLock` doesn't help across threads.
+
+        `LocalHFBackend._generate_intrinsic_with_adapter_scope` is the reference
+        example of a caller that *does* close the gap for its own call site: it
+        holds `_generation_lock` around the entire scope, which is safe there
+        only because each invocation is fully synchronous end to end and never
+        re-enters the event loop — concurrent invocations simply land on
+        different threads and serialise on the lock, rather than one thread
+        holding it while another does async work on the loop. A caller whose
+        body awaits work that re-enters generation on another thread must not
+        widen a lock this way — that reproduces the deadlock above.
 
         Args:
             adapter: The adapter to activate, or `None` (no-op).

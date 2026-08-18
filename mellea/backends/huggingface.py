@@ -16,7 +16,7 @@ import functools
 import json
 import threading
 from collections.abc import Callable, Coroutine, Sequence
-from typing import Any, ClassVar, cast
+from typing import Any, ClassVar, TypeVar, cast
 
 import jinja2
 import jinja2.meta
@@ -79,7 +79,6 @@ from ._options import resolve_model_options
 from .adapters import AdapterMixin, IntrinsicAdapter, LocalHFAdapter
 from .adapters._core import (
     Adapter as _AdapterCore,
-    Identity,
     IOContract,
     LocalFileBinding,
     WeightsBinding,
@@ -142,6 +141,8 @@ Hugging Face backends can initialize themselves from a model string if the trans
 TransformersTorchConfig = tuple[PreTrainedTokenizerBase, PreTrainedModel, torch.device]
 
 format: None = None  # typing this variable in order to shadow the global format function and ensure mypy checks for errors
+
+_T = TypeVar("_T")
 
 
 @dataclasses.dataclass
@@ -592,35 +593,47 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             return out
 
     def _generate_intrinsic_with_adapter_scope(
-        self, adapter: IntrinsicAdapter, generate_func: Callable, *args, **kwargs
-    ):
+        self,
+        adapter: IntrinsicAdapter,
+        generate_func: Callable[..., _T],
+        *args: Any,
+        **kwargs: Any,
+    ) -> _T:
         """Runs `generate_func` with `adapter` active, inside `AdapterMixin.adapter_scope`.
 
-        Replaces the old direct load-then-activate-then-generate sequence
-        `_generate_from_intrinsic` used to run through `_generate_with_adapter_lock`
-        (#1465): the model call now runs inside `adapter_scope`, so activation and
+        The model call now runs inside `adapter_scope`, so activation and
         deactivation fire the `ADAPTER_FUNCTION_PHASE_COMPLETE`/
-        `ADAPTER_FUNCTION_INVOCATION_COMPLETE` hooks, and deactivation is
-        guaranteed even if `generate_func` raises.
+        `ADAPTER_FUNCTION_INVOCATION_COMPLETE` hooks (`phase="activate"` and
+        `"deactivate"` only — `"generate"`/`"parse"` are not emitted; adding
+        those is out of scope here, see #1466), and deactivation is guaranteed
+        even if `generate_func` raises. Those hooks dispatch synchronously
+        (`_run_async_in_thread`, no timeout) while `_generation_lock` is held
+        below, so a blocking-mode `ADAPTER_FUNCTION_*` subscriber stalls
+        generation on this backend for its duration.
 
         `IntrinsicAdapter` (the legacy shim `adapter` is expected to be) carries
         an inert `_ShimWeightsBinding` that raises on every verb, so it can't be
         handed to `adapter_scope()` directly. This method builds a fresh
-        `_AdapterCore` wrapping a `_IntrinsicPeftBinding` instead, which drives
+        `_AdapterCore` around `adapter`'s own `identity` (not a rebuilt one —
+        rebuilding it would re-run `Identity.__post_init__`'s capability-registry
+        check on every call) wrapping a `_IntrinsicPeftBinding`, which drives
         this backend's own `load_peft_adapter`/`activate_peft_adapter`/
         `deactivate_peft_adapter` verbs — the same verbs
         `_generate_with_adapter_lock` used to call directly.
 
-        Holds `_generation_lock` for the *entire* activate -> generate ->
-        deactivate section, not just around activation, so a concurrent
-        caller's `activate()` can never interleave with this call's generation
-        — the atomicity gap `adapter_scope()`'s own docstring flags as
-        unresolved for real concurrent callers. This is safe specifically
-        because this method only ever runs inside a single `asyncio.to_thread`
-        worker thread (see its call site in `_generate_from_intrinsic`): the
-        inner re-acquisition of `_generation_lock` inside `adapter_scope()`'s
-        `activate()`/`deactivate()` (via `_adapter_activation_lock()`) is
-        same-thread, so it's reentrant rather than a cross-thread deadlock.
+        Holds `_generation_lock` for the *entire* prepare -> activate ->
+        generate -> deactivate section, not just around activation, so a
+        concurrent caller's `activate()` can never interleave with this call's
+        generation — the atomicity gap `adapter_scope()`'s own docstring flags
+        as unresolved for a caller that doesn't do this. Safe here because each
+        invocation of this method runs entirely on one thread (this method is
+        only ever invoked via a single `asyncio.to_thread` call — see its call
+        site in `_generate_from_intrinsic`) and never re-enters generation on
+        another thread: the inner re-acquisition of `_generation_lock` inside
+        `adapter_scope()`'s `activate()`/`deactivate()` (via
+        `_adapter_activation_lock()`) is therefore same-thread and reentrant.
+        Concurrent invocations land on different `asyncio.to_thread` pool
+        threads and simply serialise on the lock.
 
         Args:
             adapter: The (legacy) `IntrinsicAdapter` to activate for this call.
@@ -633,15 +646,14 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             Whatever `generate_func` returns.
         """
         scope_adapter = _AdapterCore(
-            identity=Identity(
-                name=adapter.name,
-                adapter_type=adapter.adapter_type.value,
-                capability=adapter.name,
+            identity=adapter.identity,
+            io_contract=_UnusedIOContract(),
+            weights=_IntrinsicPeftBinding(
+                self, adapter.qualified_name, adapter.intrinsic_metadata.revision
             ),
-            io_contract=_NoIntrinsicIOContract(),
-            weights=_IntrinsicPeftBinding(self, adapter.qualified_name),
         )
         with self._generation_lock:
+            scope_adapter.weights.prepare()
             with self.adapter_scope(scope_adapter):
                 _assert_correct_adapters(adapter.qualified_name, self._model)
                 out = generate_func(*args, **kwargs)
@@ -2284,7 +2296,7 @@ def _assert_correct_adapters(expected_state: str, model: PreTrainedModel):
             raise e
 
 
-class _NoIntrinsicIOContract(IOContract):
+class _UnusedIOContract(IOContract):
     """Placeholder `IOContract` for `_generate_intrinsic_with_adapter_scope`'s `_AdapterCore`.
 
     `_generate_from_intrinsic` builds its own I/O handling directly (the
@@ -2296,13 +2308,13 @@ class _NoIntrinsicIOContract(IOContract):
 
     def build_prompt(self, **kwargs: object) -> Component:
         raise NotImplementedError(
-            "not used on the intrinsic generation path (#1465): "
+            "not used on the intrinsic generation path: "
             "_generate_from_intrinsic builds prompts via IntrinsicsRewriter."
         )
 
     def parse(self, raw: str) -> dict[str, object]:
         raise NotImplementedError(
-            "not used on the intrinsic generation path (#1465): "
+            "not used on the intrinsic generation path: "
             "_generate_from_intrinsic parses output via IntrinsicsResultProcessor."
         )
 
@@ -2316,27 +2328,49 @@ class _IntrinsicPeftBinding(WeightsBinding):
     `_generate_intrinsic_with_adapter_scope` builds one of these fresh per call
     instead, and it drives the backend's own `load_peft_adapter`/
     `activate_peft_adapter`/`deactivate_peft_adapter` verbs — the same verbs
-    `_generate_with_adapter_lock` used to call directly, before generation was
-    routed through `adapter_scope` (#1465).
+    `_generate_with_adapter_lock` used to call directly before generation was
+    routed through `adapter_scope`.
 
-    `prepare()`/`release()` are no-ops: registration and the weights download
-    already happened in `add_adapter()` when the intrinsic adapter was
-    resolved (see `AdapterMixin.resolve_adapter`), and this binding doesn't own
-    that lifecycle — it only exists for the duration of one generate call.
+    `binding_type` is `"local_file"`, not a distinct value: this binding loads
+    LoRA/aLoRA weights downloaded to local disk via PEFT — the same reality
+    `LocalFileBinding` reports — so it must share that value rather than
+    fragment the weights-reality metric dimension. A distinct class exists
+    rather than reusing `LocalFileBinding` directly because `LocalFileBinding.prepare()`
+    calls `add_adapter()`, which would collide with the `IntrinsicAdapter`
+    already registered under this `qualified_name`.
+
+    `prepare()` loads the weights (mirrors `LocalFileBinding.prepare()`'s
+    phase boundary: the load belongs to `"prepare"`, not `"activate"`, so
+    `phase="activate"` duration stays comparable across bindings).
+    `release()` is a no-op: registration happened in `add_adapter()` when the
+    intrinsic adapter was resolved (see `AdapterMixin.resolve_adapter`), and
+    this binding doesn't own that lifecycle — it only exists for the duration
+    of one generate call.
+
+    Attributes:
+        revision (str | None): The catalogue revision `adapter_scope()` reports
+            to the `ADAPTER_FUNCTION_INVOCATION_COMPLETE` hook. Set explicitly
+            (rather than left for `adapter_scope()`'s `getattr(..., None)`
+            fallback) because `IntrinsicAdapter`s are always pinned to a
+            catalogue SHA; reporting `None` would mislabel every intrinsic
+            invocation as unpinned.
     """
 
-    binding_type: ClassVar[str] = "intrinsic_legacy"
+    binding_type: ClassVar[str] = "local_file"
 
-    def __init__(self, backend: LocalHFBackend, qualified_name: str) -> None:
+    def __init__(
+        self, backend: LocalHFBackend, qualified_name: str, revision: str | None
+    ) -> None:
         self._backend = backend
         self._qualified_name = qualified_name
+        self.revision = revision
 
     def prepare(self) -> None:
-        return
+        with self._backend._adapter_activation_lock():
+            self._backend.load_peft_adapter(self._qualified_name)
 
     def activate(self) -> None:
         with self._backend._adapter_activation_lock():
-            self._backend.load_peft_adapter(self._qualified_name)
             self._backend.activate_peft_adapter(self._qualified_name)
 
     def deactivate(self) -> None:
