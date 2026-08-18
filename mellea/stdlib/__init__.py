@@ -13,11 +13,10 @@ the sub-packages — `mellea.stdlib.components`, `mellea.stdlib.sampling`, and
 `mellea.stdlib.session` — for day-to-day use.
 
 Streaming chunking strategies (for use with streaming validation) are available at
-`mellea.stdlib.chunking` and re-exported here for convenience.  The core streaming
-orchestration primitive :func:`~mellea.stdlib.streaming.stream_with_chunking` and
-its result type :class:`~mellea.stdlib.streaming.StreamChunkingResult` are also
-re-exported here, alongside the full :class:`~mellea.stdlib.streaming.StreamEvent`
-vocabulary for typed event observation.
+`mellea.stdlib.chunking` and re-exported here for convenience, alongside the
+`Chunker` that drives them over a stream.  The core streaming primitive `stream()`
+and its async-iterable handle `Streamer` are also re-exported here, alongside the
+full `StreamEvent` vocabulary for typed event observation.
 
 Low-level primitives for tool execution are available in `mellea.stdlib.functional`:
 `call_tools` and `acall_tools` for executing model-requested tool calls with full
@@ -26,31 +25,38 @@ hook and telemetry support. Higher-level APIs like `act()`, `instruct()`, or
 the generated tools. These primitives are rarely needed outside custom agentic loops.
 """
 
-from .chunking import ChunkingStrategy, ParagraphChunker, SentenceChunker, WordChunker
+from .chunking import (
+    Chunker,
+    ChunkingStrategy,
+    ParagraphChunking,
+    SentenceChunking,
+    WordChunking,
+)
 from .streaming import (
     ChunkEvent,
     CompletedEvent,
     ErrorEvent,
     FullValidationEvent,
     QuickCheckEvent,
-    StreamChunkingResult,
+    Streamer,
     StreamEvent,
     StreamingDoneEvent,
-    stream_with_chunking,
+    stream,
 )
 
 __all__ = [
     "ChunkEvent",
+    "Chunker",
     "ChunkingStrategy",
     "CompletedEvent",
     "ErrorEvent",
     "FullValidationEvent",
-    "ParagraphChunker",
+    "ParagraphChunking",
     "QuickCheckEvent",
-    "SentenceChunker",
-    "StreamChunkingResult",
+    "SentenceChunking",
     "StreamEvent",
+    "Streamer",
     "StreamingDoneEvent",
-    "WordChunker",
-    "stream_with_chunking",
+    "WordChunking",
+    "stream",
 ]

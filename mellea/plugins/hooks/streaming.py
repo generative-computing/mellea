@@ -11,11 +11,11 @@ from mellea.plugins.base import MelleaBasePayload
 
 
 class StreamingStartPayload(MelleaBasePayload):
-    """Payload for `streaming_start` — before a `stream_with_chunking` run starts.
+    """Payload for `streaming_start` — before a `stream` run starts.
 
     Attributes:
         streaming_id: UUID correlating start/event/end hooks for a single
-            `stream_with_chunking` run.
+            `stream` run.
         has_requirements: `True` when the orchestrator was given at least one
             `Requirement` to validate against.
         requirement_count: Number of `Requirement` instances supplied.
@@ -45,7 +45,7 @@ class StreamingEventPayload(MelleaBasePayload):
 
 
 class StreamingEndPayload(MelleaBasePayload):
-    """Payload for `streaming_end` — when `stream_with_chunking` finishes.
+    """Payload for `streaming_end` — when `stream` finishes.
 
     Fires on every completing path: natural completion, validation-fail
     early-exit, and an unhandled exception. `success` and `exception`
@@ -70,26 +70,3 @@ class StreamingEndPayload(MelleaBasePayload):
     model: str | None = None
     provider: str | None = None
     full_text_length: int = 0
-
-
-class StreamingOrchestrationStartPayload(MelleaBasePayload):
-    """Payload for `streaming_orchestration_start` — on the orchestration task, before the stream is drained.
-
-    Attributes:
-        streaming_id: UUID correlating with the matching `streaming_start`.
-    """
-
-    streaming_id: str = ""
-
-
-class StreamingOrchestrationEndPayload(MelleaBasePayload):
-    """Payload for `streaming_orchestration_end` — on the orchestration task, after the stream is drained.
-
-    Fires on the same task as `streaming_orchestration_start`.
-
-    Attributes:
-        streaming_id: UUID correlating with the matching
-            `streaming_orchestration_start`.
-    """
-
-    streaming_id: str = ""

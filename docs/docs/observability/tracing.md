@@ -193,16 +193,16 @@ One per requirement-validation batch, wherever requirements are checked.
 | `mellea.validation.failed_count` | Number of requirements that failed |
 | `mellea.validation.failure_reasons` | List of failing requirements' reasons; recorded only when `MELLEA_TRACES_CONTENT=true` |
 
-#### `stream_with_chunking` span
+#### `stream` span
 
-One per `stream_with_chunking()` run, wrapping the backend generation and any
-per-chunk validation.
+One per `stream()` run, wrapping the backend generation and any per-chunk
+validation.
 
 | Attribute | Description |
 | --------- | ----------- |
 | `mellea.streaming.has_requirements` | Whether requirements were supplied |
 | `mellea.streaming.requirement_count` | Number of requirements supplied |
-| `mellea.streaming.chunking_strategy` | `ChunkingStrategy` class name (e.g., `SentenceChunker`) |
+| `mellea.streaming.chunking_strategy` | `ChunkingStrategy` class name (e.g., `SentenceChunking`) |
 | `mellea.streaming.full_text_length` | Length of the accumulated text at completion |
 | `gen_ai.request.model` | Model ID, when known |
 | `gen_ai.provider.name` | Provider name, when known |
@@ -283,21 +283,20 @@ Tool execution happens after the generating call completes, so `execute_tool`
 spans are not nested inside the `action` that requested them. Outside a session
 they are root spans.
 
-In a `stream_with_chunking` run, the backend generation and each per-chunk
-validation call nest under the `stream_with_chunking` span as sibling `chat`
-spans:
+In a `stream` run, the backend generation and each per-chunk validation call
+nest under the `stream` span as sibling `chat` spans:
 
 ```text
-stream_with_chunking      (mellea.application)
-│                         [mellea.streaming.chunking_strategy=SentenceChunker]
+stream                    (mellea.application)
+│                         [mellea.streaming.chunking_strategy=SentenceChunking]
 ├── chat                  (mellea.backend)    ← streaming generation
 │                         [gen_ai.request.model=granite4.1:3b]
 └── chat                  (mellea.backend)    ← per-chunk validation
                           [gen_ai.request.model=granite4.1:3b]
 ```
 
-The `stream_with_chunking` span itself parents under whatever span is active
-when the run starts, or is a root span when none is.
+The `stream` span itself parents under whatever span is active when the run
+starts, or is a root span when none is.
 
 > **Note:** Full span nesting requires Python 3.12+. On Python 3.11 some spans
 > may appear flattened rather than nested; all spans and attributes are still

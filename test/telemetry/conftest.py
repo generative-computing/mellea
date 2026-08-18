@@ -61,7 +61,6 @@ def reset_tracing_state() -> None:
     tracing._application_tracer = None
     tracing._backend_tracer = None
     tracing._in_flight_spans.clear()
-    tracing._reattached_tokens.clear()
     # Re-register: another test's shutdown_plugins() may have emptied the manager.
     tracing._plugins_registered = False
     tracing._setup_tracing()

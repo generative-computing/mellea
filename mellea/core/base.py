@@ -830,6 +830,8 @@ class ModelOutputThunk(Generic[S]):
         # Set computed to True if a value is passed in.
         self._computed: bool = True if value is not None else False
         self._cancelled: bool = False
+        # Guards `__aiter__` against a second consumer splitting the same stream.
+        self._aiter_started: bool = False
 
         # Additional fields that should be standardized across apis.
         self.tool_calls = tool_calls
@@ -937,53 +939,54 @@ class ModelOutputThunk(Generic[S]):
         # Drain before awaiting — unblocks any put() the task is stuck on.
         _drain()
 
-        if self._gen.generate is not None:
-            try:
-                await self._gen.generate
-            except asyncio.CancelledError:
-                # Re-raise if the *outer* task is being cancelled (Python 3.11+
-                # task.cancelling() > 0) so we don't silently absorb external
-                # cancellation. For the inner task's own CancelledError (the
-                # expected result of .cancel() above), cancelling() is 0.
-                cur = asyncio.current_task()
-                if cur is not None and cur.cancelling() > 0:
-                    raise
-            except Exception:
-                pass
+        try:
+            if self._gen.generate is not None:
+                try:
+                    await self._gen.generate
+                except asyncio.CancelledError:
+                    # Re-raise if the *outer* task is being cancelled (Python 3.11+
+                    # task.cancelling() > 0) so we don't silently absorb external
+                    # cancellation. For the inner task's own CancelledError (the
+                    # expected result of .cancel() above), cancelling() is 0.
+                    cur = asyncio.current_task()
+                    if cur is not None and cur.cancelling() > 0:
+                        raise
+                except Exception:
+                    pass
 
-        if self._gen.generate_extra is not None:
-            try:
-                await self._gen.generate_extra
-            except asyncio.CancelledError:
-                cur = asyncio.current_task()
-                if cur is not None and cur.cancelling() > 0:
-                    raise
-            except Exception:
-                pass
+            if self._gen.generate_extra is not None:
+                try:
+                    await self._gen.generate_extra
+                except asyncio.CancelledError:
+                    cur = asyncio.current_task()
+                    if cur is not None and cur.cancelling() > 0:
+                        raise
+                except Exception:
+                    pass
+        finally:
+            # Drain again for any final item the task put before terminating.
+            _drain()
 
-        # Drain again for any final item the task put before terminating.
-        _drain()
+            if self._underlying_value is None:
+                self._underlying_value = ""
+            self._cancelled = True
+            self._computed = True
 
-        if has_plugins(HookType.GENERATION_ERROR):
-            from ..plugins.hooks.generation import GenerationErrorPayload
+            if has_plugins(HookType.GENERATION_ERROR):
+                from ..plugins.hooks.generation import GenerationErrorPayload
 
-            recorded: Exception = (
-                error if error is not None else RuntimeError("Generation cancelled")
-            )
-            await invoke_hook(
-                HookType.GENERATION_ERROR,
-                GenerationErrorPayload(
-                    exception=recorded,
-                    model_output=self,
-                    generation_id=self._call.generation_id,
-                    latency_ms=self._elapsed_ms(),
-                ),
-            )
-
-        if self._underlying_value is None:
-            self._underlying_value = ""
-        self._cancelled = True
-        self._computed = True
+                recorded: Exception = (
+                    error if error is not None else RuntimeError("Generation cancelled")
+                )
+                await invoke_hook(
+                    HookType.GENERATION_ERROR,
+                    GenerationErrorPayload(
+                        exception=recorded,
+                        model_output=self,
+                        generation_id=self._call.generation_id,
+                        latency_ms=self._elapsed_ms(),
+                    ),
+                )
 
     @property
     def cancelled(self) -> bool:
@@ -1258,6 +1261,72 @@ class ModelOutputThunk(Generic[S]):
             if beginning_length == 0
             else self._underlying_value[beginning_length:]  # type: ignore
         )
+
+    def __aiter__(self) -> ModelOutputThunk[S]:
+        """Iterate the streamed deltas with `async for`.
+
+        Wraps `astream()` in the async-iterator protocol so callers can write
+        `async for delta in mot:` rather than the manual
+        `while not mot.is_computed(): await mot.astream()` loop. Each iteration
+        yields a delta (the new text since the previous one); iteration ends when
+        generation completes.
+
+        Single-consumer: the underlying stream has one cursor, so a second
+        iterator would split the same stream rather than start an independent
+        one. The first `__aiter__` marks the thunk consumed; a second call
+        raises. This mirrors the single-consumer constraint on `astream()`.
+
+        Returns:
+            ModelOutputThunk[S]: This thunk, acting as its own iterator.
+
+        Raises:
+            RuntimeError: If the thunk is already being iterated by another
+                consumer.
+        """
+        if self._aiter_started:
+            raise RuntimeError(
+                "ModelOutputThunk is already being iterated; async iteration is "
+                "single-consumer. A second `async for` would split the same stream "
+                "rather than start an independent one."
+            )
+        self._aiter_started = True
+        return self
+
+    async def __anext__(self) -> str:
+        """Return the next streamed delta, or stop when generation is complete.
+
+        Returns:
+            str: The new text received since the previous delta.
+
+        Raises:
+            StopAsyncIteration: When the thunk is already computed.
+        """
+        if self._computed:
+            raise StopAsyncIteration
+        return await self.astream()
+
+    async def aclose(self) -> None:
+        """Cancel an unfinished generation and release its resources.
+
+        Makes `async for delta in mot` safe to abandon: iterating and breaking
+        out early otherwise leaves the backend generation running, since the
+        async-iterator protocol has no reliable finalizer. Idempotent — a no-op
+        once the thunk is computed (including after natural completion), so it is
+        safe to call after full iteration or more than once.
+
+        Prefer `async with mot:` so this runs automatically on every exit path;
+        call `aclose()` directly only when not using the context manager.
+        """
+        if not self._computed:
+            await self.cancel_generation()
+
+    async def __aenter__(self) -> ModelOutputThunk[S]:
+        """Enter the async context manager, returning this thunk."""
+        return self
+
+    async def __aexit__(self, *exc_info: object) -> None:
+        """Exit the context manager, cancelling any in-flight generation."""
+        await self.aclose()
 
     def __str__(self) -> str:
         """Stringifies the thunk value."""

@@ -1746,54 +1746,46 @@ class _StreamingBackend(Backend):
 
 
 class TestStreamingHookCallSites:
-    """STREAMING_START/EVENT/END fire in stream_with_chunking() and acomplete()."""
+    """STREAMING_START/EVENT/END fire across a stream() run consumed with async for."""
 
-    async def test_streaming_start_fires_once_with_payload(self) -> None:
-        """STREAMING_START fires once carrying requirement and chunking metadata."""
-        from mellea.stdlib.streaming import stream_with_chunking
+    async def test_start_and_end_fire_once_across_a_drained_stream(self) -> None:
+        """Draining a stream fires STREAMING_START and STREAMING_END once each, with payloads."""
+        from mellea.stdlib.streaming import stream
 
-        observed: list[Any] = []
+        starts: list[Any] = []
+        ends: list[Any] = []
 
         @hook("streaming_start")
-        async def recorder(payload: Any, ctx: Any) -> Any:
-            observed.append(payload)
+        async def on_start(payload: Any, ctx: Any) -> Any:
+            starts.append(payload)
             return None
 
-        register(recorder)
-        await stream_with_chunking(
+        @hook("streaming_end")
+        async def on_end(payload: Any, ctx: Any) -> Any:
+            ends.append(payload)
+            return None
+
+        register(on_start)
+        register(on_end)
+        async with await stream(
             CBlock("prompt"), _StreamingBackend(), SimpleContext(), chunking="sentence"
-        )
+        ) as s:
+            async for _chunk in s:
+                pass
 
-        assert len(observed) == 1
-        assert observed[0].has_requirements is False
-        assert observed[0].requirement_count == 0
-        assert observed[0].chunking_strategy == "SentenceChunker"
+        assert len(starts) == 1
+        assert starts[0].has_requirements is False
+        assert starts[0].requirement_count == 0
+        assert starts[0].chunking_strategy == "SentenceChunking"
 
-    async def test_streaming_end_fires_once_on_completion(self) -> None:
-        """acomplete() fires STREAMING_END once with success and model metadata."""
-        from mellea.stdlib.streaming import stream_with_chunking
+        assert len(ends) == 1
+        assert ends[0].success is True
+        assert ends[0].model == "stream-mock-model"
+        assert ends[0].provider == "stream-mock-provider"
 
-        observed: list[Any] = []
-
-        @hook("streaming_end")
-        async def recorder(payload: Any, ctx: Any) -> Any:
-            observed.append(payload)
-            return None
-
-        register(recorder)
-        result = await stream_with_chunking(
-            CBlock("prompt"), _StreamingBackend(), SimpleContext()
-        )
-        await result.acomplete()
-
-        assert len(observed) == 1
-        assert observed[0].success is True
-        assert observed[0].model == "stream-mock-model"
-        assert observed[0].provider == "stream-mock-provider"
-
-    async def test_streaming_end_fires_once_across_repeat_acomplete(self) -> None:
-        """Repeat acomplete() calls fire STREAMING_END exactly once."""
-        from mellea.stdlib.streaming import stream_with_chunking
+    async def test_streaming_end_fires_once_across_repeat_aclose(self) -> None:
+        """aclose() fires STREAMING_END once; a repeat aclose() does not re-fire it."""
+        from mellea.stdlib.streaming import stream
 
         observed: list[Any] = []
 
@@ -1803,60 +1795,17 @@ class TestStreamingHookCallSites:
             return None
 
         register(recorder)
-        result = await stream_with_chunking(
-            CBlock("prompt"), _StreamingBackend(), SimpleContext()
-        )
-        await result.acomplete()
-        await result.acomplete()
+        # Abnormal path on purpose: the Streamer is never consumed, so aclose()
+        # fires END rather than a natural drain.
+        s = await stream(CBlock("prompt"), _StreamingBackend(), SimpleContext())
+        await s.aclose()
+        await s.aclose()
 
         assert len(observed) == 1
-
-    async def test_streaming_orchestration_start_fires_once_on_orch_task(self) -> None:
-        """STREAMING_ORCHESTRATION_START fires once, after consumption begins."""
-        from mellea.stdlib.streaming import stream_with_chunking
-
-        observed: list[Any] = []
-
-        @hook("streaming_orchestration_start")
-        async def recorder(payload: Any, ctx: Any) -> Any:
-            observed.append(payload.streaming_id)
-            return None
-
-        register(recorder)
-        result = await stream_with_chunking(
-            CBlock("prompt"), _StreamingBackend(), SimpleContext()
-        )
-        # The hook fires inside the orchestration task, which only runs once the
-        # result is consumed — nothing observed until astream()/acomplete().
-        assert observed == []
-        await result.acomplete()
-
-        assert len(observed) == 1
-        assert observed[0] == result._streaming_id
-
-    async def test_streaming_orchestration_end_fires_once_on_completion(self) -> None:
-        """STREAMING_ORCHESTRATION_END fires once, pairing with the start hook."""
-        from mellea.stdlib.streaming import stream_with_chunking
-
-        observed: list[Any] = []
-
-        @hook("streaming_orchestration_end")
-        async def recorder(payload: Any, ctx: Any) -> Any:
-            observed.append(payload.streaming_id)
-            return None
-
-        register(recorder)
-        result = await stream_with_chunking(
-            CBlock("prompt"), _StreamingBackend(), SimpleContext()
-        )
-        await result.acomplete()
-
-        assert len(observed) == 1
-        assert observed[0] == result._streaming_id
 
     async def test_streaming_end_fires_when_generation_raises(self) -> None:
-        """A backend failure before streaming fires STREAMING_END with no model."""
-        from mellea.stdlib.streaming import stream_with_chunking
+        """A backend failure during setup fires STREAMING_END with no model."""
+        from mellea.stdlib.streaming import stream
 
         class _RaisingBackend(Backend):
             _model_id = "x"
@@ -1877,9 +1826,7 @@ class TestStreamingHookCallSites:
 
         register(recorder)
         with pytest.raises(RuntimeError, match="backend down"):
-            await stream_with_chunking(
-                CBlock("prompt"), _RaisingBackend(), SimpleContext()
-            )
+            await stream(CBlock("prompt"), _RaisingBackend(), SimpleContext())
 
         assert len(observed) == 1
         assert observed[0].success is False

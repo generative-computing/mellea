@@ -689,6 +689,19 @@ def test_mot_error_carried_by_copy_methods() -> None:
     assert target.error is err
 
 
+def test_mot_cancelled_carried_by_copy_methods() -> None:
+    """`_cancelled` survives `copy`, `deepcopy`, and `_copy_from`."""
+    mot = ModelOutputThunk(value="")
+    mot._cancelled = True
+
+    assert copy.copy(mot).cancelled is True
+    assert copy.deepcopy(mot).cancelled is True
+
+    target = ModelOutputThunk(value=None)
+    target._copy_from(mot)
+    assert target.cancelled is True
+
+
 def test_mot_thinking_public_field_round_trip():
     mot = ModelOutputThunk(value="x")
     mot.thinking = "reasoning trace"
