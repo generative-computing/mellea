@@ -136,10 +136,10 @@ def test_start_session_span_stamps_attrs_and_stashes_under_session_id(enabled_tr
     fake_tracer.start_span.assert_called_once_with("session")
     assert "sess-1" in tracing._in_flight_spans
     attrs = _attrs(fake_span)
-    assert attrs["mellea.session_id"] == "sess-1"
-    assert attrs["mellea.context_type"] == "SimpleContext"
-    # `backend` not passed → no `mellea.backend` attribute.
-    assert "mellea.backend" not in attrs
+    assert attrs["mellea.session.id"] == "sess-1"
+    assert attrs["mellea.session.context_type"] == "SimpleContext"
+    # `backend` not passed → no `gen_ai.provider.name` attribute.
+    assert "gen_ai.provider.name" not in attrs
 
 
 def test_start_session_span_stamps_backend_when_provided(enabled_tracing):
@@ -150,7 +150,7 @@ def test_start_session_span_stamps_backend_when_provided(enabled_tracing):
         start_session_span("sess-b", context_type="SimpleContext", backend="ollama")
 
     attrs = _attrs(fake_span)
-    assert attrs["mellea.backend"] == "ollama"
+    assert attrs["gen_ai.provider.name"] == "ollama"
 
 
 def test_start_session_startup_span_stashes_under_suffixed_key(enabled_tracing):
@@ -169,10 +169,10 @@ def test_start_session_startup_span_stashes_under_suffixed_key(enabled_tracing):
     assert "sess-2" not in tracing._in_flight_spans
     assert "sess-2:startup" in tracing._in_flight_spans
     attrs = _attrs(fake_span)
-    assert attrs["mellea.session_id"] == "sess-2"
-    assert attrs["mellea.backend"] == "ollama"
-    assert attrs["mellea.model_id"] == "granite4.1:3b"
-    assert attrs["mellea.context_type"] == "SimpleContext"
+    assert attrs["mellea.session.id"] == "sess-2"
+    assert attrs["mellea.session.backend_name"] == "ollama"
+    assert attrs["gen_ai.request.model"] == "granite4.1:3b"
+    assert attrs["mellea.session.context_type"] == "SimpleContext"
 
 
 def test_finish_session_startup_span_returns_true_when_in_flight(enabled_tracing):
@@ -234,12 +234,12 @@ def test_start_action_span_stamps_request_attrs(enabled_tracing):
     fake_tracer.start_span.assert_called_once_with("action")
     assert "cid-1" in tracing._in_flight_spans
     attrs = _attrs(fake_span)
-    assert attrs["mellea.action_type"] == "Instruction"
-    assert attrs["mellea.has_requirements"] is True
-    assert attrs["mellea.has_strategy"] is True
-    assert attrs["mellea.strategy_type"] == "RejectionSamplingStrategy"
-    assert attrs["mellea.has_format"] is False
-    assert attrs["mellea.tool_calls"] is False
+    assert attrs["mellea.component.type"] == "Instruction"
+    assert attrs["mellea.action.has_requirements"] is True
+    assert attrs["mellea.action.has_strategy"] is True
+    assert attrs["mellea.sampling.strategy_type"] == "RejectionSamplingStrategy"
+    assert attrs["mellea.action.has_format"] is False
+    assert attrs["mellea.action.tool_calls"] is False
 
 
 def test_finish_action_span_success_records_length_always(enabled_tracing, monkeypatch):
@@ -265,8 +265,8 @@ def test_finish_action_span_success_records_length_always(enabled_tracing, monke
         )
 
     attrs = _attrs(fake_span)
-    assert attrs["mellea.response_length"] == 11
-    assert "mellea.response" not in attrs
+    assert attrs["mellea.action.response_length"] == 11
+    assert "mellea.action.response" not in attrs
 
 
 def test_finish_action_span_success_records_response_when_content_enabled(
@@ -291,8 +291,8 @@ def test_finish_action_span_success_records_response_when_content_enabled(
         )
 
     attrs = _attrs(fake_span)
-    assert attrs["mellea.response"] == "captured text"
-    assert attrs["mellea.response_length"] == 13
+    assert attrs["mellea.action.response"] == "captured text"
+    assert attrs["mellea.action.response_length"] == 13
 
 
 def test_finish_action_span_success_truncates_long_response(
@@ -318,9 +318,9 @@ def test_finish_action_span_success_truncates_long_response(
         )
 
     attrs = _attrs(fake_span)
-    assert attrs["mellea.response"].endswith("...")
-    assert len(attrs["mellea.response"]) == 503  # 500 chars + "..."
-    assert attrs["mellea.response_length"] == 800
+    assert attrs["mellea.action.response"].endswith("...")
+    assert len(attrs["mellea.action.response"]) == 503  # 500 chars + "..."
+    assert attrs["mellea.action.response_length"] == 800
 
 
 def test_finish_action_span_error_marks_and_ends(enabled_tracing):
@@ -426,9 +426,9 @@ def test_session_with_block_emits_session_action_nesting(span_exporter):
     # one-way contextvar propagation in `_run_async_in_thread`.
     assert action_span.parent is not None
     assert action_span.parent.span_id == session_span.context.span_id
-    # mellea.backend on the session span comes from `backend._provider`.
+    # gen_ai.provider.name on the session span comes from `backend._provider`.
     assert session_span.attributes is not None
-    assert session_span.attributes.get("mellea.backend") == "mock-provider"
+    assert session_span.attributes.get("gen_ai.provider.name") == "mock-provider"
 
 
 @pytest.mark.integration
@@ -477,10 +477,10 @@ def test_session_action_chat_span_nesting_through_real_hooks(span_exporter):
     by_name = _spans_by_name(span_exporter)
     assert "session" in by_name, "session span not emitted"
     assert "action" in by_name, "action span not emitted"
-    assert "chat" in by_name, "chat span not emitted"
+    assert "chat test-model" in by_name, "chat span not emitted"
     session_span = by_name["session"]
     action_span = by_name["action"]
-    chat_span = by_name["chat"]
+    chat_span = by_name["chat test-model"]
 
     # Action nests under session on all versions: the session span is attached
     # directly (not via a hook), so it survives as ambient context on 3.11 too.

@@ -13,6 +13,9 @@ pytest.importorskip(
 )
 pytest.importorskip("cpex", reason="cpex not installed — install mellea[hooks]")
 
+from opentelemetry.trace import SpanKind
+
+from mellea.backends.model_options import ModelOption
 from mellea.core.base import GenerationMetadata, ModelOutputThunk
 from mellea.core.requirement import PartialValidationResult, ValidationResult
 from mellea.plugins.hooks.component import (
@@ -123,11 +126,39 @@ async def test_pre_call_starts_span_and_stashes_by_generation_id(
     with patch("mellea.telemetry.tracing.get_backend_tracer", return_value=fake_tracer):
         await backend_plugin.on_pre_call(payload, {})
 
-    fake_tracer.start_span.assert_called_once_with("chat")
+    fake_tracer.start_span.assert_called_once_with("chat", kind=SpanKind.INTERNAL)
     assert "gid-1" in tracing._in_flight_spans
     fake_span.end.assert_not_called()
     attrs = _attrs(fake_span)
     assert attrs["gen_ai.operation.name"] == "chat"
+
+
+@pytest.mark.asyncio
+async def test_pre_call_sets_request_attrs_on_span(backend_plugin, enabled_tracing):
+    fake_span = MagicMock()
+    fake_tracer = MagicMock()
+    fake_tracer.start_span.return_value = fake_span
+
+    payload = GenerationPreCallPayload(
+        action=None,
+        context=None,
+        generation_id="gid-1",
+        model="ibm-granite/granite-4.1-3b",
+        provider="huggingface",
+        model_options={ModelOption.STREAM: True},
+    )
+
+    with patch("mellea.telemetry.tracing.get_backend_tracer", return_value=fake_tracer):
+        await backend_plugin.on_pre_call(payload, {})
+
+    fake_tracer.start_span.assert_called_once_with(
+        "chat ibm-granite/granite-4.1-3b", kind=SpanKind.INTERNAL
+    )
+    attrs = _attrs(fake_span)
+    assert attrs["gen_ai.operation.name"] == "chat"
+    assert attrs["gen_ai.request.model"] == "ibm-granite/granite-4.1-3b"
+    assert attrs["gen_ai.provider.name"] == "huggingface"
+    assert attrs["gen_ai.request.stream"] is True
 
 
 @pytest.mark.asyncio
@@ -157,7 +188,7 @@ async def test_post_call_finishes_span_with_usage_attrs(
     attrs = _attrs(fake_span)
     assert attrs["gen_ai.usage.input_tokens"] == 10
     assert attrs["gen_ai.usage.output_tokens"] == 5
-    assert attrs["gen_ai.usage.total_tokens"] == 15
+    assert attrs["mellea.usage.total_tokens"] == 15
     assert attrs["gen_ai.provider.name"] == "openai"
     assert attrs["gen_ai.request.model"] == "gpt-4o"
     assert "gid-2" not in tracing._in_flight_spans
@@ -204,7 +235,11 @@ async def test_event_records_chunk_processed_on_in_flight_span(
     payload = GenerationEventPayload(
         generation_id="gid-ev",
         event_name="chunk_processed",
-        data={"chunk_index": 2, "chunk_text_length": 5},
+        data={
+            "chunk_index": 2,
+            "chunk_text_length": 5,
+            "time_since_last_chunk_ms": 40.0,
+        },
     )
     await backend_plugin.on_generation_event(payload, {})
 
@@ -214,6 +249,7 @@ async def test_event_records_chunk_processed_on_in_flight_span(
     assert name == "chunk_processed"
     assert attrs["mellea.generation.chunk_index"] == 2
     assert attrs["mellea.generation.chunk_text_length"] == 5
+    assert attrs["mellea.generation.time_since_last_chunk_ms"] == 40.0
     # The event does not close the span.
     fake_span.end.assert_not_called()
 
@@ -362,7 +398,7 @@ class _DummyFormat:
 async def test_pre_call_emits_request_side_mellea_attrs(
     backend_plugin, enabled_tracing
 ):
-    """`mellea.has_format`, `mellea.format_type`, and `mellea.tool_calls_enabled` come through the pre_call payload."""
+    """`gen_ai.output.type`, `mellea.request.format_type`, and `mellea.action.tool_calls` come through the pre_call payload."""
     fake_span = MagicMock()
     fake_tracer = MagicMock()
     fake_tracer.start_span.return_value = fake_span
@@ -379,18 +415,17 @@ async def test_pre_call_emits_request_side_mellea_attrs(
 
     attrs = _attrs(fake_span)
     assert "mellea.backend" not in attrs
-    assert attrs["mellea.has_format"] is True
-    assert attrs["mellea.format_type"] == "_DummyFormat"
-    assert attrs["mellea.tool_calls_enabled"] is True
+    assert attrs["mellea.request.format_type"] == "_DummyFormat"
+    assert attrs["mellea.action.tool_calls"] is True
     # OTel GenAI semconv attribute for structured output
-    assert attrs["gen_ai.output.type"] == "json_schema"
+    assert attrs["gen_ai.output.type"] == "json"
 
 
 @pytest.mark.asyncio
 async def test_pre_call_omits_format_type_when_no_format(
     backend_plugin, enabled_tracing
 ):
-    """`mellea.format_type` is not emitted when no format is supplied; `mellea.has_format` is still emitted as False."""
+    """Neither `gen_ai.output.type` nor `mellea.request.format_type` is emitted when no format is supplied."""
     fake_span = MagicMock()
     fake_tracer = MagicMock()
     fake_tracer.start_span.return_value = fake_span
@@ -406,9 +441,8 @@ async def test_pre_call_omits_format_type_when_no_format(
         await backend_plugin.on_pre_call(pre, {})
 
     attrs = _attrs(fake_span)
-    assert attrs["mellea.has_format"] is False
-    assert "mellea.format_type" not in attrs
-    assert attrs["mellea.tool_calls_enabled"] is False
+    assert "mellea.request.format_type" not in attrs
+    assert attrs["mellea.action.tool_calls"] is False
     assert "gen_ai.output.type" not in attrs
 
 
@@ -490,17 +524,19 @@ async def test_batch_pre_call_starts_text_completion_span(
     with patch("mellea.telemetry.tracing.get_backend_tracer", return_value=fake_tracer):
         await backend_plugin.on_batch_pre_call(payload, {})
 
-    fake_tracer.start_span.assert_called_once_with("text_completion")
+    fake_tracer.start_span.assert_called_once_with(
+        "text_completion m-x", kind=SpanKind.CLIENT
+    )
     assert "batch-1" in tracing._in_flight_spans
     attrs = _attrs(fake_span)
     assert attrs["gen_ai.operation.name"] == "text_completion"
-    assert attrs["mellea.num_actions"] == 3
+    assert attrs["mellea.request.num_actions"] == 3
     assert attrs["gen_ai.provider.name"] == "openai"
     assert attrs["gen_ai.request.model"] == "m-x"
     assert "mellea.backend" not in attrs
-    assert attrs["mellea.has_format"] is True
-    assert attrs["mellea.format_type"] == "_DummyFormat"
-    assert attrs["mellea.tool_calls_enabled"] is False
+    assert attrs["gen_ai.output.type"] == "json"
+    assert attrs["mellea.request.format_type"] == "_DummyFormat"
+    assert attrs["mellea.action.tool_calls"] is False
 
 
 @pytest.mark.asyncio
@@ -535,7 +571,8 @@ async def test_batch_post_call_finishes_with_aggregate_usage(
     attrs = _attrs(fake_span)
     assert attrs["gen_ai.usage.input_tokens"] == 30
     assert attrs["gen_ai.usage.output_tokens"] == 15
-    assert attrs["gen_ai.usage.total_tokens"] == 45
+    assert attrs["mellea.usage.total_tokens"] == 45
+    assert attrs["gen_ai.provider.name"] == "ibm.watsonx.ai"
     assert "batch-2" not in tracing._in_flight_spans
 
 
@@ -738,19 +775,19 @@ async def test_action_pre_execute_emits_request_attrs(
     fake_tracer.start_span.assert_called_once_with("action")
     assert "cid-1" in tracing._in_flight_spans
     attrs = _attrs(fake_span)
-    assert attrs["mellea.action_type"] == "Foo"
-    assert attrs["mellea.has_requirements"] is True
-    assert attrs["mellea.has_strategy"] is True
-    assert attrs["mellea.strategy_type"] == "FakeStrategy"
-    assert attrs["mellea.has_format"] is True
-    assert attrs["mellea.tool_calls"] is True
+    assert attrs["mellea.component.type"] == "Foo"
+    assert attrs["mellea.action.has_requirements"] is True
+    assert attrs["mellea.action.has_strategy"] is True
+    assert attrs["mellea.sampling.strategy_type"] == "FakeStrategy"
+    assert attrs["mellea.action.has_format"] is True
+    assert attrs["mellea.action.tool_calls"] is True
 
 
 @pytest.mark.asyncio
 async def test_action_post_success_records_response_length_always(
     component_plugin, enabled_tracing, monkeypatch
 ):
-    """`mellea.response_length` is recorded regardless of MELLEA_TRACES_CONTENT."""
+    """`mellea.action.response_length` is recorded regardless of MELLEA_TRACES_CONTENT."""
     monkeypatch.delenv("MELLEA_TRACES_CONTENT", raising=False)
     monkeypatch.delenv(
         "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT", raising=False
@@ -774,15 +811,15 @@ async def test_action_post_success_records_response_length_always(
         await component_plugin.on_component_post_success(success, {})
 
     attrs = _attrs(fake_span)
-    assert attrs["mellea.response_length"] == len("hello world")
-    assert "mellea.response" not in attrs
+    assert attrs["mellea.action.response_length"] == len("hello world")
+    assert "mellea.action.response" not in attrs
 
 
 @pytest.mark.asyncio
 async def test_action_post_success_records_response_when_content_enabled(
     component_plugin, enabled_tracing, monkeypatch
 ):
-    """`mellea.response` is recorded only when `MELLEA_TRACES_CONTENT=true`."""
+    """`mellea.action.response` is recorded only when `MELLEA_TRACES_CONTENT=true`."""
     monkeypatch.setenv("MELLEA_TRACES_CONTENT", "true")
 
     fake_span = MagicMock()
@@ -803,8 +840,8 @@ async def test_action_post_success_records_response_when_content_enabled(
         await component_plugin.on_component_post_success(success, {})
 
     attrs = _attrs(fake_span)
-    assert attrs["mellea.response"] == "captured text"
-    assert attrs["mellea.response_length"] == len("captured text")
+    assert attrs["mellea.action.response"] == "captured text"
+    assert attrs["mellea.action.response_length"] == len("captured text")
 
 
 @pytest.mark.asyncio
@@ -832,9 +869,9 @@ async def test_action_post_success_truncates_long_response(
         await component_plugin.on_component_post_success(success, {})
 
     attrs = _attrs(fake_span)
-    assert attrs["mellea.response"].endswith("...")
-    assert len(attrs["mellea.response"]) == 503
-    assert attrs["mellea.response_length"] == 800
+    assert attrs["mellea.action.response"].endswith("...")
+    assert len(attrs["mellea.action.response"]) == 503
+    assert attrs["mellea.action.response_length"] == 800
 
 
 @pytest.mark.asyncio
@@ -1373,9 +1410,9 @@ async def test_sampling_loop_start_starts_span_and_stashes_by_id(
     fake_tracer.start_span.assert_called_once_with("sampling")
     assert "sid-1" in tracing._in_flight_spans
     attrs = _attrs(fake_span)
-    assert attrs["mellea.strategy_type"] == "RejectionSamplingStrategy"
-    assert attrs["mellea.loop_budget"] == 3
-    assert attrs["mellea.requirement_count"] == 2
+    assert attrs["mellea.sampling.strategy_type"] == "RejectionSamplingStrategy"
+    assert attrs["mellea.sampling.loop_budget"] == 3
+    assert attrs["mellea.sampling.requirement_count"] == 2
 
 
 @pytest.mark.asyncio
@@ -1482,8 +1519,8 @@ async def test_sampling_loop_end_finishes_span(sampling_plugin, enabled_tracing)
     fake_span.end.assert_called_once()
     assert "sid-4" not in tracing._in_flight_spans
     attrs = _attrs(fake_span)
-    assert attrs["mellea.sampling_success"] is False
-    assert attrs["mellea.iterations_used"] == 2
+    assert attrs["mellea.sampling.success"] is False
+    assert attrs["mellea.sampling.iterations_used"] == 2
     # A budget-exhausted loop is a routine outcome, not an error.
     fake_span.set_status.assert_not_called()
 
@@ -1555,7 +1592,7 @@ async def test_validation_pre_check_starts_span_and_stashes_by_id(
 
     fake_tracer.start_span.assert_called_once_with("validation")
     assert "vid-1" in tracing._in_flight_spans
-    assert _attrs(fake_span)["mellea.requirement_count"] == 3
+    assert _attrs(fake_span)["mellea.validation.requirement_count"] == 3
 
 
 @pytest.mark.asyncio
@@ -1610,11 +1647,11 @@ async def test_validation_post_check_finishes_span_with_counts(
     fake_span.end.assert_called_once()
     assert "vid-2" not in tracing._in_flight_spans
     attrs = _attrs(fake_span)
-    assert attrs["mellea.validation_passed"] is False
-    assert attrs["mellea.passed_count"] == 1
-    assert attrs["mellea.failed_count"] == 1
+    assert attrs["mellea.validation.passed"] is False
+    assert attrs["mellea.validation.passed_count"] == 1
+    assert attrs["mellea.validation.failed_count"] == 1
     # Content capture disabled → failure reasons omitted.
-    assert "mellea.failure_reasons" not in attrs
+    assert "mellea.validation.failure_reasons" not in attrs
 
 
 @pytest.mark.asyncio
@@ -1647,7 +1684,9 @@ async def test_validation_post_check_records_reasons_when_content_enabled(
         await validation_plugin.on_post_check(post, {})
 
     # Only failing results contribute reasons, recorded as a list.
-    assert _attrs(fake_span)["mellea.failure_reasons"] == ["output too short"]
+    assert _attrs(fake_span)["mellea.validation.failure_reasons"] == [
+        "output too short"
+    ]
 
 
 @pytest.mark.asyncio

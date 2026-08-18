@@ -91,6 +91,7 @@ class BackendTracingPlugin(Plugin, name="backend_tracing", priority=1040):
         """Start a backend chat span for this generation."""
         if not payload.generation_id:
             return
+        from mellea.backends.model_options import ModelOption
         from mellea.telemetry.tracing import start_backend_span
 
         action = payload.action
@@ -98,12 +99,13 @@ class BackendTracingPlugin(Plugin, name="backend_tracing", priority=1040):
         start_backend_span(
             "chat",
             payload.generation_id,
-            model=None,
-            provider=None,
+            model=payload.model,
+            provider=payload.provider,
             action_class_name=action.__class__.__name__ if action is not None else None,
             has_format=fmt is not None,
             format_type=fmt.__name__ if fmt is not None else None,
             tool_calls_enabled=payload.tool_calls,
+            streaming=bool(payload.model_options.get(ModelOption.STREAM, False)),
             attach_context=_CONTEXT_ATTACH_SUPPORTED,
         )
 
@@ -157,6 +159,9 @@ class BackendTracingPlugin(Plugin, name="backend_tracing", priority=1040):
                     "mellea.generation.chunk_index": payload.data.get("chunk_index"),
                     "mellea.generation.chunk_text_length": payload.data.get(
                         "chunk_text_length"
+                    ),
+                    "mellea.generation.time_since_last_chunk_ms": payload.data.get(
+                        "time_since_last_chunk_ms"
                     ),
                 },
             )

@@ -19,6 +19,7 @@ from mellea.plugins.hooks.generation import (
     GenerationBatchErrorPayload,
     GenerationBatchPostCallPayload,
     GenerationErrorPayload,
+    GenerationEventPayload,
     GenerationPostCallPayload,
 )
 from mellea.plugins.hooks.sampling import (
@@ -81,6 +82,7 @@ async def test_record_token_metrics_with_usage(
             output_tokens=expected_output,
             model="test-model",
             provider="test-provider",
+            operation="chat",
         )
 
 
@@ -108,7 +110,11 @@ async def test_record_token_metrics_missing_model_provider(token_plugin):
         await token_plugin.record_token_metrics(payload, {})
 
         mock_record.assert_called_once_with(
-            input_tokens=10, output_tokens=5, model="unknown", provider="unknown"
+            input_tokens=10,
+            output_tokens=5,
+            model="unknown",
+            provider="unknown",
+            operation="chat",
         )
 
 
@@ -144,6 +150,7 @@ async def test_record_batch_token_metrics_with_usage(token_plugin):
             output_tokens=25,
             model="batch-model",
             provider="batch-provider",
+            operation="text_completion",
         )
 
 
@@ -171,7 +178,11 @@ async def test_record_batch_token_metrics_missing_model_provider(token_plugin):
         await token_plugin.record_batch_token_metrics(payload, {})
 
         mock_record.assert_called_once_with(
-            input_tokens=10, output_tokens=5, model="unknown", provider="unknown"
+            input_tokens=10,
+            output_tokens=5,
+            model="unknown",
+            provider="unknown",
+            operation="text_completion",
         )
 
 
@@ -213,6 +224,7 @@ async def test_latency_non_streaming_records_duration_only(latency_plugin):
             duration_s=1.2,
             model="test-model",
             provider="test-provider",
+            operation="chat",
             streaming=False,
         )
         mock_ttfb.assert_not_called()
@@ -230,10 +242,14 @@ async def test_latency_streaming_with_ttfb_records_both(latency_plugin):
         await latency_plugin.record_latency_metrics(payload, {})
 
         mock_dur.assert_called_once_with(
-            duration_s=2.0, model="test-model", provider="test-provider", streaming=True
+            duration_s=2.0,
+            model="test-model",
+            provider="test-provider",
+            operation="chat",
+            streaming=True,
         )
         mock_ttfb.assert_called_once_with(
-            ttfb_s=0.18, model="test-model", provider="test-provider"
+            ttfb_s=0.18, model="test-model", provider="test-provider", operation="chat"
         )
 
 
@@ -266,7 +282,11 @@ async def test_latency_missing_model_provider(latency_plugin):
         await latency_plugin.record_latency_metrics(payload, {})
 
         mock_dur.assert_called_once_with(
-            duration_s=0.5, model="unknown", provider="unknown", streaming=False
+            duration_s=0.5,
+            model="unknown",
+            provider="unknown",
+            operation="chat",
+            streaming=False,
         )
 
 
@@ -288,6 +308,7 @@ async def test_batch_latency_records_duration_non_streaming(latency_plugin):
             duration_s=1.5,
             model="batch-model",
             provider="batch-provider",
+            operation="text_completion",
             streaming=False,
         )
         mock_ttfb.assert_not_called()
@@ -302,8 +323,69 @@ async def test_batch_latency_missing_model_provider(latency_plugin):
         await latency_plugin.record_batch_latency_metrics(payload, {})
 
         mock_dur.assert_called_once_with(
-            duration_s=0.4, model="unknown", provider="unknown", streaming=False
+            duration_s=0.4,
+            model="unknown",
+            provider="unknown",
+            operation="text_completion",
+            streaming=False,
         )
+
+
+@pytest.mark.asyncio
+async def test_chunk_interval_records_time_per_output_chunk(latency_plugin):
+    """A chunk_processed event with an interval records the metric (ms -> s)."""
+    payload = GenerationEventPayload(
+        generation_id="gid-ev",
+        event_name="chunk_processed",
+        model="gpt-4",
+        provider="openai",
+        data={
+            "chunk_index": 2,
+            "chunk_text_length": 5,
+            "time_since_last_chunk_ms": 40.0,
+        },
+    )
+
+    with patch("mellea.telemetry.metrics.record_time_per_output_chunk") as mock_record:
+        await latency_plugin.record_chunk_interval_metrics(payload, {})
+
+        mock_record.assert_called_once_with(
+            time_s=0.04, model="gpt-4", provider="openai", operation="chat"
+        )
+
+
+@pytest.mark.asyncio
+async def test_chunk_interval_skips_first_chunk(latency_plugin):
+    """The first chunk carries no interval (None) and records nothing."""
+    payload = GenerationEventPayload(
+        generation_id="gid-ev",
+        event_name="chunk_processed",
+        model="gpt-4",
+        provider="openai",
+        data={
+            "chunk_index": 0,
+            "chunk_text_length": 5,
+            "time_since_last_chunk_ms": None,
+        },
+    )
+
+    with patch("mellea.telemetry.metrics.record_time_per_output_chunk") as mock_record:
+        await latency_plugin.record_chunk_interval_metrics(payload, {})
+
+        mock_record.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_chunk_interval_ignores_other_events(latency_plugin):
+    """A non-chunk_processed generation_event records nothing."""
+    payload = GenerationEventPayload(
+        generation_id="gid-ev", event_name="something_else", data={}
+    )
+
+    with patch("mellea.telemetry.metrics.record_time_per_output_chunk") as mock_record:
+        await latency_plugin.record_chunk_interval_metrics(payload, {})
+
+        mock_record.assert_not_called()
 
 
 # ErrorMetricsPlugin tests
@@ -334,6 +416,7 @@ async def test_error_plugin_records_correct_type(error_plugin):
             model="test-model",
             provider="test-provider",
             exception_class="TimeoutError",
+            operation="chat",
         )
 
 
@@ -350,6 +433,7 @@ async def test_error_plugin_unknown_exception(error_plugin):
             model="test-model",
             provider="test-provider",
             exception_class="ValueError",
+            operation="chat",
         )
 
 
@@ -366,17 +450,21 @@ async def test_error_plugin_falls_back_to_unknown_when_model_none(error_plugin):
             model="unknown",
             provider="unknown",
             exception_class="ConnectionError",
+            operation="chat",
         )
 
 
 @pytest.mark.asyncio
 async def test_error_plugin_handles_none_model_output(error_plugin):
-    """Plugin handles a None model_output gracefully."""
+    """Plugin handles a None model_output gracefully and records no duration."""
     payload = GenerationErrorPayload(
         exception=RuntimeError("queue error"), model_output=None
     )
 
-    with patch("mellea.telemetry.metrics.record_error") as mock_record:
+    with (
+        patch("mellea.telemetry.metrics.record_error") as mock_record,
+        patch("mellea.telemetry.metrics.record_request_duration") as mock_dur,
+    ):
         await error_plugin.record_error_metrics(payload, {})
 
         mock_record.assert_called_once_with(
@@ -384,6 +472,34 @@ async def test_error_plugin_handles_none_model_output(error_plugin):
             model="unknown",
             provider="unknown",
             exception_class="RuntimeError",
+            operation="chat",
+        )
+        # Pre-dispatch failure (no MOT) has no operation to time.
+        mock_dur.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_error_plugin_records_duration_on_failure(error_plugin):
+    """A failed call with a MOT also records duration tagged with error.type."""
+    mot = ModelOutputThunk(value="")
+    mot.generation = GenerationMetadata(model="m", provider="p", streaming=True)
+    payload = GenerationErrorPayload(
+        exception=TimeoutError("slow"), model_output=mot, latency_ms=1500.0
+    )
+
+    with (
+        patch("mellea.telemetry.metrics.record_error"),
+        patch("mellea.telemetry.metrics.record_request_duration") as mock_dur,
+    ):
+        await error_plugin.record_error_metrics(payload, {})
+
+        mock_dur.assert_called_once_with(
+            duration_s=1.5,
+            model="m",
+            provider="p",
+            operation="chat",
+            streaming=True,
+            exception_class="TimeoutError",
         )
 
 
@@ -438,13 +554,25 @@ async def test_batch_error_plugin_records_correct_type(error_plugin):
     """Batch plugin classifies the exception and calls record_error correctly."""
     payload = _make_batch_error_payload(TimeoutError("timed out"))
 
-    with patch("mellea.telemetry.metrics.record_error") as mock_record:
+    with (
+        patch("mellea.telemetry.metrics.record_error") as mock_record,
+        patch("mellea.telemetry.metrics.record_request_duration") as mock_dur,
+    ):
         await error_plugin.record_batch_error_metrics(payload, {})
 
         mock_record.assert_called_once_with(
             error_type=ERROR_TYPE_TIMEOUT,
             model="batch-model",
             provider="batch-provider",
+            exception_class="TimeoutError",
+            operation="text_completion",
+        )
+        mock_dur.assert_called_once_with(
+            duration_s=0.01,
+            model="batch-model",
+            provider="batch-provider",
+            operation="text_completion",
+            streaming=False,
             exception_class="TimeoutError",
         )
 
@@ -462,6 +590,7 @@ async def test_batch_error_plugin_unknown_exception(error_plugin):
             model="batch-model",
             provider="batch-provider",
             exception_class="ValueError",
+            operation="text_completion",
         )
 
 
@@ -480,6 +609,7 @@ async def test_batch_error_plugin_unknown_model_provider_fallback(error_plugin):
             model="unknown",
             provider="unknown",
             exception_class="ConnectionError",
+            operation="text_completion",
         )
 
 
@@ -522,7 +652,7 @@ async def test_cost_plugin_records_cost_for_known_model(cost_plugin):
             cache_creation_tokens=0,
         )
         mock_record.assert_called_once_with(
-            cost=0.0042, model="test-model", provider="test-provider"
+            cost=0.0042, model="test-model", provider="test-provider", operation="chat"
         )
 
 
@@ -614,7 +744,7 @@ async def test_cost_plugin_unknown_model_provider_fallback(cost_plugin):
             cache_creation_tokens=0,
         )
         mock_record.assert_called_once_with(
-            cost=0.001, model="unknown", provider="unknown"
+            cost=0.001, model="unknown", provider="unknown", operation="chat"
         )
 
 
@@ -645,7 +775,10 @@ async def test_batch_cost_plugin_records_cost_for_known_model(cost_plugin):
             cache_creation_tokens=0,
         )
         mock_record.assert_called_once_with(
-            cost=0.0042, model="batch-model", provider="batch-provider"
+            cost=0.0042,
+            model="batch-model",
+            provider="batch-provider",
+            operation="text_completion",
         )
 
 
@@ -733,7 +866,7 @@ async def test_batch_cost_plugin_unknown_model_provider_fallback(cost_plugin):
             cache_creation_tokens=0,
         )
         mock_record.assert_called_once_with(
-            cost=0.001, model="unknown", provider="unknown"
+            cost=0.001, model="unknown", provider="unknown", operation="text_completion"
         )
 
 

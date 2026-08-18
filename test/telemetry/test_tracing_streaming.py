@@ -267,7 +267,7 @@ async def test_stream_chat_span_nests_under_streaming_span(span_exporter):
     spans = _finished_spans(span_exporter)
     streaming_span = next((s for s in spans if s.name == "stream"), None)
     assert streaming_span is not None, "stream span not emitted"
-    chat_span = next((s for s in spans if s.name == "chat"), None)
+    chat_span = next((s for s in spans if s.name == "chat test-model"), None)
     assert chat_span is not None, "chat span not emitted"
 
     assert streaming_span.parent is None, "streaming span should be a root"
@@ -296,7 +296,7 @@ async def test_stream_validation_chat_span_is_sibling_of_generation(span_exporte
     spans = _finished_spans(span_exporter)
     streaming_span = next((s for s in spans if s.name == "stream"), None)
     assert streaming_span is not None, "stream span not emitted"
-    chat_spans = [s for s in spans if s.name == "chat"]
+    chat_spans = [s for s in spans if s.name == "chat test-model"]
     assert len(chat_spans) == 2, f"expected 2 chat spans, got {len(chat_spans)}"
 
     streaming_id = streaming_span.context.span_id

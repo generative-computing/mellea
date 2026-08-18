@@ -173,7 +173,7 @@ async def test_stream_mocked(span_exporter, monkeypatch, emit):
 
     spans = span_exporter.get_finished_spans()
     streaming_span = next(s for s in spans if s.name == "stream")
-    chat_span = next(s for s in spans if s.name == "chat")
+    chat_span = next(s for s in spans if s.name == "chat test-model")
 
     assert streaming_span.parent is None, "streaming span should be a root"
     if _CONTEXT_ATTACH_SUPPORTED:
@@ -227,7 +227,11 @@ async def test_span_duration_captures_async_operation_mocked(
     trace.get_tracer_provider().force_flush()  # type: ignore
 
     backend_span = next(
-        (span for span in span_exporter.get_finished_spans() if span.name == "chat"),
+        (
+            span
+            for span in span_exporter.get_finished_spans()
+            if span.name == "chat test-model"
+        ),
         None,
     )
     assert backend_span is not None, "Backend span not found"
@@ -262,7 +266,9 @@ async def test_context_propagation_parent_child_mocked(
     parent_recorded = next(
         (span for span in spans if span.name == "parent_operation"), None
     )
-    child_recorded = next((span for span in spans if span.name == "chat"), None)
+    child_recorded = next(
+        (span for span in spans if span.name == "chat test-model"), None
+    )
 
     assert parent_recorded is not None, "Parent span not found"
     assert child_recorded is not None, "Child span not found"
@@ -292,7 +298,11 @@ async def test_token_usage_recorded_after_completion_mocked(
     await drain_background_tasks()
 
     backend_span = next(
-        (span for span in span_exporter.get_finished_spans() if span.name == "chat"),
+        (
+            span
+            for span in span_exporter.get_finished_spans()
+            if span.name == "chat test-model"
+        ),
         None,
     )
     assert backend_span is not None, "Backend span not found"
@@ -317,13 +327,17 @@ async def test_span_not_closed_prematurely_mocked(
     )
 
     spans_before = span_exporter.get_finished_spans()
-    backend_spans_before = [span for span in spans_before if span.name == "chat"]
+    backend_spans_before = [
+        span for span in spans_before if span.name == "chat test-model"
+    ]
 
     await mot.avalue()
     await drain_background_tasks()
 
     spans_after = span_exporter.get_finished_spans()
-    backend_spans_after = [span for span in spans_after if span.name == "chat"]
+    backend_spans_after = [
+        span for span in spans_after if span.name == "chat test-model"
+    ]
     assert len(backend_spans_after) > len(backend_spans_before), (
         "Span was closed before async completion"
     )
@@ -349,7 +363,9 @@ async def test_multiple_generations_separate_spans_mocked(
     await drain_background_tasks()
 
     backend_spans = [
-        span for span in span_exporter.get_finished_spans() if span.name == "chat"
+        span
+        for span in span_exporter.get_finished_spans()
+        if span.name == "chat test-model"
     ]
     assert len(backend_spans) >= 2, (
         f"Expected at least 2 spans, got {len(backend_spans)}"
@@ -384,7 +400,7 @@ async def test_span_duration_captures_async_operation(span_exporter):
 
     backend_span = None
     for span in spans:
-        if span.name == "chat":
+        if span.name == f"chat {IBM_GRANITE_4_1_3B.ollama_name}":
             backend_span = span
             break
 
@@ -432,7 +448,7 @@ async def test_context_propagation_parent_child(span_exporter):
     for span in spans:
         if span.name == "parent_operation":
             parent_recorded = span
-        elif span.name == "chat":  # Gen-AI convention
+        elif span.name == f"chat {IBM_GRANITE_4_1_3B.ollama_name}":  # Gen-AI convention
             child_recorded = span
 
     assert parent_recorded is not None, "Parent span not found"
@@ -470,7 +486,9 @@ async def test_token_usage_recorded_after_completion(span_exporter):
 
     backend_span = None
     for span in spans:
-        if span.name == "chat":  # Gen-AI convention uses 'chat' for chat completions
+        if (
+            span.name == f"chat {IBM_GRANITE_4_1_3B.ollama_name}"
+        ):  # Gen-AI convention uses 'chat {model}' for chat completions
             backend_span = span
             break
 
@@ -516,7 +534,7 @@ async def test_span_not_closed_prematurely(span_exporter):
     # because we haven't awaited the ModelOutputThunk
     spans_before = span_exporter.get_finished_spans()
     backend_spans_before = [
-        s for s in spans_before if s.name == "chat"
+        s for s in spans_before if s.name == f"chat {IBM_GRANITE_4_1_3B.ollama_name}"
     ]  # Gen-AI convention
 
     # Now complete the async operation
@@ -526,7 +544,7 @@ async def test_span_not_closed_prematurely(span_exporter):
     # Now the span should be closed
     spans_after = span_exporter.get_finished_spans()
     backend_spans_after = [
-        s for s in spans_after if s.name == "chat"
+        s for s in spans_after if s.name == f"chat {IBM_GRANITE_4_1_3B.ollama_name}"
     ]  # Gen-AI convention
 
     # The span should only appear after completion
@@ -559,7 +577,9 @@ async def test_multiple_generations_separate_spans(span_exporter):
 
     # Get the recorded spans
     spans = span_exporter.get_finished_spans()
-    backend_spans = [s for s in spans if s.name == "chat"]  # Gen-AI convention
+    backend_spans = [
+        s for s in spans if s.name == f"chat {IBM_GRANITE_4_1_3B.ollama_name}"
+    ]  # Gen-AI convention
 
     assert len(backend_spans) >= 2, (
         f"Expected at least 2 spans, got {len(backend_spans)}"
@@ -597,7 +617,9 @@ async def test_stream_e2e(span_exporter):
 
     spans = span_exporter.get_finished_spans()
     streaming_span = next(s for s in spans if s.name == "stream")
-    chat_span = next(s for s in spans if s.name == "chat")
+    chat_span = next(
+        s for s in spans if s.name == f"chat {IBM_GRANITE_4_1_3B.ollama_name}"
+    )
 
     assert streaming_span.parent is None, "streaming span should be a root"
     if _CONTEXT_ATTACH_SUPPORTED:

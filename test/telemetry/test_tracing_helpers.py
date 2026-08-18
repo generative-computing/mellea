@@ -106,7 +106,7 @@ def test_set_usage_attrs_top_level_token_counts():
     attrs = _attrs(span)
     assert attrs["gen_ai.usage.input_tokens"] == 10
     assert attrs["gen_ai.usage.output_tokens"] == 5
-    assert attrs["gen_ai.usage.total_tokens"] == 15
+    assert attrs["mellea.usage.total_tokens"] == 15
 
 
 def test_set_usage_attrs_cache_read_top_level_preferred():
@@ -162,12 +162,14 @@ def test_set_response_attrs_full():
         response_model="gpt-4o-2024-08-06",
         response_id="chatcmpl-abc",
         finish_reasons=["stop"],
+        ttfb_ms=250.0,
     )
     set_response_attrs(span, gen)
     attrs = _attrs(span)
     assert attrs["gen_ai.response.model"] == "gpt-4o-2024-08-06"
     assert attrs["gen_ai.response.id"] == "chatcmpl-abc"
     assert attrs["gen_ai.response.finish_reasons"] == ["stop"]
+    assert attrs["gen_ai.response.time_to_first_chunk"] == 0.25
 
 
 def test_set_response_attrs_skips_unset_fields():
@@ -199,55 +201,32 @@ def test_set_mellea_attrs_action_class_name_from_action():
     mot = MagicMock()
     mot._call.action = MyAction()
     mot._call.context = None
-    gen = GenerationMetadata(model="m", provider="p")
-    set_mellea_attrs(span, mot, gen)
+    set_mellea_attrs(span, mot)
     attrs = _attrs(span)
-    assert attrs["mellea.action_type"] == "MyAction"
+    assert attrs["mellea.component.type"] == "MyAction"
 
 
 def test_set_mellea_attrs_skips_action_type_when_no_action():
     span = MagicMock()
     mot = MagicMock(spec=[])  # No _action attribute
-    gen = GenerationMetadata(model="m", provider="p")
-    set_mellea_attrs(span, mot, gen)
+    set_mellea_attrs(span, mot)
     attrs = _attrs(span)
-    assert "mellea.action_type" not in attrs
+    assert "mellea.component.type" not in attrs
 
 
 def test_set_mellea_attrs_context_size():
     """Length when context is non-empty; zero when falsy."""
-    gen = GenerationMetadata(model="m", provider="p")
-
     span = MagicMock()
     mot = MagicMock()
     mot._call.action = None
     mot._call.context = [1, 2, 3]
-    set_mellea_attrs(span, mot, gen)
-    assert _attrs(span)["mellea.context_size"] == 3
+    set_mellea_attrs(span, mot)
+    assert _attrs(span)["mellea.request.context_size"] == 3
 
     span = MagicMock()
     mot._call.context = None
-    set_mellea_attrs(span, mot, gen)
-    assert _attrs(span)["mellea.context_size"] == 0
-
-
-def test_set_mellea_attrs_streaming_conditional():
-    """`mellea.streaming` is emitted only when streaming is truthy."""
-    mot = MagicMock()
-    mot._call.action = None
-    mot._call.context = None
-
-    span = MagicMock()
-    set_mellea_attrs(
-        span, mot, GenerationMetadata(model="m", provider="p", streaming=True)
-    )
-    assert _attrs(span)["mellea.streaming"] is True
-
-    span = MagicMock()
-    set_mellea_attrs(
-        span, mot, GenerationMetadata(model="m", provider="p", streaming=False)
-    )
-    assert "mellea.streaming" not in _attrs(span)
+    set_mellea_attrs(span, mot)
+    assert _attrs(span)["mellea.request.context_size"] == 0
 
 
 # set_conversation_id

@@ -31,10 +31,10 @@ def reset_metrics_state() -> None:
     metrics._meter = None
     # Cached lazy instruments — bound to the old MeterProvider, must clear so
     # the next record_* call re-creates them against the new provider.
-    metrics._input_token_counter = None
-    metrics._output_token_counter = None
+    metrics._token_usage_histogram = None
     metrics._duration_histogram = None
     metrics._ttfb_histogram = None
+    metrics._time_per_output_chunk_histogram = None
     metrics._error_counter = None
     metrics._cost_counter = None
     metrics._sampling_attempts_counter = None

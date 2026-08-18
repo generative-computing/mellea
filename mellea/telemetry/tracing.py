@@ -63,6 +63,7 @@ from mellea.telemetry._tracing_helpers import (
     content_capture_enabled,
     get_capture_content_value,
     get_tool_call_attrs,
+    normalize_provider_name,
     set_attribute_safe,
     set_conversation_id,
     set_mellea_attrs,
@@ -76,6 +77,8 @@ _application_tracer: Any = None
 _backend_tracer: Any = None
 _tracing_enabled: bool = False
 _plugins_registered: bool = False  # Plugin registry is process-global; register once.
+
+_REMOTE_PROVIDERS = frozenset({"openai", "ollama", "watsonx", "litellm"})
 
 
 def _setup_tracer_provider() -> Any:
@@ -283,6 +286,7 @@ def start_backend_span(
     has_format: bool | None = None,
     format_type: str | None = None,
     tool_calls_enabled: bool | None = None,
+    streaming: bool | None = None,
     attach_context: bool = True,
 ) -> Span | None:
     """Open a backend span, activate it as the current OTel context, and stash both under `generation_id`.
@@ -298,13 +302,14 @@ def start_backend_span(
         model: Model identifier, or `None` if not yet known (chat path
             populates this in post_processing).
         provider: Provider name, or `None` if not yet known.
-        action_class_name: Optional `mellea.action_type` attribute (chat).
-        num_actions: Optional `mellea.num_actions` attribute (batch).
-        has_format: Optional `mellea.has_format` attribute (whether structured
-            output was requested).
-        format_type: Optional `mellea.format_type` attribute (the structured
-            output class name, when `has_format` is True).
-        tool_calls_enabled: Optional `mellea.tool_calls_enabled` attribute.
+        action_class_name: Component class name being generated from (chat).
+        num_actions: Number of actions in the batch call (batch).
+        has_format: Whether structured output was requested; emits
+            `gen_ai.output.type="json"` when True.
+        format_type: Structured-output class name, when `has_format` is True.
+        tool_calls_enabled: Whether tool calling is enabled for the call.
+        streaming: Whether streaming was requested; emits `gen_ai.request.stream`
+            when True (unset/False is left off, which semconv reads as non-streaming).
         attach_context: Whether to attach the span as the ambient OTel context.
 
     Returns:
@@ -316,22 +321,29 @@ def start_backend_span(
     if tracer is None:
         return None
 
-    span = tracer.start_span(operation)
+    # Span name is "{operation} {model}" per Gen-AI semconv; operation alone when model unknown.
+    span_name = f"{operation} {model}" if model else operation
+    kind = (
+        trace.SpanKind.CLIENT
+        if provider in _REMOTE_PROVIDERS
+        else trace.SpanKind.INTERNAL
+    )
+    span = tracer.start_span(span_name, kind=kind)
 
     gen = GenerationMetadata(model=model, provider=provider)
     set_request_attrs(span, gen, operation)
     if action_class_name is not None:
-        span.set_attribute("mellea.action_type", action_class_name)
+        span.set_attribute("mellea.component.type", action_class_name)
     if num_actions is not None:
-        span.set_attribute("mellea.num_actions", num_actions)
-    if has_format is not None:
-        span.set_attribute("mellea.has_format", has_format)
-        if has_format:
-            span.set_attribute("gen_ai.output.type", "json_schema")
+        span.set_attribute("mellea.request.num_actions", num_actions)
+    if has_format:
+        span.set_attribute("gen_ai.output.type", "json")
     if format_type is not None:
-        span.set_attribute("mellea.format_type", format_type)
+        span.set_attribute("mellea.request.format_type", format_type)
+    if streaming:
+        span.set_attribute("gen_ai.request.stream", True)
     if tool_calls_enabled is not None:
-        span.set_attribute("mellea.tool_calls_enabled", tool_calls_enabled)
+        span.set_attribute("mellea.action.tool_calls", tool_calls_enabled)
     set_conversation_id(span)
 
     token = _attach_span_context(span, attach=attach_context)
@@ -369,8 +381,8 @@ def finish_backend_span_success(
             set_request_attrs(span, gen, operation)
             set_response_attrs(span, gen)
         set_usage_attrs(span, usage)
-        if mot is not None and gen is not None:
-            set_mellea_attrs(span, mot, gen)
+        if mot is not None:
+            set_mellea_attrs(span, mot)
     finally:
         _detach_token(token)
         span.end()
@@ -511,14 +523,13 @@ def start_session_startup_span(
 ) -> Span | None:
     """Open the `start_session` span around backend construction.
 
-    Carries construction-time attributes (`mellea.session_id`,
-    `mellea.backend`, `mellea.model_id`, `mellea.context_type`). Stashed
-    under a derived key so it doesn't collide with the long-lived
+    Stashed under a derived key so it doesn't collide with the long-lived
     `session` span when both share a `session_id`.
 
     Args:
         session_id: Session UUID. The in-flight key is derived from this.
-        backend: Backend identifier (e.g. `"ollama"`); stamped as `mellea.backend`.
+        backend: Requested backend name (e.g. `"ollama"`, `"hf"`), before
+            resolution to a provider id.
         model_id: Resolved model id string.
         context_type: Context class name (e.g. `"SimpleContext"`).
 
@@ -529,10 +540,10 @@ def start_session_startup_span(
         "start_session",
         session_id + _SESSION_STARTUP_KEY_SUFFIX,
         {
-            "mellea.session_id": session_id,
-            "mellea.backend": backend,
-            "mellea.model_id": model_id,
-            "mellea.context_type": context_type,
+            "mellea.session.id": session_id,
+            "mellea.session.backend_name": backend,
+            "gen_ai.request.model": model_id,
+            "mellea.session.context_type": context_type,
         },
     )
 
@@ -566,11 +577,10 @@ def start_session_span(
     """Open the long-lived `session` span over a session's lifetime.
 
     Args:
-        session_id: Session UUID, used as the correlation key and stamped
-            as `mellea.session_id`.
+        session_id: Session UUID, used as the correlation key.
         context_type: Context class name.
-        backend: Backend identifier (e.g. `"ollama"`); stamped as
-            `mellea.backend` when provided.
+        backend: Resolved provider id (e.g. `"ollama"`), normalized to its
+            `gen_ai.provider.name` value when provided.
 
     Returns:
         The span, or `None` if tracing is disabled.
@@ -579,9 +589,9 @@ def start_session_span(
         "session",
         session_id,
         {
-            "mellea.session_id": session_id,
-            "mellea.context_type": context_type,
-            "mellea.backend": backend,
+            "mellea.session.id": session_id,
+            "mellea.session.context_type": context_type,
+            "gen_ai.provider.name": normalize_provider_name(backend),
         },
     )
 
@@ -631,12 +641,12 @@ def start_action_span(
         "action",
         action_id,
         {
-            "mellea.action_type": action_class_name,
-            "mellea.has_requirements": has_requirements,
-            "mellea.has_strategy": has_strategy,
-            "mellea.strategy_type": strategy_type,
-            "mellea.has_format": has_format,
-            "mellea.tool_calls": tool_calls,
+            "mellea.component.type": action_class_name,
+            "mellea.action.has_requirements": has_requirements,
+            "mellea.action.has_strategy": has_strategy,
+            "mellea.sampling.strategy_type": strategy_type,
+            "mellea.action.has_format": has_format,
+            "mellea.action.tool_calls": tool_calls,
         },
         attach_context=attach_context,
     )
@@ -652,24 +662,24 @@ def finish_action_span_success(
 ) -> None:
     """End the action span with response-side attributes.
 
-    `mellea.response` is recorded (truncated) only when content capture is enabled;
-    `mellea.response_length` is always recorded (a non-content metric).
+    The response text is recorded (truncated) only when content capture is
+    enabled; its length is always recorded (a non-content metric).
 
     Args:
         action_id: Correlation key from the matching open call.
-        num_generate_logs: `mellea.num_generate_logs`.
-        sampling_success: `mellea.sampling_success` (set when a strategy ran).
-        response_text: Raw response text. Recorded as `mellea.response` only
-            when content tracing is enabled.
-        response_length: `mellea.response_length` (always safe; ungated).
+        num_generate_logs: Number of generate logs the run accumulated.
+        sampling_success: Sampling outcome, set when a strategy ran.
+        response_text: Raw response text. Recorded only when content tracing
+            is enabled.
+        response_length: Response length; always safe to record (ungated).
     """
     _finish_application_span_success(
         action_id,
         extra_attributes={
-            "mellea.num_generate_logs": num_generate_logs,
-            "mellea.sampling_success": sampling_success,
-            "mellea.response": get_capture_content_value(response_text),
-            "mellea.response_length": response_length,
+            "mellea.action.num_generate_logs": num_generate_logs,
+            "mellea.sampling.success": sampling_success,
+            "mellea.action.response": get_capture_content_value(response_text),
+            "mellea.action.response_length": response_length,
         },
     )
 
@@ -839,7 +849,7 @@ def finish_streaming_span(
     extra_attributes = {
         "mellea.streaming.full_text_length": full_text_length,
         "gen_ai.request.model": model,
-        "gen_ai.provider.name": provider,
+        "gen_ai.provider.name": normalize_provider_name(provider),
     }
 
     if success:
@@ -882,9 +892,9 @@ def start_sampling_span(
         "sampling",
         sampling_id,
         {
-            "mellea.strategy_type": strategy_type,
-            "mellea.loop_budget": loop_budget,
-            "mellea.requirement_count": requirement_count,
+            "mellea.sampling.strategy_type": strategy_type,
+            "mellea.sampling.loop_budget": loop_budget,
+            "mellea.sampling.requirement_count": requirement_count,
         },
         attach_context=attach_context,
     )
@@ -907,17 +917,16 @@ def finish_sampling_span(
         sampling_id: Correlation key from the matching open call.
         success: `True` if at least one attempt passed all requirements.
         iterations_used: Total iterations that completed across subsamples.
-        failure_reason: Reason recorded as `mellea.failure_reason` when
-            `success` is `False`.
+        failure_reason: Reason recorded when `success` is `False`.
         exception: The exception that ended the loop, when one was raised.
     """
     if exception is None:
         _finish_application_span_success(
             sampling_id,
             extra_attributes={
-                "mellea.sampling_success": success,
-                "mellea.iterations_used": iterations_used,
-                "mellea.failure_reason": failure_reason,
+                "mellea.sampling.success": success,
+                "mellea.sampling.iterations_used": iterations_used,
+                "mellea.sampling.failure_reason": failure_reason,
             },
         )
     else:
@@ -940,7 +949,7 @@ def start_validation_span(
     return _start_application_span(
         "validation",
         validation_id,
-        {"mellea.requirement_count": requirement_count},
+        {"mellea.validation.requirement_count": requirement_count},
         attach_context=attach_context,
     )
 
@@ -957,16 +966,16 @@ def finish_validation_span(
     """End the `validation` span.
 
     Records the outcome attributes, or ERROR status with the exception when the
-    check raised. `mellea.failure_reasons` is recorded only when content capture
-    is enabled, since a requirement's reason can echo model output.
+    check raised. Failure reasons are recorded only when content capture is
+    enabled, since a requirement's reason can echo model output.
 
     Args:
         validation_id: Correlation key from the matching open call.
-        all_validations_passed: `mellea.validation_passed`.
-        passed_count: `mellea.passed_count`.
-        failed_count: `mellea.failed_count`.
-        failure_reasons: One reason per failing requirement. Recorded as
-            `mellea.failure_reasons` only when content tracing is enabled.
+        all_validations_passed: Whether every requirement passed.
+        passed_count: Number of requirements that passed.
+        failed_count: Number of requirements that failed.
+        failure_reasons: One reason per failing requirement. Recorded only when
+            content tracing is enabled.
         exception: The exception that ended validation, when one was raised.
     """
     if exception is None:
@@ -978,10 +987,10 @@ def finish_validation_span(
         _finish_application_span_success(
             validation_id,
             extra_attributes={
-                "mellea.validation_passed": all_validations_passed,
-                "mellea.passed_count": passed_count,
-                "mellea.failed_count": failed_count,
-                "mellea.failure_reasons": reasons,
+                "mellea.validation.passed": all_validations_passed,
+                "mellea.validation.passed_count": passed_count,
+                "mellea.validation.failed_count": failed_count,
+                "mellea.validation.failure_reasons": reasons,
             },
         )
     else:
