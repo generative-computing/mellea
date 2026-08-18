@@ -492,6 +492,13 @@ def test_release_is_idempotent():
 
 
 def test_prepare_fires_phase_complete_metric_when_plugins_present():
+    """`prepare()` fires its own invocation-start/complete pair around the phase-start/complete pair.
+
+    Four hook dispatches total: invocation_start, phase_start, phase_complete,
+    invocation_complete — see `LocalFileBinding.prepare()`'s docstring for why
+    `prepare()` opens its own single-phase invocation rather than relying on one
+    supplied by a caller.
+    """
     pytest.importorskip("cpex", reason="cpex not installed — install mellea[hooks]")
     backend = _fake_backend()
     binding = LocalFileBinding(name="answerability")
@@ -503,10 +510,11 @@ def test_prepare_fires_phase_complete_metric_when_plugins_present():
     ):
         binding.prepare()
 
-    mock_run.assert_called_once()
-    hook_coro = mock_run.call_args.args[0]
-    assert isinstance(hook_coro, Coroutine)
-    hook_coro.close()
+    assert mock_run.call_count == 4
+    for call in mock_run.call_args_list:
+        hook_coro = call.args[0]
+        assert isinstance(hook_coro, Coroutine)
+        hook_coro.close()
 
 
 def test_release_does_not_fire_phase_complete_metric():

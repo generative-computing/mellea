@@ -36,7 +36,10 @@ from mellea.backends.huggingface import LocalHFBackend
 from mellea.core import Component
 from test.backends.test_adapters._hook_capture import (
     capture_adapter_hooks,
-    hook_payloads,
+    invocation_payloads,
+    invocation_start_payloads,
+    phase_payloads,
+    phase_start_payloads,
 )
 
 pytestmark = pytest.mark.integration
@@ -117,16 +120,22 @@ def test_prepare_activate_deactivate_release_full_lifecycle():
     backend._model.delete_adapter.assert_called_once_with(binding.qualified_name)  # type: ignore[union-attr]
     assert binding.backend is None
 
-    recorded = hook_payloads(mock_invoke)
-    phases = [p.phase for p in recorded if hasattr(p, "phase")]
-    assert phases == ["activate", "deactivate"]
+    assert [p.phase for p in phase_start_payloads(mock_invoke)] == [
+        "activate",
+        "deactivate",
+    ]
+    assert [p.phase for p in phase_payloads(mock_invoke)] == ["activate", "deactivate"]
 
-    invocations = [p for p in recorded if hasattr(p, "outcome")]
+    invocation_starts = invocation_start_payloads(mock_invoke)
+    assert len(invocation_starts) == 1
+
+    invocations = invocation_payloads(mock_invoke)
     assert len(invocations) == 1
     assert invocations[0].outcome == "success"
     assert invocations[0].name == "answerability"
     assert invocations[0].binding_type == "local_file"
     assert invocations[0].adapter_type == binding.adapter_type.value
+    assert invocations[0].invocation_id == invocation_starts[0].invocation_id
 
 
 def test_deactivate_runs_even_when_generation_body_raises():
@@ -151,11 +160,9 @@ def test_deactivate_runs_even_when_generation_body_raises():
 
     # deactivate still ran, and the invocation is reported as an error carrying
     # the original exception — the behaviour the span status used to assert.
-    recorded = hook_payloads(mock_invoke)
-    phases = [p.phase for p in recorded if hasattr(p, "phase")]
-    assert "deactivate" in phases
+    assert "deactivate" in [p.phase for p in phase_payloads(mock_invoke)]
 
-    invocations = [p for p in recorded if hasattr(p, "outcome")]
+    invocations = invocation_payloads(mock_invoke)
     assert len(invocations) == 1
     assert invocations[0].outcome == "error"
     assert isinstance(invocations[0].error, RuntimeError)

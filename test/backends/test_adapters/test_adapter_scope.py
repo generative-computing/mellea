@@ -27,6 +27,8 @@ from mellea.core import Component
 from test.backends.test_adapters._hook_capture import (
     capture_adapter_hooks,
     invocation_payloads,
+    phase_payloads,
+    phase_start_payloads,
 )
 
 
@@ -201,12 +203,15 @@ def test_adapter_scope_reports_other_exceptions_as_error():
 
 
 def test_phase_hook_not_fired_when_the_phase_itself_fails():
-    """A phase that raised did not complete, so no phase event is emitted.
+    """A phase that raised opens (phase-start fires) but never completes.
 
-    `ADAPTER_FUNCTION_PHASE_COMPLETE` means the phase finished. The failure is
-    reported once, at invocation level, where `outcome`/`error` carry it — so a
+    `ADAPTER_FUNCTION_PHASE_COMPLETE` means the phase finished, so it does not
+    fire for a phase that raised. `ADAPTER_FUNCTION_PHASE_START` fires
+    regardless, since it only marks the phase as about to run. The failure is
+    reported at invocation level, where `outcome`/`error` carry it — so a
     consumer reconciling phase counts against invocation counts sees one
-    invocation error and no phase event, not both.
+    invocation error, one phase-start with no matching phase-complete, and no
+    phase-complete event.
     """
     mock_backend = MagicMock(spec=AdapterMixin)
     adapter, weights = _make_adapter()
@@ -217,8 +222,8 @@ def test_phase_hook_not_fired_when_the_phase_itself_fails():
             with AdapterMixin.adapter_scope(mock_backend, adapter):
                 pytest.fail("body must not run when activate() raises")
 
-    payloads = [c.args[1] for c in mock_invoke.call_args_list]
-    assert [p for p in payloads if hasattr(p, "phase")] == []
+    assert [p.phase for p in phase_start_payloads(mock_invoke)] == ["activate"]
+    assert phase_payloads(mock_invoke) == []
 
     invocations = invocation_payloads(mock_invoke)
     assert [p.outcome for p in invocations] == ["error"]
