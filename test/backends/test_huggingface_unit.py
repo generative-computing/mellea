@@ -27,6 +27,7 @@ from transformers.generation.utils import GenerateDecoderOnlyOutput
 from mellea.backends import ModelOption
 from mellea.backends.adapters import AdapterMixin, AdapterType, IntrinsicAdapter
 from mellea.backends.adapters._core import Identity
+from mellea.backends.adapters.catalog import IntrinsicsCatalogEntry
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.core import ModelOutputThunk
 from mellea.formatters.granite.base.util import (
@@ -42,6 +43,10 @@ from mellea.stdlib.components import (
     Message,
 )
 from mellea.stdlib.context import ChatContext
+from test.backends.test_adapters._hook_capture import (
+    capture_adapter_hooks,
+    hook_payloads,
+)
 
 # Minimal 1x1 PNG for testing
 _MINIMAL_PNG = (
@@ -382,17 +387,34 @@ def test_generation_lock_reentrant_activation_does_not_deadlock():
     )
 
 
-def _make_fake_intrinsic_adapter(qualified_name: str) -> IntrinsicAdapter:
+def _make_fake_intrinsic_adapter(
+    qualified_name: str, revision: str = "fake0000000000000000000000000000000000000"
+) -> IntrinsicAdapter:
     """Builds a minimal `IntrinsicAdapter` stand-in, bypassing `__init__` (which
     downloads the adapter's `io.yaml`), exposing only the attributes
-    `_generate_intrinsic_with_adapter_scope` reads.
+    `_generate_intrinsic_with_adapter_scope` reads: `.name`, `.qualified_name`,
+    `.adapter_type`, `.identity` (reused directly, not rebuilt, so this must
+    already be the real `Identity` `IntrinsicAdapter.__init__` would have
+    built), and `.intrinsic_metadata.revision` (the catalogue-pinned SHA
+    `_IntrinsicPeftBinding` reports to telemetry — real `IntrinsicsCatalogEntry.revision`
+    is a required, non-optional `str`, so this stand-in mirrors that rather
+    than allowing `None`).
     """
-    name, _, adapter_type = qualified_name.rpartition("_")
+    name, _, adapter_type_str = qualified_name.rpartition("_")
+    adapter_type = (
+        AdapterType.ALORA if adapter_type_str == "alora" else AdapterType.LORA
+    )
     adapter = IntrinsicAdapter.__new__(IntrinsicAdapter)
     adapter.name = name
     adapter.qualified_name = qualified_name
-    adapter.adapter_type = (
-        AdapterType.ALORA if adapter_type == "alora" else AdapterType.LORA
+    adapter.adapter_type = adapter_type
+    adapter.intrinsic_metadata = IntrinsicsCatalogEntry(
+        name=name, repo_id="fake/repo", revision=revision
+    )
+    object.__setattr__(
+        adapter,
+        "identity",
+        Identity(name=name, adapter_type=adapter_type.value, capability=name),
     )
     return adapter
 
@@ -449,6 +471,42 @@ def test_generate_intrinsic_with_adapter_scope_activates_during_generation():
     assert out == "output"
     assert seen_during_generation == [[adapter.qualified_name]]
     assert backend._model.active_adapters() == []
+
+
+def test_generate_intrinsic_with_adapter_scope_fires_hooks_with_correct_payload():
+    """The hooks `_generate_intrinsic_with_adapter_scope`'s docstring claims to
+    enable must actually fire, with a payload that matches reality — not just
+    smoke-tested by checking that *some* hooks fire.
+
+    Regression coverage for two bugs caught in review: `revision` reported as
+    `None` (mislabelled "unpinned") despite the adapter being pinned, and
+    `binding_type` set to an invented `"intrinsic_legacy"` value instead of the
+    `"local_file"` reality this binding actually is.
+    """
+    backend = _make_backend()
+    _wire_fake_peft_model(backend)
+    adapter = _make_fake_intrinsic_adapter(
+        "answerability_alora", revision="deadbeef00000000000000000000000000000000"
+    )
+    _register_fake_adapter(backend, adapter.qualified_name, "/fake/path")
+
+    with capture_adapter_hooks() as mock_invoke:
+        out = backend._generate_intrinsic_with_adapter_scope(adapter, lambda: "output")
+
+    assert out == "output"
+    payloads = hook_payloads(mock_invoke)
+
+    phases = [p.phase for p in payloads if hasattr(p, "phase")]
+    assert phases == ["activate", "deactivate"]
+
+    invocations = [p for p in payloads if hasattr(p, "outcome")]
+    assert len(invocations) == 1
+    invocation = invocations[0]
+    assert invocation.outcome == "success"
+    assert invocation.name == "answerability"
+    assert invocation.adapter_type == "alora"
+    assert invocation.binding_type == "local_file"
+    assert invocation.revision == "deadbeef00000000000000000000000000000000"
 
 
 def test_generate_intrinsic_with_adapter_scope_deactivates_on_error():
