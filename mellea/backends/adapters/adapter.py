@@ -768,6 +768,14 @@ class AdapterMixin(Backend, abc.ABC):
         body awaits work that re-enters generation on another thread must not
         widen a lock this way — that reproduces the deadlock above.
 
+        A caller composing `adapter_scope()` with `LocalHFBackend`'s *standard*
+        (non-intrinsic) generation path still silently ignores it: that path
+        (`_generate_with_adapter_lock`) always deactivates any adapter before
+        generating, so wrapping `generate_from_context()` in `adapter_scope()`
+        activates the adapter, generates against the base model anyway, then
+        deactivates. Pre-existing, not specific to the intrinsic path this
+        method now supports.
+
         Args:
             adapter: The adapter to activate, or `None` (no-op).
 
