@@ -25,7 +25,7 @@ from mellea.stdlib import functional as mfuncs
 from mellea.stdlib.components import Intrinsic, Message
 from mellea.stdlib.context import ChatContext
 
-pytestmark = [pytest.mark.integration, pytest.mark.openai]
+pytestmark = pytest.mark.integration
 
 _SIMPLE_CONFIG = {
     "model": None,
@@ -111,32 +111,3 @@ async def test_activation_goes_through_embedded_binding(technology):
         "answerability"
     )
     assert call_kwargs["model"] == "granite-switch"
-
-
-async def test_existing_switch_call_shape_unchanged():
-    """Regression guard: the observable request shape through the binding
-    matches what the old inline isinstance(adapter, EmbeddedIntrinsicAdapter)
-    block produced — same chat_template_kwargs, no stray top-level `model`
-    override from the rewriter."""
-    backend = _backend_with_adapter("alora")
-    mock_create = AsyncMock(return_value=_chat_completion())
-    mock_client = MagicMock()
-    mock_client.chat.completions.create = mock_create
-
-    with patch.object(
-        OpenAIBackend,
-        "_async_client",
-        new_callable=PropertyMock,
-        return_value=mock_client,
-    ):
-        ctx = ChatContext().add(Message("user", "What is the square root of 4?"))
-        mot, _ = await mfuncs.aact(
-            Intrinsic("answerability"), ctx, backend, strategy=None
-        )
-        await mot.avalue()
-
-    call_kwargs = mock_create.call_args.kwargs
-    assert call_kwargs["model"] == "granite-switch"
-    assert call_kwargs["extra_body"]["chat_template_kwargs"]["adapter_name"] == (
-        "answerability"
-    )
