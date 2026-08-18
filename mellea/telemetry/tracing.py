@@ -1086,6 +1086,195 @@ def finish_validation_span(
         _finish_application_span_error(validation_id, exception=exception)
 
 
+# Child phase spans are stashed under a key derived from the invocation id so
+# they can't collide with the parent's own `_in_flight_spans` entry (keyed by
+# the bare invocation id) or with each other across phases of the same
+# invocation.
+_ADAPTER_FUNCTION_PHASE_KEY_INFIX = ":phase:"
+
+
+def _adapter_function_phase_key(invocation_id: str, phase: str) -> str:
+    return f"{invocation_id}{_ADAPTER_FUNCTION_PHASE_KEY_INFIX}{phase}"
+
+
+def start_adapter_function_span(
+    invocation_id: str,
+    *,
+    name: str,
+    revision: str | None,
+    binding_type: str,
+    adapter_type: str,
+    attach_context: bool = False,
+) -> Span | None:
+    """Open the `adapter_function` parent span for one adapter-function invocation.
+
+    On the `mellea.backend` tracer: adapter/model lifecycle work is a backend
+    concern, not a user-facing operation (see
+    `docs/docs/observability/tracing.md`).
+
+    `attach_context` defaults to `False`, unlike every other `start_*_span`
+    helper. `ADAPTER_FUNCTION_INVOCATION_START`/`_PHASE_START` fire from sync
+    code (`AdapterMixin.adapter_scope`, `LocalFileBinding.prepare`) via
+    `_run_async_in_thread`, which runs each hook as an independent task on a
+    shared background event loop, seeded from a *fresh* `contextvars.copy_context()`
+    snapshot of the calling thread taken at that call — mutations inside one
+    hook's task (like an ambient-context attach) never leak back to the
+    calling thread and so are invisible to the *next* `_run_async_in_thread`
+    call's snapshot. Ambient attach/detach across two such calls therefore
+    can't establish a parent/child edge (and mismatched attach/detach tasks
+    trigger "Detaching an OTel context token across asyncio tasks" warnings)
+    — `start_adapter_function_phase_span` instead parents explicitly via
+    `trace.set_span_in_context` using the span object looked up by
+    `invocation_id`, which needs no ambient context at all.
+
+    Args:
+        invocation_id: Correlation key for the matching `finish_adapter_function_span` call.
+        name: Adapter function name (e.g. `"answerability"`).
+        revision: Catalog revision of the adapter, or `None` if unpinned.
+        binding_type: Weight-binding reality the adapter is running under (e.g.
+            `"local_file"`, `"embedded"`, `"server_mediated"`).
+        adapter_type: Adapter mechanism (e.g. `"lora"`, `"alora"`).
+        attach_context: Whether to attach the span as the ambient OTel context.
+            Left `False` by every current caller — see above.
+
+    Returns:
+        The span, or `None` if tracing is disabled.
+    """
+    tracer = get_backend_tracer()
+    if tracer is None:
+        return None
+
+    span = tracer.start_span("adapter_function")
+    set_attribute_safe(span, "mellea.adapter_function.name", name)
+    set_attribute_safe(span, "mellea.adapter_function.revision", revision)
+    set_attribute_safe(span, "mellea.adapter_function.binding_type", binding_type)
+    set_attribute_safe(span, "mellea.adapter_function.adapter_type", adapter_type)
+
+    token = _attach_span_context(span, attach=attach_context)
+    _in_flight_spans[invocation_id] = (span, token, _current_task())
+    return span
+
+
+def finish_adapter_function_span(
+    invocation_id: str, *, outcome: str, exception: BaseException | None
+) -> None:
+    """End the `adapter_function` span, recording its outcome.
+
+    Defensively closes any `adapter_function.<phase>` child span still open
+    under this invocation first — a phase that raised fires
+    `adapter_function_phase_start` but never its own
+    `adapter_function_phase_complete` (that hook's contract is success-only),
+    so without this the child span would never close and the in-flight
+    registry would never drain. The dangling child is marked ERROR with the
+    same exception as the invocation.
+
+    Args:
+        invocation_id: Correlation key from the matching `start_adapter_function_span` call.
+        outcome: `"success"`, `"schema_error"`, or `"error"`.
+        exception: The exception raised during the invocation, or `None` on success.
+    """
+    prefix = f"{invocation_id}{_ADAPTER_FUNCTION_PHASE_KEY_INFIX}"
+    for key in [k for k in _in_flight_spans if k.startswith(prefix)]:
+        entry = _in_flight_spans.pop(key, None)
+        if entry is None:
+            continue
+        phase_span, phase_token, phase_attach_task = entry
+        try:
+            if exception is not None:
+                phase_span.record_exception(exception)
+                phase_span.set_status(
+                    trace.Status(trace.StatusCode.ERROR, str(exception))
+                )
+        finally:
+            _safe_detach(phase_token, phase_attach_task)
+            phase_span.end()
+
+    entry = _in_flight_spans.pop(invocation_id, None)
+    if entry is None:
+        return
+    span, token, attach_task = entry
+    try:
+        set_attribute_safe(span, "mellea.adapter_function.outcome", outcome)
+        if exception is not None:
+            span.record_exception(exception)
+            span.set_status(trace.Status(trace.StatusCode.ERROR, str(exception)))
+            span.set_attribute("error.type", type(exception).__name__)
+    finally:
+        _safe_detach(token, attach_task)
+        span.end()
+
+
+def start_adapter_function_phase_span(
+    invocation_id: str,
+    phase: str,
+    *,
+    revision: str | None = None,
+    attach_context: bool = False,
+) -> Span | None:
+    """Open an `adapter_function.<phase>` child span, explicitly parented under the invocation span.
+
+    Parents via `trace.set_span_in_context` on the `adapter_function` span
+    looked up by `invocation_id`, rather than via ambient context — see
+    `start_adapter_function_span`'s docstring for why ambient attach can't
+    establish this edge for hooks fired via `_run_async_in_thread`. Explicit
+    parenting works the same on every Python version; no `_CONTEXT_ATTACH_SUPPORTED`
+    gating applies here. A missing parent (invocation not in flight, or
+    tracing was enabled only after the invocation started) falls back to
+    whatever's ambient — the phase span still opens; it just can't nest.
+
+    Args:
+        invocation_id: Correlation key of the enclosing `adapter_function` span.
+        phase: Lifecycle phase name (e.g. `"prepare"`, `"activate"`).
+        revision: Catalog revision of the adapter, or `None` if unpinned. Recorded
+            directly on this phase span — e.g. `adapter_function.prepare` records
+            the resolved Hugging Face SHA here, not just on the parent.
+        attach_context: Whether to attach the span as the ambient OTel context.
+            Left `False` by every current caller — see `start_adapter_function_span`.
+
+    Returns:
+        The span, or `None` if tracing is disabled.
+    """
+    tracer = get_backend_tracer()
+    if tracer is None:
+        return None
+
+    parent_entry = _in_flight_spans.get(invocation_id)
+    parent_context = (
+        trace.set_span_in_context(parent_entry[0]) if parent_entry is not None else None
+    )
+    span = tracer.start_span(f"adapter_function.{phase}", context=parent_context)
+    set_attribute_safe(span, "mellea.adapter_function.phase", phase)
+    set_attribute_safe(span, "mellea.adapter_function.revision", revision)
+
+    token = _attach_span_context(span, attach=attach_context)
+    _in_flight_spans[_adapter_function_phase_key(invocation_id, phase)] = (
+        span,
+        token,
+        _current_task(),
+    )
+    return span
+
+
+def finish_adapter_function_phase_span(invocation_id: str, phase: str) -> None:
+    """End an `adapter_function.<phase>` child span successfully.
+
+    A no-op if the phase span isn't in flight — e.g. it was already closed
+    defensively by `finish_adapter_function_span` because the phase raised.
+
+    Args:
+        invocation_id: Correlation key of the enclosing `adapter_function` span.
+        phase: Lifecycle phase name.
+    """
+    entry = _in_flight_spans.pop(
+        _adapter_function_phase_key(invocation_id, phase), None
+    )
+    if entry is None:
+        return
+    span, token, attach_task = entry
+    _safe_detach(token, attach_task)
+    span.end()
+
+
 __all__ = [
     "get_application_tracer",
     "get_backend_tracer",

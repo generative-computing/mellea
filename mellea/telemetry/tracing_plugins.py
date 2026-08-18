@@ -17,6 +17,10 @@ pipelines to automatically emit spans when tracing is enabled:
 - SamplingTracingPlugin: Emits a `sampling` span per sampling loop, with a span
   event per iteration and repair.
 - ValidationTracingPlugin: Emits a `validation` span per requirement-check batch.
+- AdapterFunctionTracingPlugin: Emits the `adapter_function` span tree (one
+  parent span per invocation, one `adapter_function.<phase>` child per
+  lifecycle phase) for the adapter-function lifecycle. Covers
+  prepare/activate/deactivate only as of #1466; generate/parse land with #1465.
 """
 
 from __future__ import annotations
@@ -35,6 +39,12 @@ from mellea.plugins.decorators import hook
 _CONTEXT_ATTACH_SUPPORTED: bool = sys.version_info >= (3, 12)
 
 if TYPE_CHECKING:
+    from mellea.plugins.hooks.adapter_function import (
+        AdapterFunctionInvocationCompletePayload,
+        AdapterFunctionInvocationStartPayload,
+        AdapterFunctionPhaseCompletePayload,
+        AdapterFunctionPhaseStartPayload,
+    )
     from mellea.plugins.hooks.component import (
         ComponentPostErrorPayload,
         ComponentPostSuccessPayload,
@@ -634,6 +644,88 @@ class ValidationTracingPlugin(Plugin, name="validation_tracing", priority=1045):
         )
 
 
+class AdapterFunctionTracingPlugin(
+    Plugin, name="adapter_function_tracing", priority=1046
+):
+    """Emits the `adapter_function` span tree for the adapter-function lifecycle.
+
+    `adapter_function_invocation_start` opens the `adapter_function` parent
+    span; `adapter_function_invocation_complete` closes it, recording the
+    outcome and defensively closing any `adapter_function.<phase>` child span
+    left open by a phase that raised (see `finish_adapter_function_span`).
+    `adapter_function_phase_start`/`adapter_function_phase_complete` open/close
+    one child span per lifecycle phase, correlated with the parent via
+    `invocation_id`.
+
+    On the `mellea.backend` tracer (adapter/model lifecycle work, not a
+    user-facing operation — see `docs/docs/observability/tracing.md`).
+
+    Covers `prepare`/`activate`/`deactivate` only as of #1466. `generate`/
+    `parse` fire no hooks yet (blocked on #1465 wiring generation through
+    `AdapterMixin.adapter_scope`), so this plugin does not yet emit
+    `adapter_function.generate`/`adapter_function.parse` — it will, once those
+    hooks fire, with no changes needed here. `release` fires no hooks at all
+    (see `AdapterFunctionPhaseCompletePayload`'s `phase` field for why) and so
+    never gets a span either. Content capture (`MELLEA_TRACES_CONTENT`) is not
+    wired here: no phase in scope carries adapter input/output content —
+    `generate`/`parse` are where that will apply.
+
+    Unlike every other plugin in this module, these hooks don't rely on
+    `_CONTEXT_ATTACH_SUPPORTED` ambient-context attach/detach at all — they
+    fire from sync code (`AdapterMixin.adapter_scope`, `LocalFileBinding.prepare`)
+    via `_run_async_in_thread`, under which ambient attach can't establish a
+    parent/child edge (see `start_adapter_function_span`'s docstring).
+    `start_adapter_function_phase_span` parents each child explicitly instead,
+    so nesting works identically on every Python version.
+    """
+
+    @hook("adapter_function_invocation_start")
+    async def on_invocation_start(
+        self, payload: AdapterFunctionInvocationStartPayload, context: dict[str, Any]
+    ) -> None:
+        """Open the `adapter_function` parent span for this invocation."""
+        from mellea.telemetry.tracing import start_adapter_function_span
+
+        start_adapter_function_span(
+            payload.invocation_id,
+            name=payload.name,
+            revision=payload.revision,
+            binding_type=payload.binding_type,
+            adapter_type=payload.adapter_type,
+        )
+
+    @hook("adapter_function_invocation_complete")
+    async def on_invocation_complete(
+        self, payload: AdapterFunctionInvocationCompletePayload, context: dict[str, Any]
+    ) -> None:
+        """Close the `adapter_function` span with its outcome."""
+        from mellea.telemetry.tracing import finish_adapter_function_span
+
+        finish_adapter_function_span(
+            payload.invocation_id, outcome=payload.outcome, exception=payload.error
+        )
+
+    @hook("adapter_function_phase_start")
+    async def on_phase_start(
+        self, payload: AdapterFunctionPhaseStartPayload, context: dict[str, Any]
+    ) -> None:
+        """Open the `adapter_function.<phase>` child span."""
+        from mellea.telemetry.tracing import start_adapter_function_phase_span
+
+        start_adapter_function_phase_span(
+            payload.invocation_id, payload.phase, revision=payload.revision
+        )
+
+    @hook("adapter_function_phase_complete")
+    async def on_phase_complete(
+        self, payload: AdapterFunctionPhaseCompletePayload, context: dict[str, Any]
+    ) -> None:
+        """Close the `adapter_function.<phase>` child span."""
+        from mellea.telemetry.tracing import finish_adapter_function_phase_span
+
+        finish_adapter_function_phase_span(payload.invocation_id, payload.phase)
+
+
 # All tracing plugins to auto-register when tracing is enabled.
 _TRACING_PLUGIN_CLASSES = (
     BackendTracingPlugin,
@@ -642,4 +734,5 @@ _TRACING_PLUGIN_CLASSES = (
     ToolTracingPlugin,
     SamplingTracingPlugin,
     ValidationTracingPlugin,
+    AdapterFunctionTracingPlugin,
 )
