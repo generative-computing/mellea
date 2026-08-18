@@ -484,6 +484,7 @@ def test_concurrent_intrinsic_calls_cannot_observe_each_others_adapter():
     _register_fake_adapter(backend, "uncertainty_lora", "/fake/b")
 
     mismatches: list[tuple[str, list[str]]] = []
+    errors: list[BaseException] = []
 
     def run(qualified_name: str):
         adapter = _make_fake_intrinsic_adapter(qualified_name)
@@ -495,7 +496,10 @@ def test_concurrent_intrinsic_calls_cannot_observe_each_others_adapter():
                 mismatches.append((qualified_name, current))
             return "ok"
 
-        backend._generate_intrinsic_with_adapter_scope(adapter, fake_generate)
+        try:
+            backend._generate_intrinsic_with_adapter_scope(adapter, fake_generate)
+        except BaseException as exc:  # surfaced via `errors`, not swallowed
+            errors.append(exc)
 
     threads = [
         threading.Thread(target=run, args=("answerability_lora",)),
@@ -507,6 +511,11 @@ def test_concurrent_intrinsic_calls_cannot_observe_each_others_adapter():
         t.join(timeout=5)
 
     assert not any(t.is_alive() for t in threads)
+    # A `Thread` swallows exceptions from its target by default, so without this
+    # check a totally broken `_generate_intrinsic_with_adapter_scope` (e.g. an
+    # AttributeError before `fake_generate` ever runs) would leave `mismatches`
+    # empty and this test would pass vacuously.
+    assert errors == []
     assert mismatches == []
 
 
