@@ -272,6 +272,8 @@ class Streamer:
         """
         if self._finalized:
             return
+        # Set before teardown: a cancellation mid-dispatch can curtail the remaining
+        # STREAMING_END subscribers with no retry (unclosed span / unrecorded metrics).
         self._finalized = True
 
         try:
