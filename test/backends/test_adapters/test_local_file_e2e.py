@@ -9,14 +9,15 @@ PEFT machinery, or model. Requires GPU and network/Hub access; not expected to
 run in CI or in sandboxes without hardware access (see test/README.md).
 
 `adapter_scope()` is asserted to really flip the real PEFT model's active
-adapter set. `generate_from_context()` on a plain `CBlock` is only a
-smoke-test that generation still succeeds afterwards — it does not run
-through the activated adapter, since the standard generation path always
-deactivates adapters first (`_generate_with_adapter_lock("", ...)`); wiring
-that path onto `adapter_scope` is deferred to #1465.
+adapter set, and to keep it active across a real generate call: the model is
+called directly (bypassing `generate_from_context()`'s standard path, which
+always deactivates adapters first via `_generate_with_adapter_lock("", ...)`)
+so the active-adapter assertion straddling the generate call is a genuine
+proof that generation ran with the adapter active, not a smoke test that
+generation merely succeeded afterwards.
 
 Assertions are structural/functional only (adapter registered, real model
-reports it active, generation succeeds, adapter cleanly released), per
+reports it active during and after generation, adapter cleanly released), per
 test/README.md's e2e rules — no assertions on generated text content.
 """
 
@@ -47,8 +48,7 @@ from mellea.backends.adapters._core import (
     LocalFileBinding,
 )
 from mellea.backends.huggingface import LocalHFBackend
-from mellea.core import CBlock, Component
-from mellea.stdlib.context import SimpleContext
+from mellea.core import Component
 from test.conftest import cleanup_gpu_backend, hf_skip
 
 
@@ -88,17 +88,25 @@ async def test_local_file_binding_full_lifecycle_against_real_model(backend):
     assert binding.backend is backend
     assert binding.qualified_name in backend.list_adapters()
 
-    ctx = SimpleContext().add(CBlock("Is the sky blue?"))
     with backend.adapter_scope(adapter):
-        # Confirms activate() really flipped the real PEFT model's active
-        # adapter — the generate call below does not run through it (see
-        # module docstring), so this is the only in-scope proof of activation.
+        # Confirms activate() really flipped the real PEFT model's active adapter.
         assert binding.qualified_name in backend._model.active_adapters()  # type: ignore[union-attr]
 
-        mot, _ = await backend.generate_from_context(
-            CBlock("Is the sky blue?"), ctx, model_options={}
+        # Generate directly against the real model rather than through
+        # generate_from_context() — that standard path always deactivates
+        # adapters first (_generate_with_adapter_lock("", ...)), which would
+        # make this a smoke test that generation merely succeeds afterwards,
+        # not a demonstration that generation ran with the adapter active.
+        toks = backend._tokenizer("Is the sky blue?", return_tensors="pt").to(  # type: ignore[union-attr]
+            backend._device  # type: ignore[union-attr]
         )
-        value = await mot.avalue()
+        with torch.no_grad():
+            out_ids = backend._model.generate(**toks, max_new_tokens=8)  # type: ignore[union-attr]
+
+        # Still inside the scope: the adapter must still be the one active
+        # during generation, not just at scope-entry.
+        assert binding.qualified_name in backend._model.active_adapters()  # type: ignore[union-attr]
+        value = backend._tokenizer.decode(out_ids[0], skip_special_tokens=True)  # type: ignore[union-attr]
 
     assert binding.qualified_name not in backend._model.active_adapters()  # type: ignore[union-attr]
     assert isinstance(value, str)
