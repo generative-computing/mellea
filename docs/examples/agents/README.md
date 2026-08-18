@@ -36,5 +36,4 @@ An alternative implementation of the ReACT pattern using Mellea's instruct-valid
 
 ## Related Documentation
 
-- See `docs/dev/tool_calling.md` for more on tool integration
 - See `mellea/stdlib/requirements/tool_reqs.py` for tool requirements

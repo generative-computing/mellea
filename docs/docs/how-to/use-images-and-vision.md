@@ -11,8 +11,9 @@ Mellea supports multimodal input: pass images alongside your text prompt to any
 running.
 
 > **Backend note:** The default Ollama model (`granite4.1:3b`) does not support image
-> input. You must switch to a vision-capable model such as `granite3.2-vision` or
-> `llava`. Not all backends support vision — see backend notes below.
+> input. You must switch to a vision-capable model such as `granite3.2-vision`, or
+> `granite-vision-4.1` via the Hugging Face tag shown below. Not all backends support
+> vision — see backend notes below.
 
 ---
 
@@ -37,6 +38,40 @@ print(str(result))
 ```
 
 Other vision-capable Ollama models: `llava`, `llava-phi3`, `moondream`, `qwen2.5vl:7b`.
+
+### Granite Vision 4.1
+
+`granite-vision-4.1` is the current-generation Granite vision model. It is not in the
+Ollama library, so pull IBM's official GGUF build from Hugging Face instead — that
+build ships the `mmproj` projector Ollama needs for image input:
+
+```bash
+ollama pull hf.co/ibm-granite/granite-vision-4.1-4b-GGUF:Q4_K_M
+```
+
+Reference it with the `IBM_GRANITE_VISION_4_1_4B` constant rather than typing the tag:
+
+```python
+# Requires: mellea, pillow
+# Returns: str
+from PIL import Image
+from mellea import start_session
+from mellea.backends import ModelOption, model_ids
+
+m = start_session(
+    model_id=model_ids.IBM_GRANITE_VISION_4_1_4B,
+    model_options={ModelOption.CONTEXT_WINDOW: 4096},
+)
+
+img = Image.open("photo.jpg")
+result = m.instruct("Is the subject in this image smiling?", images=[img])
+print(str(result))
+# Output will vary — LLM responses depend on model and temperature.
+```
+
+Setting `CONTEXT_WINDOW` explicitly is worth the line. Ollama otherwise allocates the
+model's full 131072-token window — close to 9 GB — for a request that needs a few
+thousand tokens. Capping it at 4096 brings that down to roughly 2.5 GB.
 
 ---
 

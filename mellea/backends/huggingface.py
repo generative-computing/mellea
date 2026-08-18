@@ -9,6 +9,7 @@ The purpose of the Hugging Face backend is to provide a setting for implementing
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import dataclasses
 import datetime
 import functools
@@ -76,6 +77,7 @@ from ..stdlib.requirements import ALoraRequirement, LLMaJRequirement
 from ..telemetry.context import generate_request_id, with_context
 from ._options import resolve_model_options
 from .adapters import AdapterMixin, IntrinsicAdapter, LocalHFAdapter
+from .adapters._core import LocalFileBinding
 from .adapters.adapter import AdapterInput
 from .backend import FormatterBackend
 from .cache import Cache, SimpleLRUCache
@@ -445,8 +447,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         )
 
         # Adapters can be made known to the backend (added) and loaded.
-        self._added_adapters: dict[str, LocalHFAdapter] = {}
-        self._loaded_adapters: dict[str, LocalHFAdapter] = {}
+        self._added_adapters: dict[str, LocalHFAdapter | LocalFileBinding] = {}
+        self._loaded_adapters: dict[str, LocalHFAdapter | LocalFileBinding] = {}
 
         self._generation_lock = threading.Lock()
         """Used to force generation requests to be non-concurrent. Necessary for preventing issues with adapters."""
@@ -502,7 +504,9 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
             # Requirements can be automatically rerouted to a requirement adapter.
             if isinstance(action, Requirement):
-                # See docs/dev/requirement_aLoRA_rerouting.md
+                # See "How automatic routing works" in
+                # docs/docs/advanced/lora-and-alora-adapters.md for the three
+                # exceptions to this rule.
                 reroute_to_alora = self.default_to_constraint_checking_alora
                 adapter_name = "requirement-check"
 
@@ -563,19 +567,9 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         with self._generation_lock:
             if adapter_name != "":
                 self.load_peft_adapter(adapter_name)
-                self._model.set_adapter(adapter_name)
+                self.activate_peft_adapter(adapter_name)
             else:
-                try:
-                    # `._model.disable_adapters()` doesn't seem to actually disable them or
-                    # remove them from the model's list of `.active_adapters()`.
-                    self._model.set_adapter([])
-                except ValueError as e:
-                    # If no weights have been loaded, the model will raise a ValueError:
-                    # `ValueError("No adapter loaded. Please load an adapter first.")`
-                    if "No adapter loaded" in str(e):
-                        pass
-                    else:
-                        raise e
+                self.deactivate_peft_adapter(adapter_name)
 
             _assert_correct_adapters(adapter_name, self._model)
             out = generate_func(*args, **kwargs)
@@ -2003,15 +1997,16 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
         Args:
             adapter (AdapterInput): The adapter to register. Must be a
-                `LocalHFAdapter`; other adapter realities are rejected.
+                `LocalHFAdapter` or `LocalFileBinding`; other adapter realities
+                are rejected.
 
         Raises:
-            TypeError: If `adapter` is not a `LocalHFAdapter`.
+            TypeError: If `adapter` is not a `LocalHFAdapter` or `LocalFileBinding`.
             Exception: If `adapter` has already been added to a different backend.
         """
-        if not isinstance(adapter, LocalHFAdapter):
+        if not isinstance(adapter, (LocalHFAdapter, LocalFileBinding)):
             raise TypeError(
-                f"LocalHFBackend requires a LocalHFAdapter; got "
+                f"LocalHFBackend requires a LocalHFAdapter or LocalFileBinding; got "
                 f"{type(adapter).__name__}."
             )
         if adapter.backend is not None:
@@ -2025,9 +2020,15 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                     f"adapter {adapter.name} with type {adapter.adapter_type} has already been added to backend {adapter.backend}"
                 )
 
-        if self._added_adapters.get(adapter.qualified_name) is not None:
+        existing = self._added_adapters.get(adapter.qualified_name)
+        if existing is not None:
             MelleaLogger.get_logger().warning(
-                f"Client code attempted to add {adapter.name} with type {adapter.adapter_type} but {adapter.name} was already added to {self.__class__}. The backend is refusing to do this, because adapter loading is not idempotent."
+                f"Client code attempted to add {adapter.name} with type {adapter.adapter_type} "
+                f"but {adapter.qualified_name!r} is already registered as a "
+                f"{type(existing).__name__} on {self.__class__.__name__}. The backend is "
+                "refusing to do this, because adapter loading is not idempotent. "
+                "LocalFileBinding and IntrinsicAdapter/resolve_adapter() registrations "
+                "share this qualified-name key space and cannot both claim the same name."
             )
             return None
 
@@ -2100,6 +2101,69 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
         # Remove the adapter from the list of loaded adapters.
         del self._loaded_adapters[adapter.qualified_name]
+
+    def activate_peft_adapter(self, adapter_qualified_name: str) -> None:
+        """Switch a previously loaded PEFT adapter on for subsequent generation.
+
+        Must be called while holding `_generation_lock`.
+
+        Args:
+            adapter_qualified_name (str): The `adapter.qualified_name` of the adapter
+                to activate.
+        """
+        self._model.set_adapter(adapter_qualified_name)
+
+    def deactivate_peft_adapter(self, adapter_qualified_name: str) -> None:
+        """Switch off any active PEFT adapter so generation uses the base model.
+
+        Must be called while holding `_generation_lock`.
+
+        Args:
+            adapter_qualified_name (str): The `adapter.qualified_name` of the adapter
+                to deactivate. Accepted for symmetry with `activate_peft_adapter`; the
+                underlying primitive clears all active PEFT adapters regardless of
+                name.
+
+        Raises:
+            ValueError: If the underlying PEFT model raises `ValueError` for a
+                reason other than "no adapter loaded" (which is treated as a
+                no-op, since deactivating is already a no-op in that case).
+        """
+        try:
+            # `._model.disable_adapters()` doesn't seem to actually disable them or
+            # remove them from the model's list of `.active_adapters()`.
+            self._model.set_adapter([])
+        except ValueError as e:
+            # If no weights have been loaded, the model will raise a ValueError:
+            # `ValueError("No adapter loaded. Please load an adapter first.")`
+            if "No adapter loaded" not in str(e):
+                raise e
+
+    def _adapter_activation_lock(
+        self,
+    ) -> contextlib.AbstractContextManager[bool | None]:
+        """Reuse `_generation_lock` for exclusivity around adapter activation.
+
+        `activate_peft_adapter`/`deactivate_peft_adapter` document "must be called
+        while holding `_generation_lock`" as a precondition, and they have two
+        callers:
+
+        1. `_generate_with_adapter_lock`, which takes `_generation_lock` itself.
+        2. `LocalFileBinding.activate()`/`.deactivate()` (driven by
+           `AdapterMixin.adapter_scope()`), which holds no lock of its own.
+
+        This exists for caller 2 — so it is not a duplicate of the lock caller 1
+        takes, it is the only thing satisfying the precondition on that path.
+
+        TODO(#1465): `_generation_lock` is a plain non-reentrant `threading.Lock`.
+        Nothing nests these two callers today, because generation still runs
+        outside `adapter_scope`. When #1465 moves the model call inside the scope,
+        `activate()` will re-acquire this lock while `_generate_with_adapter_lock`
+        already holds it and deadlock. #1465 owns the fix (make it reentrant, or
+        restructure so the scope takes the lock once); it must not be resolved by
+        dropping the lock here, which would leave caller 2's precondition unmet.
+        """
+        return self._generation_lock
 
     def list_adapters(self) -> list[str]:
         """List the qualified names of all adapters registered with this backend.

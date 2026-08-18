@@ -22,7 +22,7 @@ from mellea.core.base import AbstractMelleaTool, ModelOutputThunk, ModelToolCall
 from mellea.plugins import block, hook, is_internal_tool, register
 from mellea.plugins.manager import shutdown_plugins
 from mellea.plugins.types import HookType, PluginMode
-from mellea.stdlib.functional import _acall_tools
+from mellea.stdlib.functional import acall_tools
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -86,7 +86,7 @@ class TestControlFlowPayloadField:
 
         register(spy)
 
-        await _acall_tools(result, MagicMock())
+        await acall_tools(result, MagicMock())
 
         assert len(captured) == 1
         assert captured[0].model_tool_call.name == "final_answer"
@@ -106,7 +106,7 @@ class TestControlFlowPayloadField:
 
         register(spy)
 
-        await _acall_tools(result, MagicMock())
+        await acall_tools(result, MagicMock())
 
         assert len(captured) == 1
         assert captured[0].is_control_flow is True
@@ -125,7 +125,7 @@ class TestControlFlowPayloadField:
 
         register(spy)
 
-        await _acall_tools(result, MagicMock())
+        await acall_tools(result, MagicMock())
 
         assert len(captured) == 1
         assert captured[0].is_control_flow is False
@@ -148,7 +148,7 @@ class TestControlFlowPayloadField:
 
         register(spy)
 
-        await _acall_tools(result, MagicMock())
+        await acall_tools(result, MagicMock())
 
         assert len(captured) == 2
         by_name = {p.model_tool_call.name: p for p in captured}
@@ -181,7 +181,7 @@ class TestAllowlistPluginPattern:
         )
         result = _make_result(tc)
 
-        msgs = await _acall_tools(result, MagicMock())
+        msgs = await acall_tools(result, MagicMock())
         assert len(msgs) == 1
 
     async def test_allowlist_still_blocks_unknown_user_tools(self) -> None:
@@ -204,4 +204,4 @@ class TestAllowlistPluginPattern:
         result = _make_result(tc)
 
         with pytest.raises(PluginViolationError, match="not permitted"):
-            await _acall_tools(result, MagicMock())
+            await acall_tools(result, MagicMock())

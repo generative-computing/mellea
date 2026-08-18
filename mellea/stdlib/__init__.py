@@ -17,6 +17,12 @@ Streaming chunking strategies (for use with streaming validation) are available 
 `Chunker` that drives them over a stream.  The core streaming primitive `stream()`
 and its async-iterable handle `Streamer` are also re-exported here, alongside the
 full `StreamEvent` vocabulary for typed event observation.
+
+Low-level primitives for tool execution are available in `mellea.stdlib.functional`:
+`call_tools` and `acall_tools` for executing model-requested tool calls with full
+hook and telemetry support. Higher-level APIs like `act()`, `instruct()`, or
+`chat()` generate tool calls but do not execute them—use `call_tools()` to run
+the generated tools. These primitives are rarely needed outside custom agentic loops.
 """
 
 from .chunking import (

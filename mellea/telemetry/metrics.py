@@ -1009,8 +1009,7 @@ def _get_adapter_function_invocations_counter() -> Any:
         # in the codebase, pre-existing, already-shipped `Intrinsic*` symbols
         # (the `Intrinsic` component, `call_intrinsic`, etc.) still use the old
         # name and are renamed in a later, coordinated phase of Epic #929 (#1136)
-        # rather than here. See docs/dev/adapter_observability.md for the full
-        # rationale. (Applies to all three metrics below.)
+        # rather than here. (Applies to all three metrics below.)
         _adapter_function_invocations_counter = create_counter(
             "mellea.adapter_function.invocations",
             description="Total number of adapter function invocations",

@@ -170,4 +170,3 @@ result = m.instruct(
 
 - See `mellea/stdlib/requirements/` for requirement types
 - See `mellea/stdlib/sampling/` for sampling strategies
-- See `docs/dev/mellea_library.md` for design philosophy
