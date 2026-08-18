@@ -17,7 +17,7 @@ runnable as an automated example).
 
 import time
 
-from mellea import MelleaSession
+from mellea import MelleaSession, model_ids
 from mellea.backends.adapters import AdapterType
 from mellea.backends.adapters.adapter import IntrinsicAdapter
 from mellea.backends.cache import SimpleLRUCache
@@ -26,7 +26,7 @@ from mellea.core import GenerateLog, ValidationResult
 from mellea.stdlib.context import ChatContext
 from mellea.stdlib.requirements import ALoraRequirement, LLMaJRequirement, Requirement
 
-backend = LocalHFBackend(model_id="ibm-granite/granite-4.1-3b", cache=SimpleLRUCache(5))
+backend = LocalHFBackend(model_id=model_ids.IBM_GRANITE_4_1_3B, cache=SimpleLRUCache(5))
 
 m = MelleaSession(backend=backend, ctx=ChatContext())
 
@@ -38,7 +38,7 @@ m = MelleaSession(backend=backend, ctx=ChatContext())
 # also load-bearing here: routing only looks up ("alora",), so registering the
 # LORA variant instead would hit the same failure.
 backend.add_adapter(
-    IntrinsicAdapter(
+    IntrinsicAdapter(  # emits a DeprecationWarning -- see module docstring, #1144
         "requirement-check",
         adapter_type=AdapterType.ALORA,
         base_model_name=backend.base_model_name,

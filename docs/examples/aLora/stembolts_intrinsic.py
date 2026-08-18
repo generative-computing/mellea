@@ -40,14 +40,15 @@ async def async_stembolt_failure_analysis(
     notes: str, ctx: Context, backend: Backend | AdapterMixin
 ):
     # Backend.add_adapter should be idempotent, but we'll go ahead and check just in case.
-    if _INTRINSIC_ADAPTER_NAME not in backend.list_adapters():
-        backend.add_adapter(StemboltAdapter(backend.base_model_name))
+    adapter = StemboltAdapter(backend.base_model_name)
+    if adapter.qualified_name not in backend.list_adapters():
+        backend.add_adapter(adapter)
 
     ctx = ctx.add(Message("user", content=notes))
 
     action = StemboltIntrinsic()
-    mot = await backend.generate_from_context(action, ctx)
-    return mot
+    mot, ctx = await backend.generate_from_context(action, ctx)
+    return mot, ctx
 
 
 def stembolt_failure_analysis(
