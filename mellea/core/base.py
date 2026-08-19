@@ -37,6 +37,7 @@ from typing import (
     Literal,
     ParamSpec,
     Protocol,
+    Self,
     TypeVar,
     runtime_checkable,
 )
@@ -1679,6 +1680,32 @@ class ContextTurn:
 ContextT = TypeVar("ContextT", bound="Context")
 
 
+class ContextTypeMismatchError(TypeError):
+    """Raised when a function returns a different `Context` subtype than it was given.
+
+    Mellea's convention is that the context type flowing out of a function equals
+    the context type flowing in (see issue #1522). This error enforces that
+    invariant. It is raised by the functional layer when a backend or sampling
+    strategy produces a context whose type differs from the input context's type,
+    unless the caller opted in to a deliberate type change via
+    `allow_context_type_change=True`.
+
+    Args:
+        input_type (type): The type of the context passed into the function.
+        output_type (type): The type of the context the function produced.
+    """
+
+    def __init__(self, input_type: type, output_type: type) -> None:
+        """Build the error message from the mismatched input and output context types."""
+        super().__init__(
+            f"Context type changed during generation: input was "
+            f"{input_type.__name__!r} but output is {output_type.__name__!r}. "
+            "Mellea functions must return the same Context subtype they were "
+            "given. If this change is deliberate (e.g. switching the context type "
+            "associated with a session), pass allow_context_type_change=True."
+        )
+
+
 class Context(abc.ABC):
     """A `Context` is used to track the state of a `MelleaSession`.
 
@@ -1738,7 +1765,7 @@ class Context(abc.ABC):
         """
         return cls()
 
-    def new_instance(self) -> Context:
+    def new_instance(self) -> Self:
         """Return a new empty root context, preserving any subclass configuration.
 
         The base implementation calls `reset_to_new()`, which returns a bare
@@ -1747,7 +1774,7 @@ class Context(abc.ABC):
         should override this to propagate their config into the fresh instance.
 
         Returns:
-            Context: A freshly initialised root context of the same type.
+            Self: A freshly initialised root context of the same type.
         """
         return self.reset_to_new()
 
@@ -1877,14 +1904,15 @@ class Context(abc.ABC):
     # Abstract methods below this line.
 
     @abc.abstractmethod
-    def add(self, c: Span) -> Context:
+    def add(self, c: Span) -> Self:
         """Returns a new context obtained by appending `c` to this context.
 
         Args:
             c (Span): The component, content block, or model output to add to the context.
 
         Returns:
-            Context: A new context node with `c` as its data and this context as its previous node.
+            Self: A new context node of the same type with `c` as its data and this
+            context as its previous node.
         """
         # something along ....from_previous(self, c)
         ...
