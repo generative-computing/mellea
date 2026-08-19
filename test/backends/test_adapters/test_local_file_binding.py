@@ -166,6 +166,51 @@ def test_prepare_and_release_are_linearized_before_registration():
     assert not binding._loaded
 
 
+def test_concurrent_prepare_loses_the_race_without_reloading():
+    """A prepare() that loses the race to a winner must not re-run the load.
+
+    Regression guard: the hook dispatches run between two short lifecycle-lock
+    windows (see `prepare()`'s body comment), so a concurrent caller can pass
+    the pre-flight check while the winner still holds the work lock. On
+    entering the work window it must re-check and return instead of re-running
+    `load_peft_adapter` and firing a second phase-complete for work it never
+    did.
+    """
+    backend = _fake_backend()
+    registration_started = threading.Event()
+    allow_registration = threading.Event()
+    errors: list[BaseException] = []
+
+    def register(binding: LocalFileBinding) -> None:
+        registration_started.set()
+        allow_registration.wait(timeout=1)
+        binding.backend = backend
+
+    def prepare() -> None:
+        try:
+            binding.prepare()
+        except BaseException as exc:
+            errors.append(exc)
+
+    backend.add_adapter.side_effect = register
+    binding = LocalFileBinding(name="answerability")
+    binding.bind_backend(backend)
+
+    threads = [threading.Thread(target=prepare) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    assert registration_started.wait(timeout=1)
+    allow_registration.set()
+    for thread in threads:
+        thread.join(timeout=1)
+
+    assert not any(thread.is_alive() for thread in threads)
+    assert not errors
+    backend.add_adapter.assert_called_once()
+    backend.load_peft_adapter.assert_called_once_with(binding.qualified_name)
+    assert binding._loaded
+
+
 def test_bind_backend_rejects_a_different_backend_after_registration():
     backend = _fake_backend()
     other_backend = _fake_backend()

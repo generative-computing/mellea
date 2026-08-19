@@ -388,7 +388,11 @@ class LocalFileBinding(WeightsBinding):
     def prepare(self) -> None:
         """Downloads the adapter weights and loads them into the staged backend.
 
-        Idempotent: a no-op once already prepared. Retryable: if a previous
+        Idempotent: a no-op once already prepared, including a concurrent
+        caller that passes the pre-flight check while a winner is still
+        loading — such a caller re-checks under the lifecycle lock and returns
+        without re-running the load or firing a phase-complete for work it
+        never did. Retryable: if a previous
         call registered with the backend but failed during the weights load
         (e.g. a transient download/load failure), the next call retries only
         the load rather than re-registering — registration already succeeded
@@ -439,9 +443,12 @@ class LocalFileBinding(WeightsBinding):
         # that re-enters this binding's lifecycle from the background loop would
         # otherwise deadlock against the lock this call still holds. The check
         # above and the work below each run under the lock, so an already-loaded
-        # (or released) binding opens no invocation and fires no hooks, and a
-        # concurrent `release()` interleaving surfaces as the backend's
-        # "refused to register" error rather than as state corruption.
+        # (or released) binding opens no invocation and fires no hooks. A
+        # caller that passes the check while a winner is still loading re-checks
+        # under the work lock and returns without re-running the load or firing
+        # a phase-complete; a `release()` completing between the two windows
+        # clears `_staged_backend`, so the work window raises the bind-missing
+        # error — a clean termination, not state corruption.
         invocation_id = str(uuid.uuid4())
         revision: str | None
         try:
@@ -454,6 +461,13 @@ class LocalFileBinding(WeightsBinding):
         error: BaseException | None = None
         try:
             with self._lifecycle_lock:
+                if self.backend is not None and self._loaded:
+                    # Lost the race: a concurrent prepare() completed between
+                    # the check window above and the work lock. The load did
+                    # not run under this call, so no phase-complete fires
+                    # (success-only contract) — the `finally` below still
+                    # closes the invocation this call opened.
+                    return
                 started_at = time.monotonic()
                 if self.backend is None:
                     if self._staged_backend is None:
