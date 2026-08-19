@@ -899,8 +899,8 @@ class AdapterMixin(Backend, abc.ABC):
         activated = False
         body_exception: BaseException | None = None
         try:
-            started_at = time.monotonic()
             _fire_phase_start_hook(invocation_id, name, "activate", revision)
+            started_at = time.monotonic()
             try:
                 adapter.weights.activate()
                 activated = True

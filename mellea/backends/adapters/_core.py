@@ -396,11 +396,14 @@ class LocalFileBinding(WeightsBinding):
         guard.
 
         The `prepare` phase duration reported to
-        `ADAPTER_FUNCTION_PHASE_COMPLETE` spans the whole operation, **including
-        the Hugging Face download** — `add_adapter` calls `get_local_hf_path`,
-        which can take seconds on a cache miss. That is deliberate (it is the
-        wall-clock cost of preparing), but worth stating, since a phase added
-        later may not want the same boundary.
+        `ADAPTER_FUNCTION_PHASE_COMPLETE` spans the phase's own work under the
+        lifecycle lock — backend registration and the weights load,
+        **including the Hugging Face download** (`add_adapter` calls
+        `get_local_hf_path`, which can take seconds on a cache miss) — and
+        excludes hook-dispatch and lock-wait time, matching the
+        `activate`/`deactivate` boundaries in `AdapterMixin.adapter_scope`.
+        Worth stating, since a phase added later may not want the same
+        boundary.
 
         Unlike `activate`/`deactivate` (owned by `AdapterMixin.adapter_scope`),
         `prepare()` runs outside any wrapping invocation, so it opens its own
@@ -420,7 +423,6 @@ class LocalFileBinding(WeightsBinding):
                 the binding was already `release()`d, or the backend refused
                 the registration.
         """
-        started_at = time.monotonic()
         with self._lifecycle_lock:
             if self._released:
                 raise RuntimeError(
@@ -452,6 +454,7 @@ class LocalFileBinding(WeightsBinding):
         error: BaseException | None = None
         try:
             with self._lifecycle_lock:
+                started_at = time.monotonic()
                 if self.backend is None:
                     if self._staged_backend is None:
                         raise RuntimeError(
@@ -500,7 +503,7 @@ class LocalFileBinding(WeightsBinding):
             # dangling-child cleanup in `finish_adapter_function_span` the
             # only path that ever closed `adapter_function.prepare`'s span.
             self._fire_phase_complete(
-                "prepare", time.monotonic() - started_at, invocation_id
+                invocation_id, "prepare", time.monotonic() - started_at
             )
         finally:
             self._fire_invocation_complete(invocation_id, revision, error)
@@ -720,7 +723,7 @@ class LocalFileBinding(WeightsBinding):
             )
 
     def _fire_phase_complete(
-        self, phase: str, duration_s: float, invocation_id: str
+        self, invocation_id: str, phase: str, duration_s: float
     ) -> None:
         """Fires `adapter_function_phase_complete` for a phase this binding owns.
 
@@ -732,10 +735,10 @@ class LocalFileBinding(WeightsBinding):
         is otherwise unobserved.
 
         Args:
+            invocation_id: Correlation id of the enclosing (prepare-only) invocation.
             phase: Lifecycle phase name; must be a valid
                 `AdapterFunctionPhaseCompletePayload.phase` value.
             duration_s: Wall-clock duration of the phase, in seconds.
-            invocation_id: Correlation id of the enclosing (prepare-only) invocation.
         """
         if not has_plugins(HookType.ADAPTER_FUNCTION_PHASE_COMPLETE):
             return
