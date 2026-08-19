@@ -529,6 +529,74 @@ def test_generate_intrinsic_with_adapter_scope_deactivates_on_error():
     backend._model.set_adapter.assert_any_call([])  # type: ignore[attr-defined]
 
 
+def test_generate_intrinsic_with_adapter_scope_error_hook_payload():
+    """A failed intrinsic generation reports `outcome="error"` with both phase events.
+
+    The `AdapterMixin.adapter_scope` contract for a failing body is pinned
+    generically (against a `LocalFileBinding`) in `test_adapter_scope.py`; this
+    pins it with the intrinsic payload — `name`, `adapter_type`, `binding_type`
+    and the pinned `revision` — so a regression can't silently mislabel
+    intrinsic failures while the generic coverage keeps passing.
+    """
+    backend = _make_backend()
+    _wire_fake_peft_model(backend)
+    adapter = _make_fake_intrinsic_adapter(
+        "answerability_alora", revision="deadbeef00000000000000000000000000000000"
+    )
+    _register_fake_adapter(backend, adapter.qualified_name, "/fake/path")
+
+    def failing_generate():
+        raise RuntimeError("boom")
+
+    with capture_adapter_hooks() as mock_invoke:
+        with pytest.raises(RuntimeError, match="boom"):
+            backend._generate_intrinsic_with_adapter_scope(adapter, failing_generate)
+
+    payloads = hook_payloads(mock_invoke)
+    phases = [p.phase for p in payloads if hasattr(p, "phase")]
+    assert phases == ["activate", "deactivate"]
+
+    invocations = [p for p in payloads if hasattr(p, "outcome")]
+    assert len(invocations) == 1
+    invocation = invocations[0]
+    assert invocation.outcome == "error"
+    assert isinstance(invocation.error, RuntimeError)
+    assert invocation.name == "answerability"
+    assert invocation.adapter_type == "alora"
+    assert invocation.binding_type == "local_file"
+    assert invocation.revision == "deadbeef00000000000000000000000000000000"
+
+    assert backend._model.active_adapters() == []
+
+
+def test_generate_intrinsic_with_adapter_scope_prepare_failure_no_hooks():
+    """A `load_peft_adapter` failure happens before `adapter_scope()` is entered.
+
+    So no adapter hooks fire at all, activation state is unchanged, and the
+    next call still succeeds — a failed load must not poison later calls.
+    """
+    backend = _make_backend()
+    _wire_fake_peft_model(backend)
+    adapter = _make_fake_intrinsic_adapter("answerability_alora")
+    _register_fake_adapter(backend, adapter.qualified_name, "/fake/path")
+
+    with (
+        capture_adapter_hooks() as mock_invoke,
+        patch.object(
+            backend, "load_peft_adapter", side_effect=RuntimeError("load failed")
+        ),
+    ):
+        with pytest.raises(RuntimeError, match="load failed"):
+            backend._generate_intrinsic_with_adapter_scope(adapter, lambda: "output")
+
+    assert hook_payloads(mock_invoke) == []
+    assert backend._model.active_adapters() == []
+
+    out = backend._generate_intrinsic_with_adapter_scope(adapter, lambda: "output")
+    assert out == "output"
+    assert backend._model.active_adapters() == []
+
+
 def test_concurrent_intrinsic_calls_cannot_observe_each_others_adapter():
     """Two concurrent intrinsic generate calls must never see each other's adapter active.
 
