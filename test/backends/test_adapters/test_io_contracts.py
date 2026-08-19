@@ -44,6 +44,17 @@ def test_registry_covers_every_catalog_name():
     assert missing == set()
 
 
+def test_registry_has_no_orphan_keys():
+    """A contract keyed to a name absent from the catalog would be dead code.
+
+    Guards the reverse direction of the completeness invariant: an orphan key
+    would be served by `get_io_contract` ahead of the permissive fallback if a
+    later adapter ever registered under that name.
+    """
+    orphans = set(_INTRINSIC_IO_CONTRACTS) - set(known_intrinsic_names())
+    assert orphans == set()
+
+
 def test_get_io_contract_returns_declared_instance_for_known_names():
     for name in known_intrinsic_names():
         assert get_io_contract(name) is _INTRINSIC_IO_CONTRACTS[name]

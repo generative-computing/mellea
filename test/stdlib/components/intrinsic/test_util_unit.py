@@ -1,11 +1,14 @@
 # Copyright IBM Corp. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Unit tests for `call_intrinsic`'s model_options resolution.
+"""Unit tests for `call_intrinsic`'s model_options resolution and contract
+wiring.
 
 Exercises the model_options precedence without a real backend or model —
 guards against the PR #972 bug class (caller-supplied model_options silently
-discarded behind a hardcoded default) resurfacing.
+discarded behind a hardcoded default) resurfacing. Also covers the issue #1516
+change: the output contract is taken from the adapter `resolve_adapter()`
+returns, and `call_intrinsic` no longer accepts an `io_contract` kwarg.
 """
 
 import json

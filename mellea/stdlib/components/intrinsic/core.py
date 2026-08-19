@@ -25,8 +25,10 @@ from ._util import _resolve_response, call_intrinsic
 # have no equivalent constant — nothing outside a test needs one, since their
 # io_contract is looked up by resolve_adapter() at call time
 # (mellea.backends.adapters.io_contracts), never declared here. Declaring one
-# unused by any caller is exactly the parallel-declaration problem issue #1516
-# closes.
+# unused by any caller would be exactly the parallel-declaration problem
+# issue #1516 closes; the `rag.py`/`guardian.py` sibling constants are kept
+# only as per-helper weights scaffolding for #1141/#1142, never as a second
+# source of their contracts.
 # ---------------------------------------------------------------------------
 
 _REQUIREMENT_CHECK_ADAPTER = Adapter(
@@ -59,7 +61,8 @@ def check_certainty(
         Certainty score as a float (higher = more certain).
 
     Raises:
-        ValueError: When the model output is not valid JSON.
+        ValueError: When the model output is not valid JSON or is not a
+            JSON object.
         AdapterSchemaMismatchError: When the model output is missing the required
             `certainty` field.
     """
@@ -98,7 +101,8 @@ def requirement_check(
         Score as a float between 0.0 and 1.0 (higher = more likely satisfied).
 
     Raises:
-        ValueError: When the model output is not valid JSON.
+        ValueError: When the model output is not valid JSON or is not a
+            JSON object.
         AdapterSchemaMismatchError: If the adapter output does not match the
             expected `{"requirement_check": {"score": <float>}}` contract, or
             if the score is not a finite number in the range 0.0-1.0.
@@ -158,7 +162,8 @@ def find_context_attributions(
             UTF-8 strings.
 
     Raises:
-        ValueError: When the model output is not valid JSON.
+        ValueError: When the model output is not valid JSON, is not a
+            JSON array, or contains a non-object element.
         AdapterSchemaMismatchError: When any record in the output is missing a
             required field.
     """

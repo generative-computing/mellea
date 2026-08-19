@@ -45,6 +45,10 @@ _TARGET_ROLE_TO_SCHEMA = {"user": "user_prompt", "assistant": "assistant_respons
 # (mellea.backends.adapters.io_contracts) rather than declared here — a second,
 # independent declaration is exactly the parallel-argument problem issue #1516
 # closes. See test_guardian_io_contract.py for contract-enforcement tests.
+#
+# The helper bodies no longer reference these constants: the contract travels
+# with the adapter resolve_adapter() returns. They remain as the per-helper
+# Adapter handles that #1141/#1142 will fill with real weights bindings.
 # ---------------------------------------------------------------------------
 
 _POLICY_GUARDRAILS_ADAPTER = Adapter(

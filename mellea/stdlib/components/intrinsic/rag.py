@@ -27,6 +27,10 @@ from ._util import _resolve_question, _resolve_response, call_intrinsic
 # (mellea.backends.adapters.io_contracts) rather than declared here — a second,
 # independent declaration is exactly the parallel-argument problem issue #1516
 # closes. See test_rag_contracts.py for contract-enforcement tests.
+#
+# The helper bodies no longer reference these constants: the contract travels
+# with the adapter resolve_adapter() returns. They remain as the per-helper
+# Adapter handles that #1141/#1142 will fill with real weights bindings.
 # ---------------------------------------------------------------------------
 
 _ANSWERABILITY_ADAPTER = Adapter(

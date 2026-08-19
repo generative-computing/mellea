@@ -246,11 +246,11 @@ _INTRINSIC_IO_CONTRACTS: dict[str, IOContract] = {
         ),
     ),
 }
-"""Canonical output contract for every catalogued adapter function, keyed by its
-catalog `name` (see module docstring). Kept exhaustive over
-:func:`~mellea.backends.adapters.catalog.known_intrinsic_names` by
-`test/backends/test_adapters/test_io_contracts.py`, and enforced below at import
-time — mirroring the duplicate-`effective_capability` check in `catalog.py`."""
+# Canonical output contract for every catalogued adapter function, keyed by its
+# catalog `name` (see module docstring). Kept exhaustive over
+# known_intrinsic_names() by test/backends/test_adapters/test_io_contracts.py,
+# and enforced below at import time — mirroring the
+# duplicate-`effective_capability` check in catalog.py.
 
 _missing_contracts = set(known_intrinsic_names()) - set(_INTRINSIC_IO_CONTRACTS)
 if _missing_contracts:

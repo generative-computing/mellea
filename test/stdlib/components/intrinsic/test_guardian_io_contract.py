@@ -1,9 +1,12 @@
 # Copyright IBM Corp. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Unit tests for IOContract validation in guardian.py (Epic #929 Phase 1).
+"""Unit tests for the guardian adapter functions' output contracts (Epic #929,
+#1516).
 
-Tests the `parse()` method of each IOContract subclass directly — no backend,
+The contracts are declared in `mellea.backends.adapters.io_contracts` and
+carried by the `guardian.py` adapter constants via `get_io_contract`.
+Tests the `parse()` method of each contract directly — no backend,
 no GPU, no model download required.  Two tests per helper:
 
 - `test_<helper>_contract_enforced` — output missing a required field raises
