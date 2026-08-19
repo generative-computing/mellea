@@ -3,7 +3,9 @@
 
 """Unit tests for the litellm-backed pricing module."""
 
+import builtins
 import json
+import logging
 import sys
 from unittest.mock import MagicMock, patch
 
@@ -33,6 +35,26 @@ def mock_litellm_pricing():
         patch("mellea.telemetry.pricing._warned_models", set()),
     ):
         yield mock
+
+
+@pytest.fixture()
+def unimportable_litellm(monkeypatch):
+    """Pricing enabled, but `import litellm` fails.
+
+    A `None` entry in `sys.modules` is CPython's "blocked module" sentinel:
+    `import litellm` raises ImportError while the distribution stays on disk,
+    which is exactly the skewed-install case `find_spec` cannot detect.
+    """
+    monkeypatch.setattr(pricing, "_LITELLM_AVAILABLE", True)
+    monkeypatch.setattr(pricing, "_PRICING_ENABLED", True)
+    monkeypatch.setattr(pricing, "_warned_models", set())
+    monkeypatch.setitem(sys.modules, "litellm", None)
+    yield
+    # `_import_litellm` clears the module globals. Undo the patches first, then
+    # re-run setup, so teardown ordering against `restore_pricing` (which also
+    # depends on monkeypatch, and so is torn down last) is deterministic.
+    monkeypatch.undo()
+    reset_pricing_state()
 
 
 # ---------------------------------------------------------------------------
@@ -203,8 +225,6 @@ def test_compute_cost_disabled_returns_none():
 
 def test_compute_cost_unknown_model_warns_once(mock_litellm_pricing, caplog):
     """Exception from litellm → None + log warning on first failure only."""
-    import logging
-
     mock_litellm_pricing.cost_per_token.side_effect = ValueError("No model data")
     with caplog.at_level(logging.WARNING, logger="mellea.telemetry.pricing"):
         cost = pricing.compute_cost("unknown-model-xyz", None, 100, 50)
@@ -214,3 +234,73 @@ def test_compute_cost_unknown_model_warns_once(mock_litellm_pricing, caplog):
         pricing.compute_cost("unknown-model-xyz", None, 100, 50)
 
     assert not any("unknown-model-xyz" in r.message for r in caplog.records)
+
+
+# ---------------------------------------------------------------------------
+# litellm discoverable via find_spec but not importable
+# ---------------------------------------------------------------------------
+
+
+def test_compute_cost_unimportable_litellm_returns_none(unimportable_litellm):
+    """A litellm that fails to import yields None instead of propagating."""
+    assert pricing.compute_cost("gpt-5.4", "openai", 100, 50) is None
+
+
+def test_compute_cost_unimportable_litellm_disables_pricing(unimportable_litellm):
+    """A failed litellm import latches pricing off for the rest of the process."""
+    pricing.compute_cost("gpt-5.4", "openai", 100, 50)
+
+    assert pricing.is_pricing_enabled() is False
+
+
+def test_compute_cost_unimportable_litellm_warns_once(unimportable_litellm, caplog):
+    """The import failure is logged on the first call only."""
+    with caplog.at_level(logging.WARNING, logger="mellea.telemetry.pricing"):
+        pricing.compute_cost("gpt-5.4", "openai", 100, 50)
+        assert any("failed to import" in r.message for r in caplog.records)
+        caplog.clear()
+        pricing.compute_cost("gpt-5.4", "openai", 100, 50)
+
+    assert not any("failed to import" in r.message for r in caplog.records)
+
+
+def test_compute_cost_non_import_error_from_litellm_returns_none(monkeypatch):
+    """A skewed install that raises AttributeError on import is absorbed too."""
+    real_import = builtins.__import__
+
+    def failing_import(name, *args, **kwargs):
+        if name == "litellm":
+            raise AttributeError("partially-installed dependency")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(pricing, "_LITELLM_AVAILABLE", True)
+    monkeypatch.setattr(pricing, "_PRICING_ENABLED", True)
+    monkeypatch.setattr(builtins, "__import__", failing_import)
+
+    assert pricing.compute_cost("gpt-5.4", "openai", 100, 50) is None
+
+
+def test_register_custom_pricing_unimportable_litellm_does_not_raise(
+    tmp_path, unimportable_litellm
+):
+    """A valid pricing file plus an unimportable litellm is a no-op, not an error."""
+    pricing_file = tmp_path / "pricing.json"
+    pricing_file.write_text(json.dumps({"m": {"input_cost_per_token": 1e-6}}))
+
+    pricing._register_custom_pricing(str(pricing_file))  # must not raise
+
+    assert pricing.is_pricing_enabled() is False
+
+
+def test_setup_pricing_unimportable_litellm_does_not_raise(
+    tmp_path, monkeypatch, unimportable_litellm
+):
+    """`import mellea` survives MELLEA_PRICING_FILE plus an unimportable litellm."""
+    pricing_file = tmp_path / "pricing.json"
+    pricing_file.write_text(json.dumps({"m": {"input_cost_per_token": 1e-6}}))
+    monkeypatch.setenv("MELLEA_PRICING_ENABLED", "true")
+    monkeypatch.setenv("MELLEA_PRICING_FILE", str(pricing_file))
+
+    pricing._setup_pricing()  # must not raise
+
+    assert pricing.is_pricing_enabled() is False

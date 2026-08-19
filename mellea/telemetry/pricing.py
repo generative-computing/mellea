@@ -8,17 +8,20 @@ auto-enabled when litellm is installed and can be explicitly controlled via the
 `MELLEA_PRICING_ENABLED` environment variable.
 
 `MELLEA_PRICING_ENABLED` tri-state:
-  - `"true"`  + litellm installed  → enabled
+  - `"true"`  + litellm importable → enabled
   - `"true"`  + litellm absent     → warning, disabled
   - `"false"` (any)                → disabled (silent)
-  - unset       + litellm installed  → enabled (auto)
-  - unset       + litellm absent     → disabled (silent)
+  - unset     + litellm importable → enabled (auto)
+  - unset     + litellm absent     → disabled (silent)
+
+If litellm is discoverable but fails to import (a skewed install), pricing is
+disabled on first use with a logged warning; it never raises into caller code.
 
 Pricing is only active when `MELLEA_METRICS_ENABLED` is also set.
 
 Custom pricing:
   Set `MELLEA_PRICING_FILE` to a JSON file using litellm's native per-token
-  schema. Minimal entries with only cost fields are supported::
+  schema. Minimal entries with only cost fields are supported:
 
       {
         "my-model": {
@@ -26,7 +29,6 @@ Custom pricing:
           "output_cost_per_token": 0.000015
         }
       }
-
   Optional cache fields: `cache_read_input_token_cost`,
   `cache_creation_input_token_cost`.
 
@@ -41,13 +43,16 @@ import logging
 import os
 import warnings
 from pathlib import Path
+from types import ModuleType
 
 logger = logging.getLogger(__name__)
 
 # Availability is probed without importing: `import litellm` costs ~1s and
 # transitively pulls in openai and pandas, which every `import mellea` would pay
-# even when pricing is disabled. The functions below import litellm at the point
-# of use, so the cost lands on the first priced request instead.
+# even when pricing is disabled. `find_spec` only proves a loader exists, so the
+# real import happens at the point of use via `_import_litellm`, which downgrades
+# to "pricing disabled" if the module fails to execute. Either way the cost lands
+# on the first priced request instead of on `import mellea`.
 _LITELLM_AVAILABLE = importlib.util.find_spec("litellm") is not None
 
 
@@ -59,8 +64,9 @@ def _resolve_pricing_enabled() -> bool:
         if _LITELLM_AVAILABLE:
             return True
         warnings.warn(
-            "MELLEA_PRICING_ENABLED=true but litellm is not installed — "
-            "pricing metrics disabled. Install with: pip install 'mellea[litellm]'",
+            "MELLEA_PRICING_ENABLED=true but litellm is not installed or could "
+            "not be imported — pricing metrics disabled. "
+            "Install with: pip install 'mellea[litellm]'",
             stacklevel=2,
         )
         return False
@@ -70,6 +76,38 @@ def _resolve_pricing_enabled() -> bool:
 _PRICING_ENABLED: bool = False
 
 _warned_models: set[str] = set()
+
+
+def _import_litellm() -> ModuleType | None:
+    """Import litellm, disabling pricing if the import fails.
+
+    `_LITELLM_AVAILABLE` is probed with `find_spec`, which proves only that a
+    loader exists — not that the module executes. A skewed install (mismatched
+    pydantic, half-installed openai, wrong native ABI) can raise almost anything
+    from litellm's module body, so every failure is treated as "no pricing"
+    rather than propagated: this is a best-effort telemetry path and
+    `compute_cost` is called from a fire-and-forget metrics hook.
+
+    Both `_LITELLM_AVAILABLE` and `_PRICING_ENABLED` are cleared on failure, so
+    the warning is emitted at most once per process.
+
+    Returns:
+        The imported `litellm` module, or `None` if it could not be imported.
+    """
+    global _LITELLM_AVAILABLE, _PRICING_ENABLED
+    try:
+        import litellm  # type: ignore[import-not-found]
+
+        return litellm
+    except Exception as exc:
+        logger.warning(
+            "litellm was discoverable but failed to import (%s: %s) — "
+            "pricing metrics disabled.",
+            type(exc).__name__,
+            exc,
+        )
+        _LITELLM_AVAILABLE = _PRICING_ENABLED = False
+        return None
 
 
 def _register_custom_pricing(path: str | Path) -> None:
@@ -88,7 +126,9 @@ def _register_custom_pricing(path: str | Path) -> None:
             "Custom pricing file %r must be a JSON object — skipping.", str(path)
         )
         return
-    import litellm  # type: ignore[import-not-found]
+    litellm = _import_litellm()
+    if litellm is None:
+        return
 
     try:
         litellm.register_model(data)
@@ -142,7 +182,9 @@ def compute_cost(
     if not _PRICING_ENABLED:
         return None
 
-    import litellm  # type: ignore[import-not-found]
+    litellm = _import_litellm()
+    if litellm is None:
+        return None
 
     try:
         prompt_cost, completion_cost = litellm.cost_per_token(
