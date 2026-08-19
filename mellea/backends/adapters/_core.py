@@ -429,6 +429,13 @@ class LocalFileBinding(WeightsBinding):
                         "instead."
                     )
 
+                # `add_adapter`'s duplicate-name check runs under only this
+                # binding's `_lifecycle_lock`, while `release()` pops the
+                # registry under the backend's `_generation_lock` — so a
+                # concurrent `release()` of a same-qualified-name binding can
+                # make this registration transiently refuse a name that is in
+                # fact free. Retryable; no shipped path registers two bindings
+                # of one capability concurrently (that is #1465's per-call case).
                 self._staged_backend.add_adapter(self)
                 # `add_adapter` signals success by setting `.backend`; it has early-return
                 # paths (notably: a different object already registered under this
@@ -441,7 +448,7 @@ class LocalFileBinding(WeightsBinding):
                     raise RuntimeError(
                         f"Backend refused to register adapter {self.qualified_name!r}; see "
                         "the backend's warning log — another adapter is already registered "
-                        "under this qualified name and has not been released."
+                        "under this qualified name."
                     )
             # `load_peft_adapter` mutates the backend's underlying PEFT model, the
             # same shared state `activate_peft_adapter`/`deactivate_peft_adapter`
@@ -544,10 +551,14 @@ class LocalFileBinding(WeightsBinding):
                 try:
                     backend.remove_adapter(self.qualified_name)
                 except NotImplementedError:
+                    # State the observable fact, not the presumed cause: a real
+                    # implementation can raise NotImplementedError internally, and
+                    # that would be misdiagnosed as "does not implement it".
                     MelleaLogger.get_logger().warning(
-                        f"{type(backend).__name__} does not implement remove_adapter(); "
-                        f"{self.qualified_name!r} stays registered for the backend's "
-                        "lifetime even though this binding has released."
+                        f"{type(backend).__name__}.remove_adapter() raised "
+                        f"NotImplementedError; {self.qualified_name!r} stays registered "
+                        "for the backend's lifetime even though this binding has "
+                        "released."
                     )
                 self.backend = None
                 self.path = None

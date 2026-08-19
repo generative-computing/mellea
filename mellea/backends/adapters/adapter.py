@@ -899,6 +899,14 @@ class AdapterMixin(Backend, abc.ABC):
         # mutating the dict while this loop holds a live `.values()` view would
         # raise "dictionary changed size during iteration"; iterating a list
         # copy instead is immune to a mutation of the underlying dict.
+        #
+        # The snapshot also means this lookup can still see an entry that
+        # `remove_adapter()` just popped — harmless today because a qualified
+        # name is held by either a `LocalFileBinding` or an `IntrinsicAdapter`
+        # shim (never both) and the generation path consumes only shims.
+        # `remove_adapter()` is public, though, so any registered entry — shim
+        # or binding — can be popped: re-check that invariant when #1465 moves
+        # generation inside `adapter_scope`.
         adapters = list(getattr(self, "_added_adapters", {}).values())
         if adapter_types is None:
             for a in adapters:

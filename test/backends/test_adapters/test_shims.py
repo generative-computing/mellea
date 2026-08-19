@@ -313,6 +313,40 @@ class _MutatingCapability:
         return hash("mutating-capability-sentinel")
 
 
+class _MutatingName:
+    """Capability-name sentinel whose `__str__` pops an entry from the
+    registry, simulating a concurrent `release()` mutating
+    `_added_adapters` while `resolve_adapter`'s collision scan builds
+    `f"{name}_"` on every iteration.
+
+    Companion to `_MutatingCapability` (which fires from a reflected
+    `str.__eq__` inside `_find_adapter`): the collision scan never compares
+    `name` with `==`, so the side effect hooks `__str__` instead — the
+    f-string build fires it from inside the scan, deterministically, with no
+    threading. `__add__` answers without firing: `Adapter.__init__` builds
+    `qualified_name` as `name + "_" + ...` during the lazy-registration
+    step, and the mutation must land in the scan, not in registration.
+    """
+
+    def __init__(self, registry: dict, key_to_remove: str, prefix: str) -> None:
+        self._registry = registry
+        self._key_to_remove = key_to_remove
+        self._prefix = prefix
+        self.fired = False
+
+    def __add__(self, other: str) -> str:
+        return self._prefix + other
+
+    def __str__(self) -> str:
+        if not self.fired:
+            self.fired = True
+            self._registry.pop(self._key_to_remove, None)
+        return self._prefix
+
+    def __repr__(self) -> str:
+        return f"_MutatingName({self._prefix!r})"
+
+
 def test_find_adapter_survives_concurrent_removal_during_iteration():
     """`_find_adapter` must not iterate a live view over `_added_adapters`.
 
@@ -337,6 +371,56 @@ def test_find_adapter_survives_concurrent_removal_during_iteration():
     assert capability.fired, "the mutation must have fired during iteration"
     assert result is None
     assert second.qualified_name not in registry
+
+
+def test_resolve_adapter_survives_concurrent_removal_during_iteration():
+    """`resolve_adapter`'s collision scan must not iterate a live view of `_added_adapters`.
+
+    Guards the `list(...)` snapshot with the same deterministic sentinel
+    pattern as
+    `test_find_adapter_survives_concurrent_removal_during_iteration`: the
+    pop fires from the scan's `f"{name}_"` build on the first (non-matching)
+    entry, so a live `.items()` view raises
+    `RuntimeError: dictionary changed size during iteration` when the scan
+    then advances, while the snapshot iterates on.
+    """
+    binding = LocalFileBinding(name="answerability", adapter_type=AdapterType.LORA)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        distractor = EmbeddedIntrinsicAdapter(
+            "uncertainty", config={}, technology="lora"
+        )
+
+    mock_backend = MagicMock(spec=AdapterMixin)
+    mock_backend.base_model_name = "ibm-granite/granite-4.1-3b"
+    mock_backend._uses_embedded_adapters = False
+    registry = {distractor.qualified_name: distractor, binding.qualified_name: binding}
+    mock_backend._added_adapters = registry
+    mock_backend._find_adapter.side_effect = lambda cap, types=None: (
+        AdapterMixin._find_adapter(mock_backend, cap, types)
+    )
+    # Nothing new lands in the registry: the binding keeps the name, exactly
+    # as the real duplicate-key guard would.
+    mock_backend.add_adapter.side_effect = lambda a: None
+
+    name = _MutatingName(registry, distractor.qualified_name, "answerability")
+    with (
+        patch(
+            "mellea.backends.adapters.adapter.fetch_intrinsic_metadata",
+            return_value=_MOCK_CATALOG_ENTRY,
+        ),
+        patch(
+            "mellea.backends.adapters.adapter.intrinsics.obtain_io_yaml",
+            return_value="/fake/adapter.yaml",
+        ),
+        patch("builtins.open", mock_open(read_data="key: value")),
+    ):
+        with pytest.raises(KeyError, match=r"LocalFileBinding.*answerability_lora"):
+            AdapterMixin.resolve_adapter(mock_backend, name)
+
+    assert name.fired, "the mutation must have fired during the collision scan"
+    assert distractor.qualified_name not in registry
+    assert binding.qualified_name in registry
 
 
 def test_resolve_adapter_names_the_conflict_when_a_binding_blocks_registration():

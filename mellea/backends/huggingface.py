@@ -2113,6 +2113,14 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         already-added no-op). If the adapter is not currently registered, a
         log message is emitted and the method returns without error.
 
+        For a `LocalFileBinding`, call `binding.release()` instead: it runs
+        this verb and also marks the binding released, so a later
+        `activate()`/`deactivate()` keeps working. Calling this method
+        directly on a registered binding clears only `.backend`/`.path` — the
+        binding's `_loaded`/`_released` state is untouched, so
+        `activate()`/`deactivate()` then raise the `prepare()`-required error
+        until `prepare()` is called again.
+
         Args:
             adapter_qualified_name (str): The `adapter.qualified_name` of the
                 adapter to deregister.

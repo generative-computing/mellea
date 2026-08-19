@@ -397,9 +397,8 @@ def test_remove_adapter_clears_backend_and_path_references():
     the registry entry.
 
     Regression guard: `add_adapter()` sets `.path` and `.backend = self` in
-    addition to inserting into `_added_adapters`
-    (mellea/backends/huggingface.py:2035-2037). A `remove_adapter()` that only
-    pops the dict entry leaves the removed object's `.backend` pointing at a
+    addition to inserting into `_added_adapters`. A `remove_adapter()` that
+    only pops the dict entry leaves the removed object's `.backend` pointing at a
     backend that no longer knows about it — bricking the object for
     re-registration anywhere (see the next test).
     """
@@ -421,9 +420,8 @@ def test_add_adapter_after_remove_adapter_allows_reregistering_the_same_object()
     """A removed adapter object, not just a fresh one, must be re-addable.
 
     Before `remove_adapter()` cleared `.backend`, re-adding the *same* object
-    hit the `adapter.backend is self` early-return in `add_adapter()`
-    (mellea/backends/huggingface.py:2012-2017) — a silent no-op, never
-    re-registered, with no exception raised.
+    hit the `adapter.backend is self` early-return in `add_adapter()` — a
+    silent no-op, never re-registered, with no exception raised.
     """
     backend = _make_backend()
     adapter = _make_intrinsic_adapter_stub()
@@ -442,8 +440,8 @@ def test_remove_adapter_raises_if_still_loaded():
     """remove_adapter() must refuse to free a name that is still loaded.
 
     `load_peft_adapter()` deliberately swallows PEFT's "Adapter with name X
-    already exists." (mellea/backends/huggingface.py:2068-2073) — safe only
-    because a qualified_name, once claimed, could never be reclaimed. Freeing
+    already exists." — safe only because a qualified_name, once claimed,
+    could never be reclaimed. Freeing
     the name while it is still loaded lets a later `load_peft_adapter()` call
     for a *different* adapter object hit that swallow and silently keep
     running on the old weights. `unload_peft_adapter()` (which `release()`

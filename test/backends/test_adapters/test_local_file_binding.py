@@ -32,11 +32,12 @@ def _fake_backend_with_registry():
     `remove_adapter` registration semantics, so tests can exercise the #1528
     re-registration contract without a real model.
 
-    Mirrors both of `LocalHFBackend.add_adapter`'s guards — the
-    `binding.backend is not None` early-return (huggingface.py:2012-2017), not
-    just the duplicate-qualified-name refusal — so a `remove_adapter()` that
-    forgot to clear `.backend`/`.path` would show up here as a re-registration
-    failure too, not just at the real-backend level.
+    Mirrors `LocalHFBackend.add_adapter`'s `binding.backend is not None`
+    early-return and its duplicate-qualified-name refusal — the real method's
+    cross-backend `raise Exception` outcome is folded into the early-return
+    no-op here — so a `remove_adapter()` that forgot to clear `.backend`/
+    `.path` would show up here as a re-registration failure too, not just at
+    the real-backend level.
     """
     backend = MagicMock()
     registry: dict[str, LocalFileBinding] = {}
@@ -447,7 +448,7 @@ def test_release_degrades_gracefully_when_backend_lacks_remove_adapter():
     `AdapterMixin.remove_adapter` defaults to `raise NotImplementedError`
     (mellea/backends/adapters/adapter.py). A backend supporting the
     LocalFile/PEFT reality (`unload_peft_adapter`, etc.) but not overriding
-    `remove_adapter` used to have `release()` propagate that exception
+    `remove_adapter` would have `release()` propagate that exception
     mid-teardown, leaving `_released` False forever — every retry just
     re-raised. `release()` must catch it, log, and finish releasing anyway
     (the qualified_name simply stays claimed for that backend's lifetime,
