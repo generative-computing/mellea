@@ -105,16 +105,17 @@ async def test_local_file_binding_full_lifecycle_against_real_model(backend):
         toks = backend._tokenizer("Is the sky blue?", return_tensors="pt").to(  # type: ignore[union-attr]
             backend._device  # type: ignore[union-attr]
         )
+        # No assertion on the raw output: `model.generate` returns the prompt
+        # plus completion, so any decode would be non-empty regardless, and
+        # generated content is out of scope per the module docstring.
         with torch.no_grad():
-            out_ids = backend._model.generate(**toks, max_new_tokens=8)  # type: ignore[union-attr]
+            backend._model.generate(**toks, max_new_tokens=8)  # type: ignore[union-attr]
 
         # Still inside the scope: the adapter must still be the one active
         # during generation, not just at scope-entry.
         assert binding.qualified_name in backend._model.active_adapters()  # type: ignore[union-attr]
-        value = backend._tokenizer.decode(out_ids[0], skip_special_tokens=True)  # type: ignore[union-attr]
 
     assert binding.qualified_name not in backend._model.active_adapters()  # type: ignore[union-attr]
-    assert value.strip()
 
     # Composition smoke test: generate_from_context() must still work once the
     # scope has exited (see module docstring — it does not exercise the
