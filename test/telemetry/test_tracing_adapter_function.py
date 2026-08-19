@@ -242,6 +242,9 @@ def test_finish_adapter_function_phase_span_no_op_when_not_in_flight(enabled_tra
     # unconditionally without double-closing a phase that completed normally.
     finish_adapter_function_phase_span("inv-6", "prepare")
 
+    # The no-op must leave the registry untouched, not merely avoid raising.
+    assert tracing._in_flight_spans == {}
+
 
 def test_finish_adapter_function_span_closes_dangling_phase_span(enabled_tracing):
     """A phase that raised (start fired, complete never did) is closed by the invocation's own finish."""

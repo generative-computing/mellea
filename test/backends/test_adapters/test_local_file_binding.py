@@ -497,7 +497,9 @@ def test_prepare_fires_phase_complete_metric_when_plugins_present():
     Four hook dispatches total: invocation_start, phase_start, phase_complete,
     invocation_complete — see `LocalFileBinding.prepare()`'s docstring for why
     `prepare()` opens its own single-phase invocation rather than relying on one
-    supplied by a caller.
+    supplied by a caller. A second, already-loaded `prepare()` adds no
+    dispatches: idempotent re-entry must not open a second invocation (the
+    check that gates on `_loaded` runs before any hook fires).
     """
     pytest.importorskip("cpex", reason="cpex not installed — install mellea[hooks]")
     backend = _fake_backend()
@@ -508,6 +510,7 @@ def test_prepare_fires_phase_complete_metric_when_plugins_present():
         patch("mellea.backends.adapters._core.has_plugins", return_value=True),
         patch("mellea.backends.adapters._core._run_async_in_thread") as mock_run,
     ):
+        binding.prepare()
         binding.prepare()
 
     assert mock_run.call_count == 4
