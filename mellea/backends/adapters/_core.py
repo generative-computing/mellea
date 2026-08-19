@@ -411,6 +411,9 @@ class LocalFileBinding(WeightsBinding):
         parent span, and guarantees the in-flight span registry drains even if
         `prepare()` raises (the invocation-complete hook always fires, in a
         `finally`, unlike the phase-complete hook, which only fires on success).
+        The hook dispatches run outside the `_lifecycle_lock` (see the body
+        comment for the deadlock rationale); the released/loaded checks and the
+        registration/load work each run under it.
 
         Raises:
             RuntimeError: `bind_backend()` was not called first, `name` is empty,
@@ -428,17 +431,27 @@ class LocalFileBinding(WeightsBinding):
             if self.backend is not None and self._loaded:
                 return
 
-            invocation_id = str(uuid.uuid4())
-            revision: str | None
-            try:
-                revision = self.resolved_revision()
-            except Exception:
-                revision = self.revision
-            self._fire_invocation_start(invocation_id, revision)
-            self._fire_phase_start(invocation_id, "prepare", revision)
+        # Every hook dispatch below blocks the caller on the shared background
+        # event loop (`_run_async_in_thread`), so they run outside
+        # `_lifecycle_lock` (a non-reentrant `threading.Lock`): a plugin handler
+        # that re-enters this binding's lifecycle from the background loop would
+        # otherwise deadlock against the lock this call still holds. The check
+        # above and the work below each run under the lock, so an already-loaded
+        # (or released) binding opens no invocation and fires no hooks, and a
+        # concurrent `release()` interleaving surfaces as the backend's
+        # "refused to register" error rather than as state corruption.
+        invocation_id = str(uuid.uuid4())
+        revision: str | None
+        try:
+            revision = self.resolved_revision()
+        except Exception:
+            revision = self.revision
+        self._fire_invocation_start(invocation_id, revision)
+        self._fire_phase_start(invocation_id, "prepare", revision)
 
-            error: BaseException | None = None
-            try:
+        error: BaseException | None = None
+        try:
+            with self._lifecycle_lock:
                 if self.backend is None:
                     if self._staged_backend is None:
                         raise RuntimeError(
@@ -476,21 +489,21 @@ class LocalFileBinding(WeightsBinding):
                 with self.backend._adapter_activation_lock():
                     self.backend.load_peft_adapter(self.qualified_name)
                 self._loaded = True
-            except BaseException as exc:
-                error = exc
-                raise
-            else:
-                # Fires before `_fire_invocation_complete` below so hook order
-                # matches `AdapterMixin.adapter_scope`'s (phase-complete, then
-                # invocation-complete) — firing this after the `with` block
-                # instead put it after invocation-complete, which made the
-                # dangling-child cleanup in `finish_adapter_function_span` the
-                # only path that ever closed `adapter_function.prepare`'s span.
-                self._fire_phase_complete(
-                    "prepare", time.monotonic() - started_at, invocation_id
-                )
-            finally:
-                self._fire_invocation_complete(invocation_id, revision, error)
+        except BaseException as exc:
+            error = exc
+            raise
+        else:
+            # Fires before `_fire_invocation_complete` below so hook order
+            # matches `AdapterMixin.adapter_scope`'s (phase-complete, then
+            # invocation-complete) — firing this after the `with` block
+            # instead put it after invocation-complete, which made the
+            # dangling-child cleanup in `finish_adapter_function_span` the
+            # only path that ever closed `adapter_function.prepare`'s span.
+            self._fire_phase_complete(
+                "prepare", time.monotonic() - started_at, invocation_id
+            )
+        finally:
+            self._fire_invocation_complete(invocation_id, revision, error)
 
     def activate(self) -> None:
         """Selects already-loaded adapter weights for generation.
