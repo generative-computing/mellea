@@ -679,6 +679,9 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             intrinsic output.
 
         Raises:
+            NotImplementedError: If the context isn't a chat context, or if
+                streaming is requested (intrinsic post-processing requires
+                the complete response).
             ValueError: If no embedded adapter is registered for the requested
                 intrinsic.
             TypeError: If the adapter isn't an EmbeddedIntrinsicAdapter, or its

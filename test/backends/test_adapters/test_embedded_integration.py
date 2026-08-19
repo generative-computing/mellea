@@ -18,7 +18,7 @@ from openai.types.chat import ChatCompletion, ChatCompletionMessage
 from openai.types.chat.chat_completion import Choice
 from openai.types.completion_usage import CompletionUsage
 
-from mellea.backends.adapters._core import EmbeddedBinding
+from mellea.backends.adapters import EmbeddedBinding, ServerMediatedBinding
 from mellea.backends.adapters.adapter import EmbeddedIntrinsicAdapter
 from mellea.backends.openai import OpenAIBackend
 from mellea.stdlib import functional as mfuncs
@@ -76,6 +76,9 @@ async def test_activation_goes_through_embedded_binding(technology):
     backend = _backend_with_adapter(technology)
     adapter = backend._added_adapters[f"answerability_{technology}"]
     assert isinstance(adapter.weights, EmbeddedBinding)
+    # add_adapter stamps the registration-time source (openai.py), distinct
+    # from the from_base_model() classmethod covered in test_embedded_binding.py.
+    assert adapter.weights.source == "granite-switch"
 
     mock_create = AsyncMock(return_value=_chat_completion())
     mock_client = MagicMock()
@@ -111,3 +114,19 @@ async def test_activation_goes_through_embedded_binding(technology):
         "answerability"
     )
     assert call_kwargs["model"] == "granite-switch"
+
+
+async def test_reassigned_weights_fail_loudly():
+    """Reassigning `.weights` off the EmbeddedBinding must fail at generation.
+
+    The shim permits attribute mutation, so a caller reassigning `.weights`
+    after construction must hit the explicit TypeError rather than silently
+    skipping activation and sending an unactivated request (issue #1142).
+    """
+    backend = _backend_with_adapter("alora")
+    adapter = backend._added_adapters["answerability_alora"]
+    adapter.weights = ServerMediatedBinding()
+
+    ctx = ChatContext().add(Message("user", "What is the square root of 4?"))
+    with pytest.raises(TypeError, match=r"weights must be an EmbeddedBinding"):
+        await mfuncs.aact(Intrinsic("answerability"), ctx, backend, strategy=None)
