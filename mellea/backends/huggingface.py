@@ -606,10 +606,17 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         `ADAPTER_FUNCTION_INVOCATION_COMPLETE` hooks (`phase="activate"` and
         `"deactivate"` only — `"generate"`/`"parse"` are not emitted; adding
         those is out of scope here, see #1466), and deactivation is guaranteed
-        even if `generate_func` raises. Those hooks dispatch synchronously
-        (`_run_async_in_thread`, no timeout) while `_generation_lock` is held
-        below, so a blocking-mode `ADAPTER_FUNCTION_*` subscriber stalls
-        generation on this backend for its duration.
+        even if `generate_func` raises. Those hooks dispatch while
+        `_generation_lock` is held below: the dispatching call blocks this
+        thread with no timeout, and the hook coroutines run on the shared
+        `_EventLoopHandler` event-loop thread, so an `ADAPTER_FUNCTION_*`
+        subscriber that re-enters any `_generation_lock`-holding path (any
+        generation call or adapter activation on this backend) blocks the
+        event-loop thread while this one waits on it — a cross-thread deadlock
+        the `RLock` cannot prevent, since reentrance only helps the owning
+        thread. `ADAPTER_FUNCTION_*` subscribers must therefore be non-blocking
+        and must never re-enter this backend; a merely slow subscriber stalls
+        all generation on this backend for its duration.
 
         `IntrinsicAdapter` (the legacy shim `adapter` is expected to be) carries
         an inert `_ShimWeightsBinding` that raises on every verb, so it can't be
@@ -626,9 +633,10 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         concurrent caller's `activate()` can never interleave with this call's
         generation — the atomicity gap `adapter_scope()`'s own docstring flags
         as unresolved for a caller that doesn't do this. Safe here because each
-        invocation of this method runs entirely on one thread (this method is
-        only ever invoked via a single `asyncio.to_thread` call — see its call
-        site in `_generate_from_intrinsic`) and never re-enters generation on
+        invocation of this method runs entirely on one thread (in production it
+        is only ever invoked via a single `asyncio.to_thread` call — see its
+        call site in `_generate_from_intrinsic`; the unit tests call it
+        directly, also single-threaded) and never re-enters generation on
         another thread: the inner re-acquisition of `_generation_lock` inside
         `adapter_scope()`'s `activate()`/`deactivate()` (via
         `_adapter_activation_lock()`) is therefore same-thread and reentrant.
@@ -2236,20 +2244,24 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
            (for the standard, non-intrinsic generation path).
         2. `LocalFileBinding.activate()`/`.deactivate()` (driven by
            `AdapterMixin.adapter_scope()`), which holds no lock of its own.
-        3. `_generate_intrinsic_with_adapter_scope`, which also holds
-           `_generation_lock` itself, for the whole activate -> generate ->
-           deactivate section — and calls into caller 2's path via
-           `adapter_scope()` from inside that section (#1465).
+        3. `_IntrinsicPeftBinding.activate()`/`.deactivate()` (driven by
+           `_generate_intrinsic_with_adapter_scope` via
+           `AdapterMixin.adapter_scope()`), the intrinsic-path counterpart of
+           caller 2's `LocalFileBinding` — whose driver also holds
+           `_generation_lock` itself for the whole activate -> generate ->
+           deactivate section (#1465), so those verb acquisitions nest
+           same-thread inside that outer hold.
 
-        This method exists for caller 2 — so it is not a duplicate of the lock
-        callers 1 and 3 take, it is the only thing satisfying the precondition
-        on that path.
+        This method exists for callers 2 and 3 — so it is not a duplicate of
+        the lock caller 1 (and, on the outer level, caller 3's driver) takes,
+        it is the only thing satisfying the precondition on those paths.
 
-        Caller 3 nests inside caller 2's lock acquisition on the same thread
-        (see `_generate_intrinsic_with_adapter_scope`'s docstring), which is
-        exactly why `_generation_lock` is a `threading.RLock`: a plain
-        `threading.Lock` would deadlock on that same-thread re-acquisition
-        (this was #1465's known lock-reentrancy issue).
+        Caller 3's verb acquisitions nest inside its driver's `_generation_lock`
+        hold on the same thread (see `_generate_intrinsic_with_adapter_scope`'s
+        docstring), which is exactly why `_generation_lock` is a
+        `threading.RLock`: a plain `threading.Lock` would deadlock on that
+        same-thread re-acquisition (this was #1465's known lock-reentrancy
+        issue).
         """
         return self._generation_lock
 

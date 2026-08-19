@@ -735,10 +735,17 @@ class AdapterMixin(Backend, abc.ABC):
         This method fires hooks only; it does not open spans. Span production is a
         plugin's job (see #1464 for the rule and #1466 for the adapter-function
         spans), and the `ADAPTER_FUNCTION_*` family currently has no start hook for
-        a plugin to open a span on. Hook dispatch (`_run_async_in_thread`, no
-        timeout) runs synchronously on the calling thread, so a slow or
-        blocking-mode `ADAPTER_FUNCTION_*` subscriber delays whatever holds this
-        scope open.
+        a plugin to open a span on. Hook dispatch goes through
+        `_run_async_in_thread` (no timeout): the dispatching call blocks the
+        calling thread, but the hook coroutine itself runs on the shared
+        `_EventLoopHandler` event-loop thread. A subscriber that blocks on
+        something the dispatching thread is holding deadlocks rather than
+        merely stalls — e.g. on `LocalHFBackend`, an intrinsic caller holds
+        `_generation_lock` across the whole scope, so a subscriber that
+        re-enters any `_generation_lock` path blocks the event-loop thread
+        while its owner waits on that same event loop, and reentrance cannot
+        bridge the gap. Even without such re-entry, a slow or blocking-mode
+        `ADAPTER_FUNCTION_*` subscriber delays whatever holds this scope open.
 
         `deactivate()` is guarded on `activate()`'s own side effect having
         completed, not on the activate phase's hook dispatch also succeeding.
