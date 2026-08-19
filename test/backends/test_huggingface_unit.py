@@ -4,6 +4,8 @@
 """Unit tests for HuggingFace backend pure-logic helpers — no model load required."""
 
 import asyncio
+import gc
+import weakref
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -1392,4 +1394,115 @@ async def test_whitespace_pattern_cannot_be_defeated_by_schema():
         )
         assert captured[0].get("whitespace_pattern") == r"[\x20\x0A\x0D\x09]{0,20}", (
             f"Expected bounded whitespace_pattern to override False in {path_name}"
+        )
+
+
+async def _post_process_holding_only_weakrefs(
+    backend: LocalHFBackend, n_steps: int
+) -> tuple[ModelOutputThunk, dict[str, list["weakref.ref"]]]:
+    """Run post_processing on a MOT and return weakrefs to the raw tensors it cleared.
+
+    Builds a `GenerateDecoderOnlyOutput` whose `scores`, `logits`, and
+    `past_key_values` hold fresh tensors, takes weakrefs to those tensors, then
+    drops every strong local reference so the only remaining strong references
+    are the ones the `ModelOutput` mapping keeps. After `post_processing` clears
+    the fields, a correct clear drops the mapping entries and the weakrefs die on
+    the next GC; the buggy attribute-set/`del` leaves them alive.
+
+    Args:
+        backend: The backend whose `post_processing` is exercised.
+        n_steps: Number of decode steps (length of the scores/logits tuples).
+
+    Returns:
+        The finalized thunk and a dict mapping field name to the list of
+        weakrefs (one per step) to the tensors that field held.
+    """
+    input_ids = torch.tensor([[1]])
+    sequences = torch.tensor([[0, 0]])
+    scores = tuple(torch.zeros(1, 32000) for _ in range(n_steps))
+    logits = tuple(torch.ones(1, 32000) for _ in range(n_steps))
+    kv = tuple(torch.zeros(2, 4) for _ in range(n_steps))
+
+    refs: dict[str, list[weakref.ref]] = {
+        "scores": [weakref.ref(t) for t in scores],
+        "logits": [weakref.ref(t) for t in logits],
+        "past_key_values": [weakref.ref(t) for t in kv],
+    }
+
+    mot = ModelOutputThunk(value="hi")
+    mot._call.action = Message("user", "noop")
+    mot._call.model_options = {}
+    mot.raw.response = GenerateDecoderOnlyOutput(
+        sequences=sequences,
+        scores=scores,
+        logits=logits,
+        attentions=None,
+        hidden_states=None,
+        past_key_values=kv,
+    )
+
+    # Drop every strong local reference to the tensors and their tuples. After
+    # this, the ModelOutput mapping is the only thing keeping them alive.
+    del scores, logits, kv
+
+    await backend.post_processing(mot, [], None, False, {}, None, input_ids)
+
+    return mot, refs
+
+
+@pytest.mark.asyncio
+async def test_post_processing_clearing_raw_logits_actually_releases_them():
+    """Clearing `hf_output.logits` must drop the tensors, not just the attribute.
+
+    `GenerateDecoderOnlyOutput` is a `ModelOutput`, i.e. an `OrderedDict` subclass
+    that mirrors every field into the mapping. `ModelOutput.__setattr__` skips the
+    mapping write when the value is `None`, and `ModelOutput` defines no
+    `__delattr__`, so `out.logits = None` and `del out.logits` both leave the
+    mapping entry — and therefore the tensors — in place. Any code that nulls a
+    field to free memory while keeping the container has to clear the mapping too.
+    """
+    backend = _make_backend(1)
+    backend._use_caches = True  # keeps raw.response, so the container survives
+
+    mot, refs = await _post_process_holding_only_weakrefs(backend, n_steps=2)
+    gc.collect()
+    gc.collect()
+
+    assert mot.raw.response is not None, "test setup: raw.response should be retained"
+    assert mot.raw.response.logits is None, "test setup: logits attribute was cleared"
+    for step, ref in enumerate(refs["logits"]):
+        assert ref() is None, (
+            f"raw logits tensor for step {step} is still alive after hf_output.logits "
+            "was set to None — the ModelOutput mapping entry still references it"
+        )
+
+
+@pytest.mark.asyncio
+async def test_post_processing_clearing_scores_and_kv_actually_releases_them():
+    """The caching branch clears `scores`/`past_key_values` off the MOT.
+
+    Those tensors are retained in the LRU cache, so nulling the fields on the
+    `ModelOutput` must actually release the container's strong reference (via the
+    mapping), otherwise the KV cache is held twice — once in the LRU and once on
+    the MOT — defeating the cleanup.
+    """
+    backend = _make_backend(1)
+    backend._use_caches = True
+
+    mot, refs = await _post_process_holding_only_weakrefs(backend, n_steps=2)
+    gc.collect()
+    gc.collect()
+
+    assert mot.raw.response is not None, "test setup: raw.response should be retained"
+    assert mot.raw.response.scores is None, "test setup: scores attribute was cleared"
+    assert mot.raw.response.past_key_values is None, (
+        "test setup: past_key_values attribute was cleared"
+    )
+    # With the default zero-capacity LRU, cache_put evicts immediately, so the
+    # MOT's ModelOutput mapping is the only thing that could keep the scores
+    # tensors alive; clearing the field through the mapping must release them.
+    for step, ref in enumerate(refs["scores"]):
+        assert ref() is None, (
+            f"raw scores tensor for step {step} is still alive after hf_output.scores "
+            "was set to None — the ModelOutput mapping entry still references it"
         )

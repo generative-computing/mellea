@@ -1519,12 +1519,16 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             self.cache_put(cache_key, cache_info)
 
             # Clear KV cache and scores from HF output; retained via LRU cache above.
-            hf_output.past_key_values = None
-            hf_output.scores = None
+            # ModelOutput mirrors fields into an OrderedDict mapping; assigning the
+            # attribute to None only clears the __dict__ slot and leaves the mapping
+            # entry (and its tensor) alive, so clear through the mapping instead.
+            hf_output["past_key_values"] = None
+            hf_output["scores"] = None
 
         # Clear the raw logits tensor (scores already cleared above if cached).
+        # Route through the mapping for the same reason as above.
         if isinstance(hf_output, GenerateDecoderOnlyOutput):
-            hf_output.logits = None
+            hf_output["logits"] = None
 
         # Only scan for tools if we are not doing structured output and tool calls were provided to the model.
         if _format is None and tool_calls:
@@ -1605,12 +1609,16 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             import gc
 
             hf_out = mot.raw.response
-            if hasattr(hf_out, "sequences") and hf_out.sequences is not None:
-                del hf_out.sequences
-            if hasattr(hf_out, "scores") and hf_out.scores is not None:
-                del hf_out.scores
-            if hasattr(hf_out, "logits") and hf_out.logits is not None:
-                del hf_out.logits
+            # ModelOutput has no __delattr__ and its __setattr__ skips the mapping
+            # write for None, so `del hf_out.f` / `hf_out.f = None` leave the mapping
+            # entry (and its tensor) alive. Clear through the mapping to actually
+            # release the tensors before dropping the container.
+            if hf_out.sequences is not None:
+                hf_out["sequences"] = None
+            if hf_out.scores is not None:
+                hf_out["scores"] = None
+            if hf_out.logits is not None:
+                hf_out["logits"] = None
             mot.raw.response = None
 
             # Force Python GC and return CUDA memory to device
