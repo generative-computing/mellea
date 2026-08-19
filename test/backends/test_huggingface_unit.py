@@ -529,7 +529,7 @@ def test_generate_intrinsic_with_adapter_scope_deactivates_on_error():
     backend._model.set_adapter.assert_any_call([])  # type: ignore[attr-defined]
 
 
-def test_generate_intrinsic_with_adapter_scope_error_hook_payload():
+def test_generate_intrinsic_with_adapter_scope_reports_error_outcome_in_hook_payload():
     """A failed intrinsic generation reports `outcome="error"` with both phase events.
 
     The `AdapterMixin.adapter_scope` contract for a failing body is pinned
@@ -569,7 +569,7 @@ def test_generate_intrinsic_with_adapter_scope_error_hook_payload():
     assert backend._model.active_adapters() == []
 
 
-def test_generate_intrinsic_with_adapter_scope_prepare_failure_no_hooks():
+def test_generate_intrinsic_with_adapter_scope_fires_no_hooks_on_prepare_failure():
     """A `load_peft_adapter` failure happens before `adapter_scope()` is entered.
 
     So no adapter hooks fire at all, activation state is unchanged, and the
