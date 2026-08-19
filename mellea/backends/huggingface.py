@@ -2114,12 +2114,16 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         log message is emitted and the method returns without error.
 
         For a `LocalFileBinding`, call `binding.release()` instead: it runs
-        this verb and also marks the binding released, so a later
-        `activate()`/`deactivate()` keeps working. Calling this method
-        directly on a registered binding clears only `.backend`/`.path` — the
-        binding's `_loaded`/`_released` state is untouched, so
-        `activate()`/`deactivate()` then raise the `prepare()`-required error
-        until `prepare()` is called again.
+        this verb and also marks the binding released, so the binding's
+        lifecycle state stays coherent with the registry. Calling this
+        method directly on a registered binding clears only `.backend`/
+        `.path` — the binding's `_loaded`/`_released` state is untouched, so
+        a later `activate()`/`deactivate()` raises the `prepare()`-required
+        error even though the binding was never released, and the real
+        cause (an external `remove_adapter()`) is nowhere in the message.
+        `prepare()` self-heals that state (re-registers via the staged
+        backend and reloads), but `release()` is the intended way to free
+        the name.
 
         Args:
             adapter_qualified_name (str): The `adapter.qualified_name` of the
