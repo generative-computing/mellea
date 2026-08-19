@@ -287,7 +287,8 @@ a phase that didn't finish contributes no duration sample) — the enclosing
 invocation's own close defensively ends that child span with `ERROR` status
 instead, so the in-flight span registry still drains to zero.
 
-**Nesting is unconditional, unlike every other span pair in this document.**
+**Nesting is unconditional across Python versions, unlike every other span
+pair in this document, with one edge exception.**
 Every other family nests via ambient OTel context attach, which needs
 Python 3.12+ (see the note under "Span hierarchy" below) — `adapter_function`
 children instead parent explicitly via `trace.set_span_in_context`, because
@@ -296,7 +297,11 @@ children instead parent explicitly via `trace.set_span_in_context`, because
 ambient attach can't establish a parent/child edge at all (each dispatched
 hook call gets an independent `contextvars` snapshot of the calling thread).
 So `adapter_function.<phase>` nests under `adapter_function` the same way on
-Python 3.11 and 3.12+.
+Python 3.11 and 3.12+. The edge exception is not version-related: every
+firing site swallows a failed dispatch (an observability failure must never
+block the operation it observes), so if an invocation's *start* dispatch
+fails, its parent span never opens and that invocation's phase spans open
+unparented, falling back to whatever ambient context exists.
 
 **Known gap: no exemplar linkage to `mellea.adapter_function.phase_duration`.**
 Because no span in this family is attached as ambient context (see above), the

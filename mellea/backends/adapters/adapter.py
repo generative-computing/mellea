@@ -455,6 +455,11 @@ def _fire_invocation_start_hook(
 ) -> None:
     """Fire the `adapter_function_invocation_start` hook.
 
+    Unlike `_fire_phase_start_hook`, neither the payload construction nor the
+    dispatch is guarded here: a failure escapes to the call site, which must
+    wrap the call in `try`/`except` if the operation must not be blocked (see
+    `adapter_scope`).
+
     Args:
         invocation_id: Correlation id shared with the matching
             `_fire_invocation_complete` call.
@@ -489,6 +494,11 @@ def _fire_invocation_complete(
     error: BaseException | None,
 ) -> None:
     """Fire the `adapter_function_invocation_complete` metric hook.
+
+    Payload construction is unguarded here, as in
+    `_fire_invocation_start_hook`: the call site carries the `try`/`except` —
+    a complete-hook failure must be logged and swallowed, never mask the real
+    outcome (see `adapter_scope`).
 
     Args:
         invocation_id: Correlation id shared with the matching
