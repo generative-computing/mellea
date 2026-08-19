@@ -229,13 +229,15 @@ Output format is task-specific — `requirement-check` returns `{"requirement_ch
 
 ## Composable adapter construction (advanced)
 
-> **Advanced:** `Adapter` composes an `Identity`, an `IOContract`, and a weights
-> binding into a single, inspectable object. It's scaffolding for a future
-> backend-integration surface (Epic #929) — today, `LocalHFBackend.add_adapter`
-> and `OpenAIBackend.add_adapter` accept a weights binding or a shim class
-> directly, not a composed `Adapter`. The construction below is illustrative
-> of the binding shapes; write a new backend integration against the bindings
-> themselves.
+> **Advanced:** `Adapter` composes an `Identity`, an `IOContract`, and a
+> weights binding into a single, inspectable object. It's scaffolding for a
+> future backend-integration surface (Epic #929) — today, neither backend
+> accepts a composed `Adapter` directly: `LocalHFBackend.add_adapter` takes a
+> `LocalFileBinding` or the `LocalHFAdapter` shim, while
+> `OpenAIBackend.add_adapter` takes only the deprecated
+> `EmbeddedIntrinsicAdapter` shim, which builds an `EmbeddedBinding`
+> internally. The construction below is illustrative of the binding shapes;
+> write a new backend integration against the bindings themselves.
 
 Each weights binding models how its deployment turns an adapter on.
 `LocalFileBinding` downloads and loads LoRA/aLoRA weights, so it exposes a
@@ -264,8 +266,10 @@ hf_backend = LocalHFBackend(model_id="ibm-granite/granite-4.1-3b")
 hf_binding = LocalFileBinding.from_catalog("answerability")
 hf_binding.bind_backend(hf_backend)
 # hf_binding.prepare() downloads the weights and loads them into hf_backend.
+# adapter_type must match the binding — from_catalog loads the first
+# catalog-listed adapter type, which is LoRA for answerability.
 hf_adapter = Adapter(
-    identity=Identity(name="answerability", adapter_type="alora"),
+    identity=Identity(name="answerability", adapter_type="lora"),
     io_contract=AnswerabilityContract(),
     weights=hf_binding,
 )
@@ -277,7 +281,9 @@ that edits the outgoing request instead of a lifecycle:
 
 ```python
 switch_backend = OpenAIBackend(
-    model_id="granite-switch", base_url="http://localhost:8000/v1"
+    model_id="granite-switch",
+    api_key="EMPTY",
+    base_url="http://localhost:8000/v1",
 )
 switch_adapter = Adapter(
     identity=Identity(name="answerability", adapter_type="alora"),
