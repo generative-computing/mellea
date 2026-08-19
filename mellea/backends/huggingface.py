@@ -463,7 +463,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
         Reentrant (`threading.RLock`, not `threading.Lock`) because
         `_generate_intrinsic_with_adapter_scope` holds it for a whole
-        activate -> generate -> deactivate critical section, and
+        prepare -> activate -> generate -> deactivate critical section, and
         `adapter_scope()`'s `activate()`/`deactivate()` re-acquire it from
         inside that section, on the same thread, via `_adapter_activation_lock()`.
         A plain `Lock` deadlocks on that same-thread re-acquisition (#1465).
@@ -607,16 +607,17 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         `"deactivate"` only — `"generate"`/`"parse"` are not emitted; adding
         those is out of scope here, see #1466), and deactivation is guaranteed
         even if `generate_func` raises. Those hooks dispatch while
-        `_generation_lock` is held below: the dispatching call blocks this
-        thread with no timeout, and the hook coroutines run on the shared
-        `_EventLoopHandler` event-loop thread, so an `ADAPTER_FUNCTION_*`
-        subscriber that re-enters any `_generation_lock`-holding path (any
-        generation call or adapter activation on this backend) blocks the
-        event-loop thread while this one waits on it — a cross-thread deadlock
-        the `RLock` cannot prevent, since reentrance only helps the owning
-        thread. `ADAPTER_FUNCTION_*` subscribers must therefore be non-blocking
-        and must never re-enter this backend; a merely slow subscriber stalls
-        all generation on this backend for its duration.
+        `_generation_lock` is held below — see `adapter_scope()`'s
+        hook-dispatch paragraph for the mechanism (blocked call, no timeout,
+        hook coroutines on the shared event-loop thread) — so an
+        `ADAPTER_FUNCTION_*` subscriber that re-enters any
+        `_generation_lock`-holding path (any generation call or adapter
+        activation on this backend) deadlocks this backend rather than merely
+        stalling it (the `RLock` cannot bridge the gap: reentrance only helps
+        the owning thread), and a merely slow subscriber stalls all generation
+        on this backend for that dispatch's duration. `ADAPTER_FUNCTION_*`
+        subscribers must therefore be non-blocking and must never re-enter
+        this backend.
 
         `IntrinsicAdapter` (the legacy shim `adapter` is expected to be) carries
         an inert `_ShimWeightsBinding` that raises on every verb, so it can't be
@@ -2248,20 +2249,19 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
            `_generate_intrinsic_with_adapter_scope` via
            `AdapterMixin.adapter_scope()`), the intrinsic-path counterpart of
            caller 2's `LocalFileBinding` — whose driver also holds
-           `_generation_lock` itself for the whole activate -> generate ->
-           deactivate section (#1465), so those verb acquisitions nest
-           same-thread inside that outer hold.
+           `_generation_lock` itself for the whole prepare -> activate ->
+           generate -> deactivate section (#1465).
 
         This method exists for callers 2 and 3 — so it is not a duplicate of
         the lock caller 1 (and, on the outer level, caller 3's driver) takes,
         it is the only thing satisfying the precondition on those paths.
 
-        Caller 3's verb acquisitions nest inside its driver's `_generation_lock`
-        hold on the same thread (see `_generate_intrinsic_with_adapter_scope`'s
-        docstring), which is exactly why `_generation_lock` is a
-        `threading.RLock`: a plain `threading.Lock` would deadlock on that
-        same-thread re-acquisition (this was #1465's known lock-reentrancy
-        issue).
+        Caller 3's verb acquisitions therefore nest inside its driver's
+        `_generation_lock` hold on the same thread (see
+        `_generate_intrinsic_with_adapter_scope`'s docstring), which is
+        exactly why `_generation_lock` is a `threading.RLock`: a plain
+        `threading.Lock` would deadlock on that same-thread re-acquisition
+        (this was #1465's known lock-reentrancy issue).
         """
         return self._generation_lock
 

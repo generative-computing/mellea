@@ -768,10 +768,13 @@ class AdapterMixin(Backend, abc.ABC):
         `LocalHFBackend._generate_intrinsic_with_adapter_scope` is the reference
         example of a caller that *does* close the gap for its own call site: it
         holds `_generation_lock` around the entire scope, which is safe there
-        only because each invocation is fully synchronous end to end and never
-        re-enters the event loop — concurrent invocations simply land on
-        different threads and serialise on the lock, rather than one thread
-        holding it while another does async work on the loop. A caller whose
+        only because the scope *body* is fully synchronous end to end and
+        does no async generation work on the event loop (its only loop
+        traffic during the scope is the hook dispatches described above —
+        one-way submissions, not re-entry into this backend) — concurrent
+        invocations simply land on different threads and serialise on the
+        lock, rather than one thread holding it while another does async work
+        on the loop. A caller whose
         body awaits work that re-enters generation on another thread must not
         widen a lock this way — that reproduces the deadlock above.
 
