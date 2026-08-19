@@ -1438,7 +1438,10 @@ async def _post_process_holding_only_weakrefs(
         logits=logits,
         attentions=None,
         hidden_states=None,
-        past_key_values=kv,
+        # past_key_values is typed Cache | None, but ModelOutput stores whatever
+        # it is handed in its mapping; a tuple of tensors is all this fixture needs
+        # to exercise the clearing path.
+        past_key_values=kv,  # type: ignore[arg-type]
     )
 
     # Drop every strong local reference to the tensors and their tuples. After
