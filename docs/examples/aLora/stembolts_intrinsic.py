@@ -39,7 +39,7 @@ class StemboltIntrinsic(Intrinsic):
 async def async_stembolt_failure_analysis(
     notes: str, ctx: Context, backend: Backend | AdapterMixin
 ):
-    # Backend.add_adapter should be idempotent, but we'll go ahead and check just in case.
+    # add_adapter() refuses a duplicate qualified name with a warning, so guard first.
     adapter = StemboltAdapter(backend.base_model_name)
     if adapter.qualified_name not in backend.list_adapters():
         backend.add_adapter(adapter)
@@ -54,7 +54,7 @@ async def async_stembolt_failure_analysis(
 def stembolt_failure_analysis(
     notes: str, ctx: Context, backend: Backend | AdapterMixin
 ):
-    # Backend.add_adapter should be idempotent, but we'll go ahead and check just in case.
+    # add_adapter() refuses a duplicate qualified name with a warning, so guard first.
     adapter = StemboltAdapter(backend.base_model_name)
     if adapter.qualified_name not in backend.list_adapters():
         backend.add_adapter(adapter)

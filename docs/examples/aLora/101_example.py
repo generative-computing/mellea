@@ -31,14 +31,15 @@ backend = LocalHFBackend(model_id=model_ids.IBM_GRANITE_4_1_3B, cache=SimpleLRUC
 m = MelleaSession(backend=backend, ctx=ChatContext())
 
 # Register the aLoRA variant of the catalog's requirement-check adapter. Without
-# this, ALoraRequirement logs a warning, falls back to regular generation, and
-# then fails: the fallback prompt asks for a plain "yes"/"no", but
-# ALoraRequirement always parses results as JSON via requirement_check_to_bool,
-# so it raises json.JSONDecodeError on that fallback output. The ALORA type is
-# also load-bearing here: routing only looks up ("alora",), so registering the
-# LORA variant instead would hit the same failure.
+# this, ALoraRequirement logs a warning and falls back to regular generation,
+# whose prompt asks for a plain "yes"/"no" answer — but the result is still
+# parsed as JSON by requirement_check_to_bool, so a plain yes/no reply fails
+# validation in practice (a JSON reply that doesn't match the schema instead
+# raises AdapterSchemaMismatchError). The ALORA type is also load-bearing here:
+# routing only looks up ("alora",), so registering the LORA variant instead
+# would hit the same failure.
 backend.add_adapter(
-    IntrinsicAdapter(  # emits a DeprecationWarning -- see module docstring, #1144
+    IntrinsicAdapter(  # emits a DeprecationWarning — see module docstring, #1144
         "requirement-check",
         adapter_type=AdapterType.ALORA,
         base_model_name=backend.base_model_name,
@@ -48,7 +49,7 @@ backend.add_adapter(
 description = "The summary must mention the suspected cause of failure."
 
 # define a requirement
-failure_check = ALoraRequirement(description)
+alora_check = ALoraRequirement(description)
 
 res = m.instruct(
     "Write a triage summary based on this technician note: Oil seepage around "
@@ -100,13 +101,13 @@ llmaj_check = LLMaJRequirement(description)
 # aLoRA adapter pays a one-time PEFT weight-load cost that has nothing to do with
 # per-call latency; the LLM-as-judge call has no such cost, but gets a warm-up too
 # so both measurements below are on equal footing.
-m.validate([failure_check])
+m.validate([alora_check])
 m.validate([llmaj_check])
 
 # ALoraRequirement always routes through the registered aLoRA adapter.
-computetime_alora, _ = validate_reqs([failure_check], "aLoRA")
+computetime_alora, _ = validate_reqs([alora_check], "aLoRA")
 
-# LLMaJRequirement always bypasses adapters, regardless of what's registered --
+# LLMaJRequirement always bypasses adapters, regardless of what's registered —
 # the only way to get a genuine no-adapter timing comparison for the same check.
 computetime_llmaj, _ = validate_reqs([llmaj_check], "LLM-as-judge")
 
@@ -114,7 +115,7 @@ print(f"aLoRA validation:        {computetime_alora:.3f}s")
 print(f"LLM-as-judge validation: {computetime_llmaj:.3f}s")
 print(
     "NOTE: whichever way these numbers land, they are not measuring aLoRA's "
-    "architectural advantage -- reusing an already-computed KV cache instead of "
+    "architectural advantage — reusing an already-computed KV cache instead of "
     "recomputing the context under adapter-modified weights. `generate_from_context` "
     "never routes through that KV-cache-reuse path (`_generate_from_context_with_kv_cache`; "
     "reachable today only by calling it directly, see `docs/kv_smash/hf_example.py`), so "
