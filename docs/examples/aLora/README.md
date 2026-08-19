@@ -84,7 +84,7 @@ m alora add-readme \
     stembolt_failure_dataset.jsonl
 ```
 
-The generator will display the README and ask for confirmation before uploading it to your Hugging Face repo. You can also call the generator programmatically from Python -- see `example_readme_generator.py` for an example.
+The generator will display the README and ask for confirmation before uploading it to your Hugging Face repo. You can also call the generator programmatically from Python — see `example_readme_generator.py` for an example.
 
 ## Using Adapter Functions
 
@@ -128,8 +128,8 @@ Demonstrates:
 - Timing both validation paths
 
 ### 102_example.py
-Interactive, stdin-driven loop that exercises the custom `stembolts` adapter
-(skip-marked because it blocks on user input).
+Interactive loop that exercises the custom `stembolts` adapter — skip-marked
+because it blocks on stdin in an infinite loop.
 
 Demonstrates:
 - Loading a fully custom, non-catalog adapter via `stembolts_intrinsic.py`

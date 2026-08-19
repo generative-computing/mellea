@@ -33,11 +33,12 @@ m = MelleaSession(backend=backend, ctx=ChatContext())
 # Register the aLoRA variant of the catalog's requirement-check adapter. Without
 # this, ALoraRequirement logs a warning and falls back to regular generation,
 # whose prompt asks for a plain "yes"/"no" answer — but the result is still
-# parsed as JSON by requirement_check_to_bool, so a plain yes/no reply fails
-# validation in practice (a JSON reply that doesn't match the schema instead
-# raises AdapterSchemaMismatchError). The ALORA type is also load-bearing here:
-# routing only looks up ("alora",), so registering the LORA variant instead
-# would hit the same failure.
+# parsed as JSON by requirement_check_to_bool: a plain yes/no reply raises
+# json.JSONDecodeError (it is not JSON), and a JSON reply that doesn't match
+# the schema raises AdapterSchemaMismatchError — either way the error
+# propagates out of validate() instead of returning a failed check. The ALORA
+# type is also load-bearing here: routing only looks up ("alora",), so
+# registering the LORA variant instead would hit the same failure.
 backend.add_adapter(
     IntrinsicAdapter(  # emits a DeprecationWarning — see module docstring, #1144
         "requirement-check",
