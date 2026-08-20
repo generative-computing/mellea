@@ -102,14 +102,23 @@ def to_chat(
     # consult `should_replay_reasoning` (unlike the OpenAI/LiteLLM/Watsonx/Ollama chat paths). This is
     # acceptable today because HF has a capture gap (per #1201) and never populates `Message.thinking`
     # to begin with; when that gap is closed, replay must be wired in here.
-    ctx_as_conversation: list = [
-        {"role": m.role, "content": formatter.print(m)} for m in ctx_as_message_list
-    ]
+    ctx_as_conversation: list = []
+    for m in ctx_as_message_list:
+        msg_dict: dict = {"role": m.role, "content": formatter.print(m)}
+        # Honor component-declared tool metadata. HF chat templates expect the
+        # OpenAI-ish id/type/function shape, so pass `tool_calls` verbatim; a
+        # `role="tool"` turn references its originating call via `tool_call_id`.
+        if m.tool_calls:
+            msg_dict["tool_calls"] = m.tool_calls
+        if m.tool_call_id:
+            msg_dict["tool_call_id"] = m.tool_call_id
+        ctx_as_conversation.append(msg_dict)
 
-    # Check that we ddin't accidentally end up with CBlocks.
+    # Check that we ddin't accidentally end up with CBlocks. Only string values can
+    # carry a stray `CBlock` repr; tool metadata (lists/None) is skipped.
     for msg in ctx_as_conversation:
         for v in msg.values():
-            if "CBlock" in v:
+            if isinstance(v, str) and "CBlock" in v:
                 MelleaLogger.get_logger().error(
                     f"Found the string `CBlock` in what should've been a stringified context: {ctx_as_conversation}"
                 )
