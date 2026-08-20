@@ -689,6 +689,15 @@ def validate_tool_arguments(
 
             return (result | None) if has_null else result
 
+        # Handle enum constraint (e.g. Literal["read", "write"] on a plain field)
+        if "enum" in schema:
+            enum_vals = tuple(schema["enum"])
+            return Literal[enum_vals]  # type: ignore
+
+        # Handle const constraint (e.g. a bare {"type": "string", "const": "cat"})
+        if "const" in schema:
+            return Literal[schema["const"]]  # type: ignore
+
         # Simple type mapping
         return JSON_TYPE_TO_PYTHON.get(json_type, Any)
 
@@ -1419,18 +1428,31 @@ def convert_function_to_ollama_tool(
             # This now handles Optional[primitive] types correctly
             if "anyOf" in v:
                 types = {t.get("type", "string") for t in v.get("anyOf")}
+                # Collect enum values from each non-null anyOf branch
+                # (handles Optional[Literal[...]] which Pydantic emits as anyOf)
+                enum_values: list | None = None
+                for sub in v.get("anyOf", []):
+                    if sub.get("type") == "null":
+                        continue
+                    if "enum" in sub:
+                        enum_values = list(sub["enum"])
+                        break
             else:
                 types = {v.get("type", "string")}
+                enum_values = list(v["enum"]) if "enum" in v else None
 
             if "null" in types:
                 if k in schema.get("required", []):
                     schema["required"].remove(k)
                 types.discard("null")
 
-            schema["properties"][k] = {
+            prop: dict = {
                 "description": parsed_docstring.get(k, ""),
                 "type": ", ".join(types),
             }
+            if enum_values is not None:
+                prop["enum"] = enum_values
+            schema["properties"][k] = prop
 
     # Final pass: recursively inline all remaining $refs at any depth.
     # This catches dangling references in nested model properties that weren't
