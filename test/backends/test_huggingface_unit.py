@@ -237,52 +237,30 @@ def _make_intrinsic_backend_stub(stub_backend):
     return stub_backend
 
 
-def test_generate_with_adapter_lock_calls_load_peft_adapter():
-    """Regression guard: the internal adapter-lock call site (Epic #929 Phase 2,
-    issue #1140) must use the renamed `load_peft_adapter` verb, not the old
-    `load_adapter` name.
+def test_generate_with_adapter_lock_deactivates_before_generating():
+    """_generate_with_adapter_lock generates against the base model.
+
+    Standard (non-intrinsic) generation runs without adapters: the method
+    delegates to `deactivate_peft_adapter("")` (rather than calling
+    `_model.set_adapter` directly, Epic #929 Phase 2 / issue #1141) and never
+    touches the activation verbs or `load_peft_adapter`. Since #1465 routed
+    intrinsic generation through `_generate_intrinsic_with_adapter_scope`, no
+    production caller passes it an adapter to activate — which is why the
+    method takes no adapter name at all.
     """
     backend = _make_backend()
-    backend._model.active_adapters.return_value = ["my_adapter"]  # type: ignore[union-attr]
-
-    with patch.object(backend, "load_peft_adapter") as mock_load:
-        backend._generate_with_adapter_lock("my_adapter", lambda: "output")
-
-    mock_load.assert_called_once_with("my_adapter")
-    # Deliberately no `_model.set_adapter` assertion. Since #1141 that call is
-    # reached via `activate_peft_adapter` rather than inlined here, so asserting
-    # it would make this test an unannounced guard for the delegation chain --
-    # failing on a change to `activate_peft_adapter` without naming it. The chain
-    # is covered by `test_generate_with_adapter_lock_uses_activate_deactivate_verbs`
-    # and the verb itself by `test_activate_peft_adapter_calls_set_adapter`.
-
-
-def test_generate_with_adapter_lock_uses_activate_deactivate_verbs():
-    """_generate_with_adapter_lock delegates to the new activate/deactivate verbs
-    rather than calling `_model.set_adapter` directly (Epic #929 Phase 2, issue #1141).
-    """
-    backend = _make_backend()
-    backend._model.active_adapters.return_value = ["my_adapter"]  # type: ignore[union-attr]
-
-    with (
-        patch.object(backend, "load_peft_adapter"),
-        patch.object(backend, "activate_peft_adapter") as mock_activate,
-        patch.object(backend, "deactivate_peft_adapter") as mock_deactivate,
-    ):
-        backend._generate_with_adapter_lock("my_adapter", lambda: "output")
-
-    mock_activate.assert_called_once_with("my_adapter")
-    mock_deactivate.assert_not_called()
-
     backend._model.active_adapters.return_value = []  # type: ignore[union-attr]
+
     with (
+        patch.object(backend, "load_peft_adapter") as mock_load,
         patch.object(backend, "activate_peft_adapter") as mock_activate,
         patch.object(backend, "deactivate_peft_adapter") as mock_deactivate,
     ):
-        backend._generate_with_adapter_lock("", lambda: "output")
+        backend._generate_with_adapter_lock(lambda: "output")
 
-    mock_activate.assert_not_called()
     mock_deactivate.assert_called_once_with("")
+    mock_activate.assert_not_called()
+    mock_load.assert_not_called()
 
 
 def test_activate_peft_adapter_calls_set_adapter():

@@ -11,7 +11,7 @@ run in CI or in sandboxes without hardware access (see test/README.md).
 `adapter_scope()` is asserted to really flip the real PEFT model's active
 adapter set, and to keep it active across a real generate call: the model is
 called directly (bypassing `generate_from_context()`'s standard path, which
-always deactivates adapters first via `_generate_with_adapter_lock("", ...)`)
+always deactivates adapters first via `_generate_with_adapter_lock`)
 so the active-adapter assertion straddling the generate call is a genuine
 proof that generation ran with the adapter active, not a smoke test that
 generation merely succeeded afterwards. A separate `generate_from_context()`
@@ -99,7 +99,7 @@ async def test_local_file_binding_full_lifecycle_against_real_model(backend):
 
         # Generate directly against the real model rather than through
         # generate_from_context() — that standard path always deactivates
-        # adapters first (_generate_with_adapter_lock("", ...)), which would
+        # adapters first (_generate_with_adapter_lock), which would
         # make this a smoke test that generation merely succeeds afterwards,
         # not a demonstration that generation ran with the adapter active.
         toks = backend._tokenizer("Is the sky blue?", return_tensors="pt").to(  # type: ignore[union-attr]

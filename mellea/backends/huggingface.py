@@ -576,20 +576,24 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
             return mot, ctx.add(action).add(mot)
 
-    def _generate_with_adapter_lock(
-        self, adapter_name: str, generate_func: Callable, *args, **kwargs
-    ):
-        """Helper function for ensuring exclusive generation when adapters are present. Necessary to prevent generating with incorrect weights."""
-        with self._generation_lock:
-            if adapter_name != "":
-                self.load_peft_adapter(adapter_name)
-                self.activate_peft_adapter(adapter_name)
-            else:
-                self.deactivate_peft_adapter(adapter_name)
+    def _generate_with_adapter_lock(self, generate_func: Callable, *args, **kwargs):
+        """Exclusive generation against the base model for the standard path.
 
-            _assert_correct_adapters(adapter_name, self._model)
+        Standard (non-intrinsic) generation runs without adapters: any active
+        adapter is deactivated before the model call, and the model's active
+        state is asserted before and after. Adapter-active generation goes
+        elsewhere — `_generate_intrinsic_with_adapter_scope` for intrinsics
+        (routed through `adapter_scope`, with its lifecycle hooks), and
+        Granite Switch's embedded activation via the binding's
+        `apply_activation` (#1018). Neither path activates through this
+        method — which is why it takes no adapter name.
+        """
+        with self._generation_lock:
+            self.deactivate_peft_adapter("")
+
+            _assert_correct_adapters("", self._model)
             out = generate_func(*args, **kwargs)
-            _assert_correct_adapters(adapter_name, self._model)
+            _assert_correct_adapters("", self._model)
             return out
 
     def _generate_intrinsic_with_adapter_scope(
@@ -1187,7 +1191,6 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
             chat_response = asyncio.to_thread(
                 self._generate_with_adapter_lock,
-                "",  # Empty for no adapters.
                 self._model.generate,  # type: ignore
                 # Passed as args/kwargs to generate.
                 input_ids.to(self._device),
@@ -1381,7 +1384,6 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
             chat_response = asyncio.to_thread(
                 self._generate_with_adapter_lock,
-                "",  # Empty for no adapters.
                 self._model.generate,  # type: ignore
                 # Passed as args/kwargs to generate.
                 inputs=input_ids["input_ids"],
@@ -1809,7 +1811,6 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
         outputs = await asyncio.to_thread(
             self._generate_with_adapter_lock,
-            "",  # Empty for no adapter.
             self._model.generate,  # type: ignore
             # Passed as args/kwargs to generate.
             input_ids=inputs["input_ids"],
@@ -2238,8 +2239,10 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         while holding `_generation_lock`" as a precondition, and they have three
         callers:
 
-        1. `_generate_with_adapter_lock`, which takes `_generation_lock` itself
-           (for the standard, non-intrinsic generation path).
+        1. `_generate_with_adapter_lock` (the standard, non-intrinsic
+           generation path), which takes `_generation_lock` itself and calls
+           only `deactivate_peft_adapter` — never the activation verbs,
+           because standard generation always runs against the base model.
         2. `LocalFileBinding.activate()`/`.deactivate()` (driven by
            `AdapterMixin.adapter_scope()`), which holds no lock of its own.
         3. `_IntrinsicPeftBinding.activate()`/`.deactivate()` (driven by
