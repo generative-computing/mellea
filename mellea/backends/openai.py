@@ -309,7 +309,9 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         Accepts the full `AdapterInput` union to honour the mixin contract, but
         currently only `EmbeddedIntrinsicAdapter` (the Embedded/Granite Switch
-        reality) is supported; other realities are rejected at runtime.
+        reality) is supported; other realities are rejected at runtime. As a
+        side effect, an `EmbeddedBinding` weights handler is stamped with this
+        backend's `base_model_name` in its `source` field.
 
         Args:
             adapter (AdapterInput): The adapter to register. Must be an
