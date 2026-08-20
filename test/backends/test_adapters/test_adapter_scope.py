@@ -326,6 +326,29 @@ def test_adapter_scope_swallows_invocation_start_hook_failure():
     weights.deactivate.assert_called_once()
 
 
+def test_adapter_scope_swallows_non_str_identity_name_on_phase_complete():
+    """A non-`str` adapter identity name must not abort activation.
+
+    Regression guard: `_fire_phase_complete_hook` constructed its payload
+    outside its guard, so an adapter whose `Identity.name` was not a
+    `str` (`Identity` is a plain frozen dataclass and performs no runtime
+    type coercion) raised a pydantic `ValidationError` from the activate
+    phase-complete site after `activate()` had already succeeded — the
+    body never ran and a healthy invocation was reported as an error.
+    Construction now sits under the same guard as the dispatch.
+    """
+    mock_backend = MagicMock(spec=AdapterMixin)
+    weights = _IntRevisionBinding()
+    identity = Identity(name=7, adapter_type="lora")  # type: ignore[arg-type]
+    adapter = Adapter(identity=identity, io_contract=_Contract(), weights=weights)
+
+    body_ran = False
+    with AdapterMixin.adapter_scope(mock_backend, adapter):
+        body_ran = True
+
+    assert body_ran
+
+
 def test_adapter_scope_swallows_invocation_hook_failure_on_clean_run():
     """A failing invocation-complete hook must not turn a clean run into an error.
 

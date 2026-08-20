@@ -379,9 +379,9 @@ def _fire_phase_complete_hook(
     Split out of `_run_adapter_phase` so a caller that must guarantee cleanup
     after a phase's side effect — e.g. `adapter_scope` guaranteeing
     `deactivate()` runs once `activate()` has succeeded — can run the side
-    effect and this hook fire under separate exception handling. A hook-dispatch
-    failure is logged and ignored: observability must not turn a completed
-    lifecycle phase into an operation failure.
+    effect and this hook fire under separate exception handling. A
+    construction or dispatch failure is logged and ignored: observability
+    must not turn a completed lifecycle phase into an operation failure.
 
     Args:
         invocation_id: Correlation id of the enclosing invocation.
@@ -394,10 +394,10 @@ def _fire_phase_complete_hook(
         return
     from ...plugins.hooks.adapter_function import AdapterFunctionPhaseCompletePayload
 
-    payload = AdapterFunctionPhaseCompletePayload(
-        invocation_id=invocation_id, name=name, phase=phase, duration_ms=duration_ms
-    )
     try:
+        payload = AdapterFunctionPhaseCompletePayload(
+            invocation_id=invocation_id, name=name, phase=phase, duration_ms=duration_ms
+        )
         hook_coro = invoke_hook(HookType.ADAPTER_FUNCTION_PHASE_COMPLETE, payload)
         _run_async_in_thread(hook_coro)
     except Exception:
