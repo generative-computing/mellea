@@ -6,10 +6,10 @@
 Both helpers moved from raw `json.loads` to registry-contract validation when
 `call_intrinsic` started parsing via the resolved adapter's contract, and
 `find_context_attributions` additionally changed return shape (unwrap of
-`"items"`). Their only other tests are GPU-gated qualitative/xfail tests in
-`test_core.py`, which give no CI signal on that wiring — these stub
-`mfuncs.act` and `backend.resolve_adapter` (the `test_core_schema.py` pattern)
-and exercise the helper boundary itself.
+`"items"`). Their other tests — GPU-gated qualitative/xfail tests in
+`test_core.py` plus opt-in e2e runs in `docs/examples` — give no CI signal on
+that wiring, so these stub `mfuncs.act` and `backend.resolve_adapter` (the
+`test_core_schema.py` pattern) and exercise the helper boundary itself.
 """
 
 import json

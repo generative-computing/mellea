@@ -178,3 +178,15 @@ def test_context_attribution_contract_accepts_recorded_model_output():
 
     assert len(result["items"]) == 7  # type: ignore[arg-type]
     assert result["items"][0]["attribution_msg_index"] is None  # type: ignore[index]
+
+
+def test_context_attribution_contract_rejects_missing_item_key():
+    """A record missing a required item key raises AdapterSchemaMismatchError."""
+    fixture = _INTRINSIC_TESTDATA / "output_json" / "context-attribution.json"
+    completion = json.loads(fixture.read_text(encoding="utf-8"))
+    raw = completion["choices"][0]["message"]["content"]
+    items = json.loads(raw)
+    del items[0]["attribution_text"]
+
+    with pytest.raises(AdapterSchemaMismatchError):
+        _INTRINSIC_IO_CONTRACTS["context-attribution"].parse(json.dumps(items))

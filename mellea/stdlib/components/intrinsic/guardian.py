@@ -59,7 +59,8 @@ def policy_guardrails(
         Compliance label as `"Yes"`, `"No"`, or `"Ambiguous"` (`"Yes"` = compliant).
 
     Raises:
-        ValueError: When the model output is not valid JSON.
+        ValueError: When the model output is not valid JSON or is not a
+            JSON object.
         AdapterSchemaMismatchError: When neither or both of `label` / `score` are present.
     """
     result_json = call_intrinsic(
@@ -221,7 +222,7 @@ def guardian_check(
     Raises:
         TypeError: When both `scoring_schema` and `target_role` are provided.
         ValueError: When `target_role` is not `"user"` or `"assistant"`, or
-            when the model output is not valid JSON.
+            when the model output is not valid JSON or is not a JSON object.
         AdapterSchemaMismatchError: When the model output is missing the required
             `guardian` key or its nested `score` key.
     """
@@ -316,7 +317,8 @@ def factuality_detection(
     Raises:
         ValueError: If `documents` is provided but the last assistant response
             cannot be extracted (empty context, non-assistant last turn, or
-            uncomputed response). Also raised when the model output is not valid JSON.
+            uncomputed response). Also raised when the model output is not valid
+            JSON, or is not a JSON object.
         AdapterSchemaMismatchError: When the model output is missing the required
             `score` field.
     """
@@ -373,7 +375,8 @@ def factuality_correction(
     Raises:
         ValueError: If `documents` is provided but the last assistant response
             cannot be extracted (empty context, non-assistant last turn, or
-            uncomputed response). Also raised when the model output is not valid JSON.
+            uncomputed response). Also raised when the model output is not valid
+            JSON, or is not a JSON object.
         AdapterSchemaMismatchError: When the model output is missing the required
             `correction` field.
     """

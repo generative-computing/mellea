@@ -723,11 +723,12 @@ class Adapter:
     # verbs key on the binding's `qualified_name`; `_find_adapter` scans on the
     # identity) and both return `None` on a miss, so a disagreement surfaces as
     # "adapter not found" far from its cause. But it cannot be enforced yet:
-    # in-tree constructions still pair an `alora` identity with a placeholder
-    # binding — the `_REQUIREMENT_CHECK_ADAPTER` test stub in
-    # `stdlib/components/intrinsic/core.py` (a bare, deliberately unconfigured
-    # `LocalFileBinding()` that defaults to LoRA) and the deprecated shims'
-    # `_ShimWeightsBinding`. Every catalogue entry supports both types, so those
-    # are placeholders rather than genuine conflicts, and the check fired on
-    # "not configured yet". Enforce the check once those constructions carry
-    # real bindings (the shims retire in #1144).
+    # the `_REQUIREMENT_CHECK_ADAPTER` test stub in
+    # `stdlib/components/intrinsic/core.py` pairs an `alora` identity with a
+    # bare, deliberately unconfigured `LocalFileBinding()` that defaults to
+    # LoRA (every catalogue entry supports both types, so a placeholder rather
+    # than a genuine conflict — the check fired on "not configured yet"), and
+    # the deprecated shims carry a `_ShimWeightsBinding` with no `adapter_type`
+    # to compare at all (their identity tracks the configured type). Enforce
+    # the check once those constructions carry real, typed bindings (the shims
+    # retire in #1144).

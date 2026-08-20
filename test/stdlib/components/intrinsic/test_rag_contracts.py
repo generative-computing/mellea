@@ -1,7 +1,7 @@
 # Copyright IBM Corp. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Unit tests for the rag adapter functions' output contracts (Epic #929, #1516).
+"""Unit tests for the rag adapter functions' output contracts (Epic #929, issue #1516).
 
 The contracts are declared in `mellea.backends.adapters.io_contracts` and
 looked up by catalog name via `get_io_contract`.  Tests the `parse()` method

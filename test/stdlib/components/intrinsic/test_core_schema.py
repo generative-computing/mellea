@@ -5,7 +5,7 @@
 
 Issue #1516 replaced the hand-rolled score-range validation `requirement_check` used
 to run after `call_intrinsic` with the `requirement-check` capability's declared
-`IOContract`, obtained from the adapter `resolve_adapter` returns rather than passed
+`IOContract`, obtained from the adapter that `resolve_adapter()` returns rather than passed
 as a parallel argument. These tests exercise that real path — `call_intrinsic` and
 `IOContract.parse` both run against a stubbed `resolve_adapter` return value — by
 mocking `mfuncs.act` (the actual model call) and `backend.resolve_adapter` (a bare
@@ -22,7 +22,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from mellea.backends.adapters import AdapterSchemaMismatchError
+from mellea.backends.adapters import AdapterSchemaMismatchError, get_io_contract
 from mellea.stdlib.components import Message
 from mellea.stdlib.components.intrinsic import _util, core
 from mellea.stdlib.components.intrinsic.core import _REQUIREMENT_CHECK_ADAPTER
@@ -99,3 +99,10 @@ def test_requirement_check_resolves_adapter_by_name(monkeypatch):
     context = ChatContext().add(Message("user", "hi"))
     core.requirement_check(context, backend, _REQUIREMENT)
     backend.resolve_adapter.assert_called_once_with("requirement-check")
+
+
+def test_requirement_check_adapter_carries_registry_contract():
+    """The stub must carry the registry's declared contract, not a local copy."""
+    assert _REQUIREMENT_CHECK_ADAPTER.io_contract is get_io_contract(
+        "requirement-check"
+    )

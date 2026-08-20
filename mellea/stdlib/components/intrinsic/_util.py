@@ -184,8 +184,8 @@ def call_intrinsic(
     output contract always travels with the adapter that produced it, rather than as a
     separate argument a caller could mismatch. For adapters Mellea constructs (the lazy
     shims) that contract comes from the `mellea.backends.adapters.io_contracts` registry;
-    for an adapter a user registered under the same name, the user's own `io_contract`
-    wins. The contract validates required fields and
+    for an adapter a user registered under the same capability, the user's own
+    `io_contract` wins. The contract validates required fields and
     raises `AdapterSchemaMismatchError` on contract-breaking deltas; forward-compatible
     additions (extra optional fields) do not raise.
 
@@ -206,8 +206,9 @@ def call_intrinsic(
     Raises:
         ValueError: When *context* forwards no history to the model (e.g. a
             `SimpleContext` was passed), when the model output is `None` or is
-            not valid JSON, or when well-formed JSON has a top-level shape the
-            resolved adapter's contract rejects.
+            not valid JSON, or when well-formed JSON is rejected for shape by
+            the resolved adapter's contract (wrong top-level type, or a
+            non-object element of an array-shaped contract).
         AdapterSchemaMismatchError: When the model output is missing a field required
             by the resolved adapter's output contract.
     """

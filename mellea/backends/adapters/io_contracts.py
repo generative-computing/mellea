@@ -13,10 +13,12 @@ wrong constant was a silent mismatch.
 :data:`_INTRINSIC_IO_CONTRACTS` is the single source of truth instead: it is keyed by the
 adapter function's catalog name (:attr:`~mellea.backends.adapters.catalog.IntrinsicsCatalogEntry.name`,
 e.g. `"guardian-core"` — the same string passed to `call_intrinsic` and
-`resolve_adapter`), and both the shim adapters in `adapter.py` (via :func:`get_io_contract`)
-and the high-level helpers in `mellea.stdlib.components.intrinsic` read from it. Declaring
-a capability's contract anywhere else reintroduces the parallel-argument problem this
-module exists to close.
+`resolve_adapter`). The shim adapters in `adapter.py` and the
+`_REQUIREMENT_CHECK_ADAPTER` test stub in `mellea/stdlib/components/intrinsic/core.py`
+read from it at construction (via :func:`get_io_contract`); the high-level helpers
+reach it indirectly, through the adapter `resolve_adapter` returns. Declaring a
+capability's contract anywhere else reintroduces the parallel-argument problem
+this module exists to close.
 
 An adapter a user registers with a backend takes precedence over the registry for its
 own contract: `call_intrinsic` parses with whatever contract the resolved adapter

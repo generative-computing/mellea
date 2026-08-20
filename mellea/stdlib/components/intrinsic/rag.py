@@ -54,7 +54,8 @@ def check_answerability(
         A string value of either `"answerable"` or `"unanswerable"`.
 
     Raises:
-        ValueError: When the model output is not valid JSON.
+        ValueError: When the model output is not valid JSON or is not a
+            JSON object.
         AdapterSchemaMismatchError: When the model output is missing the required
             `answerability` field.
     """
@@ -100,7 +101,8 @@ def rewrite_question(
         Rewritten version of `question`.
 
     Raises:
-        ValueError: When the model output is not valid JSON.
+        ValueError: When the model output is not valid JSON or is not a
+            JSON object.
         AdapterSchemaMismatchError: When the model output is missing the required
             `rewritten_question` field.
     """
@@ -150,7 +152,8 @@ def clarify_query(
         the string `"CLEAR"` if no clarification is needed.
 
     Raises:
-        ValueError: When the model output is not valid JSON.
+        ValueError: When the model output is not valid JSON or is not a
+            JSON object.
         AdapterSchemaMismatchError: When the model output is missing the required
             `clarification` field.
     """
@@ -209,7 +212,8 @@ def find_citations(
         character offsets into their respective UTF-8 strings.
 
     Raises:
-        ValueError: When the model output is not valid JSON.
+        ValueError: When the model output is not valid JSON, is not a
+            JSON array, or contains a non-object element.
         AdapterSchemaMismatchError: When any record in the output is missing a
             required field.
     """
@@ -273,7 +277,8 @@ def check_context_relevance(
         `"relevant"`, `"irrelevant"`, or `"partially relevant"`.
 
     Raises:
-        ValueError: When the model output is not valid JSON.
+        ValueError: When the model output is not valid JSON or is not a
+            JSON object.
         AdapterSchemaMismatchError: When the model output is missing the required
             `context_relevance` field.
     """
@@ -340,7 +345,8 @@ def flag_hallucinated_content(
         `response_text`, `faithfulness`, `explanation`.
 
     Raises:
-        ValueError: When the model output is not valid JSON.
+        ValueError: When the model output is not valid JSON, is not a
+            JSON array, or contains a non-object element.
         AdapterSchemaMismatchError: When any record in the output is missing a
             required field.
     """

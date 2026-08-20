@@ -7,7 +7,7 @@ wiring.
 Exercises the model_options precedence without a real backend or model —
 guards against the PR #972 bug class (caller-supplied model_options silently
 discarded behind a hardcoded default) resurfacing. Also covers the issue #1516
-change: the output contract is taken from the adapter `resolve_adapter()`
+change: the output contract is taken from the adapter that `resolve_adapter()`
 returns, and `call_intrinsic` no longer accepts an `io_contract` kwarg.
 """
 
