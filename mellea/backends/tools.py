@@ -1353,18 +1353,25 @@ def convert_function_to_ollama_tool(
     # This schema never consumes the return annotation, so an unresolvable one
     # is left as a string rather than being allowed to fail the conversion.
     sig = resolve_signature_annotations(func)
-    schema = type(
-        func.__name__,
-        (BaseModel,),
-        {
-            "__annotations__": {
-                k: v.annotation if v.annotation != inspect._empty else str
-                for k, v in sig.parameters.items()
-            },
-            "__signature__": sig,
-            "__doc__": parsed_docstring[doc_string_hash],
+    model_attrs: dict[str, Any] = {
+        "__annotations__": {
+            k: v.annotation if v.annotation != inspect._empty else str
+            for k, v in sig.parameters.items()
         },
-    ).model_json_schema()  # type: ignore
+        "__signature__": sig,
+        "__doc__": parsed_docstring[doc_string_hash],
+    }
+    # Set each parameter's default as a field value on the dynamic model.
+    # Pydantic derives a field's required-ness and schema `default` from the
+    # value assigned on the model, not from `__signature__` (which is only
+    # informational). Without this, every parameter is treated as required and
+    # default values are dropped from the emitted schema. Compare against
+    # `inspect._empty` (not truthiness) so falsy defaults like 0/""/False are
+    # preserved.
+    for param_name, param in sig.parameters.items():
+        if param.default is not inspect._empty:
+            model_attrs[param_name] = param.default
+    schema = type(func.__name__, (BaseModel,), model_attrs).model_json_schema()  # type: ignore
 
     defs = schema.get("$defs", schema.get("definitions", {}))
 
@@ -1430,10 +1437,15 @@ def convert_function_to_ollama_tool(
                     schema["required"].remove(k)
                 types.discard("null")
 
-            schema["properties"][k] = {
+            simple_prop: dict[str, Any] = {
                 "description": parsed_docstring.get(k, ""),
                 "type": ", ".join(types),
             }
+            # Preserve the parameter's default value; rebuilding the property
+            # from scratch would otherwise drop it.
+            if "default" in v:
+                simple_prop["default"] = v["default"]
+            schema["properties"][k] = simple_prop
 
     # Final pass: recursively inline all remaining $refs at any depth.
     # This catches dangling references in nested model properties that weren't
