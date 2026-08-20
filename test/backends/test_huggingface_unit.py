@@ -340,11 +340,11 @@ def test_generation_lock_is_reentrant():
     """`_generation_lock` must be a `threading.RLock`, not a plain `threading.Lock`.
 
     `_generate_intrinsic_with_adapter_scope` (issue #1465) holds `_generation_lock`
-    for the whole activate -> generate -> deactivate critical section on one
-    thread, and `adapter_scope()`'s activate()/deactivate() re-acquire the same
-    lock (via `_adapter_activation_lock()`) from inside that section. A plain
-    `Lock` can't tell that the second acquisition is same-thread and refuses it;
-    only an `RLock` allows it.
+    for the whole prepare -> activate -> generate -> deactivate critical section
+    on one thread, and the binding's verb calls (prepare/activate/deactivate)
+    re-acquire the same lock (via `_adapter_activation_lock()`) from inside that
+    section. A plain `Lock` can't tell that the second acquisition is
+    same-thread and refuses it; only an `RLock` allows it.
     """
     backend = _make_backend()
     lock = backend._generation_lock
@@ -391,14 +391,15 @@ def _make_fake_intrinsic_adapter(
     qualified_name: str, revision: str = "fake0000000000000000000000000000000000000"
 ) -> IntrinsicAdapter:
     """Builds a minimal `IntrinsicAdapter` stand-in, bypassing `__init__` (which
-    downloads the adapter's `io.yaml`), exposing only the attributes
-    `_generate_intrinsic_with_adapter_scope` reads: `.name`, `.qualified_name`,
-    `.adapter_type`, `.identity` (reused directly, not rebuilt, so this must
-    already be the real `Identity` `IntrinsicAdapter.__init__` would have
-    built), and `.intrinsic_metadata.revision` (the catalogue-pinned SHA
-    `_IntrinsicPeftBinding` reports to telemetry — real `IntrinsicsCatalogEntry.revision`
-    is a required, non-optional `str`, so this stand-in mirrors that rather
-    than allowing `None`).
+    downloads the adapter's `io.yaml`), exposing the attribute set
+    `_generate_intrinsic_with_adapter_scope` reads — `.identity` (reused
+    directly, not rebuilt, so this must already be the real `Identity`
+    `IntrinsicAdapter.__init__` would have built), `.qualified_name`, and
+    `.intrinsic_metadata.revision` — plus `.name`/`.adapter_type` for realism
+    (the method reaches those via `identity`, not the stand-in's own fields).
+    The stand-in pins `revision` to a catalogue SHA, mirroring the real
+    `IntrinsicsCatalogEntry.revision` (a required, non-optional `str`) rather
+    than allowing `None`.
     """
     name, _, adapter_type_str = qualified_name.rpartition("_")
     adapter_type = (
@@ -600,12 +601,12 @@ def test_generate_intrinsic_with_adapter_scope_fires_no_hooks_on_prepare_failure
 def test_concurrent_intrinsic_calls_cannot_observe_each_others_adapter():
     """Two concurrent intrinsic generate calls must never see each other's adapter active.
 
-    Regression coverage for the atomicity gap `adapter_scope()`'s own docstring
-    flags as latent until #1465 wires real concurrent generation through it: if
-    `_generation_lock` only guarded `activate()`/`deactivate()` themselves
-    (rather than the whole activate -> generate -> deactivate section), one
-    thread's `activate()` could interleave during another thread's generate call.
-    The `time.sleep` below widens that window so a regression would be caught
+    Regression coverage for the intra-scope atomicity gap `adapter_scope()`'s
+    docstring describes: if `_generation_lock` only guarded the verb calls
+    themselves (rather than the whole prepare -> activate -> generate ->
+    deactivate section its driver now holds, per #1465), one thread's
+    `activate()` could interleave during another thread's generate call. The
+    `time.sleep` below widens that window so a regression would be caught
     reliably rather than by luck.
     """
     backend = _make_backend()

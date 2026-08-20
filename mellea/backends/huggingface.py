@@ -607,17 +607,14 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         `"deactivate"` only — `"generate"`/`"parse"` are not emitted; adding
         those is out of scope here, see #1466), and deactivation is guaranteed
         even if `generate_func` raises. Those hooks dispatch while
-        `_generation_lock` is held below — see `adapter_scope()`'s
-        hook-dispatch paragraph for the mechanism (blocked call, no timeout,
-        hook coroutines on the shared event-loop thread) — so an
-        `ADAPTER_FUNCTION_*` subscriber that re-enters any
-        `_generation_lock`-holding path (any generation call or adapter
-        activation on this backend) deadlocks this backend rather than merely
-        stalling it (the `RLock` cannot bridge the gap: reentrance only helps
-        the owning thread), and a merely slow subscriber stalls all generation
-        on this backend for that dispatch's duration. `ADAPTER_FUNCTION_*`
-        subscribers must therefore be non-blocking and must never re-enter
-        this backend.
+        `_generation_lock` is held below: the deadlock and stall consequences
+        in `adapter_scope()`'s hook-dispatch paragraph apply here in full,
+        since this backend's `_generation_lock` is what the dispatching thread
+        holds, and the `RLock` cannot rescue a subscriber that re-enters from
+        the event-loop thread — reentrance only helps the owning thread.
+        `ADAPTER_FUNCTION_*` subscribers must therefore be non-blocking and
+        must never re-enter this backend; a merely slow one stalls all
+        generation on this backend for that dispatch's duration.
 
         `IntrinsicAdapter` (the legacy shim `adapter` is expected to be) carries
         an inert `_ShimWeightsBinding` that raises on every verb, so it can't be
@@ -636,8 +633,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         as unresolved for a caller that doesn't do this. Safe here because each
         invocation of this method runs entirely on one thread (in production it
         is only ever invoked via a single `asyncio.to_thread` call — see its
-        call site in `_generate_from_intrinsic`; the unit tests call it
-        directly, also single-threaded) and never re-enters generation on
+        call site in `_generate_from_intrinsic`; the tests call it directly,
+        one invocation per thread) and never re-enters generation on
         another thread: the inner re-acquisition of `_generation_lock` inside
         `adapter_scope()`'s `activate()`/`deactivate()` (via
         `_adapter_activation_lock()`) is therefore same-thread and reentrant.
@@ -2357,15 +2354,11 @@ class _IntrinsicPeftBinding(WeightsBinding):
     `release()` is a no-op: registration happened in `add_adapter()` when the
     intrinsic adapter was resolved (see `AdapterMixin.resolve_adapter`), and
     this binding doesn't own that lifecycle — it only exists for the duration
-    of one generate call.
-
-    Attributes:
-        revision (str | None): The catalogue revision `adapter_scope()` reports
-            to the `ADAPTER_FUNCTION_INVOCATION_COMPLETE` hook. Set explicitly
-            (rather than left for `adapter_scope()`'s `getattr(..., None)`
-            fallback) because `IntrinsicAdapter`s are always pinned to a
-            catalogue SHA; reporting `None` would mislabel every intrinsic
-            invocation as unpinned.
+    of one generate call. `revision` — the value `adapter_scope()` reports to
+    the `ADAPTER_FUNCTION_INVOCATION_COMPLETE` hook — is set explicitly rather
+    than left for `adapter_scope()`'s `getattr(..., None)` fallback, because
+    `IntrinsicAdapter`s are always pinned to a catalogue SHA; reporting
+    `None` would mislabel every intrinsic invocation as unpinned.
     """
 
     binding_type: ClassVar[str] = "local_file"
