@@ -689,8 +689,8 @@ class AdapterMixin(Backend, abc.ABC):
         This method fires hooks only; it does not open spans. Span production is a
         plugin's job (see #1464 for the rule and #1466 for the adapter-function
         spans), and the `ADAPTER_FUNCTION_*` family currently has no start hook for
-        a plugin to open a span on. See `docs/dev/adapter_observability.md` for the
-        metric schema.
+        a plugin to open a span on. The metric schema is defined by
+        `AdapterFunctionMetricsPlugin` in `mellea/telemetry/metrics_plugins.py`.
 
         `deactivate()` is guarded on `activate()`'s own side effect having
         completed, not on the activate phase's hook dispatch also succeeding.
