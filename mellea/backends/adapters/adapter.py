@@ -112,27 +112,23 @@ class _ShimIOContract(IOContract):
 
 
 class _ShimWeightsBinding(WeightsBinding):
-    """Phase 1 placeholder; Phase 2 (see epic #929) wires in real lifecycle."""
+    """Placeholder weights binding for the deprecated IntrinsicAdapter shims.
+
+    All lifecycle verbs raise NotImplementedError; it exists only so the
+    shims can satisfy the Adapter protocol.
+    """
 
     def prepare(self) -> None:
-        raise NotImplementedError(
-            "Phase 2 (see epic #929) — WeightsBinding not yet implemented"
-        )
+        raise NotImplementedError("WeightsBinding not yet implemented")
 
     def activate(self) -> None:
-        raise NotImplementedError(
-            "Phase 2 (see epic #929) — WeightsBinding not yet implemented"
-        )
+        raise NotImplementedError("WeightsBinding not yet implemented")
 
     def deactivate(self) -> None:
-        raise NotImplementedError(
-            "Phase 2 (see epic #929) — WeightsBinding not yet implemented"
-        )
+        raise NotImplementedError("WeightsBinding not yet implemented")
 
     def release(self) -> None:
-        raise NotImplementedError(
-            "Phase 2 (see epic #929) — WeightsBinding not yet implemented"
-        )
+        raise NotImplementedError("WeightsBinding not yet implemented")
 
 
 class IntrinsicAdapter(LocalHFAdapter, _AdapterCore):
@@ -893,11 +889,10 @@ class EmbeddedIntrinsicAdapter(_AdapterCore):
 
         - `identity`: always a real value.
 
-        - `io_contract`: Phase 1 `_ShimIOContract` placeholder; raises
-          `NotImplementedError` until issue #1516 replaces it.
+        - `io_contract`: `_ShimIOContract` placeholder; raises
+          `NotImplementedError`.
 
-        - `weights`: a real `EmbeddedBinding` (issue #1142); activation
-          runs through it.
+        - `weights`: a real `EmbeddedBinding`; activation runs through it.
     """
 
     def __setattr__(self, name: str, value: object) -> None:

@@ -247,7 +247,7 @@ def test_adapter_scope_raises_for_a_shim_backed_adapter():
     mock_backend = MagicMock(spec=AdapterMixin)
     adapter = _make_intrinsic_adapter("answerability")
 
-    with pytest.raises(NotImplementedError, match="Phase 2"):
+    with pytest.raises(NotImplementedError, match="WeightsBinding not yet implemented"):
         with AdapterMixin.adapter_scope(mock_backend, adapter):
             pytest.fail("body must not run when the shim's activate() raises")
 
