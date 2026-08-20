@@ -583,10 +583,19 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         adapter is deactivated before the model call, and the model's active
         state is asserted before and after. Adapter-active generation goes
         elsewhere — `_generate_intrinsic_with_adapter_scope` for intrinsics
-        (routed through `adapter_scope`, with its lifecycle hooks), and
-        Granite Switch's embedded activation via the binding's
-        `apply_activation` (#1018). Neither path activates through this
-        method — which is why it takes no adapter name.
+        (routed through `adapter_scope`, with its lifecycle hooks), and, once
+        #1018 lands, Granite Switch's embedded activation through a binding
+        `apply_activation` verb (not yet implemented — that is #1142's work) —
+        so no current path activates through this method, which is why it
+        takes no adapter name.
+
+        Args:
+            generate_func: The synchronous generation callable to invoke.
+            *args: Positional arguments forwarded to `generate_func`.
+            **kwargs: Keyword arguments forwarded to `generate_func`.
+
+        Returns:
+            Whatever `generate_func` returns.
         """
         with self._generation_lock:
             self.deactivate_peft_adapter("")

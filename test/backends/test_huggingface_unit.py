@@ -237,16 +237,18 @@ def _make_intrinsic_backend_stub(stub_backend):
     return stub_backend
 
 
-def test_generate_with_adapter_lock_deactivates_before_generating():
-    """_generate_with_adapter_lock generates against the base model.
+def test_generate_with_adapter_lock_deactivates_and_calls_generate_func():
+    """_generate_with_adapter_lock delegates deactivation and runs the model call.
 
     Standard (non-intrinsic) generation runs without adapters: the method
     delegates to `deactivate_peft_adapter("")` (rather than calling
-    `_model.set_adapter` directly, Epic #929 Phase 2 / issue #1141) and never
-    touches the activation verbs or `load_peft_adapter`. Since #1465 routed
+    `_model.set_adapter` directly, Epic #929 Phase 2 / issue #1141), never
+    touches the activation verbs or `load_peft_adapter`, and forwards to
+    `generate_func` (its return value is the method's). Since #1465 routed
     intrinsic generation through `_generate_intrinsic_with_adapter_scope`, no
     production caller passes it an adapter to activate — which is why the
-    method takes no adapter name at all.
+    method takes no adapter name at all. The method's deactivate-then-generate
+    ordering is fixed by its body, not observable from these patched verbs.
     """
     backend = _make_backend()
     backend._model.active_adapters.return_value = []  # type: ignore[union-attr]
@@ -256,8 +258,9 @@ def test_generate_with_adapter_lock_deactivates_before_generating():
         patch.object(backend, "activate_peft_adapter") as mock_activate,
         patch.object(backend, "deactivate_peft_adapter") as mock_deactivate,
     ):
-        backend._generate_with_adapter_lock(lambda: "output")
+        out = backend._generate_with_adapter_lock(lambda: "output")
 
+    assert out == "output"
     mock_deactivate.assert_called_once_with("")
     mock_activate.assert_not_called()
     mock_load.assert_not_called()
