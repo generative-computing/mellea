@@ -729,7 +729,10 @@ def validate_tool_arguments(
     try:
         # Validate using Pydantic
         validated_model = ValidatorModel(**args)
-        validated_args = validated_model.model_dump()
+        # Only emit fields the model actually sent. A bare model_dump() would
+        # pad the output with a None for every unset optional field (at every
+        # nesting depth), inventing arguments the model never produced.
+        validated_args = validated_model.model_dump(exclude_unset=True)
 
         # In lenient mode with extra="allow", Pydantic includes extra fields
         # but we need to preserve them from the original args
