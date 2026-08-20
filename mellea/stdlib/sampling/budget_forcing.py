@@ -7,7 +7,6 @@ from copy import deepcopy
 
 import tqdm
 
-from ...backends.ollama import OllamaModelBackend
 from ...core import (
     Backend,
     BaseModelSubclass,
@@ -174,6 +173,10 @@ class BudgetForcingSamplingStrategy(RejectionSamplingStrategy):
                 assert tool_calls is False, (
                     "tool_calls is not supported with budget forcing"
                 )
+                # Imported here rather than at module scope so that the `ollama`
+                # client is not pulled into every `import mellea`.
+                from ...backends.ollama import OllamaModelBackend
+
                 # TODO
                 assert isinstance(backend, OllamaModelBackend), (
                     "Only ollama backend supported with budget forcing"
