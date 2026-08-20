@@ -202,8 +202,9 @@ def call_intrinsic(
 
     Raises:
         ValueError: When *context* forwards no history to the model (e.g. a
-            `SimpleContext` was passed), or when the model output is `None` or
-            is not valid JSON.
+            `SimpleContext` was passed), when the model output is `None` or is
+            not valid JSON, or when well-formed JSON has a top-level shape the
+            resolved adapter's contract rejects.
         AdapterSchemaMismatchError: When the model output is missing a field required
             by the resolved adapter's output contract.
     """

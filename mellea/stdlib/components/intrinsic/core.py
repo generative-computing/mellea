@@ -26,9 +26,8 @@ from ._util import _resolve_response, call_intrinsic
 # io_contract is looked up by resolve_adapter() at call time
 # (mellea.backends.adapters.io_contracts), never declared here. Declaring one
 # unused by any caller would be exactly the parallel-declaration problem
-# issue #1516 closes; the `rag.py`/`guardian.py` sibling constants are kept
-# only as per-helper weights scaffolding for #1141/#1142, never as a second
-# source of their contracts.
+# issue #1516 closes — the `rag.py`/`guardian.py` sibling constants carried
+# the same test-only status and were dropped for the same reason.
 # ---------------------------------------------------------------------------
 
 _REQUIREMENT_CHECK_ADAPTER = Adapter(

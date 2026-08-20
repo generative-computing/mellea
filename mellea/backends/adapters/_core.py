@@ -53,6 +53,11 @@ _PHASE_2_NOT_IMPLEMENTED = (
     "{cls} is a Phase 0 stub; implementation lands in Epic #929 Phase 2."
 )
 
+_BUILD_PROMPT_NOT_IMPLEMENTED = (
+    "build_prompt is not implemented; request construction still goes "
+    "through the legacy formatter/rewriter path, not IOContract."
+)
+
 
 class AdapterSchemaMismatchError(Exception):
     """Raised by :meth:`IOContract.parse` when output cannot satisfy the declared contract.
@@ -165,10 +170,7 @@ class _DictContract(IOContract):
         self._required_keys = required_keys
 
     def build_prompt(self, **_kwargs: object) -> Component:
-        raise NotImplementedError(
-            "build_prompt is not implemented; request construction still goes "
-            "through the legacy formatter/rewriter path, not IOContract."
-        )
+        raise NotImplementedError(_BUILD_PROMPT_NOT_IMPLEMENTED)
 
     def parse(self, raw: str) -> dict[str, object]:
         """Parse and validate dict-shaped adapter output.
@@ -215,10 +217,7 @@ class _ListContract(IOContract):
         self._required_item_keys = required_item_keys
 
     def build_prompt(self, **_kwargs: object) -> Component:
-        raise NotImplementedError(
-            "build_prompt is not implemented; request construction still goes "
-            "through the legacy formatter/rewriter path, not IOContract."
-        )
+        raise NotImplementedError(_BUILD_PROMPT_NOT_IMPLEMENTED)
 
     def parse(self, raw: str) -> dict[str, object]:
         """Parse and validate a list-of-dicts adapter output.
@@ -723,13 +722,12 @@ class Adapter:
     # right invariant — the two feed different lookup paths (registration and the
     # verbs key on the binding's `qualified_name`; `_find_adapter` scans on the
     # identity) and both return `None` on a miss, so a disagreement surfaces as
-    # "adapter not found" far from its cause. But it cannot be enforced yet: the
-    # ten module-level `Adapter` constants in `stdlib/components/intrinsic/rag.py`
-    # and `guardian.py` pair an `alora` identity with a bare, deliberately
-    # unconfigured `LocalFileBinding()` that defaults to LoRA. Every catalogue
-    # entry supports both types, so those are placeholders rather than genuine
-    # conflicts, and the check fired on "not configured yet". #1516 gave those
-    # constants real `io_contract`s (the capability axis) but deliberately left
-    # `weights` untouched — the alora-vs-lora binding question is the deployment
-    # axis, out of #1516's scope and still open. Enforce this check once a
-    # follow-up gives those constants real bindings.
+    # "adapter not found" far from its cause. But it cannot be enforced yet:
+    # in-tree constructions still pair an `alora` identity with a placeholder
+    # binding — the `_REQUIREMENT_CHECK_ADAPTER` test stub in
+    # `stdlib/components/intrinsic/core.py` (a bare, deliberately unconfigured
+    # `LocalFileBinding()` that defaults to LoRA) and the deprecated shims'
+    # `_ShimWeightsBinding`. Every catalogue entry supports both types, so those
+    # are placeholders rather than genuine conflicts, and the check fired on
+    # "not configured yet". Enforce the check once those constructions carry
+    # real bindings (the shims retire in #1144).

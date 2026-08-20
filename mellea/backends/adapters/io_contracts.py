@@ -23,7 +23,13 @@ import json
 import math
 
 from ...core import Component
-from ._core import AdapterSchemaMismatchError, IOContract, _DictContract, _ListContract
+from ._core import (
+    _BUILD_PROMPT_NOT_IMPLEMENTED,
+    AdapterSchemaMismatchError,
+    IOContract,
+    _DictContract,
+    _ListContract,
+)
 from .catalog import known_intrinsic_names
 
 
@@ -35,10 +41,7 @@ class _PolicyGuardrailsContract(IOContract):
     """
 
     def build_prompt(self, **_kwargs: object) -> Component:
-        raise NotImplementedError(
-            "build_prompt is not implemented; request construction still goes "
-            "through the legacy formatter/rewriter path, not IOContract."
-        )
+        raise NotImplementedError(_BUILD_PROMPT_NOT_IMPLEMENTED)
 
     def parse(self, raw: str) -> dict[str, object]:
         """Parse and validate policy-guardrails output.
@@ -88,10 +91,7 @@ class _GuardianCheckContract(IOContract):
     """
 
     def build_prompt(self, **_kwargs: object) -> Component:
-        raise NotImplementedError(
-            "build_prompt is not implemented; request construction still goes "
-            "through the legacy formatter/rewriter path, not IOContract."
-        )
+        raise NotImplementedError(_BUILD_PROMPT_NOT_IMPLEMENTED)
 
     def parse(self, raw: str) -> dict[str, object]:
         """Parse and validate guardian-core output.
@@ -140,10 +140,7 @@ class _RequirementCheckContract(IOContract):
     """
 
     def build_prompt(self, **_kwargs: object) -> Component:
-        raise NotImplementedError(
-            "build_prompt is not implemented; request construction still goes "
-            "through the legacy formatter/rewriter path, not IOContract."
-        )
+        raise NotImplementedError(_BUILD_PROMPT_NOT_IMPLEMENTED)
 
     def parse(self, raw: str) -> dict[str, object]:
         """Parse and validate requirement-check output.

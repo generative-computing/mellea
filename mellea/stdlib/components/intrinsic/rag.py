@@ -7,70 +7,12 @@ import collections.abc
 import warnings
 from typing import cast
 
-from ....backends.adapters import (
-    Adapter,
-    AdapterMixin,
-    Identity,
-    LocalFileBinding,
-    get_io_contract,
-)
+from ....backends.adapters import AdapterMixin
 from ...components import Document
 from ...context import ChatContext
 from ..chat import Message
 from ..docs.document import _coerce_to_document, _coerce_to_documents
 from ._util import _resolve_question, _resolve_response, call_intrinsic
-
-# ---------------------------------------------------------------------------
-# Module-level Adapter constants (one per helper)
-#
-# io_contract is read from the same registry `resolve_adapter()` uses
-# (mellea.backends.adapters.io_contracts) rather than declared here — a second,
-# independent declaration is exactly the parallel-argument problem issue #1516
-# closes. See test_rag_contracts.py for contract-enforcement tests.
-#
-# The helper bodies no longer reference these constants: the contract travels
-# with the adapter resolve_adapter() returns. They remain as the per-helper
-# Adapter handles that #1141/#1142 will fill with real weights bindings.
-# ---------------------------------------------------------------------------
-
-_ANSWERABILITY_ADAPTER = Adapter(
-    identity=Identity("answerability", "alora", capability="answerability"),
-    io_contract=get_io_contract("answerability"),
-    weights=LocalFileBinding(),
-)
-
-_QUERY_REWRITE_ADAPTER = Adapter(
-    identity=Identity("query_rewrite", "alora", capability="query_rewrite"),
-    io_contract=get_io_contract("query_rewrite"),
-    weights=LocalFileBinding(),
-)
-
-_QUERY_CLARIFY_ADAPTER = Adapter(
-    identity=Identity("query_clarification", "alora", capability="query_clarification"),
-    io_contract=get_io_contract("query_clarification"),
-    weights=LocalFileBinding(),
-)
-
-_CITATIONS_ADAPTER = Adapter(
-    identity=Identity("citations", "alora", capability="citations"),
-    io_contract=get_io_contract("citations"),
-    weights=LocalFileBinding(),
-)
-
-_CONTEXT_RELEVANCE_ADAPTER = Adapter(
-    identity=Identity("context_relevance", "alora", capability="context_relevance"),
-    io_contract=get_io_contract("context_relevance"),
-    weights=LocalFileBinding(),
-)
-
-_HALLUCINATION_ADAPTER = Adapter(
-    identity=Identity(
-        "hallucination_detection", "alora", capability="hallucination_detection"
-    ),
-    io_contract=get_io_contract("hallucination_detection"),
-    weights=LocalFileBinding(),
-)
-
 
 # ---------------------------------------------------------------------------
 # High-level helper functions

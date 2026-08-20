@@ -16,13 +16,7 @@ import collections.abc
 import warnings
 from typing import cast
 
-from ....backends.adapters import (
-    Adapter,
-    AdapterMixin,
-    Identity,
-    LocalFileBinding,
-    get_io_contract,
-)
+from ....backends.adapters import AdapterMixin
 from ....core.utils import MelleaLogger
 from ...components import Document
 from ...context import ChatContext
@@ -36,48 +30,6 @@ deprecated `target_role` kwarg."""
 
 _TARGET_ROLE_TO_SCHEMA = {"user": "user_prompt", "assistant": "assistant_response"}
 """Mapping used by the deprecated `target_role` path of `guardian_check`."""
-
-
-# ---------------------------------------------------------------------------
-# Module-level Adapter constants (one per helper)
-#
-# io_contract is read from the same registry `resolve_adapter()` uses
-# (mellea.backends.adapters.io_contracts) rather than declared here — a second,
-# independent declaration is exactly the parallel-argument problem issue #1516
-# closes. See test_guardian_io_contract.py for contract-enforcement tests.
-#
-# The helper bodies no longer reference these constants: the contract travels
-# with the adapter resolve_adapter() returns. They remain as the per-helper
-# Adapter handles that #1141/#1142 will fill with real weights bindings.
-# ---------------------------------------------------------------------------
-
-_POLICY_GUARDRAILS_ADAPTER = Adapter(
-    identity=Identity("policy-guardrails", "alora", capability="policy_guardrails"),
-    io_contract=get_io_contract("policy-guardrails"),
-    weights=LocalFileBinding(),
-)
-
-_GUARDIAN_CHECK_ADAPTER = Adapter(
-    identity=Identity("guardian-core", "alora", capability="guardian_core"),
-    io_contract=get_io_contract("guardian-core"),
-    weights=LocalFileBinding(),
-)
-
-_FACTUALITY_DETECTION_ADAPTER = Adapter(
-    identity=Identity(
-        "factuality-detection", "alora", capability="factuality_detection"
-    ),
-    io_contract=get_io_contract("factuality-detection"),
-    weights=LocalFileBinding(),
-)
-
-_FACTUALITY_CORRECTION_ADAPTER = Adapter(
-    identity=Identity(
-        "factuality-correction", "alora", capability="factuality_correction"
-    ),
-    io_contract=get_io_contract("factuality-correction"),
-    weights=LocalFileBinding(),
-)
 
 
 def policy_guardrails(
