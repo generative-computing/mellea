@@ -722,9 +722,10 @@ class EmbeddedBinding:
     Attributes:
         binding_type (ClassVar[str]): `"embedded"`.
         source (str): Base model identifier this binding activates adapters
-            against (e.g. the Hugging Face repo id served by the backend).
-            Recorded for the future `mellea.adapter_function.source` span
-            attribute (#1466); not otherwise used by `apply_activation`.
+            against — the backend's `base_model_name` (e.g. `granite-4.1-3b`
+            for a backend built against `ibm-granite/granite-4.1-3b`).
+            Stamped by `OpenAIBackend.add_adapter` at registration; not
+            otherwise used by `apply_activation`.
     """
 
     binding_type: ClassVar[str] = "embedded"

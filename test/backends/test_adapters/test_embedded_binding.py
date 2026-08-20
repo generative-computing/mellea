@@ -12,11 +12,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from mellea.backends.adapters._core import (
+from mellea.backends.adapters import (
     EmbeddedActivationRequest,
     EmbeddedBinding,
     Identity,
 )
+from mellea.plugins.types import HookType
 
 
 def _identity(
@@ -60,6 +61,21 @@ async def test_apply_activation_preserves_existing_chat_template_kwargs():
     ctk = request.extra_body["chat_template_kwargs"]
     assert ctk["enable_thinking"] is True
     assert ctk["adapter_name"] == "citations"
+
+
+async def test_apply_activation_handles_explicit_none_chat_template_kwargs():
+    # The `or {}` branch: an explicit None value (not a missing key) is
+    # normalised to a dict rather than crashing on assignment.
+    binding = EmbeddedBinding()
+    request = EmbeddedActivationRequest(
+        extra_body={"chat_template_kwargs": None}, api_params={}
+    )
+
+    await binding.apply_activation(request, _identity("answerability"))
+
+    assert request.extra_body["chat_template_kwargs"]["adapter_name"] == (
+        "answerability"
+    )
 
 
 def test_no_weights_verbs_on_embedded_binding():
@@ -113,6 +129,7 @@ async def test_apply_activation_fires_phase_complete_metric():
         await binding.apply_activation(request, _identity("answerability"))
 
     mock_invoke.assert_awaited_once()
+    assert mock_invoke.call_args.args[0] is HookType.ADAPTER_FUNCTION_PHASE_COMPLETE
     payload = mock_invoke.call_args.args[1]
     assert payload.name == "answerability"
     assert payload.phase == "activate"
@@ -140,6 +157,4 @@ async def test_apply_activation_does_not_fire_invocation_complete():
         await binding.apply_activation(request, _identity("answerability"))
 
     fired_hook_types = [call.args[0] for call in mock_invoke.call_args_list]
-    from mellea.plugins.types import HookType
-
     assert HookType.ADAPTER_FUNCTION_INVOCATION_COMPLETE not in fired_hook_types
