@@ -1084,7 +1084,7 @@ def adapter_function_plugin():
 async def test_record_adapter_function_invocation_success(adapter_function_plugin):
     """A successful invocation records the invocations counter, not parse_failures."""
     payload = AdapterFunctionInvocationCompletePayload(
-        invocation_id="inv-1",
+        adapter_function_invocation_id="inv-1",
         name="answerability",
         revision="r1",
         binding_type="local_file",
@@ -1118,7 +1118,7 @@ async def test_record_adapter_function_invocation_schema_error_also_records_pars
 ):
     """A schema_error outcome records both the invocations counter and parse_failures."""
     payload = AdapterFunctionInvocationCompletePayload(
-        invocation_id="inv-2",
+        adapter_function_invocation_id="inv-2",
         name="answerability",
         revision="r1",
         binding_type="local_file",
@@ -1156,7 +1156,7 @@ async def test_record_adapter_function_invocation_none_revision_passed_through(
     not in the plugin — so the plugin passes the raw payload.revision value.
     """
     payload = AdapterFunctionInvocationCompletePayload(
-        invocation_id="inv-3",
+        adapter_function_invocation_id="inv-3",
         name="answerability",
         revision=None,
         binding_type="embedded",
@@ -1182,7 +1182,10 @@ async def test_record_adapter_function_invocation_none_revision_passed_through(
 async def test_record_adapter_function_phase_duration(adapter_function_plugin):
     """Phase-complete events record the phase-duration histogram in seconds."""
     payload = AdapterFunctionPhaseCompletePayload(
-        invocation_id="inv-4", name="answerability", phase="prepare", duration_ms=12.5
+        adapter_function_invocation_id="inv-4",
+        name="answerability",
+        phase="prepare",
+        duration_ms=12.5,
     )
 
     with patch(

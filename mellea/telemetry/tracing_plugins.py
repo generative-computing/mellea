@@ -655,7 +655,7 @@ class AdapterFunctionTracingPlugin(
     left open by a phase that raised (see `finish_adapter_function_span`).
     `adapter_function_phase_start`/`adapter_function_phase_complete` open/close
     one child span per lifecycle phase, correlated with the parent via
-    `invocation_id`.
+    `adapter_function_invocation_id`.
 
     On the `mellea.backend` tracer (adapter/model lifecycle work, not a
     user-facing operation — see `docs/docs/observability/tracing.md`).
@@ -701,7 +701,7 @@ class AdapterFunctionTracingPlugin(
         from mellea.telemetry.tracing import start_adapter_function_span
 
         start_adapter_function_span(
-            payload.invocation_id,
+            payload.adapter_function_invocation_id,
             name=payload.name,
             revision=payload.revision,
             binding_type=payload.binding_type,
@@ -716,7 +716,9 @@ class AdapterFunctionTracingPlugin(
         from mellea.telemetry.tracing import finish_adapter_function_span
 
         finish_adapter_function_span(
-            payload.invocation_id, outcome=payload.outcome, exception=payload.error
+            payload.adapter_function_invocation_id,
+            outcome=payload.outcome,
+            exception=payload.error,
         )
 
     @hook("adapter_function_phase_start")
@@ -727,7 +729,9 @@ class AdapterFunctionTracingPlugin(
         from mellea.telemetry.tracing import start_adapter_function_phase_span
 
         start_adapter_function_phase_span(
-            payload.invocation_id, payload.phase, revision=payload.revision
+            payload.adapter_function_invocation_id,
+            payload.phase,
+            revision=payload.revision,
         )
 
     @hook("adapter_function_phase_complete")
@@ -737,7 +741,9 @@ class AdapterFunctionTracingPlugin(
         """Close the `adapter_function.<phase>` child span."""
         from mellea.telemetry.tracing import finish_adapter_function_phase_span
 
-        finish_adapter_function_phase_span(payload.invocation_id, payload.phase)
+        finish_adapter_function_phase_span(
+            payload.adapter_function_invocation_id, payload.phase
+        )
 
 
 # All tracing plugins to auto-register when tracing is enabled.

@@ -135,7 +135,10 @@ def test_prepare_activate_deactivate_release_full_lifecycle():
     assert invocations[0].name == "answerability"
     assert invocations[0].binding_type == "local_file"
     assert invocations[0].adapter_type == binding.adapter_type.value
-    assert invocations[0].invocation_id == invocation_starts[0].invocation_id
+    assert (
+        invocations[0].adapter_function_invocation_id
+        == invocation_starts[0].adapter_function_invocation_id
+    )
 
 
 def test_deactivate_runs_even_when_generation_body_raises():

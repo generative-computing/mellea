@@ -636,7 +636,7 @@ class LocalFileBinding(WeightsBinding):
 
         try:
             payload = AdapterFunctionInvocationStartPayload(
-                invocation_id=invocation_id,
+                adapter_function_invocation_id=invocation_id,
                 name=self.name,
                 revision=revision,
                 binding_type=self.binding_type,
@@ -682,7 +682,7 @@ class LocalFileBinding(WeightsBinding):
 
         try:
             payload = AdapterFunctionInvocationCompletePayload(
-                invocation_id=invocation_id,
+                adapter_function_invocation_id=invocation_id,
                 name=self.name,
                 revision=revision,
                 binding_type=self.binding_type,
@@ -721,7 +721,7 @@ class LocalFileBinding(WeightsBinding):
 
         try:
             payload = AdapterFunctionPhaseStartPayload(
-                invocation_id=invocation_id,
+                adapter_function_invocation_id=invocation_id,
                 name=self.name,
                 phase=phase,
                 revision=revision,
@@ -763,7 +763,7 @@ class LocalFileBinding(WeightsBinding):
 
         try:
             payload = AdapterFunctionPhaseCompletePayload(
-                invocation_id=invocation_id,
+                adapter_function_invocation_id=invocation_id,
                 name=self.name,
                 phase=phase,
                 duration_ms=duration_s * 1000.0,

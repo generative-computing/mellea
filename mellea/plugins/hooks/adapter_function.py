@@ -34,7 +34,7 @@ class AdapterFunctionInvocationStartPayload(MelleaBasePayload):
     """Payload for `adapter_function_invocation_start` — before an adapter function invocation begins.
 
     Attributes:
-        invocation_id: Correlation id shared with the matching
+        adapter_function_invocation_id: Correlation id shared with the matching
             `adapter_function_invocation_complete` event.
         name: Adapter function name (e.g. `"answerability"`).
         revision: Catalog revision of the adapter, or `None` if unpinned.
@@ -43,7 +43,7 @@ class AdapterFunctionInvocationStartPayload(MelleaBasePayload):
         adapter_type: Adapter mechanism (e.g. `"lora"`, `"alora"`).
     """
 
-    invocation_id: str
+    adapter_function_invocation_id: str
     name: str
     revision: str | None = None
     binding_type: str = "unknown"
@@ -54,7 +54,7 @@ class AdapterFunctionInvocationCompletePayload(MelleaBasePayload):
     """Payload for `adapter_function_invocation_complete` — after an adapter function invocation finishes.
 
     Attributes:
-        invocation_id: Correlation id shared with the `adapter_function_invocation_start`
+        adapter_function_invocation_id: Correlation id shared with the `adapter_function_invocation_start`
             event that opened this invocation.
         name: Adapter function name (e.g. `"answerability"`).
         revision: Catalog revision of the adapter, or `None` if unpinned.
@@ -65,7 +65,7 @@ class AdapterFunctionInvocationCompletePayload(MelleaBasePayload):
         error: The exception raised during invocation, or `None` on success.
     """
 
-    invocation_id: str
+    adapter_function_invocation_id: str
     name: str
     revision: str | None = None
     binding_type: str = "unknown"
@@ -84,7 +84,7 @@ class AdapterFunctionPhaseStartPayload(MelleaBasePayload):
     """Payload for `adapter_function_phase_start` — before one lifecycle phase begins.
 
     Attributes:
-        invocation_id: Correlation id of the enclosing invocation (shared with the
+        adapter_function_invocation_id: Correlation id of the enclosing invocation (shared with the
             `adapter_function_invocation_start`/`_complete` events).
         name: Adapter function name (e.g. `"answerability"`).
         phase: Lifecycle phase about to run. See `AdapterFunctionPhase` for which
@@ -95,7 +95,7 @@ class AdapterFunctionPhaseStartPayload(MelleaBasePayload):
             resolved Hugging Face SHA.
     """
 
-    invocation_id: str
+    adapter_function_invocation_id: str
     name: str
     phase: AdapterFunctionPhase
     revision: str | None = None
@@ -109,7 +109,7 @@ class AdapterFunctionPhaseCompletePayload(MelleaBasePayload):
     `adapter_function_invocation_complete`'s `outcome`/`error`.
 
     Attributes:
-        invocation_id: Correlation id of the enclosing invocation (shared with the
+        adapter_function_invocation_id: Correlation id of the enclosing invocation (shared with the
             `adapter_function_invocation_start`/`_complete` events).
         name: Adapter function name (e.g. `"answerability"`).
         phase: Lifecycle phase that completed. See `AdapterFunctionPhase` for
@@ -117,7 +117,7 @@ class AdapterFunctionPhaseCompletePayload(MelleaBasePayload):
         duration_ms: Wall-clock duration of the phase in milliseconds.
     """
 
-    invocation_id: str
+    adapter_function_invocation_id: str
     name: str
     # Constrained to a Literal so a typo can't silently spawn a new metric-label
     # series (the phase becomes a metric dimension). Required, with no unset

@@ -307,7 +307,7 @@ async def test_plugin_invocation_start_opens_parent_span(
 
     _fake_span, fake_tracer = _patch_backend_tracer()
     payload = AdapterFunctionInvocationStartPayload(
-        invocation_id="p-inv-1",
+        adapter_function_invocation_id="p-inv-1",
         name="answerability",
         revision="r1",
         binding_type="local_file",
@@ -331,14 +331,14 @@ async def test_plugin_invocation_complete_closes_parent_span(
 
     fake_span, fake_tracer = _patch_backend_tracer()
     start_payload = AdapterFunctionInvocationStartPayload(
-        invocation_id="p-inv-2",
+        adapter_function_invocation_id="p-inv-2",
         name="answerability",
         revision="r1",
         binding_type="local_file",
         adapter_type="lora",
     )
     complete_payload = AdapterFunctionInvocationCompletePayload(
-        invocation_id="p-inv-2",
+        adapter_function_invocation_id="p-inv-2",
         name="answerability",
         revision="r1",
         binding_type="local_file",
@@ -364,10 +364,16 @@ async def test_plugin_phase_start_and_complete_open_and_close_child_span(
 
     fake_span, fake_tracer = _patch_backend_tracer()
     start_payload = AdapterFunctionPhaseStartPayload(
-        invocation_id="p-inv-3", name="answerability", phase="prepare", revision="sha1"
+        adapter_function_invocation_id="p-inv-3",
+        name="answerability",
+        phase="prepare",
+        revision="sha1",
     )
     complete_payload = AdapterFunctionPhaseCompletePayload(
-        invocation_id="p-inv-3", name="answerability", phase="prepare", duration_ms=5.0
+        adapter_function_invocation_id="p-inv-3",
+        name="answerability",
+        phase="prepare",
+        duration_ms=5.0,
     )
     with patch("mellea.telemetry.tracing.get_backend_tracer", return_value=fake_tracer):
         await adapter_function_plugin.on_phase_start(start_payload, {})

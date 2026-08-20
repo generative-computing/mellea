@@ -358,7 +358,10 @@ def _fire_phase_start_hook(
 
     try:
         payload = AdapterFunctionPhaseStartPayload(
-            invocation_id=invocation_id, name=name, phase=phase, revision=revision
+            adapter_function_invocation_id=invocation_id,
+            name=name,
+            phase=phase,
+            revision=revision,
         )
         hook_coro = invoke_hook(HookType.ADAPTER_FUNCTION_PHASE_START, payload)
         _run_async_in_thread(hook_coro)
@@ -396,7 +399,10 @@ def _fire_phase_complete_hook(
 
     try:
         payload = AdapterFunctionPhaseCompletePayload(
-            invocation_id=invocation_id, name=name, phase=phase, duration_ms=duration_ms
+            adapter_function_invocation_id=invocation_id,
+            name=name,
+            phase=phase,
+            duration_ms=duration_ms,
         )
         hook_coro = invoke_hook(HookType.ADAPTER_FUNCTION_PHASE_COMPLETE, payload)
         _run_async_in_thread(hook_coro)
@@ -473,7 +479,7 @@ def _fire_invocation_start_hook(
     from ...plugins.hooks.adapter_function import AdapterFunctionInvocationStartPayload
 
     payload = AdapterFunctionInvocationStartPayload(
-        invocation_id=invocation_id,
+        adapter_function_invocation_id=invocation_id,
         name=name,
         revision=revision,
         binding_type=binding_type,
@@ -517,7 +523,7 @@ def _fire_invocation_complete(
     )
 
     payload = AdapterFunctionInvocationCompletePayload(
-        invocation_id=invocation_id,
+        adapter_function_invocation_id=invocation_id,
         name=name,
         revision=revision,
         binding_type=binding_type,
