@@ -17,6 +17,10 @@ e.g. `"guardian-core"` — the same string passed to `call_intrinsic` and
 and the high-level helpers in `mellea.stdlib.components.intrinsic` read from it. Declaring
 a capability's contract anywhere else reintroduces the parallel-argument problem this
 module exists to close.
+
+An adapter a user registers with a backend takes precedence over the registry for its
+own contract: `call_intrinsic` parses with whatever contract the resolved adapter
+carries, and only adapters Mellea constructs itself (the lazy shims) get theirs from here.
 """
 
 import json

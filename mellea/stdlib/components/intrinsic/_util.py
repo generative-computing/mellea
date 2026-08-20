@@ -182,7 +182,10 @@ def call_intrinsic(
     executes via `mfuncs.act`. The resolved adapter's own
     `IOContract.parse` method is called on the raw output string before returning — the
     output contract always travels with the adapter that produced it, rather than as a
-    separate argument a caller could mismatch. The contract validates required fields and
+    separate argument a caller could mismatch. For adapters Mellea constructs (the lazy
+    shims) that contract comes from the `mellea.backends.adapters.io_contracts` registry;
+    for an adapter a user registered under the same name, the user's own `io_contract`
+    wins. The contract validates required fields and
     raises `AdapterSchemaMismatchError` on contract-breaking deltas; forward-compatible
     additions (extra optional fields) do not raise.
 
