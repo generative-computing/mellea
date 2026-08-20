@@ -2102,6 +2102,60 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         # Remove the adapter from the list of loaded adapters.
         del self._loaded_adapters[adapter.qualified_name]
 
+    def remove_adapter(self, adapter_qualified_name: str) -> None:
+        """Deregister a previously added adapter, freeing its qualified name for reuse.
+
+        The inverse of `add_adapter()`: reverses all three of its mutations
+        (registry entry, `.path`, `.backend`), not just the registry entry —
+        otherwise the removed object would be left with `.backend` still
+        naming this backend, silently blocking it from being re-added anywhere
+        (`add_adapter()`'s `adapter.backend is self` guard treats that as an
+        already-added no-op). If the adapter is not currently registered, a
+        log message is emitted and the method returns without error.
+
+        For a `LocalFileBinding`, call `binding.release()` instead: it runs
+        this verb and also marks the binding released, so the binding's
+        lifecycle state stays coherent with the registry. Calling this
+        method directly on a registered binding clears only `.backend`/
+        `.path` — the binding's `_loaded`/`_released` state is untouched, so
+        a later `activate()`/`deactivate()` raises the `prepare()`-required
+        error even though the binding was never released, and the real
+        cause (an external `remove_adapter()`) is nowhere in the message.
+        `prepare()` self-heals that state (re-registers via the staged
+        backend and reloads), but `release()` is the intended way to free
+        the name.
+
+        Args:
+            adapter_qualified_name (str): The `adapter.qualified_name` of the
+                adapter to deregister.
+
+        Raises:
+            ValueError: The adapter is still loaded (`load_peft_adapter()` was
+                called and `unload_peft_adapter()` was not). Freeing the name
+                while it is still loaded would let a later `load_peft_adapter()`
+                call for a *different* adapter hit PEFT's "already exists"
+                error — silently swallowed by `load_peft_adapter()` — and keep
+                running on this adapter's stale weights under the new one's
+                identity. Call `unload_peft_adapter()` first.
+        """
+        if adapter_qualified_name in self._loaded_adapters:
+            raise ValueError(
+                f"cannot remove adapter {adapter_qualified_name} for backend {self}: "
+                "it is still loaded; call unload_peft_adapter() first (release() "
+                "does this for you)."
+            )
+
+        adapter = self._added_adapters.pop(adapter_qualified_name, None)
+        if adapter is None:
+            MelleaLogger.get_logger().info(
+                f"could not remove adapter {adapter_qualified_name} for backend {self}: "
+                "adapter was not registered"
+            )
+            return
+
+        adapter.backend = None
+        adapter.path = None
+
     def activate_peft_adapter(self, adapter_qualified_name: str) -> None:
         """Switch a previously loaded PEFT adapter on for subsequent generation.
 

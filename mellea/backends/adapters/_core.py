@@ -429,6 +429,13 @@ class LocalFileBinding(WeightsBinding):
                         "instead."
                     )
 
+                # `add_adapter`'s duplicate-name check runs under only this
+                # binding's `_lifecycle_lock`, while `release()` pops the
+                # registry under the backend's `_generation_lock` — so a
+                # concurrent `release()` of a same-qualified-name binding can
+                # make this registration transiently refuse a name that is in
+                # fact free. Retryable; no shipped path registers two bindings
+                # of one capability concurrently (that is #1465's per-call case).
                 self._staged_backend.add_adapter(self)
                 # `add_adapter` signals success by setting `.backend`; it has early-return
                 # paths (notably: a different object already registered under this
@@ -439,11 +446,9 @@ class LocalFileBinding(WeightsBinding):
                 # instead, where the cause is still visible.
                 if self.backend is None:
                     raise RuntimeError(
-                        f"Backend refused to register adapter {self.qualified_name!r}; see the "
-                        "backend's warning log. Either another adapter is already registered "
-                        "under this qualified name, or this binding was previously released — "
-                        "`release()` is terminal and does not free the name for re-use "
-                        "(see #1528)."
+                        f"Backend refused to register adapter {self.qualified_name!r}; see "
+                        "the backend's warning log — another adapter is already registered "
+                        "under this qualified name."
                     )
             # `load_peft_adapter` mutates the backend's underlying PEFT model, the
             # same shared state `activate_peft_adapter`/`deactivate_peft_adapter`
@@ -498,20 +503,26 @@ class LocalFileBinding(WeightsBinding):
             self._active = False
 
     def release(self) -> None:
-        """Unloads the adapter's weights from the backend and clears local state.
+        """Unloads the adapter's weights and deregisters it from the backend.
 
-        Idempotent: a no-op if never prepared, or already released. Terminal, per
-        the `WeightsBinding` contract — enforced: `bind_backend()` and
-        `prepare()` both raise `RuntimeError` if called after `release()`,
-        rather than silently reviving the binding on a new backend.
+        Idempotent: a no-op if never prepared, or already released. Terminal
+        for *this binding*, per the `WeightsBinding` contract — enforced:
+        `bind_backend()` and `prepare()` both raise `RuntimeError` if called
+        after `release()`, rather than silently reviving the binding on a new
+        backend.
 
-        Does **not** fully deregister. `unload_peft_adapter` removes the adapter
-        from the backend's *loaded* set, but the backend's *registered* set
-        (`_added_adapters` on `LocalHFBackend`) keeps its entry, because
-        `add_adapter` has no inverse verb. So the `qualified_name` stays claimed
-        for the backend's lifetime and no later binding can register under it.
-        Tracked in #1528, which also asks whether re-registration should be
-        supported at all given the terminal contract.
+        Terminal does not mean the `qualified_name` stays claimed forever,
+        though: alongside `unload_peft_adapter` (which reverses the *load*),
+        `release()` calls the backend's `remove_adapter` (which reverses the
+        *registration*, `add_adapter`'s inverse — see #1528). So once this
+        binding releases, a **different**, freshly constructed
+        `LocalFileBinding` for the same capability can register under the
+        same `qualified_name` on the same backend — on a backend that
+        implements `remove_adapter`. A backend that supports the LocalFile/PEFT
+        reality (`load_peft_adapter`/`unload_peft_adapter`) but predates
+        `remove_adapter` and hasn't overridden it degrades gracefully instead
+        of raising: the binding still fully releases, but the `qualified_name`
+        stays claimed for that backend's lifetime (the pre-#1528 behaviour).
 
         Raises:
             RuntimeError: The binding is active; call `deactivate()` before
@@ -537,6 +548,18 @@ class LocalFileBinding(WeightsBinding):
                         "LocalFileBinding.release() requires deactivate() to be called first."
                     )
                 backend.unload_peft_adapter(self.qualified_name)
+                try:
+                    backend.remove_adapter(self.qualified_name)
+                except NotImplementedError:
+                    # State the observable fact, not the presumed cause: a real
+                    # implementation can raise NotImplementedError internally, and
+                    # that would be misdiagnosed as "does not implement it".
+                    MelleaLogger.get_logger().warning(
+                        f"{type(backend).__name__}.remove_adapter() raised "
+                        f"NotImplementedError; {self.qualified_name!r} stays registered "
+                        "for the backend's lifetime even though this binding has "
+                        "released."
+                    )
                 self.backend = None
                 self.path = None
                 self._staged_backend = None
