@@ -15,7 +15,12 @@ from unittest.mock import MagicMock, mock_open, patch
 
 import pytest
 
-from mellea.backends.adapters import Adapter, EmbeddedIntrinsicAdapter, IntrinsicAdapter
+from mellea.backends.adapters import (
+    Adapter,
+    EmbeddedIntrinsicAdapter,
+    IntrinsicAdapter,
+    get_io_contract,
+)
 from mellea.backends.adapters._core import Identity, LocalFileBinding
 from mellea.backends.adapters.adapter import AdapterMixin
 from mellea.backends.adapters.catalog import AdapterType, IntrinsicsCatalogEntry
@@ -90,6 +95,21 @@ def test_embedded_identity_populated():
     assert adapter.identity.name == "answerability"
     assert adapter.identity.capability == "answerability"
     assert adapter.identity.adapter_type == "alora"
+
+
+def test_embedded_carries_the_declared_io_contract_not_a_shim():
+    """resolve_adapter()'s shim path must carry a real contract (issue #1516).
+
+    Regression guard: without this, reverting `get_io_contract(intrinsic_name)`
+    back to the Phase 1 `_ShimIOContract()` placeholder would pass every other
+    test in this file, since none of them inspect `.io_contract`.
+    """
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        adapter = EmbeddedIntrinsicAdapter(
+            "answerability", config={}, technology="alora"
+        )
+    assert adapter.io_contract is get_io_contract("answerability")
 
 
 def test_embedded_identity_lora_technology():
@@ -168,6 +188,17 @@ def test_intrinsic_identity_populated():
     assert adapter.identity.name == "answerability"
     assert adapter.identity.capability == "answerability"
     assert adapter.identity.adapter_type == "alora"
+
+
+def test_intrinsic_carries_the_declared_io_contract_not_a_shim():
+    """resolve_adapter()'s shim path must carry a real contract (issue #1516).
+
+    Regression guard: without this, reverting `get_io_contract(intrinsic_name)`
+    back to the Phase 1 `_ShimIOContract()` placeholder would pass every other
+    test in this file, since none of them inspect `.io_contract`.
+    """
+    adapter = _make_intrinsic_adapter("answerability")
+    assert adapter.io_contract is get_io_contract("answerability")
 
 
 def test_intrinsic_identity_lora_adapter_type():

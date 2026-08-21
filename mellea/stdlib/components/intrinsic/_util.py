@@ -3,12 +3,11 @@
 
 """Shared utilities for intrinsic convenience wrappers."""
 
-import json
 from typing import cast
 
 from ....backends import ModelOption
 from ....backends._options import resolve_model_options
-from ....backends.adapters import AdapterMixin, AdapterType, IOContract
+from ....backends.adapters import AdapterMixin, AdapterType
 from ....core import Backend
 from ....stdlib import functional as mfuncs
 from ...components import Document
@@ -176,18 +175,19 @@ def call_intrinsic(
     /,
     kwargs: dict | None = None,
     model_options: dict | None = None,
-    io_contract: IOContract | None = None,
 ) -> dict[str, object]:
-    """Invoke an adapter function via the backend, returning parsed and optionally validated JSON output.
+    """Invoke an adapter function via the backend, returning parsed and validated JSON output.
 
-    Uses `AdapterMixin.resolve_adapter` to find or lazily register the adapter,
-    then executes via `mfuncs.act`.
-
-    When *io_contract* is provided its :meth:`~mellea.backends.adapters.IOContract.parse`
-    method is called on the raw output string before returning.  The contract validates
-    required fields and raises :class:`~mellea.backends.adapters.AdapterSchemaMismatchError`
-    on contract-breaking deltas; forward-compatible additions (extra optional fields) do
-    not raise.  When *io_contract* is `None` the raw `json.loads` result is returned.
+    Uses `AdapterMixin.resolve_adapter` to find or lazily register the adapter, then
+    executes via `mfuncs.act`. The resolved adapter's own
+    `IOContract.parse` method is called on the raw output string before returning — the
+    output contract always travels with the adapter that produced it, rather than as a
+    separate argument a caller could mismatch. For adapters Mellea constructs (the lazy
+    shims) that contract comes from the `mellea.backends.adapters.io_contracts` registry;
+    for an adapter a user registered under the same capability, the user's own
+    `io_contract` wins. The contract validates required fields and
+    raises `AdapterSchemaMismatchError` on contract-breaking deltas; forward-compatible
+    additions (extra optional fields) do not raise.
 
     Args:
         intrinsic_name (str): Capability name of the adapter function
@@ -199,23 +199,25 @@ def call_intrinsic(
         model_options (dict | None): Model options that override defaults.
             Adapter functions default to `TEMPERATURE: 0.0` for deterministic
             output; pass `TEMPERATURE` here to override it.
-        io_contract (IOContract | None): Output contract to validate and parse the
-            raw model output.  When `None`, `json.loads` is used directly.
 
     Returns:
-        dict[str, object]: Parsed (and optionally validated) JSON output from the adapter function.
+        dict[str, object]: Parsed and validated JSON output from the adapter function.
 
     Raises:
         ValueError: When *context* forwards no history to the model (e.g. a
-            `SimpleContext` was passed), or when the model output is `None` or
-            is not valid JSON.
-        AdapterSchemaMismatchError: When *io_contract* is provided and the
-            model output is missing a required field.
+            `SimpleContext` was passed), when the model output is `None` or is
+            not valid JSON, or when well-formed JSON is rejected for shape by
+            the resolved adapter's contract (wrong top-level type, or a
+            non-object element of an array-shaped contract).
+        AdapterSchemaMismatchError: When the model output is missing a field required
+            by the resolved adapter's output contract.
     """
     _assert_context_forwards_history(intrinsic_name, context)
 
-    # Ensure the adapter is registered; resolve_adapter creates it if absent.
-    backend.resolve_adapter(intrinsic_name)
+    # Resolve (finding or lazily registering) the adapter now, rather than merely
+    # ensuring it is registered and discarding the result: its io_contract is what
+    # parses the raw output below.
+    adapter = backend.resolve_adapter(intrinsic_name)
 
     # Adapter activation is the backend's responsibility — the HF backend acquires
     # its generation lock and sets the active adapter inside _generate_with_adapter_lock,
@@ -247,6 +249,4 @@ def call_intrinsic(
     result_str = model_output_thunk.value
     if result_str is None:
         raise ValueError("Model output is None.")
-    if io_contract is not None:
-        return io_contract.parse(result_str)
-    return json.loads(result_str)
+    return adapter.io_contract.parse(result_str)
