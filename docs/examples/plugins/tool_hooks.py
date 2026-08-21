@@ -31,7 +31,7 @@ from mellea.plugins import (
     block,
     hook,
 )
-from mellea.stdlib.functional import _call_tools
+from mellea.stdlib.functional import call_tools
 from mellea.stdlib.requirements import uses_tool
 
 logging.basicConfig(
@@ -326,7 +326,7 @@ def scenario_1_allowed_tool(all_tools):
             model_options={ModelOption.TOOLS: all_tools},
             tool_calls=True,
         )
-        tool_outputs = _call_tools(result, m.backend)
+        tool_outputs = call_tools(result, m.backend)
         if tool_outputs:
             log.info("Tool returned: %s", tool_outputs[0].content)
         else:
@@ -342,7 +342,7 @@ def scenario_2_blocked_tool(all_tools):
             model_options={ModelOption.TOOLS: all_tools},
             tool_calls=True,
         )
-        tool_outputs = _call_tools(result, m.backend)
+        tool_outputs = call_tools(result, m.backend)
         if not tool_outputs:
             log.info("Tool call was blocked — outputs list is empty, as expected")
         else:
@@ -358,7 +358,7 @@ def scenario_3_safe_calculator(all_tools):
             model_options={ModelOption.TOOLS: all_tools},
             tool_calls=True,
         )
-        tool_outputs = _call_tools(result, m.backend)
+        tool_outputs = call_tools(result, m.backend)
         if tool_outputs:
             log.info("Tool returned: %s", tool_outputs[0].content)
         else:
@@ -377,7 +377,7 @@ def scenario_4_blocked_calculator(all_tools):
             model_options={ModelOption.TOOLS: all_tools},
             tool_calls=True,
         )
-        tool_outputs = _call_tools(result, m.backend)
+        tool_outputs = call_tools(result, m.backend)
         if not tool_outputs:
             log.info("Tool call was blocked — outputs list is empty, as expected")
         else:
@@ -396,7 +396,7 @@ def scenario_5_sanitizer_calculator(all_tools):
             model_options={ModelOption.TOOLS: all_tools},
             tool_calls=True,
         )
-        tool_outputs = _call_tools(result, m.backend)
+        tool_outputs = call_tools(result, m.backend)
         if tool_outputs:
             log.info(
                 "Sanitized expression evaluated — tool returned: %s",
@@ -415,7 +415,7 @@ def scenario_6_sanitizer_location(all_tools):
             model_options={ModelOption.TOOLS: all_tools},
             tool_calls=True,
         )
-        tool_outputs = _call_tools(result, m.backend)
+        tool_outputs = call_tools(result, m.backend)
         if tool_outputs:
             log.info(
                 "Weather fetched with normalised location — tool returned: %s",

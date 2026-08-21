@@ -31,10 +31,10 @@ def reset_metrics_state() -> None:
     metrics._meter = None
     # Cached lazy instruments — bound to the old MeterProvider, must clear so
     # the next record_* call re-creates them against the new provider.
-    metrics._input_token_counter = None
-    metrics._output_token_counter = None
+    metrics._token_usage_histogram = None
     metrics._duration_histogram = None
     metrics._ttfb_histogram = None
+    metrics._time_per_output_chunk_histogram = None
     metrics._error_counter = None
     metrics._cost_counter = None
     metrics._sampling_attempts_counter = None
@@ -61,7 +61,6 @@ def reset_tracing_state() -> None:
     tracing._application_tracer = None
     tracing._backend_tracer = None
     tracing._in_flight_spans.clear()
-    tracing._reattached_tokens.clear()
     # Re-register: another test's shutdown_plugins() may have emptied the manager.
     tracing._plugins_registered = False
     tracing._setup_tracing()

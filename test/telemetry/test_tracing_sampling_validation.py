@@ -123,9 +123,9 @@ def test_start_sampling_span_stamps_attrs_and_stashes(enabled_tracing):
     fake_tracer.start_span.assert_called_once_with("sampling")
     assert "sid-1" in tracing._in_flight_spans
     attrs = _attrs(fake_span)
-    assert attrs["mellea.strategy_type"] == "RejectionSamplingStrategy"
-    assert attrs["mellea.loop_budget"] == 4
-    assert attrs["mellea.requirement_count"] == 2
+    assert attrs["mellea.sampling.strategy_type"] == "RejectionSamplingStrategy"
+    assert attrs["mellea.sampling.loop_budget"] == 4
+    assert attrs["mellea.sampling.requirement_count"] == 2
 
 
 def test_add_span_event_records_event_on_in_flight_span(enabled_tracing):
@@ -168,8 +168,8 @@ def test_finish_sampling_span_success_stamps_outcome(enabled_tracing):
     fake_span.end.assert_called_once()
     assert "sid-ok" not in tracing._in_flight_spans
     attrs = _attrs(fake_span)
-    assert attrs["mellea.sampling_success"] is True
-    assert attrs["mellea.iterations_used"] == 3
+    assert attrs["mellea.sampling.success"] is True
+    assert attrs["mellea.sampling.iterations_used"] == 3
 
 
 def test_finish_sampling_span_failure_is_not_an_error(enabled_tracing):
@@ -193,8 +193,10 @@ def test_finish_sampling_span_failure_is_not_an_error(enabled_tracing):
     fake_span.set_status.assert_not_called()
     fake_span.end.assert_called_once()
     attrs = _attrs(fake_span)
-    assert attrs["mellea.sampling_success"] is False
-    assert attrs["mellea.failure_reason"] == "Budget exhausted after 2 iterations"
+    assert attrs["mellea.sampling.success"] is False
+    assert (
+        attrs["mellea.sampling.failure_reason"] == "Budget exhausted after 2 iterations"
+    )
 
 
 def test_finish_sampling_span_exception_sets_error(enabled_tracing):
@@ -224,7 +226,7 @@ def test_start_validation_span_stamps_requirement_count(enabled_tracing):
 
     fake_tracer.start_span.assert_called_once_with("validation")
     assert "vid-1" in tracing._in_flight_spans
-    assert _attrs(fake_span)["mellea.requirement_count"] == 3
+    assert _attrs(fake_span)["mellea.validation.requirement_count"] == 3
 
 
 def test_finish_validation_span_records_counts_always(enabled_tracing, monkeypatch):
@@ -247,11 +249,11 @@ def test_finish_validation_span_records_counts_always(enabled_tracing, monkeypat
 
     fake_span.end.assert_called_once()
     attrs = _attrs(fake_span)
-    assert attrs["mellea.validation_passed"] is False
-    assert attrs["mellea.passed_count"] == 1
-    assert attrs["mellea.failed_count"] == 1
+    assert attrs["mellea.validation.passed"] is False
+    assert attrs["mellea.validation.passed_count"] == 1
+    assert attrs["mellea.validation.failed_count"] == 1
     # Content capture disabled → failure reasons omitted.
-    assert "mellea.failure_reasons" not in attrs
+    assert "mellea.validation.failure_reasons" not in attrs
 
 
 def test_finish_validation_span_records_reasons_when_content_enabled(
@@ -271,7 +273,9 @@ def test_finish_validation_span_records_reasons_when_content_enabled(
             failure_reasons=["output too short"],
         )
 
-    assert _attrs(fake_span)["mellea.failure_reasons"] == ["output too short"]
+    assert _attrs(fake_span)["mellea.validation.failure_reasons"] == [
+        "output too short"
+    ]
 
 
 def test_finish_validation_span_records_reasons_as_list(enabled_tracing, monkeypatch):
@@ -290,7 +294,10 @@ def test_finish_validation_span_records_reasons_as_list(enabled_tracing, monkeyp
             failure_reasons=["too short", "wrong tone"],
         )
 
-    assert _attrs(fake_span)["mellea.failure_reasons"] == ["too short", "wrong tone"]
+    assert _attrs(fake_span)["mellea.validation.failure_reasons"] == [
+        "too short",
+        "wrong tone",
+    ]
 
 
 def test_finish_validation_span_exception_marks_error(enabled_tracing):
@@ -385,10 +392,10 @@ def test_act_with_strategy_emits_sampling_and_validate_nesting(span_exporter):
 
     assert sampling_span.attributes is not None
     assert (
-        sampling_span.attributes.get("mellea.strategy_type")
+        sampling_span.attributes.get("mellea.sampling.strategy_type")
         == "RejectionSamplingStrategy"
     )
-    assert sampling_span.attributes.get("mellea.sampling_success") is True
+    assert sampling_span.attributes.get("mellea.sampling.success") is True
 
     if _CONTEXT_ATTACH_SUPPORTED:
         assert sampling_span.parent is not None

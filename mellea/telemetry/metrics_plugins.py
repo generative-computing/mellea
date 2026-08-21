@@ -35,6 +35,7 @@ if TYPE_CHECKING:
         GenerationBatchErrorPayload,
         GenerationBatchPostCallPayload,
         GenerationErrorPayload,
+        GenerationEventPayload,
         GenerationPostCallPayload,
     )
     from mellea.plugins.hooks.sampling import (
@@ -82,6 +83,7 @@ class TokenMetricsPlugin(Plugin, name="token_metrics", priority=1050):
             output_tokens=gen.usage.get("completion_tokens"),
             model=gen.model or "unknown",
             provider=gen.provider or "unknown",
+            operation="chat",
         )
 
     @hook("generation_batch_post_call", mode=PluginMode.FIRE_AND_FORGET)
@@ -104,6 +106,7 @@ class TokenMetricsPlugin(Plugin, name="token_metrics", priority=1050):
             output_tokens=payload.usage.get("completion_tokens"),
             model=payload.model or "unknown",
             provider=payload.provider or "unknown",
+            operation="text_completion",
         )
 
 
@@ -137,12 +140,18 @@ class LatencyMetricsPlugin(Plugin, name="latency_metrics", priority=1051):
             duration_s=payload.latency_ms / 1000.0,
             model=model,
             provider=provider,
+            operation="chat",
             streaming=gen.streaming,
         )
 
         # Record TTFB only for streaming requests with a measured value
         if gen.streaming and gen.ttfb_ms is not None:
-            record_ttfb(ttfb_s=gen.ttfb_ms / 1000.0, model=model, provider=provider)
+            record_ttfb(
+                ttfb_s=gen.ttfb_ms / 1000.0,
+                model=model,
+                provider=provider,
+                operation="chat",
+            )
 
     @hook("generation_batch_post_call", mode=PluginMode.FIRE_AND_FORGET)
     async def record_batch_latency_metrics(
@@ -163,7 +172,40 @@ class LatencyMetricsPlugin(Plugin, name="latency_metrics", priority=1051):
             duration_s=payload.latency_ms / 1000.0,
             model=payload.model or "unknown",
             provider=payload.provider or "unknown",
+            operation="text_completion",
             streaming=False,
+        )
+
+    @hook("generation_event", mode=PluginMode.FIRE_AND_FORGET)
+    async def record_chunk_interval_metrics(
+        self, payload: GenerationEventPayload, context: dict[str, Any]
+    ) -> None:
+        """Record inter-chunk timing from `chunk_processed` events.
+
+        Each streamed chunk after the first carries an interval; the first has
+        none and is skipped. `chunk_processed` events are opt-in via
+        `MELLEA_GENERATION_CHUNK_EVENTS`, so the
+        `gen_ai.client.operation.time_per_output_chunk` histogram stays empty
+        unless that flag is set.
+
+        Args:
+            payload: A `generation_event`; the `chunk_processed` variant carries
+                `time_since_last_chunk_ms` in `data`.
+            context: Plugin context (unused).
+        """
+        if payload.event_name != "chunk_processed":
+            return
+        time_since_last_chunk_ms = payload.data.get("time_since_last_chunk_ms")
+        if time_since_last_chunk_ms is None:
+            return
+
+        from mellea.telemetry.metrics import record_time_per_output_chunk
+
+        record_time_per_output_chunk(
+            time_s=time_since_last_chunk_ms / 1000.0,
+            model=payload.model or "unknown",
+            provider=payload.provider or "unknown",
+            operation="chat",
         )
 
 
@@ -186,20 +228,37 @@ class ErrorMetricsPlugin(Plugin, name="error_metrics", priority=1052):
             context: Plugin context (unused).
         """
         from mellea.core.base import GenerationMetadata
-        from mellea.telemetry.metrics import classify_error, record_error
+        from mellea.telemetry.metrics import (
+            classify_error,
+            record_error,
+            record_request_duration,
+        )
 
         gen = (
             payload.model_output.generation
             if payload.model_output is not None
             else GenerationMetadata()
         )
-        error_type = classify_error(payload.exception)
+        exception_class = type(payload.exception).__name__
         record_error(
-            error_type=error_type,
+            error_type=classify_error(payload.exception),
             model=gen.model or "unknown",
             provider=gen.provider or "unknown",
-            exception_class=type(payload.exception).__name__,
+            exception_class=exception_class,
+            operation="chat",
         )
+
+        # Record duration for failures only when a call actually ran (a MOT
+        # exists); pre-dispatch setup failures have no operation to time.
+        if payload.model_output is not None:
+            record_request_duration(
+                duration_s=payload.latency_ms / 1000.0,
+                model=gen.model or "unknown",
+                provider=gen.provider or "unknown",
+                operation="chat",
+                streaming=gen.streaming,
+                exception_class=exception_class,
+            )
 
     @hook("generation_batch_error", mode=PluginMode.FIRE_AND_FORGET)
     async def record_batch_error_metrics(
@@ -211,21 +270,34 @@ class ErrorMetricsPlugin(Plugin, name="error_metrics", priority=1052):
             payload: Contains the exception, model, and provider for the batch.
             context: Plugin context (unused).
         """
-        from mellea.telemetry.metrics import classify_error, record_error
+        from mellea.telemetry.metrics import (
+            classify_error,
+            record_error,
+            record_request_duration,
+        )
 
-        error_type = classify_error(payload.exception)
+        exception_class = type(payload.exception).__name__
         record_error(
-            error_type=error_type,
+            error_type=classify_error(payload.exception),
             model=payload.model or "unknown",
             provider=payload.provider or "unknown",
-            exception_class=type(payload.exception).__name__,
+            exception_class=exception_class,
+            operation="text_completion",
+        )
+        record_request_duration(
+            duration_s=payload.latency_ms / 1000.0,
+            model=payload.model or "unknown",
+            provider=payload.provider or "unknown",
+            operation="text_completion",
+            streaming=False,
+            exception_class=exception_class,
         )
 
     @hook("streaming_end", mode=PluginMode.FIRE_AND_FORGET)
     async def record_streaming_error_metrics(
         self, payload: StreamingEndPayload, context: dict[str, Any]
     ) -> None:
-        """Record error metrics when `stream_with_chunking` ends with an exception.
+        """Record error metrics when `stream` ends with an exception.
 
         Args:
             payload: Contains the exception plus the model and provider from
@@ -241,6 +313,7 @@ class ErrorMetricsPlugin(Plugin, name="error_metrics", priority=1052):
             model=payload.model or "unknown",
             provider=payload.provider or "unknown",
             exception_class=type(payload.exception).__name__,
+            operation="chat",
         )
 
 
@@ -287,7 +360,7 @@ class CostMetricsPlugin(Plugin, name="cost_metrics", priority=1053):
             cache_creation_tokens=cache_creation,
         )
         if cost is not None:
-            record_cost(cost=cost, model=model, provider=provider)
+            record_cost(cost=cost, model=model, provider=provider, operation="chat")
 
     @hook("generation_batch_post_call", mode=PluginMode.FIRE_AND_FORGET)
     async def record_batch_cost_metrics(
@@ -322,7 +395,9 @@ class CostMetricsPlugin(Plugin, name="cost_metrics", priority=1053):
             cache_creation_tokens=cache_creation,
         )
         if cost is not None:
-            record_cost(cost=cost, model=model, provider=provider)
+            record_cost(
+                cost=cost, model=model, provider=provider, operation="text_completion"
+            )
 
 
 class SamplingMetricsPlugin(Plugin, name="sampling_metrics", priority=1054):
@@ -368,15 +443,15 @@ class SamplingMetricsPlugin(Plugin, name="sampling_metrics", priority=1054):
     async def record_streaming_outcome(
         self, payload: StreamingEndPayload, context: dict[str, Any]
     ) -> None:
-        """Record the `stream_with_chunking` outcome when the orchestrator finishes.
+        """Record the `stream` outcome when the stream finishes.
 
         Args:
-            payload: Contains the orchestrator's success flag.
+            payload: Contains the stream's success flag.
             context: Plugin context (unused).
         """
         from mellea.telemetry.metrics import record_sampling_outcome
 
-        record_sampling_outcome("stream_with_chunking", payload.success)
+        record_sampling_outcome("stream", payload.success)
 
 
 class RequirementMetricsPlugin(Plugin, name="requirement_metrics", priority=1055):

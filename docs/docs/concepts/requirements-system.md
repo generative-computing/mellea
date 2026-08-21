@@ -342,8 +342,8 @@ field:
 - `"fail"` — the stream is cancelled immediately; no further chunks reach the
   consumer; `validate()` is skipped for this requirement.
 
-State isolation is per-clone: `stream_with_chunking()` copies each requirement
-with `copy()` before starting the orchestrator, so the original objects are never
+State isolation is per-clone: `stream()` copies each requirement
+with `copy()` before generation starts, so the original objects are never
 mutated. Requirements that accumulate state across chunks (e.g. a running word
 count) should reassign mutable containers rather than mutate in place, since
 clones share the original's `__dict__` values at copy time.

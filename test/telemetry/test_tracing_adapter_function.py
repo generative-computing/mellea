@@ -124,6 +124,7 @@ def test_start_adapter_function_span_stamps_attrs_and_stashes_by_invocation_id(
 
     fake_tracer.start_span.assert_called_once_with("adapter_function")
     assert "inv-1" in tracing._in_flight_spans
+    assert tracing._in_flight_spans["inv-1"] == (fake_span, None)
     attrs = _attrs(fake_span)
     assert attrs["mellea.adapter_function.name"] == "answerability"
     assert attrs["mellea.adapter_function.revision"] == "abc123"

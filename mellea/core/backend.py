@@ -97,6 +97,8 @@ class Backend(abc.ABC):
                 model_options=model_options or {},
                 tool_calls=tool_calls,
                 generation_id=generation_id,
+                model=self._model_id,
+                provider=self._provider,
             )
             _, pre_payload = await invoke_hook(
                 HookType.GENERATION_PRE_CALL, pre_payload, backend=self

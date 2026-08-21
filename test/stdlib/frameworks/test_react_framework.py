@@ -3,7 +3,7 @@
 
 """Integration tests for mellea.stdlib.frameworks.react.
 
-Uses a ScriptedBackend (fake) so that real aact() and _call_tools() run
+Uses a ScriptedBackend (fake) so that real aact() and call_tools() run
 end-to-end — only LLM inference is faked. This makes the tests robust to
 internal refactors of react() while still verifying observable behaviour.
 """

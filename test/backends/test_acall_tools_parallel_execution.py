@@ -1,17 +1,17 @@
 # Copyright IBM Corp. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Test for _acall_tools() execution with parallel same-name tool calls.
+"""Test for acall_tools() execution with parallel same-name tool calls.
 
 This test fills the gap identified in PR #1431 review: verifying that the
-automatic tool execution loop through _acall_tools() correctly processes
+automatic tool execution loop through acall_tools() correctly processes
 multiple same-name tool calls from the list-based tool_calls structure.
 
 Coverage layers:
 - Extraction layer: test/helpers/test_openai_compatible_helpers.py::test_duplicate_same_name_tool_calls
   Verifies that extract_model_tool_requests() preserves both calls in the list.
 - Execution layer: this file
-  Verifies that _acall_tools() iterates and executes all calls from the list,
+  Verifies that acall_tools() iterates and executes all calls from the list,
   producing ToolMessages for each (not just the last one).
 """
 
@@ -20,7 +20,7 @@ import pytest
 from mellea.backends.ollama import OllamaModelBackend
 from mellea.backends.tools import MelleaTool
 from mellea.core.base import ModelOutputThunk, ModelToolCall
-from mellea.stdlib.functional import _acall_tools
+from mellea.stdlib.functional import acall_tools
 
 pytestmark = [pytest.mark.integration]
 
@@ -29,7 +29,7 @@ pytestmark = [pytest.mark.integration]
 def backend():
     """Create an OllamaModelBackend for formatter.print() only.
 
-    Note: _acall_tools() only uses backend.formatter, not inference.
+    Note: acall_tools() only uses backend.formatter, not inference.
     Tests use local Python functions as tool implementations, no model calls.
     """
     return OllamaModelBackend()
@@ -37,10 +37,10 @@ def backend():
 
 @pytest.mark.asyncio
 async def test_acall_tools_executes_all_parallel_same_name_calls(backend):
-    """Verify _acall_tools() executes all parallel same-name tool calls.
+    """Verify acall_tools() executes all parallel same-name tool calls.
 
     This is the execution-level regression test for PR #1431.
-    It directly tests _acall_tools() to ensure:
+    It directly tests acall_tools() to ensure:
     1. All tool calls in the list are iterated (not lost to dict key collision)
     2. Each produces a ToolMessage
     3. The returned list has correct cardinality
@@ -75,12 +75,12 @@ async def test_acall_tools_executes_all_parallel_same_name_calls(backend):
         value="I'll search for both topics.", tool_calls=[tool_call_1, tool_call_2]
     )
 
-    # Call _acall_tools() - the automatic execution pipeline
-    tool_messages = await _acall_tools(mot, backend)
+    # Call acall_tools() - the automatic execution pipeline
+    tool_messages = await acall_tools(mot, backend)
 
     # Verify all tool calls were executed
     assert len(execution_log) == 2, (
-        f"Both tool calls should execute via _acall_tools(), "
+        f"Both tool calls should execute via acall_tools(), "
         f"got {len(execution_log)} executions"
     )
 
@@ -99,7 +99,7 @@ async def test_acall_tools_executes_all_parallel_same_name_calls(backend):
 
 @pytest.mark.asyncio
 async def test_acall_tools_preserves_order_in_execution(backend):
-    """Verify _acall_tools() executes tool calls in order.
+    """Verify acall_tools() executes tool calls in order.
 
     Order preservation is critical for reproducibility and correctness,
     especially when tool results depend on prior execution (e.g., write then read).
@@ -137,8 +137,8 @@ async def test_acall_tools_preserves_order_in_execution(backend):
 
     mot = ModelOutputThunk(value="Running three operations.", tool_calls=tool_calls)
 
-    # Execute through _acall_tools()
-    tool_messages = await _acall_tools(mot, backend)
+    # Execute through acall_tools()
+    tool_messages = await acall_tools(mot, backend)
 
     # Verify execution happened in order
     assert len(execution_order) == 3
@@ -156,7 +156,7 @@ async def test_acall_tools_preserves_order_in_execution(backend):
 
 @pytest.mark.asyncio
 async def test_acall_tools_with_mixed_tools(backend):
-    """Verify _acall_tools() handles multiple different tools alongside duplicates.
+    """Verify acall_tools() handles multiple different tools alongside duplicates.
 
     Realistic scenario: user calls search twice, calculate once, search again.
     tool_calls should be: [search, search, calculate, search]
@@ -194,7 +194,7 @@ async def test_acall_tools_with_mixed_tools(backend):
 
     mot = ModelOutputThunk(value="Complex query", tool_calls=tool_calls)
 
-    tool_messages = await _acall_tools(mot, backend)
+    tool_messages = await acall_tools(mot, backend)
 
     # Verify all 4 executions happened
     assert len(executions) == 4
@@ -243,7 +243,7 @@ async def test_acall_tools_cardinality_regression(backend):
 
     mot = ModelOutputThunk(value="Run N times", tool_calls=tool_calls)
 
-    tool_messages = await _acall_tools(mot, backend)
+    tool_messages = await acall_tools(mot, backend)
 
     # THE CRITICAL ASSERTION: cardinality must match
     assert len(tool_messages) == n_calls, (
