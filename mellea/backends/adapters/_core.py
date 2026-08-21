@@ -66,24 +66,33 @@ class AdapterSchemaMismatchError(Exception):
         name (str): Name of the adapter whose contract was violated.
         observed_keys (frozenset[str]): Keys present in the observed output.
         expected_keys (frozenset[str]): Keys required by the contract.
+        reason (str | None): Capability-specific explanation of the mismatch.
     """
 
     def __init__(
-        self, name: str, observed_keys: frozenset[str], expected_keys: frozenset[str]
+        self,
+        name: str,
+        observed_keys: frozenset[str],
+        expected_keys: frozenset[str],
+        reason: str | None = None,
     ) -> None:
         self.name = name
         self.observed_keys = observed_keys
         self.expected_keys = expected_keys
-        # Pass the structured fields (not the formatted message) to Exception so
-        # that ``self.args`` round-trips through ``pickle`` / ``copy`` — the default
-        # ``Exception.__reduce__`` reconstructs by calling ``cls(*self.args)``.
+        # Preserve the existing three-item ``args`` shape for callers and
+        # cross-version pickle compatibility. ``reason`` lives in instance state,
+        # which pickle restores after calling this constructor with ``args``.
+        self.reason = reason
         super().__init__(name, observed_keys, expected_keys)
 
     def __str__(self) -> str:
-        return (
+        message = (
             f"Adapter '{self.name}' output cannot satisfy declared contract. "
             f"Observed keys: {self.observed_keys}; expected: {self.expected_keys}."
         )
+        if self.reason is not None:
+            message += f" Reason: {self.reason}."
+        return message
 
 
 @dataclass(frozen=True)
@@ -723,11 +732,6 @@ class Adapter:
     # verbs key on the binding's `qualified_name`; `_find_adapter` scans on the
     # identity) and both return `None` on a miss, so a disagreement surfaces as
     # "adapter not found" far from its cause. But it cannot be enforced yet:
-    # the `_REQUIREMENT_CHECK_ADAPTER` test stub in
-    # `stdlib/components/intrinsic/core.py` pairs an `alora` identity with a
-    # bare, deliberately unconfigured `LocalFileBinding()` that defaults to
-    # LoRA (every catalogue entry supports both types, so a placeholder rather
-    # than a genuine conflict — the check fired on "not configured yet"), and
     # the deprecated shims carry a `_ShimWeightsBinding` with no `adapter_type`
     # to compare at all (their identity tracks the configured type). Enforce
     # the check once those constructions carry real, typed bindings (the shims

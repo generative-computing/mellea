@@ -14,9 +14,13 @@ import pathlib
 
 import pytest
 
-from mellea.backends.adapters import AdapterSchemaMismatchError
-from mellea.backends.adapters.catalog import known_intrinsic_names
+from mellea.backends.adapters import AdapterSchemaMismatchError, catalog
+from mellea.backends.adapters.catalog import (
+    IntrinsicsCatalogEntry,
+    known_intrinsic_names,
+)
 from mellea.backends.adapters.io_contracts import (
+    _BUILTIN_INTRINSIC_NAMES,
     _INTRINSIC_IO_CONTRACTS,
     get_io_contract,
 )
@@ -40,7 +44,7 @@ def test_registry_covers_every_catalog_name():
     Regression guard for the acceptance criterion that no adapter reachable
     through `resolve_adapter` carries an unimplemented placeholder contract.
     """
-    missing = set(known_intrinsic_names()) - set(_INTRINSIC_IO_CONTRACTS)
+    missing = _BUILTIN_INTRINSIC_NAMES - set(_INTRINSIC_IO_CONTRACTS)
     assert missing == set()
 
 
@@ -51,13 +55,30 @@ def test_registry_has_no_orphan_keys():
     would be served by `get_io_contract` ahead of the permissive fallback if a
     later adapter ever registered under that name.
     """
-    orphans = set(_INTRINSIC_IO_CONTRACTS) - set(known_intrinsic_names())
+    orphans = set(_INTRINSIC_IO_CONTRACTS) - _BUILTIN_INTRINSIC_NAMES
     assert orphans == set()
 
 
 def test_get_io_contract_returns_declared_instance_for_known_names():
-    for name in known_intrinsic_names():
+    for name in _BUILTIN_INTRINSIC_NAMES:
         assert get_io_contract(name) is _INTRINSIC_IO_CONTRACTS[name]
+
+
+def test_registry_invariant_ignores_runtime_custom_catalogue_entry(monkeypatch):
+    """A custom adapter must not make the built-in registry checks order-dependent."""
+    custom_name = "custom-user-adapter"
+    custom_entry = IntrinsicsCatalogEntry(
+        name=custom_name, repo_id="example/custom-user-adapter", revision="main"
+    )
+    monkeypatch.setattr(
+        catalog,
+        "_INTRINSICS_CATALOG",
+        {**catalog._INTRINSICS_CATALOG, custom_name: custom_entry},
+    )
+
+    assert custom_name in known_intrinsic_names()
+    assert custom_name not in _BUILTIN_INTRINSIC_NAMES
+    assert _BUILTIN_INTRINSIC_NAMES - set(_INTRINSIC_IO_CONTRACTS) == set()
 
 
 def test_get_io_contract_falls_back_permissively_for_unknown_names():
@@ -190,3 +211,21 @@ def test_context_attribution_contract_rejects_missing_item_key():
 
     with pytest.raises(AdapterSchemaMismatchError):
         _INTRINSIC_IO_CONTRACTS["context-attribution"].parse(json.dumps(items))
+
+
+@pytest.mark.parametrize(
+    ("output", "reason"),
+    [
+        ({"other": "value"}, "neither `label` nor `score` was present"),
+        ({"label": "Yes", "score": "No"}, "both `label` and `score` were present"),
+    ],
+)
+def test_policy_guardrails_contract_distinguishes_exclusivity_failures(output, reason):
+    """Neither-key and both-key output errors must identify the failed condition."""
+    contract = _INTRINSIC_IO_CONTRACTS["policy-guardrails"]
+
+    with pytest.raises(AdapterSchemaMismatchError) as exc_info:
+        contract.parse(json.dumps(output))
+
+    assert exc_info.value.reason == reason
+    assert reason in str(exc_info.value)

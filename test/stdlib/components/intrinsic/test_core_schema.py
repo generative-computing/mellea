@@ -22,13 +22,23 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from mellea.backends.adapters import AdapterSchemaMismatchError, get_io_contract
+from mellea.backends.adapters import (
+    Adapter,
+    AdapterSchemaMismatchError,
+    Identity,
+    LocalFileBinding,
+    get_io_contract,
+)
 from mellea.stdlib.components import Message
 from mellea.stdlib.components.intrinsic import _util, core
-from mellea.stdlib.components.intrinsic.core import _REQUIREMENT_CHECK_ADAPTER
 from mellea.stdlib.context import ChatContext
 
 _REQUIREMENT = "must be polite"
+_REQUIREMENT_CHECK_ADAPTER = Adapter(
+    identity=Identity("requirement-check", "alora", capability="requirement_check"),
+    io_contract=get_io_contract("requirement-check"),
+    weights=LocalFileBinding(),
+)
 
 
 def _call(result_dict: dict, monkeypatch) -> float:
@@ -106,3 +116,8 @@ def test_requirement_check_adapter_carries_registry_contract():
     assert _REQUIREMENT_CHECK_ADAPTER.io_contract is get_io_contract(
         "requirement-check"
     )
+
+
+def test_core_module_does_not_define_requirement_check_adapter():
+    """The adapter stub belongs to this test, not production core code."""
+    assert not hasattr(core, "_REQUIREMENT_CHECK_ADAPTER")

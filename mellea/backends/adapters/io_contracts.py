@@ -13,12 +13,10 @@ wrong constant was a silent mismatch.
 :data:`_INTRINSIC_IO_CONTRACTS` is the single source of truth instead: it is keyed by the
 adapter function's catalog name (:attr:`~mellea.backends.adapters.catalog.IntrinsicsCatalogEntry.name`,
 e.g. `"guardian-core"` — the same string passed to `call_intrinsic` and
-`resolve_adapter`). The shim adapters in `adapter.py` and the
-`_REQUIREMENT_CHECK_ADAPTER` test stub in `mellea/stdlib/components/intrinsic/core.py`
-read from it at construction (via :func:`get_io_contract`); the high-level helpers
-reach it indirectly, through the adapter `resolve_adapter` returns. Declaring a
-capability's contract anywhere else reintroduces the parallel-argument problem
-this module exists to close.
+`resolve_adapter`). The shim adapters in `adapter.py` read from it at construction
+(via :func:`get_io_contract`); the high-level helpers reach it indirectly, through
+the adapter `resolve_adapter` returns. Declaring a capability's contract anywhere
+else reintroduces the parallel-argument problem this module exists to close.
 
 An adapter a user registers with a backend takes precedence over the registry for its
 own contract: `call_intrinsic` parses with whatever contract the resolved adapter
@@ -70,21 +68,19 @@ class _PolicyGuardrailsContract(IOContract):
             )
         has_label = "label" in data
         has_score = "score" in data
-        # Both branches raise the same exception shape; `observed_keys` (all of
-        # `data`'s keys) is what distinguishes them when printed — neither
-        # "label" nor "score" appears for the missing-both case, and both do
-        # for the has-both case.
         if not has_label and not has_score:
             raise AdapterSchemaMismatchError(
                 "policy-guardrails",
                 frozenset(data.keys()),
                 frozenset({"label", "score"}),
+                "neither `label` nor `score` was present",
             )
         if has_label and has_score:
             raise AdapterSchemaMismatchError(
                 "policy-guardrails",
                 frozenset(data.keys()),
                 frozenset({"label", "score"}),
+                "both `label` and `score` were present",
             )
         return data
 
@@ -249,16 +245,16 @@ _INTRINSIC_IO_CONTRACTS: dict[str, IOContract] = {
         ),
     ),
 }
-# Canonical output contract for every catalogued adapter function, keyed by its
-# catalog `name` (see module docstring). Kept exhaustive over
-# known_intrinsic_names() by test/backends/test_adapters/test_io_contracts.py,
-# and enforced below at import time — mirroring the
+# Canonical output contract for every built-in adapter function, keyed by its
+# catalog `name` (see module docstring). Capture the built-in names before
+# `CustomIntrinsicAdapter` can extend the global catalogue at runtime, then keep
+# the registry exhaustive over that fixed set at import time — mirroring the
 # duplicate-`effective_capability` check in catalog.py.
-
-_missing_contracts = set(known_intrinsic_names()) - set(_INTRINSIC_IO_CONTRACTS)
+_BUILTIN_INTRINSIC_NAMES = frozenset(known_intrinsic_names())
+_missing_contracts = _BUILTIN_INTRINSIC_NAMES - set(_INTRINSIC_IO_CONTRACTS)
 if _missing_contracts:
     raise ValueError(
-        f"Catalogued adapter functions with no declared IOContract: "
+        f"Built-in catalogued adapter functions with no declared IOContract: "
         f"{_missing_contracts}"
     )
 del _missing_contracts

@@ -6,35 +6,11 @@
 import collections.abc
 from typing import cast
 
-from ....backends.adapters import (
-    Adapter,
-    AdapterMixin,
-    Identity,
-    LocalFileBinding,
-    get_io_contract,
-)
+from ....backends.adapters import AdapterMixin
 from ...components import Document, Message
 from ...context import ChatContext
 from ..docs.document import _coerce_to_documents
 from ._util import _resolve_response, call_intrinsic
-
-# ---------------------------------------------------------------------------
-# _REQUIREMENT_CHECK_ADAPTER: a test-visible handle onto the `requirement-check`
-# capability's canonical Adapter, used by test_core_schema.py to stub
-# `resolve_adapter`'s return value. `check_certainty` and `find_context_attributions`
-# have no equivalent constant — nothing outside a test needs one, since their
-# io_contract is looked up by resolve_adapter() at call time
-# (mellea.backends.adapters.io_contracts), never declared here. Declaring one
-# unused by any caller would be exactly the parallel-declaration problem
-# issue #1516 closes — the `rag.py`/`guardian.py` sibling constants carried
-# the same test-only status and were dropped for the same reason.
-# ---------------------------------------------------------------------------
-
-_REQUIREMENT_CHECK_ADAPTER = Adapter(
-    identity=Identity("requirement-check", "alora", capability="requirement_check"),
-    io_contract=get_io_contract("requirement-check"),
-    weights=LocalFileBinding(),
-)
 
 
 def check_certainty(
