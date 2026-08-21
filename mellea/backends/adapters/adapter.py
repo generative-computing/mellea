@@ -889,8 +889,8 @@ class EmbeddedIntrinsicAdapter(_AdapterCore):
 
         - `identity`: always a real value.
 
-        - `io_contract`: `_ShimIOContract` placeholder; raises
-          `NotImplementedError`.
+        - `io_contract`: Phase 1 `_ShimIOContract` placeholder; raises
+          `NotImplementedError` until issue #1516 replaces it.
 
         - `weights`: a real `EmbeddedBinding`; activation runs through it.
     """
