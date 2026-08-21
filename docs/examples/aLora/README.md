@@ -131,6 +131,9 @@ Demonstrates:
 Interactive loop that exercises the custom `stembolts` adapter — skip-marked
 because it blocks on stdin in an infinite loop.
 
+The example uses Granite 3.3 2B because that is the available `stembolts`
+adapter variant; Granite 4.0 and 4.1 variants are not currently available.
+
 Demonstrates:
 - Loading a fully custom, non-catalog adapter via `stembolts_intrinsic.py`
 - Running the adapter-backed intrinsic repeatedly with a fresh `ChatContext`
@@ -159,4 +162,3 @@ Demonstrates:
 - Auto-generating adapter documentation
 - Using the `m alora add-readme` command programmatically
 - Documenting custom adapters
-

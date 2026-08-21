@@ -11,6 +11,8 @@ from mellea.backends.huggingface import LocalHFBackend
 from mellea.stdlib.context import ChatContext
 
 if __name__ == "__main__":
+    # nfulton/stembolts currently provides this adapter for Granite 3.3 2B;
+    # no Granite 4.0 or 4.1 variant is available in the repository.
     backend = LocalHFBackend(
         model_id="ibm-granite/granite-3.3-2b-instruct", cache=SimpleLRUCache(5)
     )

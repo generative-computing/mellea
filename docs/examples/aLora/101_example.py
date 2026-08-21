@@ -20,13 +20,13 @@ import time
 from mellea import MelleaSession, model_ids
 from mellea.backends.adapters import AdapterType
 from mellea.backends.adapters.adapter import IntrinsicAdapter
-from mellea.backends.cache import SimpleLRUCache
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.core import GenerateLog, ValidationResult
 from mellea.stdlib.context import ChatContext
 from mellea.stdlib.requirements import ALoraRequirement, LLMaJRequirement, Requirement
 
-backend = LocalHFBackend(model_id=model_ids.IBM_GRANITE_4_1_3B, cache=SimpleLRUCache(5))
+# The example does not reuse generated KV caches, so avoid creating and retaining them.
+backend = LocalHFBackend(model_id=model_ids.IBM_GRANITE_4_1_3B, use_caches=False)
 
 m = MelleaSession(backend=backend, ctx=ChatContext())
 
