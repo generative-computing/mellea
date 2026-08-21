@@ -9,9 +9,13 @@ Introduces the composable `Adapter` dataclass and its three parts:
 - :class:`IOContract` — ABC for prompt building and output parsing
 - :class:`WeightsBinding` — pluggable ABC for weights lifecycle management
 
-Also provides :class:`LocalFileBinding`, two stub :class:`WeightsBinding`
-subclasses (:class:`EmbeddedBinding`, :class:`ServerMediatedBinding`), and
-:class:`AdapterSchemaMismatchError`.
+Also provides:
+
+- :class:`LocalFileBinding`
+- :class:`EmbeddedBinding` — Embedded/Granite Switch binding; `apply_activation`,
+  no weights lifecycle (issue #1142)
+- :class:`ServerMediatedBinding` — stub :class:`WeightsBinding` subclass
+- :class:`AdapterSchemaMismatchError`
 
 Note:
     The existing :class:`~mellea.backends.adapters.adapter.Adapter` ABC in
@@ -28,7 +32,7 @@ import threading
 import time
 import warnings
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, ClassVar, Literal
+from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
 from ...core import Component, MelleaLogger
 from ...helpers.event_loop_helper import _run_async_in_thread
@@ -579,30 +583,159 @@ class LocalFileBinding(WeightsBinding):
             )
 
 
-class EmbeddedBinding(WeightsBinding):
-    """Stub binding for weights embedded in a model artifact."""
+@dataclass
+class EmbeddedActivationRequest:
+    """Mutable outgoing-request state that `EmbeddedBinding.apply_activation` edits.
+
+    Bundles the two dicts an OpenAI-compatible call site builds separately —
+    `extra_body` and the top-level API call kwargs — so a binding can edit
+    both in one call. Both are mutated in place; the caller keeps its own
+    references and can keep layering other edits (tool wiring, thinking mode,
+    user overrides) on top after `apply_activation` returns.
+
+    Attributes:
+        extra_body (dict[str, Any]): The provider's `extra_body` payload.
+            `apply_activation` writes the activation field here (e.g.
+            `chat_template_kwargs.adapter_name` for Granite Switch).
+        api_params (dict[str, Any]): Top-level request kwargs (e.g. `model`).
+            `apply_activation` removes entries an embedded adapter's
+            activation would make incorrect.
+    """
+
+    extra_body: dict[str, Any]
+    api_params: dict[str, Any]
+
+
+class EmbeddedBinding:
+    """Weights binding for the Embedded/Granite Switch reality (Epic #929 Phase 2).
+
+    Adapter weights for this reality are already baked into the base model —
+    there is nothing to download, load, toggle, or unload. The only thing
+    that varies per call is one field on the outgoing request, so this
+    binding has a single method, `apply_activation`, rather than the four
+    `WeightsBinding` lifecycle verbs (see discussion #1486, which rescoped
+    issue #1142: declaring the four verbs here would mean four raises with
+    nothing behind them, as the previous stub did).
+
+    Stateless across calls: `apply_activation` reads only its arguments, so
+    activating one adapter for a call never leaks into the request built for
+    the next.
+
+    Attributes:
+        binding_type (ClassVar[str]): `"embedded"`.
+        source (str): Base model identifier this binding activates adapters
+            against — the backend's `base_model_name` (e.g. `granite-4.1-3b`
+            for a backend built against `ibm-granite/granite-4.1-3b`).
+            Stamped by `OpenAIBackend.add_adapter` at registration; not
+            otherwise used by `apply_activation`.
+    """
 
     binding_type: ClassVar[str] = "embedded"
 
-    def prepare(self) -> None:
-        raise NotImplementedError(
-            _PHASE_2_NOT_IMPLEMENTED.format(cls="EmbeddedBinding")
+    def __init__(self, source: str = "") -> None:
+        """Constructs an EmbeddedBinding.
+
+        Args:
+            source: Base model identifier this binding activates adapters
+                against. Prefer `from_base_model` when a backend is on hand.
+        """
+        self.source = source
+
+    @classmethod
+    def from_base_model(cls, backend: "AdapterMixin") -> "EmbeddedBinding":
+        """Builds an EmbeddedBinding recording `backend`'s base model as the source.
+
+        Args:
+            backend: The backend whose base model has the adapter embedded
+                (e.g. an `OpenAIBackend` pointed at a Granite Switch deployment).
+
+        Returns:
+            An `EmbeddedBinding` with `source` set to `backend.base_model_name`.
+        """
+        return cls(source=backend.base_model_name)
+
+    async def apply_activation(
+        self, request: EmbeddedActivationRequest, identity: "Identity"
+    ) -> None:
+        """Edits `request` so the served model activates `identity`'s adapter.
+
+        Granite Switch (the only Embedded deployment today) reads the
+        adapter to activate from `chat_template_kwargs["adapter_name"]` in
+        the chat template. The rewriter config can also set the top-level
+        `model` parameter to the adapter's name; for an embedded adapter the
+        real model is the base model already being served, so that value is
+        dropped here rather than sent to the API.
+
+        Fires `adapter_function_phase_complete` (phase `"activate"`), so
+        Embedded calls contribute to the `mellea.adapter_function.phase_duration`
+        metric like every other binding. Does **not** fire
+        `adapter_function_invocation_complete`: unlike `LocalFileBinding`'s
+        verbs (driven by `adapter_scope`, which wraps the whole call and
+        knows the real outcome), this method only edits a request — the
+        actual generation and parsing happen later, asynchronously, once the
+        caller awaits the resulting `ModelOutputThunk`. Firing an
+        invocation-complete event here would have to guess an `outcome` that
+        this method cannot know, which is worse than not firing it: it would
+        report `outcome="success"` for calls that go on to fail. Wiring a
+        real invocation-complete signal in requires the caller (currently
+        `OpenAIBackend._generate_from_intrinsic`) to fire it once generation
+        and parsing resolve — tracked as a follow-up, not part of this method.
+
+        This method is `async` (unlike the rest of `EmbeddedBinding`'s
+        surface) purely because hook dispatch (`invoke_hook`) is async; its
+        own work is synchronous. Its one caller,
+        `OpenAIBackend._generate_from_intrinsic`, is already a coroutine, so
+        `await`ing here — rather than bridging through
+        `_run_async_in_thread`, which is for calling async code from sync
+        code — avoids spawning a throwaway event loop and thread per call.
+
+        Args:
+            request: The outgoing request state to edit; both of its dicts
+                are mutated in place.
+            identity: Identifies the adapter to activate.
+        """
+        started_at = time.monotonic()
+        chat_template_kwargs = request.extra_body.pop("chat_template_kwargs", {}) or {}
+        chat_template_kwargs["adapter_name"] = identity.name
+        request.extra_body["chat_template_kwargs"] = chat_template_kwargs
+        request.api_params.pop("model", None)
+        duration_s = time.monotonic() - started_at
+
+        await self._fire_activate_phase_complete(identity.name, duration_s)
+
+    async def _fire_activate_phase_complete(self, name: str, duration_s: float) -> None:
+        """Fires `adapter_function_phase_complete` for the activate phase.
+
+        `duration_s` is the cost of editing a dict, not of an adapter
+        activation in the sense `LocalFileBinding`'s real PEFT activation is —
+        the resulting `phase_duration` samples for `binding_type="embedded"`
+        are not comparable to `binding_type="local_file"` samples for the
+        same adapter name; the histogram carries no `binding_type` attribute
+        to separate them.
+
+        Args:
+            name: Adapter function name, used as the metric's `name` field.
+            duration_s: Wall-clock duration of `apply_activation`'s request edit.
+        """
+        if not has_plugins(HookType.ADAPTER_FUNCTION_PHASE_COMPLETE):
+            return
+
+        from ...plugins.hooks.adapter_function import (
+            AdapterFunctionPhaseCompletePayload,
         )
 
-    def activate(self) -> None:
-        raise NotImplementedError(
-            _PHASE_2_NOT_IMPLEMENTED.format(cls="EmbeddedBinding")
-        )
-
-    def deactivate(self) -> None:
-        raise NotImplementedError(
-            _PHASE_2_NOT_IMPLEMENTED.format(cls="EmbeddedBinding")
-        )
-
-    def release(self) -> None:
-        raise NotImplementedError(
-            _PHASE_2_NOT_IMPLEMENTED.format(cls="EmbeddedBinding")
-        )
+        try:
+            payload = AdapterFunctionPhaseCompletePayload(
+                name=name, phase="activate", duration_ms=duration_s * 1000.0
+            )
+            await invoke_hook(HookType.ADAPTER_FUNCTION_PHASE_COMPLETE, payload)
+        except Exception:
+            MelleaLogger.get_logger().warning(
+                f"adapter_function_phase_complete hook dispatch failed for {name!r} "
+                "during 'activate'; ignoring so it does not turn a completed "
+                "request edit into an operation failure.",
+                exc_info=True,
+            )
 
 
 class ServerMediatedBinding(WeightsBinding):
@@ -635,18 +768,22 @@ class ServerMediatedBinding(WeightsBinding):
 class Adapter:
     """Composable adapter dataclass (Epic #929 Phase 0).
 
-    Composes an :class:`Identity`, an :class:`IOContract`, and a
-    :class:`WeightsBinding` into a single, inspectable object.
+    Composes an :class:`Identity`, an :class:`IOContract`, and a weights
+    binding (a :class:`WeightsBinding` or :class:`EmbeddedBinding`) into a
+    single, inspectable object.
 
     Attributes:
         identity (Identity): Name, type, and capability for this adapter.
         io_contract (IOContract): Prompt builder and output parser.
-        weights (WeightsBinding): Pluggable weights lifecycle handler.
+        weights (WeightsBinding | EmbeddedBinding): Pluggable weights handler —
+            either a `WeightsBinding` (a lifecycle to stage and switch on) or
+            an `EmbeddedBinding` (nothing to stage; activation edits the
+            outgoing request instead).
     """
 
     identity: Identity
     io_contract: IOContract
-    weights: WeightsBinding
+    weights: WeightsBinding | EmbeddedBinding
 
     # NOTE(#1516): a construction-time cross-check that `weights.adapter_type`
     # agrees with `identity.adapter_type` was tried here and backed out. It is the

@@ -214,6 +214,18 @@ score = core.check_certainty(context, backend)
 
 For lower-level control (custom adapters, model options), use `mfuncs.act()` with `Intrinsic` directly — see examples in `docs/examples/intrinsics/`.
 
+### Weights binding shapes
+
+`Adapter.weights` normalizes each deployment's activation mechanism behind one of
+two shapes — a `WeightsBinding` lifecycle for weights you stage yourself, or
+`EmbeddedBinding.apply_activation` for weights already in the served model. The
+post-activation shape each produces:
+
+| Binding | Reality | Lifecycle verbs | Caller invokes | Normalized post-activation state |
+|---------|---------|------------------|-----------------|-----------------------------------|
+| `LocalFileBinding` | LocalFile/PEFT | `prepare` / `activate` / `deactivate` / `release` | `activate()` / `deactivate()`, via `adapter_scope` | Backend-internal PEFT adapter state toggled; the outgoing request is untouched |
+| `EmbeddedBinding` | Embedded/Granite Switch | none — weights are already in the served model | `apply_activation(request, identity)` | `request.extra_body["chat_template_kwargs"]["adapter_name"]` set; `request.api_params["model"]` removed if present |
+
 ### Project Resources
 
 - **Canonical catalog**: `mellea/backends/adapters/catalog.py` — source of truth for adapter function names, HF repo IDs, and adapter types

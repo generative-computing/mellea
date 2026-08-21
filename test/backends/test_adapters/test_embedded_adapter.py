@@ -468,19 +468,6 @@ class TestOpenAIBackendRegistration:
         )
         assert set(backend.list_adapters()) == {"answerability_alora", "citations_lora"}
 
-    def test_render_controls_is_noop(self, backend):
-        """render_controls succeeds silently for embedded adapters."""
-        backend.add_adapter(
-            EmbeddedIntrinsicAdapter(
-                "answerability", config=_ANSWERABILITY_CONFIG, technology="alora"
-            )
-        )
-        # These should not raise.
-        backend.render_controls("answerability_alora", active=True)
-        backend.render_controls("answerability_alora", active=False)
-        # Adapter is still registered after activating/deactivating.
-        assert "answerability_alora" in backend._added_adapters
-
     def test_base_model_name(self, backend):
         assert backend.base_model_name == "granite-switch"
 

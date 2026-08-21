@@ -119,10 +119,9 @@ def test_weights_binding_abc_enforcement():
         PartialBinding()  # type: ignore[abstract]
 
 
-@pytest.mark.parametrize("cls", [EmbeddedBinding, ServerMediatedBinding])
 @pytest.mark.parametrize("verb", ["prepare", "activate", "deactivate", "release"])
-def test_stub_binding_subclasses_raise_not_implemented(cls, verb):
-    binding = cls()
+def test_server_mediated_binding_raises_not_implemented(verb):
+    binding = ServerMediatedBinding()
     with pytest.raises(NotImplementedError, match="Phase 0 stub"):
         getattr(binding, verb)()
 
@@ -130,7 +129,15 @@ def test_stub_binding_subclasses_raise_not_implemented(cls, verb):
 def test_local_file_binding_not_a_phase_0_stub():
     # LocalFileBinding graduated out of the stub set in Epic #929 Phase 2
     # (issue #1141) — see test_local_file_binding.py for its real behavior.
-    assert LocalFileBinding.prepare is not EmbeddedBinding.prepare
+    assert LocalFileBinding.prepare is not ServerMediatedBinding.prepare
+
+
+def test_embedded_binding_is_not_a_weights_binding():
+    # EmbeddedBinding graduated out of the WeightsBinding stub set in Epic #929
+    # Phase 2 (issue #1142) — it has no weights lifecycle at all, so it is not
+    # even a WeightsBinding subclass. See test_embedded_binding.py for its real
+    # behavior (`apply_activation`).
+    assert not isinstance(EmbeddedBinding(), WeightsBinding)
 
 
 def test_adapter_schema_mismatch_error_format():

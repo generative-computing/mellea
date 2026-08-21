@@ -33,6 +33,7 @@ from ...plugins.types import HookType
 from ._core import (
     Adapter as _AdapterCore,
     AdapterSchemaMismatchError,
+    EmbeddedBinding,
     Identity,
     IOContract,
     LocalFileBinding,
@@ -111,27 +112,23 @@ class _ShimIOContract(IOContract):
 
 
 class _ShimWeightsBinding(WeightsBinding):
-    """Phase 1 placeholder; Phase 2 (see epic #929) wires in real lifecycle."""
+    """Placeholder weights binding for the deprecated IntrinsicAdapter shims.
+
+    All lifecycle verbs raise NotImplementedError; it exists only so the
+    shims can satisfy the Adapter protocol.
+    """
 
     def prepare(self) -> None:
-        raise NotImplementedError(
-            "Phase 2 (see epic #929) — WeightsBinding not yet implemented"
-        )
+        raise NotImplementedError("WeightsBinding not yet implemented")
 
     def activate(self) -> None:
-        raise NotImplementedError(
-            "Phase 2 (see epic #929) — WeightsBinding not yet implemented"
-        )
+        raise NotImplementedError("WeightsBinding not yet implemented")
 
     def deactivate(self) -> None:
-        raise NotImplementedError(
-            "Phase 2 (see epic #929) — WeightsBinding not yet implemented"
-        )
+        raise NotImplementedError("WeightsBinding not yet implemented")
 
     def release(self) -> None:
-        raise NotImplementedError(
-            "Phase 2 (see epic #929) — WeightsBinding not yet implemented"
-        )
+        raise NotImplementedError("WeightsBinding not yet implemented")
 
 
 class IntrinsicAdapter(LocalHFAdapter, _AdapterCore):
@@ -587,49 +584,6 @@ class AdapterMixin(Backend, abc.ABC):
         """
         return contextlib.nullcontext()
 
-    def render_controls(self, adapter_qualified_name: str, active: bool) -> None:
-        """Render or clear the control tokens for a baked-in embedded adapter.
-
-        Embedded/Granite Switch reality only. Weights are already baked into
-        the model; this only toggles the control-token rendering that
-        activates or deactivates the adapter's behaviour for subsequent
-        requests.
-
-        Args:
-            adapter_qualified_name (str): The `adapter.qualified_name` of the
-                adapter to activate or deactivate.
-            active (bool): `True` to render the adapter's control tokens,
-                `False` to clear them.
-
-        Raises:
-            NotImplementedError: If this backend's adapter reality is not
-                Embedded/Granite Switch.
-        """
-        raise NotImplementedError(
-            f"Backend type {type(self)} does not support render_controls()."
-        )
-
-    def set_request_adapter(self, adapter_qualified_name: str) -> None:
-        """Select the adapter to use for the next request.
-
-        ServerMediated reality only — for servers that accept an adapter
-        selection per request rather than loading/unloading weights or
-        toggling control tokens locally. No backend implements this reality
-        yet.
-
-        Args:
-            adapter_qualified_name (str): The `adapter.qualified_name` of the
-                adapter to select.
-
-        Raises:
-            NotImplementedError: Always — the ServerMediated adapter reality
-                has no implementation yet.
-        """
-        raise NotImplementedError(
-            f"Backend type {type(self)} does not support set_request_adapter(); "
-            "the ServerMediated adapter reality is not implemented yet."
-        )
-
     def resolve_adapter(self, name: str) -> _AdapterCore:
         """Find or lazily register an adapter by capability name.
 
@@ -735,8 +689,8 @@ class AdapterMixin(Backend, abc.ABC):
         This method fires hooks only; it does not open spans. Span production is a
         plugin's job (see #1464 for the rule and #1466 for the adapter-function
         spans), and the `ADAPTER_FUNCTION_*` family currently has no start hook for
-        a plugin to open a span on. See `docs/dev/adapter_observability.md` for the
-        metric schema.
+        a plugin to open a span on. The metric schema is defined by
+        `AdapterFunctionMetricsPlugin` in `mellea/telemetry/metrics_plugins.py`.
 
         `deactivate()` is guarded on `activate()`'s own side effect having
         completed, not on the activate phase's hook dispatch also succeeding.
@@ -764,6 +718,9 @@ class AdapterMixin(Backend, abc.ABC):
             adapter: The adapter to activate, or `None` (no-op).
 
         Raises:
+            TypeError: `adapter.weights` is not a `WeightsBinding` (e.g. an
+                `EmbeddedBinding`, which has no activate()/deactivate() to
+                scope — call its `apply_activation()` directly instead).
             BaseException: An error raised by activation, the `with` body, or
                 deactivation. If both the body and deactivation fail, the body
                 error remains primary and the deactivation error is chained.
@@ -789,6 +746,16 @@ class AdapterMixin(Backend, abc.ABC):
             revision = cast(str | None, getattr(adapter.weights, "revision", None))
         binding_type = adapter.weights.binding_type
         adapter_type = adapter.identity.adapter_type
+
+        # adapter_scope drives the WeightsBinding lifecycle (activate/deactivate);
+        # a binding with no lifecycle (e.g. EmbeddedBinding) activates through its
+        # own apply_activation() instead (issue #1142) and never reaches this scope.
+        if not isinstance(adapter.weights, WeightsBinding):
+            raise TypeError(
+                f"adapter_scope() requires a WeightsBinding-backed adapter; "
+                f"{binding_type!r} bindings have no activate()/deactivate() to "
+                "scope. Call apply_activation() directly instead."
+            )
 
         outcome: Literal["success", "schema_error", "error"] = "success"
         exception: BaseException | None = None
@@ -915,12 +882,17 @@ class EmbeddedIntrinsicAdapter(_AdapterCore):
         config (dict): Parsed I/O transformation configuration.
         technology (str): `"lora"` or `"alora"`.
 
-    .. note::
-        `identity`, `io_contract`, and `weights` are Phase 1 internal scaffolding
-        populated in `__init__` to satisfy the new :class:`~mellea.backends.adapters.Adapter`
-        protocol.  They are not meaningful consumer-facing attributes; `io_contract` and
-        `weights` raise :exc:`NotImplementedError` and will be replaced in Phase 2
-        (issues #1137, #1142).
+    Note:
+        `identity`, `io_contract`, and `weights` are internal scaffolding
+        populated in `__init__` to satisfy the `Adapter` protocol; they are
+        not meaningful consumer-facing attributes.
+
+        - `identity`: always a real value.
+
+        - `io_contract`: Phase 1 `_ShimIOContract` placeholder; raises
+          `NotImplementedError` until issue #1516 replaces it.
+
+        - `weights`: a real `EmbeddedBinding`; activation runs through it.
     """
 
     def __setattr__(self, name: str, value: object) -> None:
@@ -958,15 +930,18 @@ class EmbeddedIntrinsicAdapter(_AdapterCore):
 
         # Populate the new Adapter triple so isinstance(self, _AdapterCore) holds.
         # technology is validated above; cast to the Literal type mypy expects.
+        identity = Identity(
+            name=intrinsic_name,
+            adapter_type=cast(Literal["lora", "alora"], technology),
+            capability=intrinsic_name,
+        )
+
+        io_contract = _ShimIOContract()
+
+        weights = EmbeddedBinding()
+
         _AdapterCore.__init__(
-            self,
-            identity=Identity(
-                name=intrinsic_name,
-                adapter_type=cast(Literal["lora", "alora"], technology),
-                capability=intrinsic_name,
-            ),
-            io_contract=_ShimIOContract(),
-            weights=_ShimWeightsBinding(),
+            self, identity=identity, io_contract=io_contract, weights=weights
         )
 
     @staticmethod
