@@ -16,6 +16,13 @@ import contextlib
 from collections.abc import Iterator
 from unittest.mock import MagicMock, patch
 
+from mellea.plugins.hooks.adapter_function import (
+    AdapterFunctionInvocationCompletePayload,
+    AdapterFunctionInvocationStartPayload,
+    AdapterFunctionPhaseCompletePayload,
+    AdapterFunctionPhaseStartPayload,
+)
+
 _TARGET = "mellea.backends.adapters.adapter"
 
 
@@ -66,6 +73,22 @@ def hook_payloads(mock_invoke: MagicMock) -> list:
     return [call.args[1] for call in mock_invoke.call_args_list]
 
 
+def phase_start_payloads(mock_invoke: MagicMock) -> list:
+    """Returns only the phase-start payloads.
+
+    Args:
+        mock_invoke: The mock yielded by `capture_adapter_hooks`.
+
+    Returns:
+        The recorded `AdapterFunctionPhaseStartPayload`s, ordered as fired.
+    """
+    return [
+        p
+        for p in hook_payloads(mock_invoke)
+        if isinstance(p, AdapterFunctionPhaseStartPayload)
+    ]
+
+
 def phase_payloads(mock_invoke: MagicMock) -> list:
     """Returns only the phase-complete payloads.
 
@@ -75,7 +98,27 @@ def phase_payloads(mock_invoke: MagicMock) -> list:
     Returns:
         The recorded `AdapterFunctionPhaseCompletePayload`s, ordered as fired.
     """
-    return [p for p in hook_payloads(mock_invoke) if hasattr(p, "phase")]
+    return [
+        p
+        for p in hook_payloads(mock_invoke)
+        if isinstance(p, AdapterFunctionPhaseCompletePayload)
+    ]
+
+
+def invocation_start_payloads(mock_invoke: MagicMock) -> list:
+    """Returns only the invocation-start payloads.
+
+    Args:
+        mock_invoke: The mock yielded by `capture_adapter_hooks`.
+
+    Returns:
+        The recorded `AdapterFunctionInvocationStartPayload`s, ordered as fired.
+    """
+    return [
+        p
+        for p in hook_payloads(mock_invoke)
+        if isinstance(p, AdapterFunctionInvocationStartPayload)
+    ]
 
 
 def invocation_payloads(mock_invoke: MagicMock) -> list:
@@ -87,4 +130,8 @@ def invocation_payloads(mock_invoke: MagicMock) -> list:
     Returns:
         The recorded `AdapterFunctionInvocationCompletePayload`s, ordered as fired.
     """
-    return [p for p in hook_payloads(mock_invoke) if hasattr(p, "outcome")]
+    return [
+        p
+        for p in hook_payloads(mock_invoke)
+        if isinstance(p, AdapterFunctionInvocationCompletePayload)
+    ]

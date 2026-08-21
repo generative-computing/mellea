@@ -20,6 +20,7 @@ from mellea.backends.adapters._core import (
     Identity,
     IOContract,
     LocalFileBinding,
+    WeightsBinding,
 )
 from mellea.backends.adapters.adapter import AdapterMixin
 from mellea.backends.adapters.catalog import AdapterType
@@ -27,6 +28,8 @@ from mellea.core import Component
 from test.backends.test_adapters._hook_capture import (
     capture_adapter_hooks,
     invocation_payloads,
+    phase_payloads,
+    phase_start_payloads,
 )
 
 
@@ -201,12 +204,15 @@ def test_adapter_scope_reports_other_exceptions_as_error():
 
 
 def test_phase_hook_not_fired_when_the_phase_itself_fails():
-    """A phase that raised did not complete, so no phase event is emitted.
+    """A phase that raised opens (phase-start fires) but never completes.
 
-    `ADAPTER_FUNCTION_PHASE_COMPLETE` means the phase finished. The failure is
-    reported once, at invocation level, where `outcome`/`error` carry it — so a
+    `ADAPTER_FUNCTION_PHASE_COMPLETE` means the phase finished, so it does not
+    fire for a phase that raised. `ADAPTER_FUNCTION_PHASE_START` fires
+    regardless, since it only marks the phase as about to run. The failure is
+    reported at invocation level, where `outcome`/`error` carry it — so a
     consumer reconciling phase counts against invocation counts sees one
-    invocation error and no phase event, not both.
+    invocation error, one phase-start with no matching phase-complete, and no
+    phase-complete event.
     """
     mock_backend = MagicMock(spec=AdapterMixin)
     adapter, weights = _make_adapter()
@@ -217,8 +223,8 @@ def test_phase_hook_not_fired_when_the_phase_itself_fails():
             with AdapterMixin.adapter_scope(mock_backend, adapter):
                 pytest.fail("body must not run when activate() raises")
 
-    payloads = [c.args[1] for c in mock_invoke.call_args_list]
-    assert [p for p in payloads if hasattr(p, "phase")] == []
+    assert [p.phase for p in phase_start_payloads(mock_invoke)] == ["activate"]
+    assert phase_payloads(mock_invoke) == []
 
     invocations = invocation_payloads(mock_invoke)
     assert [p.outcome for p in invocations] == ["error"]
@@ -249,6 +255,98 @@ def test_adapter_scope_reports_resolved_revision_not_raw_none():
     assert len(invocations) == 1
     assert invocations[0].revision == binding.resolved_revision()
     assert invocations[0].revision != "main"
+
+
+class _IntRevisionBinding(WeightsBinding):
+    """Non-`LocalFileBinding` weights whose `.revision` is not a `str`.
+
+    `adapter_scope` treats `WeightsBinding.revision` as unverified duck-typed
+    data for any binding that isn't a `LocalFileBinding` — it reads it via a
+    bare `getattr(...)` with no type check. This double stands in for any
+    third-party binding that sets a non-`str` revision.
+    """
+
+    binding_type = "custom"
+    revision = 7
+
+    def prepare(self) -> None:
+        pass
+
+    def activate(self) -> None:
+        pass
+
+    def deactivate(self) -> None:
+        pass
+
+    def release(self) -> None:
+        pass
+
+
+def test_adapter_scope_swallows_non_str_revision_on_phase_start():
+    """A non-`str` `.revision` must not abort activation.
+
+    Regression guard: `_fire_phase_start_hook` used to construct
+    `AdapterFunctionPhaseStartPayload` outside its own `try`, so a duck-typed
+    binding with a non-`str` `.revision` raised a pydantic `ValidationError`
+    that escaped `adapter_scope` entirely, aborting before `activate()` ever
+    ran — exactly the failure the function's docstring says it prevents.
+    """
+    mock_backend = MagicMock(spec=AdapterMixin)
+    weights = _IntRevisionBinding()
+    identity = Identity(name="answerability", adapter_type="lora")
+    adapter = Adapter(identity=identity, io_contract=_Contract(), weights=weights)
+
+    body_ran = False
+    with AdapterMixin.adapter_scope(mock_backend, adapter):
+        body_ran = True
+
+    assert body_ran
+
+
+def test_adapter_scope_swallows_invocation_start_hook_failure():
+    """A failing invocation-start hook must not block activation.
+
+    Regression guard: `_fire_invocation_start_hook` is called unguarded inside
+    `adapter_scope` itself, wrapped in its own try/except at the call site
+    (unlike `_fire_phase_start_hook`, which guards internally). Pin that the
+    call-site guard actually works — `_fire_invocation_complete` already has
+    two dedicated tests for this; `_fire_invocation_start_hook` had none.
+    """
+    mock_backend = MagicMock(spec=AdapterMixin)
+    adapter, weights = _make_adapter()
+
+    with patch(
+        "mellea.backends.adapters.adapter._fire_invocation_start_hook",
+        side_effect=RuntimeError("start hook dispatch blew up"),
+    ):
+        with AdapterMixin.adapter_scope(mock_backend, adapter):
+            pass  # must not raise despite the start hook failing on entry
+
+    weights.activate.assert_called_once()
+    weights.deactivate.assert_called_once()
+
+
+def test_adapter_scope_swallows_non_str_identity_name_on_phase_complete():
+    """A non-`str` adapter identity name must not abort activation.
+
+    Regression guard: `_fire_phase_complete_hook` constructed its payload
+    outside its guard, so an adapter whose `Identity.name` was not a
+    `str` (`Identity` is a plain frozen dataclass and performs no runtime
+    type coercion) raised a pydantic `ValidationError` from the activate
+    phase-complete site after `activate()` had already succeeded — the
+    body never ran and a healthy invocation was reported as an error.
+    Construction now sits under the same guard as the dispatch.
+    """
+    mock_backend = MagicMock(spec=AdapterMixin)
+    weights = _IntRevisionBinding()
+    identity = Identity(name=7, adapter_type="lora")  # type: ignore[arg-type]
+    adapter = Adapter(identity=identity, io_contract=_Contract(), weights=weights)
+
+    body_ran = False
+    with AdapterMixin.adapter_scope(mock_backend, adapter):
+        body_ran = True
+
+    assert body_ran
 
 
 def test_adapter_scope_swallows_invocation_hook_failure_on_clean_run():

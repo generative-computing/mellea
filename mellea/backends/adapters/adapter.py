@@ -19,6 +19,7 @@ import contextlib
 import pathlib
 import re
 import time
+import uuid
 import warnings
 from collections.abc import Callable
 from typing import Literal, TypeAlias, TypeVar, cast
@@ -336,17 +337,57 @@ def get_adapter_for_intrinsic(
     return adapter
 
 
-def _fire_phase_complete_hook(name: str, phase: str, duration_ms: float) -> None:
+def _fire_phase_start_hook(
+    invocation_id: str, name: str, phase: str, revision: str | None
+) -> None:
+    """Fire the `adapter_function_phase_start` hook for a phase about to run.
+
+    A hook-dispatch failure is logged and ignored: observability must not block
+    a phase from running.
+
+    Args:
+        invocation_id: Correlation id of the enclosing invocation.
+        name: Adapter function name, recorded as a span attribute.
+        phase: Lifecycle phase name; must be a valid
+            `AdapterFunctionPhaseStartPayload.phase` value.
+        revision: Catalog revision of the adapter, or `None` if unpinned.
+    """
+    if not has_plugins(HookType.ADAPTER_FUNCTION_PHASE_START):
+        return
+    from ...plugins.hooks.adapter_function import AdapterFunctionPhaseStartPayload
+
+    try:
+        payload = AdapterFunctionPhaseStartPayload(
+            adapter_function_invocation_id=invocation_id,
+            name=name,
+            phase=phase,
+            revision=revision,
+        )
+        hook_coro = invoke_hook(HookType.ADAPTER_FUNCTION_PHASE_START, payload)
+        _run_async_in_thread(hook_coro)
+    except Exception:
+        MelleaLogger.get_logger().warning(
+            f"adapter_function_phase_start hook dispatch failed for {name!r} "
+            f"during {phase!r}; ignoring so it does not block the phase from "
+            "running.",
+            exc_info=True,
+        )
+
+
+def _fire_phase_complete_hook(
+    invocation_id: str, name: str, phase: str, duration_ms: float
+) -> None:
     """Fire the `adapter_function_phase_complete` metric hook for a phase that already ran.
 
     Split out of `_run_adapter_phase` so a caller that must guarantee cleanup
     after a phase's side effect — e.g. `adapter_scope` guaranteeing
     `deactivate()` runs once `activate()` has succeeded — can run the side
-    effect and this hook fire under separate exception handling. A hook-dispatch
-    failure is logged and ignored: observability must not turn a completed
-    lifecycle phase into an operation failure.
+    effect and this hook fire under separate exception handling. A
+    construction or dispatch failure is logged and ignored: observability
+    must not turn a completed lifecycle phase into an operation failure.
 
     Args:
+        invocation_id: Correlation id of the enclosing invocation.
         name: Adapter function name, used as the metric's `name` field.
         phase: Lifecycle phase name; must be a valid
             `AdapterFunctionPhaseCompletePayload.phase` value.
@@ -356,10 +397,13 @@ def _fire_phase_complete_hook(name: str, phase: str, duration_ms: float) -> None
         return
     from ...plugins.hooks.adapter_function import AdapterFunctionPhaseCompletePayload
 
-    payload = AdapterFunctionPhaseCompletePayload(
-        name=name, phase=phase, duration_ms=duration_ms
-    )
     try:
+        payload = AdapterFunctionPhaseCompletePayload(
+            adapter_function_invocation_id=invocation_id,
+            name=name,
+            phase=phase,
+            duration_ms=duration_ms,
+        )
         hook_coro = invoke_hook(HookType.ADAPTER_FUNCTION_PHASE_COMPLETE, payload)
         _run_async_in_thread(hook_coro)
     except Exception:
@@ -371,32 +415,83 @@ def _fire_phase_complete_hook(name: str, phase: str, duration_ms: float) -> None
         )
 
 
-def _run_adapter_phase(name: str, phase: str, phase_fn: Callable[[], None]) -> None:
-    """Run one lifecycle phase and fire its phase-complete metric hook.
+def _run_adapter_phase(
+    invocation_id: str,
+    name: str,
+    phase: str,
+    revision: str | None,
+    phase_fn: Callable[[], None],
+) -> None:
+    """Run one lifecycle phase, firing its phase-start and phase-complete hooks.
 
-    Fires the hook only; it does not open a span. Span production belongs to a
+    Fires hooks only; it does not open a span. Span production belongs to a
     plugin (#1464, #1466), not to code under `mellea/backends/`.
 
-    The hook fires **only when the phase succeeds**, matching the name of
-    `ADAPTER_FUNCTION_PHASE_COMPLETE`: a phase that raised did not complete. If
-    `phase_fn` raises, the exception propagates and no phase event is emitted, so
-    a consumer reconciling phase counts against invocation counts will see the
-    failure only at invocation level, where `outcome` and `error` carry it.
+    The complete hook fires **only when the phase succeeds**, matching the name
+    of `ADAPTER_FUNCTION_PHASE_COMPLETE`: a phase that raised did not complete.
+    If `phase_fn` raises, the exception propagates and no phase-complete event is
+    emitted (the phase-start event already fired), so a consumer reconciling
+    phase counts against invocation counts will see the failure only at
+    invocation level, where `outcome` and `error` carry it.
 
     Args:
+        invocation_id: Correlation id of the enclosing invocation.
         name: Adapter function name, used as the metric's `name` field.
         phase: Lifecycle phase name; must be a valid
             `AdapterFunctionPhaseCompletePayload.phase` value.
+        revision: Catalog revision of the adapter, or `None` if unpinned.
         phase_fn: The zero-argument callable implementing the phase (e.g.
             `adapter.weights.activate`).
     """
+    _fire_phase_start_hook(invocation_id, name, phase, revision)
     started_at = time.monotonic()
     phase_fn()
-    _fire_phase_complete_hook(name, phase, (time.monotonic() - started_at) * 1000.0)
+    _fire_phase_complete_hook(
+        invocation_id, name, phase, (time.monotonic() - started_at) * 1000.0
+    )
+
+
+def _fire_invocation_start_hook(
+    invocation_id: str,
+    *,
+    name: str,
+    revision: str | None,
+    binding_type: str,
+    adapter_type: str,
+) -> None:
+    """Fire the `adapter_function_invocation_start` hook.
+
+    Unlike `_fire_phase_start_hook`, neither the payload construction nor the
+    dispatch is guarded here: a failure escapes to the call site, which must
+    wrap the call in `try`/`except` if the operation must not be blocked (see
+    `adapter_scope`).
+
+    Args:
+        invocation_id: Correlation id shared with the matching
+            `_fire_invocation_complete` call.
+        name: Adapter function name.
+        revision: Catalog revision of the adapter, or `None` if unpinned.
+        binding_type: Weight-binding reality the adapter will run under.
+        adapter_type: Adapter mechanism (e.g. `"lora"`, `"alora"`).
+    """
+    if not has_plugins(HookType.ADAPTER_FUNCTION_INVOCATION_START):
+        return
+    from ...plugins.hooks.adapter_function import AdapterFunctionInvocationStartPayload
+
+    payload = AdapterFunctionInvocationStartPayload(
+        adapter_function_invocation_id=invocation_id,
+        name=name,
+        revision=revision,
+        binding_type=binding_type,
+        adapter_type=adapter_type,
+    )
+    hook_coro = invoke_hook(HookType.ADAPTER_FUNCTION_INVOCATION_START, payload)
+    _run_async_in_thread(hook_coro)
 
 
 def _fire_invocation_complete(
     *,
+    invocation_id: str,
     name: str,
     revision: str | None,
     binding_type: str,
@@ -406,7 +501,14 @@ def _fire_invocation_complete(
 ) -> None:
     """Fire the `adapter_function_invocation_complete` metric hook.
 
+    Payload construction is unguarded here, as in
+    `_fire_invocation_start_hook`: the call site carries the `try`/`except` —
+    a complete-hook failure must be logged and swallowed, never mask the real
+    outcome (see `adapter_scope`).
+
     Args:
+        invocation_id: Correlation id shared with the matching
+            `_fire_invocation_start_hook` call.
         name: Adapter function name.
         revision: Catalog revision of the adapter, or `None` if unpinned.
         binding_type: Weight-binding reality the adapter ran under.
@@ -421,6 +523,7 @@ def _fire_invocation_complete(
     )
 
     payload = AdapterFunctionInvocationCompletePayload(
+        adapter_function_invocation_id=invocation_id,
         name=name,
         revision=revision,
         binding_type=binding_type,
@@ -728,15 +831,16 @@ class AdapterMixin(Backend, abc.ABC):
 
         A no-op when `adapter` is `None`. Otherwise: activates
         `adapter.weights`, yields, then always deactivates — even if the `with`
-        body raises. Each phase fires `ADAPTER_FUNCTION_PHASE_COMPLETE`, and
-        `ADAPTER_FUNCTION_INVOCATION_COMPLETE` fires on the way out, carrying the
-        overall outcome.
+        body raises. Fires `ADAPTER_FUNCTION_INVOCATION_START` on the way in;
+        each phase fires `ADAPTER_FUNCTION_PHASE_START` then
+        `ADAPTER_FUNCTION_PHASE_COMPLETE`; `ADAPTER_FUNCTION_INVOCATION_COMPLETE`
+        fires on the way out, carrying the overall outcome.
 
-        This method fires hooks only; it does not open spans. Span production is a
-        plugin's job (see #1464 for the rule and #1466 for the adapter-function
-        spans), and the `ADAPTER_FUNCTION_*` family currently has no start hook for
-        a plugin to open a span on. See `docs/dev/adapter_observability.md` for the
-        metric schema.
+        This method fires hooks only; it does not open spans itself. Span
+        production is a plugin's job (see #1464 for the rule) —
+        `AdapterFunctionTracingPlugin` (`mellea/telemetry/tracing_plugins.py`)
+        turns these hooks into the `adapter_function` span tree. See
+        `docs/docs/observability/tracing.md` for the span schema.
 
         `deactivate()` is guarded on `activate()`'s own side effect having
         completed, not on the activate phase's hook dispatch also succeeding.
@@ -789,18 +893,38 @@ class AdapterMixin(Backend, abc.ABC):
             revision = cast(str | None, getattr(adapter.weights, "revision", None))
         binding_type = adapter.weights.binding_type
         adapter_type = adapter.identity.adapter_type
+        invocation_id = str(uuid.uuid4())
+
+        try:
+            _fire_invocation_start_hook(
+                invocation_id,
+                name=name,
+                revision=revision,
+                binding_type=binding_type,
+                adapter_type=adapter_type,
+            )
+        except Exception:
+            MelleaLogger.get_logger().warning(
+                f"adapter_function_invocation_start hook dispatch failed for "
+                f"{name!r}; ignoring so it does not block activation.",
+                exc_info=True,
+            )
 
         outcome: Literal["success", "schema_error", "error"] = "success"
         exception: BaseException | None = None
         activated = False
         body_exception: BaseException | None = None
         try:
+            _fire_phase_start_hook(invocation_id, name, "activate", revision)
             started_at = time.monotonic()
             try:
                 adapter.weights.activate()
                 activated = True
                 _fire_phase_complete_hook(
-                    name, "activate", (time.monotonic() - started_at) * 1000.0
+                    invocation_id,
+                    name,
+                    "activate",
+                    (time.monotonic() - started_at) * 1000.0,
                 )
                 try:
                     yield
@@ -811,7 +935,11 @@ class AdapterMixin(Backend, abc.ABC):
                 if activated:
                     try:
                         _run_adapter_phase(
-                            name, "deactivate", adapter.weights.deactivate
+                            invocation_id,
+                            name,
+                            "deactivate",
+                            revision,
+                            adapter.weights.deactivate,
                         )
                     except BaseException as deactivate_exc:
                         if body_exception is None:
@@ -841,6 +969,7 @@ class AdapterMixin(Backend, abc.ABC):
             # telemetry-plumbing one. Log and swallow instead.
             try:
                 _fire_invocation_complete(
+                    invocation_id=invocation_id,
                     name=name,
                     revision=revision,
                     binding_type=binding_type,

@@ -137,16 +137,16 @@ if safe_calls:
 ```python
 async def custom_react(goal, backend, tools):
     ctx = ChatContext().add(Message("user", goal))
-    
+
     for step in range(max_steps):
         # Think
         result, ctx = await aact(
             system_prompt, ctx, backend, tool_calls=True
         )
-        
+
         # Act (manual tool execution gives you control)
         tool_messages = await acall_tools(result, backend)
-        
+
         # Observe
         for msg in tool_messages:
             ctx = ctx.add(msg)

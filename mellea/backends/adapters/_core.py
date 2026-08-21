@@ -26,6 +26,7 @@ import abc
 import json
 import threading
 import time
+import uuid
 import warnings
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar, Literal
@@ -387,7 +388,11 @@ class LocalFileBinding(WeightsBinding):
     def prepare(self) -> None:
         """Downloads the adapter weights and loads them into the staged backend.
 
-        Idempotent: a no-op once already prepared. Retryable: if a previous
+        Idempotent: a no-op once already prepared, including a concurrent
+        caller that passes the pre-flight check while a winner is still
+        loading — such a caller re-checks under the lifecycle lock and returns
+        without re-running the load or firing a phase-complete for work it
+        never did. Retryable: if a previous
         call registered with the backend but failed during the weights load
         (e.g. a transient download/load failure), the next call retries only
         the load rather than re-registering — registration already succeeded
@@ -395,18 +400,33 @@ class LocalFileBinding(WeightsBinding):
         guard.
 
         The `prepare` phase duration reported to
-        `ADAPTER_FUNCTION_PHASE_COMPLETE` spans the whole operation, **including
-        the Hugging Face download** — `add_adapter` calls `get_local_hf_path`,
-        which can take seconds on a cache miss. That is deliberate (it is the
-        wall-clock cost of preparing), but worth stating, since a phase added
-        later may not want the same boundary.
+        `ADAPTER_FUNCTION_PHASE_COMPLETE` spans the phase's own work under the
+        lifecycle lock — backend registration and the weights load,
+        **including the Hugging Face download** (`add_adapter` calls
+        `get_local_hf_path`, which can take seconds on a cache miss) — and
+        excludes hook-dispatch and lock-wait time, matching the
+        `activate`/`deactivate` boundaries in `AdapterMixin.adapter_scope`.
+        Worth stating, since a phase added later may not want the same
+        boundary.
+
+        Unlike `activate`/`deactivate` (owned by `AdapterMixin.adapter_scope`),
+        `prepare()` runs outside any wrapping invocation, so it opens its own
+        single-phase `adapter_function_invocation_start`/`_complete` pair around
+        the `adapter_function_phase_start`/`_complete` pair — this is what lets a
+        `AdapterFunctionTracingPlugin` (`mellea/telemetry/tracing_plugins.py`)
+        emit `adapter_function.prepare` as a child of its own `adapter_function`
+        parent span, and guarantees the in-flight span registry drains even if
+        `prepare()` raises (the invocation-complete hook always fires, in a
+        `finally`, unlike the phase-complete hook, which only fires on success).
+        The hook dispatches run outside the `_lifecycle_lock` (see the body
+        comment for the deadlock rationale); the released/loaded checks and the
+        registration/load work each run under it.
 
         Raises:
             RuntimeError: `bind_backend()` was not called first, `name` is empty,
                 the binding was already `release()`d, or the backend refused
                 the registration.
         """
-        started_at = time.monotonic()
         with self._lifecycle_lock:
             if self._released:
                 raise RuntimeError(
@@ -416,44 +436,91 @@ class LocalFileBinding(WeightsBinding):
                 )
             if self.backend is not None and self._loaded:
                 return
-            if self.backend is None:
-                if self._staged_backend is None:
-                    raise RuntimeError(
-                        "LocalFileBinding.prepare() requires bind_backend() to be called first."
-                    )
-                if not self.name:
-                    raise RuntimeError(
-                        "LocalFileBinding.prepare() requires a non-empty name. A "
-                        "default-constructed LocalFileBinding() is an unconfigured "
-                        "placeholder — build one with LocalFileBinding.from_catalog(name) "
-                        "instead."
-                    )
 
-                self._staged_backend.add_adapter(self)
-                # `add_adapter` signals success by setting `.backend`; it has early-return
-                # paths (notably: a different object already registered under this
-                # `qualified_name`) that log a warning and leave it unset. Without this
-                # check `prepare()` would go on to load the *other* adapter's weights and
-                # leave `.backend` None, so a later `activate()` would raise "requires
-                # prepare() to be called first" despite `prepare()` having run. Fail here
-                # instead, where the cause is still visible.
+        # Every hook dispatch below blocks the caller on the shared background
+        # event loop (`_run_async_in_thread`), so they run outside
+        # `_lifecycle_lock` (a non-reentrant `threading.Lock`): a plugin handler
+        # that re-enters this binding's lifecycle from the background loop would
+        # otherwise deadlock against the lock this call still holds. The check
+        # above and the work below each run under the lock, so an already-loaded
+        # (or released) binding opens no invocation and fires no hooks. A
+        # caller that passes the check while a winner is still loading re-checks
+        # under the work lock and returns without re-running the load or firing
+        # a phase-complete; a `release()` completing between the two windows
+        # clears `_staged_backend`, so the work window raises the bind-missing
+        # error — a clean termination, not state corruption.
+        invocation_id = str(uuid.uuid4())
+        revision: str | None
+        try:
+            revision = self.resolved_revision()
+        except Exception:
+            revision = self.revision
+        self._fire_invocation_start(invocation_id, revision)
+        self._fire_phase_start(invocation_id, "prepare", revision)
+
+        error: BaseException | None = None
+        try:
+            with self._lifecycle_lock:
+                if self.backend is not None and self._loaded:
+                    # Lost the race: a concurrent prepare() completed between
+                    # the check window above and the work lock. The load did
+                    # not run under this call, so no phase-complete fires
+                    # (success-only contract) — the `finally` below still
+                    # closes the invocation this call opened.
+                    return
+                started_at = time.monotonic()
                 if self.backend is None:
-                    raise RuntimeError(
-                        f"Backend refused to register adapter {self.qualified_name!r}; see the "
-                        "backend's warning log. Either another adapter is already registered "
-                        "under this qualified name, or this binding was previously released — "
-                        "`release()` is terminal and does not free the name for re-use "
-                        "(see #1528)."
-                    )
-            # `load_peft_adapter` mutates the backend's underlying PEFT model, the
-            # same shared state `activate_peft_adapter`/`deactivate_peft_adapter`
-            # document "must be called while holding `_generation_lock`" for.
-            # `prepare()`/`release()` aren't driven through `adapter_scope`, so
-            # nothing else takes this lock on their behalf.
-            with self.backend._adapter_activation_lock():
-                self.backend.load_peft_adapter(self.qualified_name)
-            self._loaded = True
-        self._fire_phase_complete("prepare", time.monotonic() - started_at)
+                    if self._staged_backend is None:
+                        raise RuntimeError(
+                            "LocalFileBinding.prepare() requires bind_backend() to be called first."
+                        )
+                    if not self.name:
+                        raise RuntimeError(
+                            "LocalFileBinding.prepare() requires a non-empty name. A "
+                            "default-constructed LocalFileBinding() is an unconfigured "
+                            "placeholder — build one with LocalFileBinding.from_catalog(name) "
+                            "instead."
+                        )
+
+                    self._staged_backend.add_adapter(self)
+                    # `add_adapter` signals success by setting `.backend`; it has early-return
+                    # paths (notably: a different object already registered under this
+                    # `qualified_name`) that log a warning and leave it unset. Without this
+                    # check `prepare()` would go on to load the *other* adapter's weights and
+                    # leave `.backend` None, so a later `activate()` would raise "requires
+                    # prepare() to be called first" despite `prepare()` having run. Fail here
+                    # instead, where the cause is still visible.
+                    if self.backend is None:
+                        raise RuntimeError(
+                            f"Backend refused to register adapter {self.qualified_name!r}; see the "
+                            "backend's warning log. Either another adapter is already registered "
+                            "under this qualified name, or this binding was previously released — "
+                            "`release()` is terminal and does not free the name for re-use "
+                            "(see #1528)."
+                        )
+                # `load_peft_adapter` mutates the backend's underlying PEFT model, the
+                # same shared state `activate_peft_adapter`/`deactivate_peft_adapter`
+                # document "must be called while holding `_generation_lock`" for.
+                # `prepare()`/`release()` aren't driven through `adapter_scope`, so
+                # nothing else takes this lock on their behalf.
+                with self.backend._adapter_activation_lock():
+                    self.backend.load_peft_adapter(self.qualified_name)
+                self._loaded = True
+        except BaseException as exc:
+            error = exc
+            raise
+        else:
+            # Fires before `_fire_invocation_complete` below so hook order
+            # matches `AdapterMixin.adapter_scope`'s (phase-complete, then
+            # invocation-complete) — firing this after the `with` block
+            # instead put it after invocation-complete, which made the
+            # dangling-child cleanup in `finish_adapter_function_span` the
+            # only path that ever closed `adapter_function.prepare`'s span.
+            self._fire_phase_complete(
+                invocation_id, "prepare", time.monotonic() - started_at
+            )
+        finally:
+            self._fire_invocation_complete(invocation_id, revision, error)
 
     def activate(self) -> None:
         """Selects already-loaded adapter weights for generation.
@@ -544,15 +611,145 @@ class LocalFileBinding(WeightsBinding):
                 self._active = False
                 self._released = True
 
-    def _fire_phase_complete(self, phase: str, duration_s: float) -> None:
+    def _fire_invocation_start(self, invocation_id: str, revision: str | None) -> None:
+        """Fires `adapter_function_invocation_start` for the prepare-only invocation this call owns.
+
+        `prepare()` does not run inside `AdapterMixin.adapter_scope`, so it opens
+        its own single-phase invocation (start here, complete in
+        `_fire_invocation_complete`) rather than relying on one supplied by a
+        caller — this is what lets a tracing plugin open a real `adapter_function`
+        parent span for `adapter_function.prepare` to nest under, and guarantees
+        the invocation-complete hook always fires (even if `prepare()` raises),
+        which `_fire_phase_complete`'s success-only firing cannot.
+
+        Args:
+            invocation_id: Correlation id shared with the matching
+                `_fire_invocation_complete` call.
+            revision: Catalog revision of the adapter, or `None` if unpinned.
+        """
+        if not has_plugins(HookType.ADAPTER_FUNCTION_INVOCATION_START):
+            return
+
+        from ...plugins.hooks.adapter_function import (
+            AdapterFunctionInvocationStartPayload,
+        )
+
+        try:
+            payload = AdapterFunctionInvocationStartPayload(
+                adapter_function_invocation_id=invocation_id,
+                name=self.name,
+                revision=revision,
+                binding_type=self.binding_type,
+                adapter_type=self.adapter_type.value,
+            )
+            hook_coro = invoke_hook(HookType.ADAPTER_FUNCTION_INVOCATION_START, payload)
+            _run_async_in_thread(hook_coro)
+        except Exception:
+            MelleaLogger.get_logger().warning(
+                f"adapter_function_invocation_start hook dispatch failed for "
+                f"{self.name!r}; ignoring so it does not block prepare().",
+                exc_info=True,
+            )
+
+    def _fire_invocation_complete(
+        self, invocation_id: str, revision: str | None, error: BaseException | None
+    ) -> None:
+        """Fires `adapter_function_invocation_complete` for the prepare-only invocation this call owns.
+
+        Always fires, in `prepare()`'s `finally`, regardless of success or
+        failure — unlike `_fire_phase_complete`, whose contract fires only on
+        success. This is what lets a tracing plugin close the `adapter_function`
+        parent span (and defensively close any dangling `adapter_function.prepare`
+        child span) even when `prepare()` itself raised, so the in-flight span
+        registry still drains to zero.
+
+        `prepare()` never parses adapter output, so its outcome is always
+        `"success"` or `"error"` — `"schema_error"` is reserved for
+        `AdapterMixin.adapter_scope`.
+
+        Args:
+            invocation_id: Correlation id shared with the matching
+                `_fire_invocation_start` call.
+            revision: Catalog revision of the adapter, or `None` if unpinned.
+            error: The exception raised during `prepare()`, or `None` on success.
+        """
+        if not has_plugins(HookType.ADAPTER_FUNCTION_INVOCATION_COMPLETE):
+            return
+
+        from ...plugins.hooks.adapter_function import (
+            AdapterFunctionInvocationCompletePayload,
+        )
+
+        try:
+            payload = AdapterFunctionInvocationCompletePayload(
+                adapter_function_invocation_id=invocation_id,
+                name=self.name,
+                revision=revision,
+                binding_type=self.binding_type,
+                adapter_type=self.adapter_type.value,
+                outcome="error" if error is not None else "success",
+                error=error,
+            )
+            hook_coro = invoke_hook(
+                HookType.ADAPTER_FUNCTION_INVOCATION_COMPLETE, payload
+            )
+            _run_async_in_thread(hook_coro)
+        except Exception:
+            MelleaLogger.get_logger().warning(
+                f"adapter_function_invocation_complete hook dispatch failed for "
+                f"{self.name!r}; ignoring so it doesn't mask the real outcome.",
+                exc_info=True,
+            )
+
+    def _fire_phase_start(
+        self, invocation_id: str, phase: str, revision: str | None
+    ) -> None:
+        """Fires `adapter_function_phase_start` for a phase this binding is about to run.
+
+        Only `"prepare"` is fired from here — see `_fire_phase_complete`.
+
+        Args:
+            invocation_id: Correlation id of the enclosing (prepare-only) invocation.
+            phase: Lifecycle phase name; must be a valid
+                `AdapterFunctionPhaseStartPayload.phase` value.
+            revision: Catalog revision of the adapter, or `None` if unpinned.
+        """
+        if not has_plugins(HookType.ADAPTER_FUNCTION_PHASE_START):
+            return
+
+        from ...plugins.hooks.adapter_function import AdapterFunctionPhaseStartPayload
+
+        try:
+            payload = AdapterFunctionPhaseStartPayload(
+                adapter_function_invocation_id=invocation_id,
+                name=self.name,
+                phase=phase,
+                revision=revision,
+            )
+            hook_coro = invoke_hook(HookType.ADAPTER_FUNCTION_PHASE_START, payload)
+            _run_async_in_thread(hook_coro)
+        except Exception:
+            MelleaLogger.get_logger().warning(
+                f"adapter_function_phase_start hook dispatch failed for {self.name!r} "
+                f"during {phase!r}; ignoring so it does not block the phase from "
+                "running.",
+                exc_info=True,
+            )
+
+    def _fire_phase_complete(
+        self, invocation_id: str, phase: str, duration_s: float
+    ) -> None:
         """Fires `adapter_function_phase_complete` for a phase this binding owns.
 
         Only `"prepare"` is fired from here: `"activate"`/`"deactivate"` are
-        owned by `AdapterMixin.adapter_scope`, and `"release"` has no phase
-        metric in the `AdapterFunctionPhaseCompletePayload` contract (Epic #929
-        Phase 1, issue #1140).
+        owned by `AdapterMixin.adapter_scope`, and `"release"` has no firing site
+        at all — it has a `Literal` value (Epic #929 Phase 1, issue #1140 first
+        gave it a phase-metric contract with no metric; issue #1466 keeps that
+        deliberately unfired, since `release()` runs outside any invocation) but
+        is otherwise unobserved.
 
         Args:
+            invocation_id: Correlation id of the enclosing (prepare-only) invocation.
             phase: Lifecycle phase name; must be a valid
                 `AdapterFunctionPhaseCompletePayload.phase` value.
             duration_s: Wall-clock duration of the phase, in seconds.
@@ -566,7 +763,10 @@ class LocalFileBinding(WeightsBinding):
 
         try:
             payload = AdapterFunctionPhaseCompletePayload(
-                name=self.name, phase=phase, duration_ms=duration_s * 1000.0
+                adapter_function_invocation_id=invocation_id,
+                name=self.name,
+                phase=phase,
+                duration_ms=duration_s * 1000.0,
             )
             hook_coro = invoke_hook(HookType.ADAPTER_FUNCTION_PHASE_COMPLETE, payload)
             _run_async_in_thread(hook_coro)

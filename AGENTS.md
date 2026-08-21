@@ -124,6 +124,7 @@ Use the tool's common name (e.g., GitHub Copilot, Cursor, etc.).
 | Telemetry import errors | Run `uv sync` to install OpenTelemetry deps |
 | Silent empty strings from async backends | Check for `asyncio.gather(..., return_exceptions=True)` — exceptions become values silently; use `return_exceptions=False` unless callers explicitly handle `BaseException` values |
 | GitHub Actions workflow injection warning | Never use `${{ expression }}` directly inside `run:` shell commands — always route through `env:` (`env: MY_VAR: ${{ expr }}` then `"$MY_VAR"` in the script). This rule applies only to `run:` steps; `${{ }}` in `if:` conditions and `with:` action inputs is fine. |
+| Docstring quality gate false-flags "missing Raises section" with no actual `raise` in the function | `tooling/docs-autogen/audit_coverage.py`'s check is `if "raise " in source` — a substring match over the whole function source, including comments and docstrings, not an AST check for real `raise` statements. A comment containing the literal text `raise ` (e.g. "can't raise X here") triggers it. Reword the comment to avoid the substring; don't add a fake `Raises:` section. |
 
 ## 10. Self-Review (before notifying user)
 1. `uv run pytest test/ -m "not qualitative"` passes?
