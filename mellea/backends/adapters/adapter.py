@@ -915,12 +915,18 @@ class EmbeddedIntrinsicAdapter(_AdapterCore):
         config (dict): Parsed I/O transformation configuration.
         technology (str): `"lora"` or `"alora"`.
 
-    .. note::
-        `identity`, `io_contract`, and `weights` are Phase 1 internal scaffolding
-        populated in `__init__` to satisfy the new :class:`~mellea.backends.adapters.Adapter`
-        protocol.  They are not meaningful consumer-facing attributes; `io_contract` and
-        `weights` raise :exc:`NotImplementedError` and will be replaced in Phase 2
-        (issues #1137, #1142).
+    Note:
+        `identity`, `io_contract`, and `weights` are internal scaffolding
+        populated in `__init__` to satisfy the `Adapter` protocol; they are
+        not meaningful consumer-facing attributes.
+
+        - `identity`: always a real value.
+
+        - `io_contract`: Phase 1 `_ShimIOContract` placeholder; raises
+          `NotImplementedError` until issue #1516 replaces it.
+
+        - `weights`: Phase 1 `_ShimWeightsBinding` placeholder; raises
+          `NotImplementedError` until issue #1142 replaces it.
     """
 
     def __setattr__(self, name: str, value: object) -> None:
@@ -958,15 +964,18 @@ class EmbeddedIntrinsicAdapter(_AdapterCore):
 
         # Populate the new Adapter triple so isinstance(self, _AdapterCore) holds.
         # technology is validated above; cast to the Literal type mypy expects.
+        identity = Identity(
+            name=intrinsic_name,
+            adapter_type=cast(Literal["lora", "alora"], technology),
+            capability=intrinsic_name,
+        )
+
+        io_contract = _ShimIOContract()
+
+        weights = _ShimWeightsBinding()
+
         _AdapterCore.__init__(
-            self,
-            identity=Identity(
-                name=intrinsic_name,
-                adapter_type=cast(Literal["lora", "alora"], technology),
-                capability=intrinsic_name,
-            ),
-            io_contract=_ShimIOContract(),
-            weights=_ShimWeightsBinding(),
+            self, identity=identity, io_contract=io_contract, weights=weights
         )
 
     @staticmethod

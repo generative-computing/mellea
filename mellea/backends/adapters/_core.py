@@ -9,9 +9,12 @@ Introduces the composable `Adapter` dataclass and its three parts:
 - :class:`IOContract` — ABC for prompt building and output parsing
 - :class:`WeightsBinding` — pluggable ABC for weights lifecycle management
 
-Also provides :class:`LocalFileBinding`, two stub :class:`WeightsBinding`
-subclasses (:class:`EmbeddedBinding`, :class:`ServerMediatedBinding`), and
-:class:`AdapterSchemaMismatchError`.
+Also provides:
+
+- :class:`LocalFileBinding`
+- :class:`EmbeddedBinding` — stub :class:`WeightsBinding` subclass
+- :class:`ServerMediatedBinding` — stub :class:`WeightsBinding` subclass
+- :class:`AdapterSchemaMismatchError`
 
 Note:
     The existing :class:`~mellea.backends.adapters.adapter.Adapter` ABC in
