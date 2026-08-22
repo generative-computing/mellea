@@ -5,6 +5,7 @@
 
 import asyncio
 from types import SimpleNamespace
+from typing import Any, cast
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -20,7 +21,10 @@ pytest.importorskip(
 import base64
 import struct
 
-from transformers.generation.utils import GenerateDecoderOnlyOutput
+from transformers.generation.utils import (
+    GenerateBeamDecoderOnlyOutput,
+    GenerateDecoderOnlyOutput,
+)
 
 from mellea.backends import ModelOption
 from mellea.backends.adapters import AdapterMixin, IntrinsicAdapter
@@ -1423,7 +1427,7 @@ async def test_generate_from_raw_raw_response_set_per_mot():
     Asserts:
     - raw.response is not None for each MOT.
     - raw.response.sequences.shape == (1, full_seq_len).
-    - raw.response.sequences shares storage with the original batch sequences tensor (view, not clone).
+    - raw.response.sequences shares storage with the original batch sequences tensor (Clone, not view).
     - raw.response.past_key_values is None.
     - raw.response.attentions is None.
     - raw.response.hidden_states is None.
@@ -1585,3 +1589,94 @@ async def test_generate_from_raw_raw_response_scores_none_when_logits_not_reques
     assert results[0].raw.response.scores is None, (
         "raw.response.scores must be None when model.generate() returns no scores"
     )
+
+
+@pytest.mark.asyncio
+async def test_generate_from_raw_raw_response_none_for_non_tensor_sequences():
+    """raw.response stays None when cached raw output sequences are not a tensor."""
+    batch_size = 2
+    vocab_size = 32000
+    n_tokens = 3
+    prompt_len = 1
+    full_seq_len = prompt_len + n_tokens
+
+    backend, _fake_encoding, _fake_input_ids = _make_raw_fake_setup(
+        batch_size, vocab_size, n_tokens, prompt_len
+    )
+    backend._use_caches = True
+    fake_outputs = cast(
+        Any,
+        SimpleNamespace(
+            sequences=[[0] * full_seq_len for _ in range(batch_size)],
+            scores=None,
+            logits=None,
+            attentions=None,
+            hidden_states=None,
+            past_key_values=None,
+        ),
+    )
+    actions = [Message("user", "hello"), Message("user", "world")]
+
+    with (
+        patch(
+            "mellea.backends.huggingface.asyncio.to_thread", return_value=fake_outputs
+        ),
+        patch.object(backend, "do_generate_walks"),
+        patch.object(backend, "formatter") as mock_fmt,
+    ):
+        mock_fmt.print = MagicMock(return_value="prompt")
+        results = await backend.generate_from_raw(
+            cast(Any, actions), MagicMock(), model_options={}
+        )
+
+    assert len(results) == batch_size
+    assert "raw_batch_non_tensor_sequences_unsupported" in backend._warned_about
+    for item_idx, result in enumerate(results):
+        assert result.raw.response is None, (
+            f"item {item_idx}: raw.response must stay None for non-tensor sequences"
+        )
+
+
+@pytest.mark.asyncio
+async def test_generate_from_raw_raw_response_none_for_beam_outputs():
+    """raw.response stays None for cached beam-search outputs."""
+    batch_size = 2
+    vocab_size = 32000
+    n_tokens = 3
+    prompt_len = 1
+    full_seq_len = prompt_len + n_tokens
+
+    backend, _fake_encoding, _fake_input_ids = _make_raw_fake_setup(
+        batch_size, vocab_size, n_tokens, prompt_len
+    )
+    backend._use_caches = True
+    fake_outputs = GenerateBeamDecoderOnlyOutput(
+        sequences=torch.zeros(batch_size, full_seq_len, dtype=torch.long),
+        sequences_scores=None,
+        scores=None,
+        logits=None,
+        beam_indices=torch.zeros(batch_size, full_seq_len, dtype=torch.long),
+        attentions=None,
+        hidden_states=None,
+        past_key_values=None,
+    )
+    actions = [Message("user", "hello"), Message("user", "world")]
+
+    with (
+        patch(
+            "mellea.backends.huggingface.asyncio.to_thread", return_value=fake_outputs
+        ),
+        patch.object(backend, "do_generate_walks"),
+        patch.object(backend, "formatter") as mock_fmt,
+    ):
+        mock_fmt.print = MagicMock(return_value="prompt")
+        results = await backend.generate_from_raw(
+            cast(Any, actions), MagicMock(), model_options={}
+        )
+
+    assert len(results) == batch_size
+    assert "raw_batch_beam_search_unsupported" in backend._warned_about
+    for item_idx, result in enumerate(results):
+        assert result.raw.response is None, (
+            f"item {item_idx}: raw.response must stay None for beam-search outputs"
+        )

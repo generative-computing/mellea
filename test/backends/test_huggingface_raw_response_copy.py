@@ -13,9 +13,6 @@ torch = pytest.importorskip("torch", reason="torch not installed — install mel
 pytest.importorskip(
     "transformers", reason="transformers not installed — install mellea[hf]"
 )
-pytest.importorskip(
-    "llguidance", reason="llguidance not installed — install mellea[hf]"
-)
 
 from transformers.generation.utils import GenerateDecoderOnlyOutput
 
@@ -23,12 +20,16 @@ from mellea.core import ModelOutputThunk
 
 
 def _make_mot_with_hf_raw_response() -> tuple[ModelOutputThunk, Any]:
-    """Build a MOT whose raw.response is a CPU-only GenerateDecoderOnlyOutput with a view."""
+    """Build a MOT whose raw.response mirrors what the raw batch path stores.
+
+    The batch path slices one row from the full-batch sequences tensor and
+    immediately calls .detach().clone(), so raw.response.sequences is always
+    an owning, contiguous tensor — never a view.
+    """
     full_batch = torch.arange(6, dtype=torch.long).reshape(2, 3)
-    # Simulate the view produced by the raw batch path for batch item 0.
-    row_view = full_batch[0:1, :]
+    sequences = full_batch[0:1, :].detach().clone()
     hf_out = GenerateDecoderOnlyOutput(
-        sequences=row_view,
+        sequences=sequences,
         scores=None,
         logits=None,
         attentions=None,
@@ -37,7 +38,7 @@ def _make_mot_with_hf_raw_response() -> tuple[ModelOutputThunk, Any]:
     )
     mot = ModelOutputThunk(value="hello")
     mot.raw.response = hf_out
-    return mot, full_batch
+    return mot, sequences
 
 
 def test_shallow_copy_raw_response_is_same_object():
@@ -50,15 +51,13 @@ def test_shallow_copy_raw_response_is_same_object():
 
 
 def test_shallow_copy_raw_response_sequences_shares_storage():
-    """Shallow-copied MOT preserves shared tensor storage for raw.response.sequences."""
-    mot, full_batch = _make_mot_with_hf_raw_response()
+    """Shallow-copied MOT shares the same sequences tensor as the original."""
+    mot, original_sequences = _make_mot_with_hf_raw_response()
     copied = copy.copy(mot)
     assert (
         copied.raw.response.sequences.untyped_storage().data_ptr()
-        == full_batch.untyped_storage().data_ptr()
-    ), (
-        "shallow copy: raw.response.sequences must still share storage with the original batch"
-    )
+        == original_sequences.untyped_storage().data_ptr()
+    ), "shallow copy: raw.response.sequences must share storage with the original MOT"
 
 
 def test_deepcopy_raw_response_is_distinct_object():
@@ -72,11 +71,11 @@ def test_deepcopy_raw_response_is_distinct_object():
 
 def test_deepcopy_raw_response_sequences_does_not_share_storage():
     """Deepcopy breaks tensor storage sharing for raw.response.sequences."""
-    mot, full_batch = _make_mot_with_hf_raw_response()
+    mot, original_sequences = _make_mot_with_hf_raw_response()
     deep = copy.deepcopy(mot)
     assert (
         deep.raw.response.sequences.untyped_storage().data_ptr()
-        != full_batch.untyped_storage().data_ptr()
+        != original_sequences.untyped_storage().data_ptr()
     ), "deepcopy: raw.response.sequences must NOT share storage with the original"
 
 
