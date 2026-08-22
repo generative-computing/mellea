@@ -164,5 +164,4 @@ Full example showing multiple adapter functions working together in a RAG pipeli
 
 - See `mellea/stdlib/components/intrinsic/` for adapter function implementations
 - See `mellea/backends/adapters/` for adapter system
-- See `docs/dev/intrinsics_and_adapters.md` for architecture details
 - See `docs/docs/examples/granite-switch/README.md` for more about granite-switch

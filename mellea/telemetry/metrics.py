@@ -4,7 +4,7 @@
 """OpenTelemetry metrics instrumentation for Mellea.
 
 Provides metrics collection using OpenTelemetry Metrics API with support for:
-- Counters: Monotonically increasing values (e.g., request counts, token usage)
+- Counters: Monotonically increasing values (e.g., request counts, error counts)
 - Histograms: Value distributions (e.g., latency, token counts)
 - UpDownCounters: Values that can increase or decrease (e.g., active sessions)
 
@@ -57,8 +57,8 @@ Example - Multiple exporters:
     export MELLEA_METRICS_PROMETHEUS=true
 
 Built-in metrics (auto-recorded via plugins when metrics are enabled):
-- Token counters: mellea.llm.tokens.input, mellea.llm.tokens.output (unit: tokens)
-- Latency histograms: mellea.llm.request.duration (unit: s), mellea.llm.ttfb (unit: s, streaming only)
+- Token usage histogram: gen_ai.client.token.usage (unit: {token}), split by gen_ai.token.type (input/output)
+- Latency histograms: gen_ai.client.operation.duration (unit: s), gen_ai.client.operation.time_to_first_chunk (unit: s, streaming only), gen_ai.client.operation.time_per_output_chunk (unit: s, streaming only, opt-in via MELLEA_GENERATION_CHUNK_EVENTS)
 - Error counter: mellea.llm.errors (unit: {error}), categorized by semantic error type
 - Cost counter: mellea.llm.cost.usd (unit: USD), estimated cost when pricing data is available
 - Sampling counters: mellea.sampling.attempts, mellea.sampling.successes, mellea.sampling.failures (unit: {attempt}/{sample}/{failure})
@@ -118,6 +118,14 @@ except ImportError:
 def _env_true(name: str) -> bool:
     """Return True if `name` is set to a truthy value (1/true/yes)."""
     return os.getenv(name, "false").lower() in ("true", "1", "yes")
+
+
+_PROVIDER_SEMCONV = {"watsonx": "ibm.watsonx.ai"}
+
+
+def _normalize_provider_name(provider: str) -> str:
+    """Map a Mellea provider id to its `gen_ai.provider.name` semconv value, else unchanged."""
+    return _PROVIDER_SEMCONV.get(provider, provider)
 
 
 def _parse_export_interval() -> int:
@@ -251,24 +259,111 @@ def _setup_meter_provider() -> Any:
             stacklevel=2,
         )
 
-    # Configure explicit bucket boundaries for LLM latency histograms
+    # Configure explicit bucket boundaries for LLM token-usage and latency histograms
     views = [
         View(  # type: ignore
-            instrument_name="mellea.llm.request.duration",
+            instrument_name="gen_ai.client.token.usage",
             aggregation=ExplicitBucketHistogramAggregation(  # type: ignore
-                [0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 120]
+                [
+                    1,
+                    4,
+                    16,
+                    64,
+                    256,
+                    1024,
+                    4096,
+                    16384,
+                    65536,
+                    262144,
+                    1048576,
+                    4194304,
+                    16777216,
+                    67108864,
+                ]
             ),
         ),
         View(  # type: ignore
-            instrument_name="mellea.llm.ttfb",
+            instrument_name="gen_ai.client.operation.duration",
             aggregation=ExplicitBucketHistogramAggregation(  # type: ignore
-                [0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10]
+                [
+                    0.01,
+                    0.02,
+                    0.04,
+                    0.08,
+                    0.16,
+                    0.32,
+                    0.64,
+                    1.28,
+                    2.56,
+                    5.12,
+                    10.24,
+                    20.48,
+                    40.96,
+                    81.92,
+                ]
+            ),
+        ),
+        View(  # type: ignore
+            instrument_name="gen_ai.client.operation.time_to_first_chunk",
+            aggregation=ExplicitBucketHistogramAggregation(  # type: ignore
+                [
+                    0.01,
+                    0.02,
+                    0.04,
+                    0.08,
+                    0.16,
+                    0.32,
+                    0.64,
+                    1.28,
+                    2.56,
+                    5.12,
+                    10.24,
+                    20.48,
+                    40.96,
+                    81.92,
+                ]
+            ),
+        ),
+        View(  # type: ignore
+            instrument_name="gen_ai.client.operation.time_per_output_chunk",
+            aggregation=ExplicitBucketHistogramAggregation(  # type: ignore
+                [
+                    0.01,
+                    0.02,
+                    0.04,
+                    0.08,
+                    0.16,
+                    0.32,
+                    0.64,
+                    1.28,
+                    2.56,
+                    5.12,
+                    10.24,
+                    20.48,
+                    40.96,
+                    81.92,
+                ]
             ),
         ),
         View(  # type: ignore
             instrument_name="mellea.adapter_function.phase_duration",
             aggregation=ExplicitBucketHistogramAggregation(  # type: ignore
-                [0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 120]
+                [
+                    0.01,
+                    0.02,
+                    0.04,
+                    0.08,
+                    0.16,
+                    0.32,
+                    0.64,
+                    1.28,
+                    2.56,
+                    5.12,
+                    10.24,
+                    20.48,
+                    40.96,
+                    81.92,
+                ]
             ),
         ),
     ]
@@ -479,39 +574,31 @@ def create_up_down_counter(name: str, description: str = "", unit: str = "1") ->
     return _meter.create_up_down_counter(name, description=description, unit=unit)
 
 
-# Token usage counters following Gen-AI semantic conventions
-# These are lazily initialized on first use and kept internal
-_input_token_counter: Any = None
-_output_token_counter: Any = None
+# Token usage histogram following Gen-AI semantic conventions.
+# Lazily initialized on first use and kept internal.
+_token_usage_histogram: Any = None
 
 
-def _get_token_counters() -> tuple[Any, Any]:
-    """Get or create token usage counters (internal use only).
+def _get_token_usage_histogram() -> Any:
+    """Get or create the token usage histogram (internal use only)."""
+    global _token_usage_histogram
 
-    Returns:
-        Tuple of (input_counter, output_counter)
-    """
-    global _input_token_counter, _output_token_counter
-
-    if _input_token_counter is None:
-        _input_token_counter = create_counter(
-            "mellea.llm.tokens.input",
-            description="Total number of input tokens processed by LLM",
-            unit="tokens",
+    if _token_usage_histogram is None:
+        _token_usage_histogram = create_histogram(
+            "gen_ai.client.token.usage",
+            description="Number of input and output tokens used",
+            unit="{token}",
         )
 
-    if _output_token_counter is None:
-        _output_token_counter = create_counter(
-            "mellea.llm.tokens.output",
-            description="Total number of output tokens generated by LLM",
-            unit="tokens",
-        )
-
-    return _input_token_counter, _output_token_counter
+    return _token_usage_histogram
 
 
 def record_token_usage_metrics(
-    input_tokens: int | None, output_tokens: int | None, model: str, provider: str
+    input_tokens: int | None,
+    output_tokens: int | None,
+    model: str,
+    provider: str,
+    operation: str,
 ) -> None:
     """Record token usage metrics following OpenTelemetry Gen-AI semantic conventions.
 
@@ -522,38 +609,45 @@ def record_token_usage_metrics(
         output_tokens: Number of output tokens (completion tokens), or None if unavailable
         model: Model identifier (e.g., "gpt-4", "llama2:7b")
         provider: Provider name (e.g., "openai", "ollama", "watsonx")
+        operation: GenAI operation name (e.g. "chat", "text_completion")
 
     Example:
         record_token_usage_metrics(
             input_tokens=150,
             output_tokens=50,
             model="llama2:7b",
-            provider="ollama"
+            provider="ollama",
+            operation="chat",
         )
     """
     # Early return if metrics are disabled (zero overhead)
     if _meter is None:
         return
 
-    # Get the token counters (lazily initialized)
-    input_counter, output_counter = _get_token_counters()
+    # Get the token usage histogram (lazily initialized)
+    histogram = _get_token_usage_histogram()
 
     # Prepare attributes following OTel Gen-AI semantic conventions
-    attributes = {"gen_ai.provider.name": provider, "gen_ai.request.model": model}
+    attributes = {
+        "gen_ai.provider.name": _normalize_provider_name(provider),
+        "gen_ai.request.model": model,
+        "gen_ai.operation.name": operation,
+    }
 
-    # Record input tokens if available
+    # Record input tokens if available, tagged as the input token type
     if input_tokens is not None and input_tokens > 0:
-        input_counter.add(input_tokens, attributes)
+        histogram.record(input_tokens, {**attributes, "gen_ai.token.type": "input"})
 
-    # Record output tokens if available
+    # Record output tokens if available, tagged as the output token type
     if output_tokens is not None and output_tokens > 0:
-        output_counter.add(output_tokens, attributes)
+        histogram.record(output_tokens, {**attributes, "gen_ai.token.type": "output"})
 
 
 # Latency histograms following Gen-AI semantic conventions
 # These are lazily initialized on first use and kept internal
 _duration_histogram: Any = None
 _ttfb_histogram: Any = None
+_time_per_output_chunk_histogram: Any = None
 
 
 def _get_latency_histograms() -> tuple[Any, Any]:
@@ -566,15 +660,19 @@ def _get_latency_histograms() -> tuple[Any, Any]:
 
     if _duration_histogram is None:
         _duration_histogram = create_histogram(
-            "mellea.llm.request.duration",
-            description="Total LLM request duration",
+            "gen_ai.client.operation.duration",
+            description="GenAI operation duration",
             unit="s",
         )
 
     if _ttfb_histogram is None:
         _ttfb_histogram = create_histogram(
-            "mellea.llm.ttfb",
-            description="Time to first token for streaming LLM requests",
+            "gen_ai.client.operation.time_to_first_chunk",
+            description=(
+                "Time to receive the first chunk, measured from when the client "
+                "issues the generation request to when the first chunk is received "
+                "in the response stream."
+            ),
             unit="s",
         )
 
@@ -582,7 +680,12 @@ def _get_latency_histograms() -> tuple[Any, Any]:
 
 
 def record_request_duration(
-    duration_s: float, model: str, provider: str, streaming: bool = False
+    duration_s: float,
+    model: str,
+    provider: str,
+    operation: str,
+    streaming: bool = False,
+    exception_class: str | None = None,
 ) -> None:
     """Record total LLM request duration.
 
@@ -592,29 +695,41 @@ def record_request_duration(
         duration_s: Request duration in seconds
         model: Model identifier (e.g., "gpt-4", "llama2:7b")
         provider: Provider name (e.g., "openai", "ollama", "watsonx")
+        operation: GenAI operation name (e.g. "chat", "text_completion")
         streaming: Whether the request used streaming mode
+        exception_class: Exception class name when the operation failed; emitted
+            as `error.type`. `None` for successful operations.
 
     Example:
         record_request_duration(
             duration_s=1.25,
             model="llama2:7b",
             provider="ollama",
+            operation="chat",
             streaming=True,
         )
     """
     if _meter is None:
         return
 
+    # A negative duration means the start time was never recorded; skip rather
+    # than pollute the histogram with a nonsensical value.
+    if duration_s < 0:
+        return
+
     duration_hist, _ = _get_latency_histograms()
     attributes = {
         "gen_ai.request.model": model,
-        "gen_ai.provider.name": provider,
-        "streaming": streaming,
+        "gen_ai.provider.name": _normalize_provider_name(provider),
+        "gen_ai.operation.name": operation,
+        "gen_ai.request.stream": streaming,
     }
+    if exception_class is not None:
+        attributes["error.type"] = exception_class
     duration_hist.record(duration_s, attributes)
 
 
-def record_ttfb(ttfb_s: float, model: str, provider: str) -> None:
+def record_ttfb(ttfb_s: float, model: str, provider: str, operation: str) -> None:
     """Record time-to-first-token for streaming LLM requests.
 
     This is a no-op when metrics are disabled, ensuring zero overhead.
@@ -624,20 +739,71 @@ def record_ttfb(ttfb_s: float, model: str, provider: str) -> None:
         ttfb_s: Time to first token in seconds
         model: Model identifier (e.g., "gpt-4", "llama2:7b")
         provider: Provider name (e.g., "openai", "ollama", "watsonx")
+        operation: GenAI operation name (e.g. "chat", "text_completion")
 
     Example:
         record_ttfb(
             ttfb_s=0.18,
             model="llama2:7b",
             provider="ollama",
+            operation="chat",
         )
     """
     if _meter is None:
         return
 
     _, ttfb_hist = _get_latency_histograms()
-    attributes = {"gen_ai.request.model": model, "gen_ai.provider.name": provider}
+    attributes = {
+        "gen_ai.request.model": model,
+        "gen_ai.provider.name": _normalize_provider_name(provider),
+        "gen_ai.operation.name": operation,
+    }
     ttfb_hist.record(ttfb_s, attributes)
+
+
+def _get_time_per_output_chunk_histogram() -> Any:
+    """Get or create the time-per-output-chunk histogram (internal use only)."""
+    global _time_per_output_chunk_histogram
+
+    if _time_per_output_chunk_histogram is None:
+        _time_per_output_chunk_histogram = create_histogram(
+            "gen_ai.client.operation.time_per_output_chunk",
+            description=(
+                "Time per output chunk, recorded for each chunk received after "
+                "the first one, measured as the time elapsed from the end of the "
+                "previous chunk to the end of the current chunk."
+            ),
+            unit="s",
+        )
+    return _time_per_output_chunk_histogram
+
+
+def record_time_per_output_chunk(
+    time_s: float, model: str, provider: str, operation: str
+) -> None:
+    """Record the time between consecutive streamed output chunks.
+
+    Measured between chunk *processing* completions, an approximation of the
+    receive-to-receive interval the OTel GenAI spec defines. No-op when metrics
+    are disabled.
+
+    Args:
+        time_s: Seconds between the previous chunk and this one.
+        model: Model identifier (e.g., "gpt-4", "llama2:7b")
+        provider: Provider name (e.g., "openai", "ollama", "watsonx")
+        operation: GenAI operation name (e.g. "chat", "text_completion")
+    """
+    if _meter is None:
+        return
+
+    _get_time_per_output_chunk_histogram().record(
+        time_s,
+        {
+            "gen_ai.request.model": model,
+            "gen_ai.provider.name": _normalize_provider_name(provider),
+            "gen_ai.operation.name": operation,
+        },
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -739,7 +905,7 @@ def _get_error_counter() -> Any:
 
 
 def record_error(
-    error_type: str, model: str, provider: str, exception_class: str
+    error_type: str, model: str, provider: str, exception_class: str, operation: str
 ) -> None:
     """Record an LLM error metric.
 
@@ -750,6 +916,7 @@ def record_error(
         model: Model identifier (e.g. "gpt-4", "llama2:7b").
         provider: Provider name (e.g. "openai", "ollama").
         exception_class: Python exception class name (e.g. "RateLimitError").
+        operation: GenAI operation name (e.g. "chat", "text_completion").
 
     Example:
         record_error(
@@ -757,6 +924,7 @@ def record_error(
             model="gpt-4",
             provider="openai",
             exception_class="RateLimitError",
+            operation="chat",
         )
     """
     if _meter is None:
@@ -766,10 +934,11 @@ def record_error(
     counter.add(
         1,
         {
-            "error_type": error_type,
+            "mellea.error.category": error_type,
             "gen_ai.request.model": model,
-            "gen_ai.provider.name": provider,
+            "gen_ai.provider.name": _normalize_provider_name(provider),
             "error.type": exception_class,
+            "gen_ai.operation.name": operation,
         },
     )
 
@@ -799,7 +968,7 @@ def _get_cost_counter() -> Any:
     return _cost_counter
 
 
-def record_cost(cost: float, model: str, provider: str) -> None:
+def record_cost(cost: float, model: str, provider: str, operation: str) -> None:
     """Record estimated LLM request cost in USD.
 
     This is a no-op when metrics are disabled, ensuring zero overhead.
@@ -810,19 +979,28 @@ def record_cost(cost: float, model: str, provider: str) -> None:
         cost: Estimated request cost in US dollars.
         model: Model identifier (e.g. `"gpt-4o"`, `"claude-sonnet-4-6"`).
         provider: Provider name (e.g. `"openai"`, `"ollama"`).
+        operation: GenAI operation name (e.g. "chat", "text_completion").
 
     Example:
         record_cost(
             cost=0.0042,
             model="gpt-4o",
             provider="openai",
+            operation="chat",
         )
     """
     if _meter is None:
         return
 
     counter = _get_cost_counter()
-    counter.add(cost, {"gen_ai.request.model": model, "gen_ai.provider.name": provider})
+    counter.add(
+        cost,
+        {
+            "gen_ai.request.model": model,
+            "gen_ai.provider.name": _normalize_provider_name(provider),
+            "gen_ai.operation.name": operation,
+        },
+    )
 
 
 _sampling_attempts_counter: Any = None
@@ -1009,8 +1187,7 @@ def _get_adapter_function_invocations_counter() -> Any:
         # in the codebase, pre-existing, already-shipped `Intrinsic*` symbols
         # (the `Intrinsic` component, `call_intrinsic`, etc.) still use the old
         # name and are renamed in a later, coordinated phase of Epic #929 (#1136)
-        # rather than here. See docs/dev/adapter_observability.md for the full
-        # rationale. (Applies to all three metrics below.)
+        # rather than here. (Applies to all three metrics below.)
         _adapter_function_invocations_counter = create_counter(
             "mellea.adapter_function.invocations",
             description="Total number of adapter function invocations",

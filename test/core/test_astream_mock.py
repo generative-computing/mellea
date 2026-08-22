@@ -166,3 +166,71 @@ async def test_astream_final_call_returns_full_value():
     # All chunks concatenated equal the full value
     assert chunk1 + chunk2 + chunk3 == "part1part2part3"
     assert mot.value == "part1part2part3"
+
+
+@pytest.mark.asyncio
+async def test_aiter_yields_streamed_deltas():
+    """`async for delta in mot` yields each streamed delta; joined, they equal `value`."""
+    mot = create_manual_mock_thunk()
+
+    async def _feed() -> None:
+        for token in ("alpha ", "beta ", "gamma"):
+            await mot._gen.queue.put(token)
+            await asyncio.sleep(0)
+        await mot._gen.queue.put(None)
+
+    task = asyncio.create_task(_feed())
+    deltas = [delta async for delta in mot]
+    await task
+
+    # Deltas are the incremental text; concatenated they equal the full value.
+    assert "".join(deltas) == "alpha beta gamma"
+    assert mot.value == "alpha beta gamma"
+
+
+@pytest.mark.asyncio
+async def test_aiter_on_computed_thunk_stops_immediately():
+    """Iterating an already-computed thunk yields nothing (StopAsyncIteration)."""
+    mot = ModelOutputThunk(value="done")
+    assert [delta async for delta in mot] == []
+
+
+@pytest.mark.asyncio
+async def test_aiter_single_consumer_guard_raises_on_second_iterator():
+    """A second `async for` over the same thunk raises rather than splitting the stream.
+
+    `__aiter__` marks the thunk consumed on first iteration; a second consumer
+    would split the one underlying stream, so it is rejected.
+    """
+    mot = create_manual_mock_thunk()
+    mot._gen.queue.put_nowait("only")
+    mot._gen.queue.put_nowait(None)
+
+    first = mot.__aiter__()
+    assert first is mot
+
+    with pytest.raises(RuntimeError, match="already being iterated"):
+        mot.__aiter__()
+
+
+@pytest.mark.asyncio
+async def test_aiter_guard_rejects_reiteration_after_break() -> None:
+    """The guard is per-thunk and one-shot: once started, no re-iteration.
+
+    Even after breaking out early, the same thunk cannot be re-iterated — the
+    stream has a single cursor.
+    """
+    mot = create_manual_mock_thunk()
+    for token in ("one ", "two ", "three"):
+        mot._gen.queue.put_nowait(token)
+    mot._gen.queue.put_nowait(None)
+
+    collected = []
+    async for delta in mot:
+        collected.append(delta)
+        break
+    assert collected  # at least the first delta was yielded
+
+    with pytest.raises(RuntimeError, match="already being iterated"):
+        async for _ in mot:
+            pass

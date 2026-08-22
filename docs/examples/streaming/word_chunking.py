@@ -1,25 +1,26 @@
 # pytest: ollama, e2e
 
-"""Streaming generation with per-word validation using WordChunker.
+"""Streaming generation with per-word validation using WordChunking.
 
 Demonstrates:
 - Using the `"word"` chunking alias for the finest-grained validation
 - Detecting a forbidden word the moment it appears in the stream
 - Early-exit cancelling generation before the consumer sees the bad word
-- How WordChunker compares to SentenceChunker in reaction time
+- How WordChunking compares to SentenceChunking in reaction time
 
-WordChunker splits on whitespace, so each `stream_validate` call receives
+WordChunking splits on whitespace, so each `stream_validate` call receives
 exactly one word.  This is the highest-sensitivity strategy: validation fires
 before the model has finished even the current clause, letting you catch
 prohibited content with minimal output produced.
 
-The trade-off vs. SentenceChunker: validators that need sentence-level context
+The trade-off vs. SentenceChunking: validators that need sentence-level context
 (grammar, coherence) cannot operate correctly at word granularity because each
-chunk carries only a single token.  Use WordChunker when the check is
+chunk carries only a single token.  Use WordChunking when the check is
 token-local — forbidden words, length budgets, numeric thresholds.
 """
 
 import asyncio
+from typing import Any
 
 from mellea.core.backend import Backend
 from mellea.core.base import Context
@@ -28,6 +29,7 @@ from mellea.core.requirement import (
     Requirement,
     ValidationResult,
 )
+from mellea.plugins import hook, register
 from mellea.stdlib.components import Instruction
 from mellea.stdlib.streaming import (
     ChunkEvent,
@@ -35,7 +37,7 @@ from mellea.stdlib.streaming import (
     FullValidationEvent,
     QuickCheckEvent,
     StreamingDoneEvent,
-    stream_with_chunking,
+    stream,
 )
 
 # Words that must not appear in the model's response.
@@ -45,9 +47,9 @@ _FORBIDDEN = {"competitor", "CompetitorX", "legacy", "inferior", "obsolete"}
 class ForbiddenWordReq(Requirement):
     """Fails the stream immediately if a forbidden word appears.
 
-    Each `stream_validate` call receives a single word (from
-    :class:`~mellea.stdlib.chunking.WordChunker`).  The check is O(1)
-    per word — set membership test — so it adds negligible latency.
+    Each `stream_validate` call receives a single word (from `WordChunking`).
+    The check is O(1) per word — set membership test — so it adds negligible
+    latency.
     """
 
     def __init__(self, forbidden: set[str]) -> None:
@@ -92,13 +94,12 @@ async def main() -> None:
     )
     req = ForbiddenWordReq(forbidden=_FORBIDDEN)
 
-    result = await stream_with_chunking(
-        action, backend, ctx, requirements=[req], chunking="word"
-    )
-
-    print("Streaming events as they arrive (one per word):")
     word_count = 0
-    async for event in result.events():
+
+    @hook("streaming_event")
+    async def print_events(payload: Any, ctx: Any) -> None:
+        nonlocal word_count
+        event = payload.event
         match event:
             case ChunkEvent():
                 word_count += 1
@@ -121,15 +122,23 @@ async def main() -> None:
             case _:
                 pass
 
-    await result.acomplete()
+    register(print_events)
 
-    print(f"\nCompleted normally: {result.completed}")
-    if result.streaming_failures:
-        for _req, pvr in result.streaming_failures:
+    print("Stream events as they arrive (one per word):")
+    async with await stream(
+        action, backend, ctx, requirements=[req], chunking="word"
+    ) as streamer:
+        # Draining the stream fires the events; the hook does the printing.
+        async for _word in streamer:
+            pass
+
+    print(f"\nCompleted normally: {streamer.completed_normally}")
+    if streamer.streaming_failures:
+        for _req, pvr in streamer.streaming_failures:
             print(f"Streaming failure: {pvr.reason}")
-        print(f"Text at cancellation: {result.full_text!r}")
+        print(f"Text at cancellation: {streamer.full_text!r}")
     else:
-        print(f"Full text: {result.full_text!r}")
+        print(f"Full text: {streamer.full_text!r}")
 
 
 asyncio.run(main())

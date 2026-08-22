@@ -111,6 +111,48 @@ How `astream()` works:
   a pre-computed thunk and `is_computed()` is already `True` before the loop runs.
 - Do not call `astream()` from multiple coroutines on the same thunk simultaneously.
 
+### Iterating with `async for`
+
+The thunk is also an async iterator, so you can consume the same chunks with
+`async for` instead of the manual `is_computed()` loop. Iterate inside
+`async with`, which cancels the generation if you leave the loop early (an
+exception or `break`) so an abandoned stream never keeps running:
+
+```python
+# Requires: mellea
+# Returns: str
+import asyncio
+import mellea
+from mellea.backends import ModelOption
+
+async def stream_summary(feedback: str) -> str:
+    m = mellea.start_session()
+    mot = await m.ainstruct(
+        "Summarise this customer feedback in one sentence: {{text}}",
+        user_variables={"text": feedback},
+        model_options={ModelOption.STREAM: True},
+        strategy=None,
+    )
+
+    chunks = []
+    async with mot:
+        async for chunk in mot:
+            print(chunk, end="", flush=True)
+            chunks.append(chunk)
+    print()  # newline after streaming completes
+
+    return "".join(chunks)
+
+asyncio.run(stream_summary(
+    "The onboarding was confusing and took far too long. "
+    "Support was helpful once I got through."
+))
+```
+
+Each iteration yields the same chunk `astream()` would return; iteration ends
+when the thunk is computed. Like `astream()`, a thunk has a single reader — a
+second `async for` over the same thunk raises rather than splitting the stream.
+
 ---
 
 ## Step 3: Concurrent batch processing

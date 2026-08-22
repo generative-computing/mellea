@@ -25,6 +25,8 @@ class GenerationPreCallPayload(MelleaBasePayload):
         generation_id: Mellea-side hook correlation ID, distinct from the
             provider-assigned `GenerationMetadata.response_id`. `None` when
             the firing site does not generate one.
+        model: Model identifier the backend is calling.
+        provider: Provider name (e.g. `"openai"`, `"ollama"`).
     """
 
     action: Any = None
@@ -33,6 +35,8 @@ class GenerationPreCallPayload(MelleaBasePayload):
     format: Any = None
     tool_calls: bool = False
     generation_id: str | None = None
+    model: str | None = None
+    provider: str | None = None
 
 
 class GenerationPostCallPayload(MelleaBasePayload):
@@ -69,18 +73,19 @@ class GenerationErrorPayload(MelleaBasePayload):
 
     Attributes:
         exception: The exception raised by the backend.
-        model_output: The `ModelOutputThunk` at the time of the error. `model`
-            and `provider` are set when the backend set them early (before the
-            async task); otherwise they are `None`.
+        model_output: The `ModelOutputThunk` at the time of the error.
         generation_id: Mellea-side hook correlation ID matching the
             corresponding pre_call payload, distinct from the provider-assigned
             `GenerationMetadata.response_id`. `None` when the firing site did
             not generate one.
+        latency_ms: Elapsed milliseconds from the call to the error. `0.0` when
+            the failure occurred before a call was issued (no `model_output`).
     """
 
     exception: BaseException
     model_output: Any = None
     generation_id: str | None = None
+    latency_ms: float = 0.0
 
 
 class GenerationEventPayload(MelleaBasePayload):
@@ -92,7 +97,9 @@ class GenerationEventPayload(MelleaBasePayload):
     Known events:
         `chunk_processed`: emitted once per streamed chunk during `astream()`
             (opt-in via `MELLEA_GENERATION_CHUNK_EVENTS`). `data` keys:
-            `chunk_index` (int), `chunk_text_length` (int).
+            `chunk_index` (int), `chunk_text_length` (int),
+            `time_since_last_chunk_ms` (float | None — milliseconds since the
+            previous chunk, `None` for the first chunk).
 
     Attributes:
         generation_id: Mellea-side hook correlation ID matching the corresponding
@@ -100,12 +107,16 @@ class GenerationEventPayload(MelleaBasePayload):
             `GenerationMetadata.response_id`. `None` when the firing site did not
             generate one.
         event_name: Identifies the event. Subscribers dispatch on this.
+        model: Model identifier for the generation, or `None` if not yet known.
+        provider: Provider name for the generation, or `None` if not yet known.
         data: Values for this event, keyed by name. The keys present depend on
             `event_name` (see Known events above).
     """
 
     generation_id: str | None = None
     event_name: str = ""
+    model: str | None = None
+    provider: str | None = None
     data: dict[str, Any] = {}
 
 

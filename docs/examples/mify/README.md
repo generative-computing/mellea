@@ -93,5 +93,4 @@ Objects decorated with `@mify` implement the `MifiedProtocol`, which provides:
 ## Related Documentation
 
 - See `mellea/stdlib/components/mify.py` for implementation
-- See `docs/dev/mify.md` for design details
 - See `mellea/templates/` for template system

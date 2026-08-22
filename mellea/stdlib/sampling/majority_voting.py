@@ -3,12 +3,13 @@
 
 """Sampling Strategies for Minimum Bayes Risk Decoding (MBRD)."""
 
+from __future__ import annotations
+
 import abc
 import asyncio
+from typing import TYPE_CHECKING
 
 import numpy as np
-from math_verify import ExprExtractionConfig, LatexExtractionConfig, parse, verify
-from rouge_score.rouge_scorer import RougeScorer  # codespell:ignore
 
 from ...core import (
     Backend,
@@ -22,6 +23,40 @@ from ...core import (
     SamplingResult,
 )
 from .base import RejectionSamplingStrategy
+
+if TYPE_CHECKING:
+    # `math_verify` and `rouge_score` are imported in the constructors of the
+    # strategies that need them rather than at module scope. Both are required
+    # dependencies, but `rouge_score` pulls in nltk (and transitively
+    # scipy/scikit-learn/pandas), which dominated `import mellea` even for programs
+    # that never perform majority voting.
+    from math_verify import ExprExtractionConfig, LatexExtractionConfig, parse, verify
+    from rouge_score.rouge_scorer import RougeScorer  # codespell:ignore
+
+
+def _build_extraction_targets(
+    match_types: tuple[str, ...],
+) -> list[LatexExtractionConfig | ExprExtractionConfig]:
+    """Build `math_verify` extraction targets for the given match types.
+
+    Only `"latex"` and `"expr"` are recognized; anything else is ignored, so an
+    empty list is a possible result.
+
+    Args:
+        match_types: Match-type names, in the order the targets should be tried.
+
+    Returns:
+        One `math_verify` extraction-target config per recognized match type.
+    """
+    from math_verify import ExprExtractionConfig, LatexExtractionConfig
+
+    targets: list[LatexExtractionConfig | ExprExtractionConfig] = []
+    for match_type in match_types:
+        if match_type == "latex":
+            targets.append(LatexExtractionConfig(boxed_match_priority=0))
+        elif match_type == "expr":
+            targets.append(ExprExtractionConfig())
+    return targets
 
 
 class BaseMBRDSampling(RejectionSamplingStrategy):
@@ -209,7 +244,8 @@ class MajorityVotingStrategyForMath(BaseMBRDSampling):
 
     Attributes:
         match_types (list[str]): Extraction target types used for parsing math
-            expressions; always `["latex", "axpr"]`, computed at init.
+            expressions; defaults to `["latex", "expr"]`. Changing it rebuilds the
+            extraction targets on the next comparison.
         symmetric (bool): Inherited from `BaseMBRDSampling`; always `True`
             for this strategy (set explicitly at init).
     """
@@ -219,6 +255,8 @@ class MajorityVotingStrategyForMath(BaseMBRDSampling):
     float_rounding: int
     strict: bool
     allow_set_relation_comp: bool
+    _extraction_targets: list[LatexExtractionConfig | ExprExtractionConfig]
+    _extraction_targets_key: tuple[str, ...]
 
     def __init__(
         self,
@@ -242,15 +280,31 @@ class MajorityVotingStrategyForMath(BaseMBRDSampling):
             loop_budget=loop_budget,
             requirements=requirements,
         )
+
+        from math_verify import parse, verify
+
+        # Use `_parse` and `_verify` so the functions can be referenced in `compare_strings`.
+        self._parse = parse
+        self._verify = verify
+
         self.number_of_samples = number_of_samples
         # match_type: type of match latex, expr (match only so far)
         #     -  For math use "latex" or "expr" or both
         #     -  For general text similarity use "rougel"
-        MATCH_TYPES = ["latex", "axpr"]
+        MATCH_TYPES = ["latex", "expr"]
         self.match_types = MATCH_TYPES
         self.float_rounding = float_rounding
         self.strict = strict
         self.allow_set_relation_comp = allow_set_relation_comp
+
+        # Seeded here so the first `compare_strings` call does not pay for it;
+        # `compare_strings` runs O(n^2) times per `sample` call. `match_types` is
+        # public, so the cache is keyed on its contents and rebuilt if a caller
+        # changes it.
+        self._extraction_targets_key = tuple(self.match_types)
+        self._extraction_targets = _build_extraction_targets(
+            self._extraction_targets_key
+        )
 
         # Note: symmetry is not implied for certain expressions, see: https://github.com/huggingface/Math-Verify/blob/5d148cfaaf99214c2e4ffb4bc497ab042c592a7a/README.md?plain=1#L183
         self.symmetric = True
@@ -259,9 +313,10 @@ class MajorityVotingStrategyForMath(BaseMBRDSampling):
     def compare_strings(self, ref: str, pred: str) -> float:
         """Compare two strings using math-aware extraction and verification.
 
-        Parses both strings into mathematical expressions using the configured
-        `match_types` (latex and/or expr), then verifies equivalence via
-        `math_verify.verify`.
+        Parses both strings into mathematical expressions using extraction
+        targets derived from `match_types`, then verifies equivalence via
+        `math_verify.verify`. The targets are cached and rebuilt only when
+        `match_types` changes.
 
         Args:
             ref (str): The reference (gold) string containing a math expression.
@@ -271,19 +326,20 @@ class MajorityVotingStrategyForMath(BaseMBRDSampling):
             float: `1.0` if the expressions are considered equivalent,
             `0.0` otherwise.
         """
-        # Convert string match_types to ExtractionTarget objects
-        extraction_targets = []
-        for match_type in self.match_types:
-            if match_type == "latex":
-                extraction_targets.append(LatexExtractionConfig(boxed_match_priority=0))
-            elif match_type == "expr":
-                extraction_targets.append(ExprExtractionConfig())
+        # Rebuild the cached targets if a caller changed the public `match_types`.
+        # A property / setter approach that updates on match_types changes would not work
+        # due to slice-assigns: `s.match_types[:] = ["latex"]`.
+        match_types = tuple(self.match_types)
+        if match_types != self._extraction_targets_key:
+            self._extraction_targets = _build_extraction_targets(match_types)
+            self._extraction_targets_key = match_types
+        targets = self._extraction_targets
 
         # NOTE: Math-Verify parse and verify functions don't support threaded environment due to usage of signal.alarm() in timeout mechanism. If you need to run in multithreaded environment it's recommended to set the parsing_timeout=None
-        gold_parsed = parse(ref, extraction_targets, parsing_timeout=None)  # type: ignore
-        pred_parsed = parse(pred, extraction_targets, parsing_timeout=None)  # type: ignore
+        gold_parsed = self._parse(ref, targets, parsing_timeout=None)  # type: ignore
+        pred_parsed = self._parse(pred, targets, parsing_timeout=None)  # type: ignore
         return float(
-            verify(
+            self._verify(
                 gold_parsed,
                 pred_parsed,
                 float_rounding=self.float_rounding,
@@ -335,6 +391,8 @@ class MBRDRougeLStrategy(BaseMBRDSampling):
             loop_budget=loop_budget,
             requirements=requirements,
         )
+        from rouge_score.rouge_scorer import RougeScorer  # codespell:ignore
+
         self.match_types = ["rougeL"]
         self.symmetric = True
         self.scorer = RougeScorer(self.match_types, use_stemmer=True)

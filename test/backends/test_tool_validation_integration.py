@@ -248,7 +248,8 @@ class TestOptionalParameters:
         validated = validate_tool_arguments(tool, args)
 
         assert validated["required"] == "value1"
-        assert "optional" not in validated or validated.get("optional") is None
+        # An omitted optional field must NOT be padded back in as None.
+        assert "optional" not in validated
 
     def test_optional_param_none(self):
         """Test validation when optional parameter is explicitly None."""
@@ -456,6 +457,102 @@ class TestUntypedParameters:
         # Should remain as string since there's no type hint to coerce to
         assert validated["message"] == "123"
         assert isinstance(validated["message"], str)
+
+
+class TestNoNullPadding:
+    """Validation must return only what the model sent, never padding unset fields.
+
+    A bare `model_dump()` used to emit a `None` for every declared-but-unset optional
+    field, at every nesting depth, inventing arguments the model never produced.
+    `model_dump(exclude_unset=True)` fixes this; these tests lock the behavior in.
+    """
+
+    def _nested_object_tool(self) -> MelleaTool:
+        """Build a tool with a nested object whose sub-fields are all optional.
+
+        Constructed directly from an explicit JSON schema (rather than
+        `from_callable`) so the nested object can declare fields the model
+        will not send.
+        """
+        schema = {
+            "type": "function",
+            "function": {
+                "name": "update_profile",
+                "description": "",
+                "parameters": {
+                    "type": "object",
+                    "required": ["user_id", "settings"],
+                    "properties": {
+                        "user_id": {"type": "string"},
+                        "settings": {
+                            "type": "object",
+                            "properties": {
+                                "theme": {"type": "string"},
+                                "language": {"type": "string"},
+                                "timezone": {"type": "string"},
+                            },
+                        },
+                    },
+                },
+            },
+        }
+        return MelleaTool(
+            name="update_profile", tool_call=lambda **k: None, as_json_tool=schema
+        )
+
+    def test_nested_object_not_padded(self):
+        """(a) Unset nested-object fields must not appear as None in the output."""
+        tool = self._nested_object_tool()
+        args = {"user_id": "u1", "settings": {"theme": "dark"}}
+        validated = validate_tool_arguments(tool, args, strict=False)
+
+        # Exactly what the model sent — no language=None / timezone=None padding.
+        assert validated == {"user_id": "u1", "settings": {"theme": "dark"}}
+        for unsent in ("language", "timezone"):
+            assert unsent not in validated["settings"]
+
+    def test_coercion_still_works(self):
+        """(b) Type coercion is unaffected by the no-padding fix."""
+        args = {"name": "Test", "age": "30", "score": "95.5", "active": True}
+        tool = MelleaTool.from_callable(typed_tool)
+        validated = validate_tool_arguments(tool, args, coerce_types=True)
+
+        assert validated["age"] == 30
+        assert isinstance(validated["age"], int)
+        assert validated["score"] == 95.5
+        assert isinstance(validated["score"], float)
+
+    def test_explicit_null_on_nullable_field_preserved(self):
+        """(c) A null the model explicitly sent for a nullable field is kept.
+
+        `optional` is typed `str | None`, so an explicit None is a valid, *set*
+        value and must survive — only *unset* fields are dropped.
+        """
+        args = {"required": "value1", "optional": None}
+        tool = MelleaTool.from_callable(optional_tool)
+        validated = validate_tool_arguments(tool, args, strict=False)
+
+        assert "optional" in validated
+        assert validated["optional"] is None
+
+    def test_required_fields_still_present(self):
+        """(d) Required fields are still validated and emitted."""
+        args = {"required": "value1"}
+        tool = MelleaTool.from_callable(optional_tool)
+        validated = validate_tool_arguments(tool, args, strict=False)
+
+        assert validated["required"] == "value1"
+        # ...and the unset optional field is not padded back in.
+        assert "optional" not in validated
+
+    def test_undeclared_extra_key_survives_in_lenient_mode(self):
+        """(e) Extra keys the model sent that aren't in the schema survive (lenient)."""
+        args = {"message": "hi", "weird_extra": 42}
+        tool = MelleaTool.from_callable(simple_tool)
+        validated = validate_tool_arguments(tool, args, strict=False)
+
+        assert validated["message"] == "hi"
+        assert validated["weird_extra"] == 42
 
 
 if __name__ == "__main__":

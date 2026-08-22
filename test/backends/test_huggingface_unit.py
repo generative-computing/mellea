@@ -239,7 +239,91 @@ def test_generate_with_adapter_lock_calls_load_peft_adapter():
         backend._generate_with_adapter_lock("my_adapter", lambda: "output")
 
     mock_load.assert_called_once_with("my_adapter")
+    # Deliberately no `_model.set_adapter` assertion. Since #1141 that call is
+    # reached via `activate_peft_adapter` rather than inlined here, so asserting
+    # it would make this test an unannounced guard for the delegation chain --
+    # failing on a change to `activate_peft_adapter` without naming it. The chain
+    # is covered by `test_generate_with_adapter_lock_uses_activate_deactivate_verbs`
+    # and the verb itself by `test_activate_peft_adapter_calls_set_adapter`.
+
+
+def test_generate_with_adapter_lock_uses_activate_deactivate_verbs():
+    """_generate_with_adapter_lock delegates to the new activate/deactivate verbs
+    rather than calling `_model.set_adapter` directly (Epic #929 Phase 2, issue #1141).
+    """
+    backend = _make_backend()
+    backend._model.active_adapters.return_value = ["my_adapter"]  # type: ignore[union-attr]
+
+    with (
+        patch.object(backend, "load_peft_adapter"),
+        patch.object(backend, "activate_peft_adapter") as mock_activate,
+        patch.object(backend, "deactivate_peft_adapter") as mock_deactivate,
+    ):
+        backend._generate_with_adapter_lock("my_adapter", lambda: "output")
+
+    mock_activate.assert_called_once_with("my_adapter")
+    mock_deactivate.assert_not_called()
+
+    backend._model.active_adapters.return_value = []  # type: ignore[union-attr]
+    with (
+        patch.object(backend, "activate_peft_adapter") as mock_activate,
+        patch.object(backend, "deactivate_peft_adapter") as mock_deactivate,
+    ):
+        backend._generate_with_adapter_lock("", lambda: "output")
+
+    mock_activate.assert_not_called()
+    mock_deactivate.assert_called_once_with("")
+
+
+def test_activate_peft_adapter_calls_set_adapter():
+    """activate_peft_adapter() is a thin wrapper over `_model.set_adapter`."""
+    backend = _make_backend()
+
+    backend.activate_peft_adapter("my_adapter")
+
     backend._model.set_adapter.assert_called_once_with("my_adapter")  # type: ignore[union-attr]
+
+
+def test_deactivate_peft_adapter_calls_set_adapter_empty():
+    """deactivate_peft_adapter() clears active adapters via `_model.set_adapter([])`."""
+    backend = _make_backend()
+
+    backend.deactivate_peft_adapter("my_adapter")
+
+    backend._model.set_adapter.assert_called_once_with([])  # type: ignore[union-attr]
+
+
+def test_deactivate_peft_adapter_swallows_no_adapter_loaded_error():
+    """deactivate_peft_adapter() is a no-op if the model has no adapter loaded yet."""
+    backend = _make_backend()
+    backend._model.set_adapter.side_effect = ValueError(  # type: ignore[union-attr]
+        "No adapter loaded. Please load an adapter first."
+    )
+
+    backend.deactivate_peft_adapter("my_adapter")  # must not raise
+
+
+def test_deactivate_peft_adapter_reraises_other_value_errors():
+    """deactivate_peft_adapter() only swallows the specific 'no adapter loaded' error."""
+    backend = _make_backend()
+    backend._model.set_adapter.side_effect = ValueError("some other failure")  # type: ignore[union-attr]
+
+    with pytest.raises(ValueError, match="some other failure"):
+        backend.deactivate_peft_adapter("my_adapter")
+
+
+def test_adapter_activation_lock_is_the_generation_lock():
+    """`_adapter_activation_lock()` reuses `_generation_lock`, not a separate lock.
+
+    `LocalFileBinding.activate()`/`.deactivate()` (driven by `adapter_scope()`)
+    hold no lock of their own and rely on this method for the exclusivity
+    `_generate_with_adapter_lock` otherwise gets from holding `_generation_lock`
+    directly. If this ever returned a different lock, the two callers would no
+    longer be mutually exclusive.
+    """
+    backend = _make_backend()
+
+    assert backend._adapter_activation_lock() is backend._generation_lock
 
 
 def test_list_adapters_reflects_registration_not_just_loading():

@@ -1,16 +1,18 @@
 # pytest: ollama, e2e
 
-"""Streaming generation with per-chunk validation using stream_with_chunking().
+"""Streaming generation with per-chunk validation using stream().
 
 Demonstrates:
 - Subclassing Requirement to override stream_validate() for early-exit checks
-- Calling stream_with_chunking() with sentence-level chunking
-- Observing the full event vocabulary via events() as they arrive
-- Awaiting full completion with acomplete() to access final_validations and full_text
+- Calling stream() with sentence-level chunking
+- Observing the typed StreamEvents via the STREAMING_EVENT hook as they arrive
+- Driving the stream with `async with` + `async for` for safe cleanup
+- Reading terminal state (failed_early, full_text, final_validations) after the loop
 """
 
 import asyncio
 import re
+from typing import Any
 
 from mellea.core.backend import Backend
 from mellea.core.base import Context
@@ -19,6 +21,7 @@ from mellea.core.requirement import (
     Requirement,
     ValidationResult,
 )
+from mellea.plugins import hook, register
 from mellea.stdlib.components import Instruction
 from mellea.stdlib.streaming import (
     ChunkEvent,
@@ -26,7 +29,7 @@ from mellea.stdlib.streaming import (
     FullValidationEvent,
     QuickCheckEvent,
     StreamingDoneEvent,
-    stream_with_chunking,
+    stream,
 )
 
 # Crude sentence-terminator detector. A run of ``.``/``!``/``?`` counts once
@@ -92,12 +95,9 @@ async def main() -> None:
     )
     req = MaxSentencesReq(limit=3)
 
-    result = await stream_with_chunking(
-        action, backend, ctx, requirements=[req], chunking="sentence"
-    )
-
-    print("Streaming events as they arrive:")
-    async for event in result.events():
+    @hook("streaming_event")
+    async def print_events(payload: Any, ctx: Any) -> None:
+        event = payload.event
         match event:
             case ChunkEvent():
                 print(f"  CHUNK[{event.chunk_index}]: {event.text!r}")
@@ -117,17 +117,25 @@ async def main() -> None:
             case _:
                 pass  # RetryEvent and any future event types
 
-    await result.acomplete()
+    register(print_events)
 
-    print(f"\nCompleted normally: {result.completed}")
-    print(f"Full text: {result.full_text!r}")
+    print("Stream events as they arrive:")
+    async with await stream(
+        action, backend, ctx, requirements=[req], chunking="sentence"
+    ) as streamer:
+        # Draining the stream fires the events; the hook does the printing.
+        async for _chunk in streamer:
+            pass
 
-    if result.streaming_failures:
-        for _req, pvr in result.streaming_failures:
+    print(f"\nCompleted normally: {streamer.completed_normally}")
+    print(f"Full text: {streamer.full_text!r}")
+
+    if streamer.streaming_failures:
+        for _req, pvr in streamer.streaming_failures:
             print(f"Streaming failure: {pvr.reason}")
 
-    if result.final_validations:
-        for vr in result.final_validations:
+    if streamer.final_validations:
+        for vr in streamer.final_validations:
             print(f"Final validation: {'PASS' if vr.as_bool() else 'FAIL'}")
 
 

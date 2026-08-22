@@ -23,3 +23,8 @@ jobs:
     secrets:
       HF_TOKEN_READ_PUBLIC_ONLY: ${{ secrets.HF_TOKEN_READ_PUBLIC_ONLY }}
 
+  actions-audit:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/actions-audit.yml
+

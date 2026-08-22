@@ -1,25 +1,26 @@
 # pytest: ollama, e2e
 
-"""Streaming generation with per-paragraph validation using ParagraphChunker.
+"""Streaming generation with per-paragraph validation using ParagraphChunking.
 
 Demonstrates:
 - Using the `"paragraph"` chunking alias for coarse-grained, structure-aware
   validation
 - A paragraph-length gate that cancels generation if any paragraph is too long
-- How ParagraphChunker withholds text until a blank line (`\\n\\n`) is seen,
+- How ParagraphChunking withholds text until a blank line (`\\n\\n`) is seen,
   then emits the entire paragraph as a single chunk
-- The latency trade-off vs. SentenceChunker: fewer, larger chunks mean lower
+- The latency trade-off vs. SentenceChunking: fewer, larger chunks mean lower
   validation overhead but later detection
 
-ParagraphChunker splits on two or more consecutive newlines.  Unlike
-SentenceChunker, it waits for the model to produce a blank line before
+ParagraphChunking splits on two or more consecutive newlines.  Unlike
+SentenceChunking, it waits for the model to produce a blank line before
 emitting anything — so if the model writes everything as one long paragraph
-the stream completes before any chunk is emitted.  Use ParagraphChunker when
+the stream completes before any chunk is emitted.  Use ParagraphChunking when
 the validation logic requires full paragraph context: topic coherence,
 heading structure, citation presence, or overall paragraph quality.
 """
 
 import asyncio
+from typing import Any
 
 from mellea.core.backend import Backend
 from mellea.core.base import Context
@@ -28,6 +29,7 @@ from mellea.core.requirement import (
     Requirement,
     ValidationResult,
 )
+from mellea.plugins import hook, register
 from mellea.stdlib.components import Instruction
 from mellea.stdlib.streaming import (
     ChunkEvent,
@@ -35,7 +37,7 @@ from mellea.stdlib.streaming import (
     FullValidationEvent,
     QuickCheckEvent,
     StreamingDoneEvent,
-    stream_with_chunking,
+    stream,
 )
 
 _MAX_PARAGRAPH_WORDS = 60
@@ -45,7 +47,7 @@ class ParagraphLengthReq(Requirement):
     """Fails the stream if any paragraph exceeds a word-count limit.
 
     Each `stream_validate` call receives one complete paragraph (from
-    :class:`~mellea.stdlib.chunking.ParagraphChunker`).  The validator counts
+    `ParagraphChunking`).  The validator counts
     words and immediately fails the stream if the paragraph is too long.  This
     lets you enforce a maximum paragraph length at generation time rather than
     post-processing.
@@ -99,12 +101,9 @@ async def main() -> None:
     )
     req = ParagraphLengthReq(max_words=_MAX_PARAGRAPH_WORDS)
 
-    result = await stream_with_chunking(
-        action, backend, ctx, requirements=[req], chunking="paragraph"
-    )
-
-    print("Streaming events as they arrive (one ChunkEvent per paragraph):")
-    async for event in result.events():
+    @hook("streaming_event")
+    async def print_events(payload: Any, ctx: Any) -> None:
+        event = payload.event
         match event:
             case ChunkEvent():
                 word_count = len(event.text.split())
@@ -129,14 +128,22 @@ async def main() -> None:
             case _:
                 pass
 
-    await result.acomplete()
+    register(print_events)
 
-    print(f"\nCompleted normally: {result.completed}")
-    if result.streaming_failures:
-        for _req, pvr in result.streaming_failures:
+    print("Stream events as they arrive (one per paragraph):")
+    async with await stream(
+        action, backend, ctx, requirements=[req], chunking="paragraph"
+    ) as streamer:
+        # Draining the stream fires the events; the hook does the printing.
+        async for _paragraph in streamer:
+            pass
+
+    print(f"\nCompleted normally: {streamer.completed_normally}")
+    if streamer.streaming_failures:
+        for _req, pvr in streamer.streaming_failures:
             print(f"Streaming failure: {pvr.reason}")
     else:
-        print(f"Full text:\n{result.full_text}")
+        print(f"Full text:\n{streamer.full_text}")
 
 
 asyncio.run(main())

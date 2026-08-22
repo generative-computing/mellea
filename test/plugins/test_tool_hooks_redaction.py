@@ -7,7 +7,7 @@
 - TOOL_POST_INVOKE: replace tool_output after the tool runs
 
 No LLM is required — the test constructs a ModelOutputThunk directly with a
-pre-built tool_calls dict and exercises _acall_tools in isolation.
+pre-built tool_calls dict and exercises acall_tools in isolation.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ pytest.importorskip("cpex.framework")
 from mellea.core.base import AbstractMelleaTool, ModelOutputThunk, ModelToolCall
 from mellea.plugins import PluginResult, hook, register
 from mellea.plugins.types import HookType
-from mellea.stdlib.functional import _acall_tools
+from mellea.stdlib.functional import acall_tools
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -83,7 +83,7 @@ class TestToolArgRedactionViaHook:
 
         register(redact_password)
 
-        tool_messages = await _acall_tools(result, MagicMock())
+        tool_messages = await acall_tools(result, MagicMock())
 
         assert len(tool_messages) == 1
         assert "[REDACTED]" in tool_messages[0].content
@@ -105,7 +105,7 @@ class TestToolArgRedactionViaHook:
 
         register(capture_payload)
 
-        await _acall_tools(result, MagicMock())
+        await acall_tools(result, MagicMock())
 
         assert len(observed_args) == 1
         assert observed_args[0]["token"] == "abc123"
@@ -124,7 +124,7 @@ class TestToolArgRedactionViaHook:
 
         register(observe_only)
 
-        await _acall_tools(result, MagicMock())
+        await acall_tools(result, MagicMock())
 
         assert recording_tool.calls[0]["value"] == "keep-me"
 
@@ -148,7 +148,7 @@ class TestToolArgRedactionViaHook:
 
         register(redact_pii)
 
-        tool_messages = await _acall_tools(result, MagicMock())
+        tool_messages = await acall_tools(result, MagicMock())
 
         assert len(tool_messages) == 1
         assert "123-45-6789" not in tool_messages[0].content
@@ -178,7 +178,7 @@ class TestToolOutputRedactionViaHook:
 
         register(redact_token)
 
-        tool_messages = await _acall_tools(result, MagicMock())
+        tool_messages = await acall_tools(result, MagicMock())
 
         assert len(tool_messages) == 1
         assert "supersecret" not in tool_messages[0].content
@@ -201,7 +201,7 @@ class TestToolOutputRedactionViaHook:
 
         register(capture_output)
 
-        await _acall_tools(result, MagicMock())
+        await acall_tools(result, MagicMock())
 
         assert len(observed_outputs) == 1
         assert "password=hunter2" in observed_outputs[0]
@@ -221,6 +221,6 @@ class TestToolOutputRedactionViaHook:
 
         register(observe_only)
 
-        tool_messages = await _acall_tools(result, MagicMock())
+        tool_messages = await acall_tools(result, MagicMock())
 
         assert tool_messages[0].content == "safe result"

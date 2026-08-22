@@ -1,0 +1,27 @@
+name: Audit GitHub Actions Workflows
+
+# Kept separate from quality.yml so it is only wired into ci.yml (the PR merge
+# gate), not into publish-release.yml. zizmor audits the CI/CD workflow files
+# themselves rather than the code being released, so a new finding here
+# shouldn't be able to block a release the way a ruff/mypy/test failure can.
+on:
+  workflow_call: {}
+
+permissions: {}
+
+jobs:
+  zizmor:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Audit GitHub Actions workflows with zizmor
+        uses: zizmorcore/zizmor-action@3dc1ecc9bcb9e94e9b2c709687979e1298497054 # v0.6.2
+        with:
+          advanced-security: false
+          config: .github/zizmor.yml
+        env:
+          GH_TOKEN: ${{ github.token }}

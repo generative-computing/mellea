@@ -67,7 +67,7 @@ def test_record_cost_basic(clean_metrics_env):
 
     from mellea.telemetry.metrics import record_cost
 
-    record_cost(cost=0.0042, model="gpt-4o", provider="openai")
+    record_cost(cost=0.0042, model="gpt-4o", provider="openai", operation="chat")
 
     provider.force_flush()
     data_points = _find_cost_data_points(reader.get_metrics_data())
@@ -76,6 +76,7 @@ def test_record_cost_basic(clean_metrics_env):
     attrs = dict(data_points[0].attributes)
     assert attrs["gen_ai.request.model"] == "gpt-4o"
     assert attrs["gen_ai.provider.name"] == "openai"
+    assert attrs["gen_ai.operation.name"] == "chat"
     assert abs(data_points[0].value - 0.0042) < 1e-9
 
 
@@ -87,9 +88,9 @@ def test_record_cost_accumulation(clean_metrics_env):
 
     from mellea.telemetry.metrics import record_cost
 
-    record_cost(0.001, "claude-sonnet-4-6", "anthropic")
-    record_cost(0.002, "claude-sonnet-4-6", "anthropic")
-    record_cost(0.003, "claude-sonnet-4-6", "anthropic")
+    record_cost(0.001, "claude-sonnet-4-6", "anthropic", "chat")
+    record_cost(0.002, "claude-sonnet-4-6", "anthropic", "chat")
+    record_cost(0.003, "claude-sonnet-4-6", "anthropic", "chat")
 
     provider.force_flush()
     data_points = _find_cost_data_points(reader.get_metrics_data())
@@ -106,9 +107,9 @@ def test_record_cost_multiple_models(clean_metrics_env):
 
     from mellea.telemetry.metrics import record_cost
 
-    record_cost(0.001, "gpt-4o", "openai")
-    record_cost(0.002, "gpt-4o-mini", "openai")
-    record_cost(0.003, "claude-sonnet-4-6", "anthropic")
+    record_cost(0.001, "gpt-4o", "openai", "chat")
+    record_cost(0.002, "gpt-4o-mini", "openai", "chat")
+    record_cost(0.003, "claude-sonnet-4-6", "anthropic", "chat")
 
     provider.force_flush()
     data_points = _find_cost_data_points(reader.get_metrics_data())

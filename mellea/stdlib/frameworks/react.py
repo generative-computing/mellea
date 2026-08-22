@@ -120,7 +120,7 @@ async def react(
         tool_responses: list[ToolMessage] = []
         if step.tool_calls is not None:
             # Code below assumes the tool is called here.
-            tool_responses = mfuncs._call_tools(step, backend=backend)
+            tool_responses = await mfuncs.acall_tools(step, backend=backend)
             for tool_res in tool_responses:
                 context = context.add(tool_res)
                 if tool_res.name == MELLEA_FINALIZER_TOOL:
