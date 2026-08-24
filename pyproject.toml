@@ -426,5 +426,8 @@ exclude_lines = [
 [tool.coverage.html]
 directory = "htmlcov"
 
+[tool.uv]
+constraint-dependencies = ["click>=8.3.3"]
+
 [tool.uv.sources]
 mellea = { workspace = true }
