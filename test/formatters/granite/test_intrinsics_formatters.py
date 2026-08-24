@@ -231,23 +231,6 @@ _YAML_JSON_COMBOS_LIST = [
         task="query_rewrite",
     ),
     YamlJsonCombo(
-        short_name="context_relevance",
-        inputs_file=_INPUT_JSON_DIR / "context_relevance.json",
-        arguments_file=_INPUT_ARGS_DIR / "context_relevance.json",
-        task="context_relevance",
-        # No Granite 4.1 version of this adapter
-        base_model_id="ibm-granite/granite-4.0-micro",
-    ),
-    YamlJsonCombo(
-        short_name="context_relevance_alora",
-        inputs_file=_INPUT_JSON_DIR / "context_relevance.json",
-        arguments_file=_INPUT_ARGS_DIR / "context_relevance.json",
-        task="context_relevance",
-        is_alora=True,
-        # No Granite 4.1 version of this adapter
-        base_model_id="ibm-granite/granite-4.0-micro",
-    ),
-    YamlJsonCombo(
         short_name="citations",
         inputs_file=_INPUT_JSON_DIR / "citations.json",
         task="citations",
@@ -787,11 +770,6 @@ def test_run_transformers(yaml_json_combo_with_model, gh_run):
     # Pull this string out of the debugger to create a fresh model outputs file.
     responses_str = responses.model_dump_json(indent=4)
     print(responses_str[:10000])  # Limit stdout content
-
-    if cfg.short_name in ("context_relevance_alora", "context_relevance"):
-        pytest.skip(
-            "context_relevance adapter deprecated (Granite 4.0 only, not maintained)"
-        )
 
     # Output processing
     transformed_responses = result_processor.transform(responses, transformed_input)

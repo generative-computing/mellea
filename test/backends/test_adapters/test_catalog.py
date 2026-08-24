@@ -111,7 +111,6 @@ def test_hyphenated_entries_have_underscore_capabilities(name, expected_capabili
     [
         "answerability",
         "citations",
-        "context_relevance",
         "hallucination_detection",
         "query_clarification",
         "query_rewrite",

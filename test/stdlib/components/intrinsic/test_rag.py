@@ -176,24 +176,6 @@ def test_citations(backend):
     assert result == expected
 
 
-@pytest.mark.qualitative
-@pytest.mark.filterwarnings("ignore::DeprecationWarning")
-def test_context_relevance(backend_4_0):
-    """Verify that the context relevance intrinsic functions properly."""
-    context, question, docs = _read_input_json("context_relevance.json")
-
-    # Context relevance can only check against a single document at a time.
-    document = docs[0]
-
-    # First call triggers adapter loading
-    result = rag.check_context_relevance(question, document, context, backend_4_0)
-    assert result == "irrelevant"
-
-    # Second call hits a different code path from the first one
-    result = rag.check_context_relevance(question, document, context, backend_4_0)
-    assert result == "irrelevant"
-
-
 def _compare_hallucination(result: list[dict], expected: list[dict]):
     """Special function to compare the result and expected output for hallucination detection.
 
@@ -307,18 +289,6 @@ def test_citations_resolve(backend):
         assert result == expected
     except AssertionError as ae:
         pytest.xfail(f"Known differences across platforms. Diff was: {ae}")
-
-
-@pytest.mark.qualitative
-@pytest.mark.filterwarnings("ignore::DeprecationWarning")
-def test_context_relevance_resolve(backend_4_0):
-    """Verify context relevance when question is resolved from context."""
-    context, question, docs = _read_input_json("context_relevance.json")
-    context = context.add(Message("user", question))
-    document = docs[0]
-
-    result = rag.check_context_relevance(None, document, context, backend_4_0)
-    assert result == "irrelevant"
 
 
 @pytest.mark.qualitative

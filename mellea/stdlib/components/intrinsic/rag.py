@@ -4,14 +4,13 @@
 """Adapter functions related to retrieval-augmented generation."""
 
 import collections.abc
-import warnings
 from typing import cast
 
 from ....backends.adapters import AdapterMixin
 from ...components import Document
 from ...context import ChatContext
 from ..chat import Message
-from ..docs.document import _coerce_to_document, _coerce_to_documents
+from ..docs.document import _coerce_to_documents
 from ._util import _resolve_question, _resolve_response, call_intrinsic
 
 # ---------------------------------------------------------------------------
@@ -231,75 +230,6 @@ def find_citations(
         model_options=model_options,
     )
     return cast(list[dict], result["items"])
-
-
-def check_context_relevance(
-    question: str | None,
-    document: str | Document,
-    context: ChatContext,
-    backend: AdapterMixin,
-    *,
-    model_options: dict | None = None,
-) -> str:
-    """Test whether a document is relevant to a user's question.
-
-    Deprecated: this function uses a Granite 4.0-only adapter that will not
-    receive a Granite 4.1 version and is not maintained. There is no direct
-    adapter replacement — use a @generative function for per-document relevance
-    filtering. See docs/advanced/intrinsics for a migration example. This
-    function will be removed in a future release.
-
-    Adapter function that checks whether a single document contains part or all of
-    the answer to a user's question. Does not consider the context in which the
-    question was asked.
-
-    This helper uses a Granite 4.0 adapter (`ibm-granite/granite-4.0-micro`) and
-    is not available for Granite 4.1 models.
-
-    Output contract — required key: `context_relevance`.  Missing the key raises
-    :class:`~mellea.backends.adapters.AdapterSchemaMismatchError`; extra optional
-    keys do not raise (forward-compatible).
-
-    Args:
-        question: Question that the user has posed. When `None`, the question
-            is extracted from the last user message in `context`.
-        document: A retrieved document snippet. May be a `Document` or a plain
-            string (automatically wrapped in `Document`).
-        context: The chat up to the point where the user asked a question.
-        backend: Backend instance that supports the adapters that implement this
-            adapter function.
-        model_options: Optional model-option overrides (e.g.
-            `{"temperature": 0.1}`).  Merged on top of the adapter default
-            (`temperature=0.0`).
-
-    Returns:
-        Context relevance judgement as one of the following strings:
-        `"relevant"`, `"irrelevant"`, or `"partially relevant"`.
-
-    Raises:
-        ValueError: When the model output is not valid JSON or is not a
-            JSON object.
-        AdapterSchemaMismatchError: When the model output is missing the required
-            `context_relevance` field.
-    """
-    warnings.warn(
-        "check_context_relevance() is deprecated and will be removed in a future "
-        "release. The context_relevance adapter is Granite 4.0 only and is not "
-        "maintained for newer models. Use a @generative function for per-document "
-        "relevance filtering — see docs/advanced/intrinsics for guidance.",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    question, context = _resolve_question(question, context, backend)
-    document = _coerce_to_document(document)
-    result = call_intrinsic(
-        "context_relevance",
-        context.add(Message("user", question)),
-        backend,
-        kwargs={"document_content": document.text},
-        model_options=model_options,
-    )
-    return cast(str, result["context_relevance"])
 
 
 def flag_hallucinated_content(
