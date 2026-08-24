@@ -808,6 +808,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             if want_scores:
                 if raw_hf_output_cell[0] is not None:
                     mot.raw.response = raw_hf_output_cell[0]
+                    raw_hf_output_cell[0] = None
                 else:
                     warn_key = "intrinsic_no_hf_output"
                     if warn_key not in self._warned_about:

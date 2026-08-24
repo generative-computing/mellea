@@ -19,8 +19,11 @@ pytest.importorskip(
 )
 
 import base64
+import gc
 import struct
+import weakref
 
+from transformers.cache_utils import CacheLayerMixin, DynamicCache
 from transformers.generation.utils import (
     GenerateBeamDecoderOnlyOutput,
     GenerateDecoderOnlyOutput,
@@ -923,6 +926,188 @@ async def test_intrinsic_logits_populated_when_option_set(stub_backend):
     assert len(output.generation.logits) == len(fake_scores)
     assert all(t.shape == (vocab_size,) for t in output.generation.logits)
 
+@pytest.mark.asyncio
+async def test_intrinsic_closure_cell_and_kv_cache_released_after_post_processing(
+    stub_backend,
+):
+    """Holding only the MOT after post_processing must not pin intrinsic HF output.
+
+    Two related retention paths are exercised:
+
+    1. `raw_hf_output_cell` — the closure captured by `_gen.process` (a
+       `functools.partial` that outlives the call). The cell must be cleared
+       after its value is transferred to `mot.raw.response`, otherwise the
+       held MOT retains the full GenerateDecoderOnlyOutput.
+
+    2. `past_key_values` — the KV cache inside the HF output. On the no-cache
+       path, post_processing must remove it from the GenerateDecoderOnlyOutput
+       before clearing `mot.raw.response`.
+
+    The test deliberately retains the MOT while dropping all independent test
+    references to the HF output, DynamicCache, and KV tensors.
+    """
+    backend = _make_intrinsic_backend_stub(stub_backend)
+    backend.processing = lambda *args, **kwargs: LocalHFBackend.processing(
+        backend, *args, **kwargs
+    )
+    backend.post_processing = lambda *args, **kwargs: LocalHFBackend.post_processing(
+        backend, *args, **kwargs
+    )
+    backend._surface_logits = lambda mot, hf_out: LocalHFBackend._surface_logits(
+        backend, mot, hf_out
+    )
+    backend._use_caches = False
+    backend.cache_put = MagicMock()
+    backend._tokenizer = MagicMock(eos_token_id=0)
+    backend.model_id = "stub-model"
+
+    # Build a small KV cache with real tensors so weakrefs can verify that the
+    # cache and its allocations are released.
+    kv_cache = DynamicCache()
+    kv_cache.update(
+        key_states=torch.zeros(1, 1, 1, 4),
+        value_states=torch.zeros(1, 1, 1, 4),
+        layer_idx=0,
+    )
+
+    fake_scores = (torch.zeros(1, 32000),)
+    fake_hf_output = GenerateDecoderOnlyOutput(
+        sequences=torch.tensor([[1, 2]]),
+        scores=fake_scores,
+        logits=None,
+        attentions=None,
+        hidden_states=None,
+        past_key_values=kv_cache,
+    )
+
+    # Take weakrefs before dropping all direct strong references.
+    ref_container = weakref.ref(fake_hf_output)
+    ref_kv_cache = weakref.ref(kv_cache)
+    ref_kv_tensors = [
+        weakref.ref(t)
+        for layer in kv_cache.layers
+        if isinstance(layer, CacheLayerMixin)
+        for t in (layer.keys, layer.values)
+        if t is not None
+    ]
+
+    adapter = _make_intrinsic_adapter_stub()
+    backend._added_adapters = {adapter.qualified_name: adapter}
+
+    class _FakeChatCompletionResponse:
+        class _Choice:
+            class _Message:
+                content = "0.9"
+
+            message = _Message()
+
+        choices = [_Choice()]
+
+    class _FakeResultProcessorPassthrough:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            pass
+
+        def transform(self, chunk: Any, rewritten: Any) -> Any:
+            return chunk
+
+    def fake_transformers_inputs(
+        rewritten: Any,
+        tokenizer: Any,
+        model: Any,
+        ll_tokenizer: Any = None,
+    ) -> tuple[dict, dict]:
+        return {"input_tokens": torch.tensor([[1]])}, {}
+
+    def fake_generate_with_transformers(
+        tokenizer: Any,
+        model: Any,
+        generate_input: Any,
+        other_input: Any,
+    ) -> Any:
+        model.generate(inputs=generate_input["input_tokens"])
+        return _FakeChatCompletionResponse()
+
+    mock_model = MagicMock()
+    mock_model.generate = MagicMock(return_value=fake_hf_output)
+    backend._model = mock_model
+
+    with (
+        patch(
+            "mellea.backends.huggingface.granite_formatters.IntrinsicsRewriter",
+            _FakeRewriter,
+        ),
+        patch(
+            "mellea.backends.huggingface.granite_formatters.IntrinsicsResultProcessor",
+            _FakeResultProcessorPassthrough,
+        ),
+        patch(
+            "mellea.formatters.granite.base.util.chat_completion_request_to_transformers_inputs",
+            side_effect=fake_transformers_inputs,
+        ),
+        patch(
+            "mellea.formatters.granite.base.util.generate_with_transformers",
+            side_effect=fake_generate_with_transformers,
+        ),
+    ):
+        output = await LocalHFBackend._generate_from_intrinsic(
+            backend,
+            Intrinsic("answerability"),
+            ChatContext().add(Message("user", "Is the sky blue?")),
+            model_options={ModelOption.LOGITS: True},
+        )
+
+        assert output._gen.generate is not None
+        await output._gen.generate
+
+        while not output._gen.queue.empty():
+            item = output._gen.queue.get_nowait()
+            if item is not None:
+                await output._gen.process(output, item)
+
+        output._computed = True
+
+    # MagicMock artificially retains its return_value. A real HF model does not
+    # retain the result of generate(), so remove this test-only retention path.
+    mock_model.generate.return_value = None
+
+    # Drop the test's direct strong references. From here onward, the retained
+    # MOT should be the only object graph capable of keeping the HF output alive.
+    del fake_hf_output
+    del kv_cache
+    del fake_scores
+
+    await backend.post_processing(
+        output,
+        [],
+        None,
+        False,
+        {},
+        None,
+        torch.tensor([[1]]),
+    )
+
+    gc.collect()
+    gc.collect()
+
+    assert output.raw.response is None, (
+        "raw.response should be None on the no-caching path"
+    )
+
+    assert ref_container() is None, (
+        "GenerateDecoderOnlyOutput is still alive while the MOT is held; "
+        "the _gen.process closure or another MOT-owned path is pinning it"
+    )
+
+    assert ref_kv_cache() is None, (
+        "DynamicCache is still alive while the MOT is held; "
+        "past_key_values was not fully released on the no-cache path"
+    )
+
+    for i, ref in enumerate(ref_kv_tensors):
+        assert ref() is None, (
+            f"KV-cache tensor {i} is still alive while the MOT is held; "
+            "past_key_values or another reference path is retaining it"
+        )
 
 @pytest.mark.parametrize("images,audio", _MULTIMODAL_CASES)
 @pytest.mark.asyncio
