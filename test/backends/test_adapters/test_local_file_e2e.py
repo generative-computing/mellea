@@ -106,9 +106,10 @@ async def test_local_file_binding_full_lifecycle_against_real_model(backend):
 
     binding.release()
     assert binding.backend is None
-    # list_adapters() reports everything ever registered via add_adapter,
-    # regardless of load state — release() only reverses the load, so check
-    # the loaded-adapters bookkeeping directly instead.
+    # #1528: release() now deregisters via the backend's remove_adapter()
+    # inverse verb, so a released adapter no longer appears in
+    # list_adapters() either.
+    assert binding.qualified_name not in backend.list_adapters()
     assert binding.qualified_name not in backend._loaded_adapters
 
 
