@@ -121,6 +121,38 @@ def test_embedded_identity_lora_technology():
     assert adapter.identity.adapter_type == "lora"
 
 
+def test_embedded_catalog_capability_avoids_spurious_registry_warning():
+    """Regression (#1563): catalog aliases use their effective capability.
+
+    Before this fix, the hyphenated catalog name emitted a KNOWN_CAPABILITIES
+    warning even though the adapter function was registered.
+    """
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        adapter = EmbeddedIntrinsicAdapter(
+            "guardian-core", config={}, technology="alora"
+        )
+
+    assert adapter.identity.capability == "guardian_core"
+    assert not any(
+        warning.category is UserWarning and "KNOWN_CAPABILITIES" in str(warning.message)
+        for warning in caught
+    )
+
+
+def test_embedded_custom_capability_still_emits_registry_warning():
+    """Custom embedded adapters retain their user-provided capability token."""
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        adapter = EmbeddedIntrinsicAdapter("custom-adapter", config={})
+
+    assert adapter.identity.capability == "custom-adapter"
+    assert any(
+        warning.category is UserWarning and "KNOWN_CAPABILITIES" in str(warning.message)
+        for warning in caught
+    )
+
+
 def test_embedded_legacy_attributes_preserved():
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", DeprecationWarning)
@@ -221,6 +253,27 @@ def test_intrinsic_identity_lora_adapter_type():
             config_dict={"dummy": "config"},
         )
     assert adapter.identity.adapter_type == "lora"
+
+
+def test_intrinsic_catalog_capability_avoids_spurious_registry_warning():
+    """Regression (#1563): catalog aliases use their effective capability.
+
+    Before this fix, the hyphenated catalog name emitted a KNOWN_CAPABILITIES
+    warning even though the adapter function was registered.
+    """
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        adapter = IntrinsicAdapter(
+            "guardian-core",
+            adapter_type=AdapterType.ALORA,
+            config_dict={"dummy": "config"},
+        )
+
+    assert adapter.identity.capability == "guardian_core"
+    assert not any(
+        warning.category is UserWarning and "KNOWN_CAPABILITIES" in str(warning.message)
+        for warning in caught
+    )
 
 
 def test_intrinsic_legacy_attributes_preserved():
@@ -548,3 +601,44 @@ def test_resolve_adapter_lazy_creates_and_returns():
     assert isinstance(created_adapters[0], IntrinsicAdapter)
     assert created_adapters[0].adapter_type == AdapterType.LORA
     assert result is created_adapters[0]
+
+
+def test_resolve_adapter_catalog_alias_returns_registered_adapter():
+    """Regression (#1563): resolve_adapter accepts the catalog's public alias.
+
+    The shim stores `guardian_core` as its canonical capability, while callers
+    resolve the adapter via the catalog name `guardian-core`.
+    """
+    mock_catalog_entry = IntrinsicsCatalogEntry(
+        name="guardian-core",
+        capability="guardian_core",
+        repo_id="ibm-granite/granitelib-guardian-r1.0",
+        revision="abc123",
+        adapter_types=(AdapterType.LORA,),
+    )
+    mock_backend = MagicMock(spec=AdapterMixin)
+    mock_backend.base_model_name = "ibm-granite/granite-4.1-3b"
+    mock_backend._uses_embedded_adapters = False
+    mock_backend._added_adapters = {}
+    mock_backend.add_adapter.side_effect = lambda adapter: (
+        mock_backend._added_adapters.__setitem__(adapter.qualified_name, adapter)
+    )
+    mock_backend._find_adapter.side_effect = lambda cap, types=None: (
+        AdapterMixin._find_adapter(mock_backend, cap, types)
+    )
+
+    with (
+        patch(
+            "mellea.backends.adapters.adapter.fetch_intrinsic_metadata",
+            return_value=mock_catalog_entry,
+        ),
+        patch(
+            "mellea.backends.adapters.adapter.intrinsics.obtain_io_yaml",
+            return_value="/fake/adapter.yaml",
+        ),
+        patch("builtins.open", mock_open(read_data="key: value")),
+    ):
+        result = AdapterMixin.resolve_adapter(mock_backend, "guardian-core")
+
+    assert result.identity.name == "guardian-core"
+    assert result.identity.capability == "guardian_core"
