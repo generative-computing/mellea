@@ -212,6 +212,21 @@ def test_simplify_and_merge_per_call_overrides_backend():
     assert result[ModelOption.MAX_NEW_TOKENS] == 512
 
 
+@pytest.mark.parametrize("is_chat_context", [True, False])
+def test_simplify_and_merge_rejects_model_option(
+    backend: OpenAIBackend, is_chat_context: bool
+) -> None:
+    """Regression (#1575): model selection is rejected for both OpenAI APIs.
+
+    Without this check, the raw `model` option reaches the API call alongside
+    OpenAIBackend's fixed model argument and raises a duplicate-keyword error.
+    """
+    with pytest.raises(ValueError, match="model cannot be set via model_options"):
+        backend._simplify_and_merge(
+            {"model": "other-model"}, is_chat_context=is_chat_context
+        )
+
+
 async def test_openai_backend_rejects_model_option_on_standard_chat_path():
     """Regression (#1575): standard chat rejects per-call model selection.
 
