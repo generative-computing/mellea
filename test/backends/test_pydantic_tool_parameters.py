@@ -1030,9 +1030,7 @@ class TestLiteralFields:
         mt = MelleaTool.from_callable(file_op)
         with pytest.raises(ValidationError):
             validate_tool_arguments(
-                mt,
-                {"path": "/etc/passwd", "mode": "delete"},
-                strict=True,
+                mt, {"path": "/etc/passwd", "mode": "delete"}, strict=True
             )
 
     def test_strict_accepts_value_inside_literal(self):
