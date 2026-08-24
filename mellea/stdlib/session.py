@@ -128,15 +128,12 @@ def start_session(
             to the backend (e.g., temperature, max_tokens, etc.). These are set
             once at construction and merged into every call in the session, so
             they act as session-wide defaults (per-call `model_options` still take
-            precedence). For thinking-capable models on the Ollama backend, this is
-            the recommended way to suppress reasoning for a whole session:
-            ```python
-            from mellea.backends import ModelOption
-
-            # Suppress thinking on a thinking-capable model for the whole session:
-            with start_session(model_options={ModelOption.THINKING: False}) as m:
-                result = m.instruct("Summarize this in one sentence.")
-            ```
+            precedence). See `ModelOption` for the available options and each
+            backend for which it respects and how. Note `ModelOption.THINKING` in
+            particular: unlike the other options, which are opt-in and change
+            nothing when omitted, some thinking-capable models reason by default,
+            so omitting it inherits that — set it here to control reasoning across
+            the whole session.
         plugins: Optional list of plugins scoped to this session. Accepts
             `@hook`-decorated functions, `@plugin`-decorated class instances,
             `MelleaPlugin` instances, or `PluginSet` instances.

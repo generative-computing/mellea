@@ -80,18 +80,11 @@ class OllamaModelBackend(FormatterBackend):
         base_url (str | None): Ollama server endpoint; defaults to
             `env(OLLAMA_HOST)` or `http://localhost:11434`.
         model_options (dict | None): Default model options for generation requests.
-            These are merged into every call, so they act as session-wide defaults
-            (per-call `model_options` take precedence). On a thinking-capable model,
-            pass `{ModelOption.THINKING: False}` here to suppress reasoning across
-            every call for the lifetime of the backend:
-            ```python
-            from mellea.backends import ModelOption
-            from mellea.backends.ollama import OllamaModelBackend
-
-            backend = OllamaModelBackend(
-                model_options={ModelOption.THINKING: False}
-            )
-            ```
+            These are merged into every call, so they act as backend-wide defaults
+            (per-call `model_options` take precedence). See `ModelOption` for the
+            available options; on a thinking-capable model, `ModelOption.THINKING`
+            set here controls reasoning across every call for the lifetime of the
+            backend.
         timeout (float | None): Per-operation HTTP timeout in seconds (connect,
             read, write, pool). Defaults to 300 s. For streaming requests this
             bounds the wait between consecutive chunks; for non-streaming requests

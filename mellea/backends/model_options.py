@@ -57,16 +57,20 @@ class ModelOption:
 
     Accepted values:
 
-    * `True` — sets `chat_template_kwargs.enable_thinking=True` (vLLM,
-      Ollama OpenAI-compat) **and** `reasoning_effort="medium"` (OpenAI
-      o-series, DeepSeek). Use this to engage reasoning on vLLM-served models
-      such as Qwen3, Gemma 4, and GLM-4.5 — `"medium"` alone is silently
-      ignored by those servers.
-    * `False` — sets `chat_template_kwargs.enable_thinking=False` to
-      suppress the think block. `reasoning_effort` is not sent (passing
-      `False` would be an invalid value for OpenAI).
-    * `"low"` / `"medium"` / `"high"` — passed directly as
-      `reasoning_effort` (OpenAI/DeepSeek only; no-op on vLLM).
+    * `True` — native Ollama backend: sends Ollama's `think` parameter.
+      OpenAI-compatible backends (OpenAI, LiteLLM, Ollama OpenAI-compat
+      endpoint): sets `chat_template_kwargs.enable_thinking=True` and
+      `reasoning_effort="medium"`. Use this to engage reasoning on vLLM-served
+      models such as Qwen3, Gemma 4, and GLM-4.5 — `"medium"` alone is
+      silently ignored by those servers.
+    * `False` — native Ollama backend: sends `think=False`.
+      OpenAI-compatible backends: sets `chat_template_kwargs.enable_thinking=False`
+      to suppress the think block. `reasoning_effort` is not sent (passing
+      `False` would be an invalid value for OpenAI; absence disables reasoning).
+    * `"low"` / `"medium"` / `"high"` — passed directly as `reasoning_effort`
+      (OpenAI-compatible backends only; no-op on vLLM).
+
+    Not yet supported by the HuggingFace backend (#1212).
     """
     SEED = "@@@seed@@@"
     STREAM = "@@@stream@@@"
