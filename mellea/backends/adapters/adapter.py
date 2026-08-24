@@ -38,7 +38,7 @@ from ._core import (
     LocalFileBinding,
     WeightsBinding,
 )
-from .catalog import AdapterType, fetch_intrinsic_metadata
+from .catalog import AdapterType, fetch_intrinsic_metadata, known_intrinsic_names
 
 
 class Adapter(abc.ABC):
@@ -263,7 +263,7 @@ class IntrinsicAdapter(LocalHFAdapter, _AdapterCore):
                 adapter_type="alora"
                 if self.adapter_type == AdapterType.ALORA
                 else "lora",
-                capability=intrinsic_name,
+                capability=self.intrinsic_metadata.effective_capability,
             ),
             io_contract=_ShimIOContract(),
             weights=_ShimWeightsBinding(),
@@ -910,14 +910,19 @@ class AdapterMixin(Backend, abc.ABC):
         adapters = list(getattr(self, "_added_adapters", {}).values())
         if adapter_types is None:
             for a in adapters:
-                if isinstance(a, _AdapterCore) and a.identity.capability == capability:
+                if isinstance(a, _AdapterCore) and (
+                    a.identity.name == capability or a.identity.capability == capability
+                ):
                     return a
             return None
         for preferred_type in adapter_types:
             for a in adapters:
                 if (
                     isinstance(a, _AdapterCore)
-                    and a.identity.capability == capability
+                    and (
+                        a.identity.name == capability
+                        or a.identity.capability == capability
+                    )
                     and a.identity.adapter_type == preferred_type
                 ):
                     return a
@@ -991,6 +996,9 @@ class EmbeddedIntrinsicAdapter(_AdapterCore):
         self.intrinsic_name = intrinsic_name
         self.config = config
         self.technology = technology
+        capability = intrinsic_name
+        if intrinsic_name in known_intrinsic_names():
+            capability = fetch_intrinsic_metadata(intrinsic_name).effective_capability
 
         # Populate the new Adapter triple so isinstance(self, _AdapterCore) holds.
         # technology is validated above; cast to the Literal type mypy expects.
@@ -999,7 +1007,7 @@ class EmbeddedIntrinsicAdapter(_AdapterCore):
             identity=Identity(
                 name=intrinsic_name,
                 adapter_type=cast(Literal["lora", "alora"], technology),
-                capability=intrinsic_name,
+                capability=capability,
             ),
             io_contract=_ShimIOContract(),
             weights=_ShimWeightsBinding(),
