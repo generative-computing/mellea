@@ -99,6 +99,134 @@ def test_strip_data_uri_prefix_preserves_order():
     assert result == ["first", "second", "third"]
 
 
+# --- _to_ollama_tool_calls ---
+
+
+def _openai_tool_call(name: str, arguments) -> dict:
+    """Build an OpenAI-shaped assistant tool call with the given raw arguments."""
+    return {
+        "id": "call_1",
+        "type": "function",
+        "function": {"name": name, "arguments": arguments},
+    }
+
+
+def test_to_ollama_tool_calls_parses_json_string_arguments():
+    """A valid JSON-string `arguments` is parsed back into a dict."""
+    from mellea.backends.ollama import _to_ollama_tool_calls
+
+    result = _to_ollama_tool_calls(
+        [_openai_tool_call("fn", '{"city": "Paris", "days": 3}')]
+    )
+    assert result == [
+        {"function": {"name": "fn", "arguments": {"city": "Paris", "days": 3}}}
+    ]
+
+
+def test_to_ollama_tool_calls_passes_dict_arguments_through():
+    """A dict `arguments` is carried through unchanged (no re-serialization)."""
+    from mellea.backends.ollama import _to_ollama_tool_calls
+
+    args = {"already": "a dict"}
+    result = _to_ollama_tool_calls([_openai_tool_call("fn", args)])
+    assert result == [{"function": {"name": "fn", "arguments": args}}]
+
+
+def test_to_ollama_tool_calls_empty_string_is_no_arg_call():
+    """An empty-string `arguments` is a valid no-argument call translating to {}."""
+    from mellea.backends.ollama import _to_ollama_tool_calls
+
+    result = _to_ollama_tool_calls([_openai_tool_call("fn", "")])
+    assert result == [{"function": {"name": "fn", "arguments": {}}}]
+
+
+def test_to_ollama_tool_calls_missing_arguments_key_is_no_arg_call():
+    """A tool call with no `arguments` key defaults to a no-argument call."""
+    from mellea.backends.ollama import _to_ollama_tool_calls
+
+    result = _to_ollama_tool_calls([{"function": {"name": "fn"}}])
+    assert result == [{"function": {"name": "fn", "arguments": {}}}]
+
+
+def test_to_ollama_tool_calls_missing_function_key_yields_none_name():
+    """A tool call with no `function` key yields a null name and empty args."""
+    from mellea.backends.ollama import _to_ollama_tool_calls
+
+    result = _to_ollama_tool_calls([{"id": "call_1", "type": "function"}])
+    assert result == [{"function": {"name": None, "arguments": {}}}]
+
+
+def test_to_ollama_tool_calls_invalid_json_is_dropped(caplog):
+    """Unparsable JSON-string arguments are dropped (not defaulted to {}) and logged."""
+    import logging
+
+    from mellea.backends.ollama import _to_ollama_tool_calls
+
+    with caplog.at_level(logging.WARNING):
+        result = _to_ollama_tool_calls([_openai_tool_call("fn", "{not valid json")])
+
+    # The misread call must NOT be replayed with default empty arguments.
+    assert result == []
+    assert any(
+        "fn" in rec.message and "not valid JSON" in rec.message
+        for rec in caplog.records
+    ), "a warning naming the dropped tool call should be logged"
+
+
+def test_to_ollama_tool_calls_non_object_json_is_dropped(caplog):
+    """Valid JSON that is not an object (a bare list/scalar) is dropped and logged."""
+    import logging
+
+    from mellea.backends.ollama import _to_ollama_tool_calls
+
+    with caplog.at_level(logging.WARNING):
+        result = _to_ollama_tool_calls([_openai_tool_call("fn", "[1, 2, 3]")])
+
+    assert result == []
+    assert any("fn" in rec.message for rec in caplog.records)
+
+
+def test_to_ollama_tool_calls_unsupported_type_is_dropped(caplog):
+    """Arguments that are neither a string nor a dict are dropped and logged."""
+    import logging
+
+    from mellea.backends.ollama import _to_ollama_tool_calls
+
+    with caplog.at_level(logging.WARNING):
+        result = _to_ollama_tool_calls([_openai_tool_call("fn", 42)])
+
+    assert result == []
+    assert any("fn" in rec.message for rec in caplog.records)
+
+
+def test_to_ollama_tool_calls_bad_call_does_not_drop_siblings(caplog):
+    """One malformed call is dropped without discarding the valid calls around it."""
+    import logging
+
+    from mellea.backends.ollama import _to_ollama_tool_calls
+
+    with caplog.at_level(logging.WARNING):
+        result = _to_ollama_tool_calls(
+            [
+                _openai_tool_call("good_before", '{"a": 1}'),
+                _openai_tool_call("bad", "{broken"),
+                _openai_tool_call("good_after", '{"b": 2}'),
+            ]
+        )
+
+    assert result == [
+        {"function": {"name": "good_before", "arguments": {"a": 1}}},
+        {"function": {"name": "good_after", "arguments": {"b": 2}}},
+    ]
+
+
+def test_to_ollama_tool_calls_empty_list():
+    """An empty input list yields an empty output list."""
+    from mellea.backends.ollama import _to_ollama_tool_calls
+
+    assert _to_ollama_tool_calls([]) == []
+
+
 # --- _simplify_and_merge ---
 
 
