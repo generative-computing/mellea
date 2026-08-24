@@ -212,6 +212,23 @@ def test_simplify_and_merge_per_call_overrides_backend():
     assert result[ModelOption.MAX_NEW_TOKENS] == 512
 
 
+async def test_openai_backend_rejects_model_option_on_standard_chat_path():
+    """Regression (#1575): standard chat rejects per-call model selection.
+
+    Without this check, the user-supplied `model` collides with the backend's
+    fixed `model` keyword argument at the OpenAI client call site.
+    """
+    from mellea.core.base import CBlock
+    from mellea.stdlib.context import ChatContext
+
+    backend = _make_backend()
+
+    with pytest.raises(ValueError, match="model cannot be set via model_options"):
+        await backend.generate_from_chat_context(
+            CBlock(value="hello"), ChatContext(), model_options={"model": "other-model"}
+        )
+
+
 # --- _make_backend_specific_and_remove ---
 
 
@@ -714,6 +731,7 @@ async def test_standard_chat_path_applies_default_extra_body_without_per_call_ov
         await mot.avalue()
 
     call_kwargs = mock_create.call_args.kwargs
+    assert call_kwargs["model"] == "gpt-4o"
     assert call_kwargs["extra_body"]["chat_template_kwargs"]["enable_thinking"] is True
 
 
