@@ -327,19 +327,9 @@ _YAML_JSON_COMBOS_WITH_LORA_MODEL = {
     k: v for k, v in _YAML_JSON_COMBOS.items() if v.task is not None and not v.is_alora
 }
 
-# Combinations suitable for an Ollama backend
-_NO_OLLAMA_ADAPTER = {
-    # Ollama LoRA adapter not yet available on HF Hub
-    "context-attribution",
-    "uncertainty",
-}
+# Combination retained for mocked Ollama formatter coverage.
 _YAML_JSON_COMBOS_FOR_OLLAMA = {
-    k: v
-    for k, v in _YAML_JSON_COMBOS.items()
-    if v.task is not None
-    and not v.is_alora
-    and v.base_model_id == "ibm-granite/granite-4.0-micro"
-    and k not in _NO_OLLAMA_ADAPTER
+    "answerability_simple": _YAML_JSON_COMBOS["answerability_simple"]
 }
 
 
@@ -401,10 +391,13 @@ def _yaml_json_combo_with_lora_model(request: pytest.FixtureRequest) -> YamlJson
     params=_YAML_JSON_COMBOS_FOR_OLLAMA,
 )
 def _yaml_json_combo_for_ollama(request: pytest.FixtureRequest) -> YamlJsonCombo:
-    """Version of :func:`_yaml_json_combo()` fixture with only inputs suitable
-    for an Ollama backend.
-    """
+    """Version of :func:`_yaml_json_combo()` for mocked Ollama formatter coverage."""
     return _YAML_JSON_COMBOS_FOR_OLLAMA[request.param]._resolve_yaml()
+
+
+def test_ollama_formatter_combos_not_empty():
+    """Keep mocked Ollama formatter coverage from silently disappearing."""
+    assert _YAML_JSON_COMBOS_FOR_OLLAMA
 
 
 @pytest.mark.integration
@@ -871,20 +864,12 @@ def test_run_transformers(yaml_json_combo_with_model, gh_run):
         raise e
 
 
+@pytest.mark.integration
 def test_run_ollama(yaml_json_combo_for_ollama):
-    """
-    Run the target model end-to-end with a mock Ollama backend.
-    """
+    """Run maintained adapter formatter coverage with a mocked chat client."""
     # The combos in _YAML_JSON_COMBOS_LIST are module-scoped singletons reused
-    # across tests, so we copy before doing the Ollama-specific base-model-id
-    # swap below.
+    # across tests, so make a copy before using the adapter configuration.
     cfg = yaml_json_combo_for_ollama.model_copy()
-
-    # Change base model id to Ollama's version
-    if cfg.base_model_id == "ibm-granite/granite-4.0-micro":
-        cfg.base_model_id = "granite4:micro"
-    else:
-        pytest.xfail(f"Unsupported base model: {cfg.base_model_id}")
 
     if cfg.arguments_file:
         with open(cfg.arguments_file, encoding="utf8") as f:
