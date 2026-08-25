@@ -27,16 +27,20 @@ from mellea.core.backend import Backend
 from mellea.core.base import (
     CBlock,
     Component,
+    ComputedModelOutputThunk,
     Context,
     GenerateLog,
     GenerateType,
     ModelOutputThunk,
 )
 from mellea.core.requirement import Requirement, ValidationResult
+from mellea.core.sampling import SamplingResult
 from mellea.plugins import HookType, PluginResult, hook, register
-from mellea.stdlib.components import Instruction
-from mellea.stdlib.context import SimpleContext
+from mellea.stdlib.components import Instruction, Message
+from mellea.stdlib.context import ChatContext, SimpleContext
 from mellea.stdlib.sampling.base import RejectionSamplingStrategy
+from mellea.stdlib.sampling.budget_forcing import BudgetForcingSamplingStrategy
+from mellea.stdlib.sampling.sofai import SOFAISamplingStrategy
 
 # ---------------------------------------------------------------------------
 # Mock backend (module-level so it can be used as a class in session tests)
@@ -71,8 +75,9 @@ class _MockBackend(Backend):
         glog.prompt = "mocked formatted prompt"
         mot._generate_log = glog
         mot._gen.start = datetime.datetime.now()
-        # Return a new SimpleContext to mimic real context evolution
-        new_ctx = SimpleContext()
+        # Return a new context of the same type to mimic real context evolution.
+        # ChatContext is needed so SOFAI's repair() assertion passes.
+        new_ctx = ChatContext() if isinstance(ctx, ChatContext) else SimpleContext()
         return mot, new_ctx
 
     async def _generate_from_raw(self, actions, ctx, **kwargs):
@@ -1299,6 +1304,1090 @@ class TestSamplingHookCallSites:
         assert observed == [], (
             "loop_budget=1 should never invoke repair (no next iteration to feed)"
         )
+
+    async def test_sampling_id_correlates_iteration_and_repair(self) -> None:
+        """All sampling hooks in one loop share the same `sampling_id`."""
+        observed: list[tuple[str, Any]] = []
+
+        @hook("sampling_loop_start")
+        async def record_start(payload: Any, ctx: Any) -> Any:
+            observed.append(("start", payload))
+            return None
+
+        @hook("sampling_iteration")
+        async def record_iteration(payload: Any, ctx: Any) -> Any:
+            observed.append(("iteration", payload))
+            return None
+
+        @hook("sampling_repair")
+        async def record_repair(payload: Any, ctx: Any) -> Any:
+            observed.append(("repair", payload))
+            return None
+
+        @hook("sampling_loop_end")
+        async def record_end(payload: Any, ctx: Any) -> Any:
+            observed.append(("end", payload))
+            return None
+
+        register(record_start)
+        register(record_iteration)
+        register(record_repair)
+        register(record_end)
+
+        backend = _MockBackend()
+        strategy = RejectionSamplingStrategy(loop_budget=2)
+        always_fail = Requirement(
+            description="always fails",
+            validation_fn=lambda _ctx: ValidationResult(result=False),
+        )
+
+        await strategy.sample(
+            Instruction("sampling-id correlation"),
+            context=SimpleContext(),
+            backend=backend,
+            requirements=[always_fail],
+            show_progress=False,
+        )
+
+        assert [kind for kind, _ in observed] == [
+            "start",
+            "iteration",
+            "repair",
+            "iteration",
+            "end",
+        ]
+        sampling_ids = {payload.sampling_id for _, payload in observed}
+        assert len(sampling_ids) == 1
+
+
+class TestBudgetForcingHookCallSites:
+    """Budget forcing emits sampling iteration/repair hooks at its loop call sites."""
+
+    @staticmethod
+    def _always_fail_requirement() -> Requirement:
+        """Return a requirement that always fails."""
+        return Requirement(
+            description="always fails",
+            validation_fn=lambda _ctx: ValidationResult(
+                result=False, reason="forced failure"
+            ),
+        )
+
+    @staticmethod
+    def _always_pass_requirement() -> Requirement:
+        """Return a requirement that always passes."""
+        return Requirement(
+            description="always passes",
+            validation_fn=lambda _ctx: ValidationResult(result=True),
+        )
+
+    @staticmethod
+    def _make_budget_forcing_result(value: str) -> ModelOutputThunk:
+        """Build a budget-forcing result thunk with the required generate log."""
+        mot = ModelOutputThunk(value=value)
+        glog = GenerateLog()
+        glog.prompt = "mocked formatted prompt"
+        glog.is_final_result = False
+        mot._generate_log = glog
+        mot._gen.start = datetime.datetime.now()
+        return mot
+
+    async def test_iteration_fires_once_per_budget_forcing_loop(self) -> None:
+        """Budget forcing emits one iteration hook per loop attempt."""
+        observed: list[Any] = []
+
+        @hook("sampling_iteration")
+        async def recorder(payload: Any, ctx: Any) -> Any:
+            observed.append(payload)
+            return None
+
+        register(recorder)
+        backend = _MockBackend()
+        strategy = BudgetForcingSamplingStrategy(loop_budget=2, requirements=None)
+
+        async def fake_think_budget_forcing(
+            *args: Any, **kwargs: Any
+        ) -> ModelOutputThunk:
+            return self._make_budget_forcing_result("budget output")
+
+        with (
+            patch("mellea.backends.ollama.OllamaModelBackend", _MockBackend),
+            patch(
+                "mellea.stdlib.sampling.budget_forcing.think_budget_forcing",
+                side_effect=fake_think_budget_forcing,
+            ),
+        ):
+            await strategy.sample(
+                Instruction("Budget forcing iteration test"),
+                context=SimpleContext(),
+                backend=backend,
+                requirements=[self._always_fail_requirement()],
+                show_progress=False,
+            )
+
+        assert [payload.iteration for payload in observed] == [1, 2]
+
+    async def test_iteration_fires_on_success_path(self) -> None:
+        """Budget forcing still emits iteration on the passing attempt."""
+        iter_observed: list[Any] = []
+        repair_observed: list[Any] = []
+
+        @hook("sampling_iteration")
+        async def record_iteration(payload: Any, ctx: Any) -> Any:
+            iter_observed.append(payload)
+            return None
+
+        @hook("sampling_repair")
+        async def record_repair(payload: Any, ctx: Any) -> Any:
+            repair_observed.append(payload)
+            return None
+
+        register(record_iteration)
+        register(record_repair)
+        backend = _MockBackend()
+        strategy = BudgetForcingSamplingStrategy(loop_budget=2, requirements=None)
+
+        async def fake_think_budget_forcing(
+            *args: Any, **kwargs: Any
+        ) -> ModelOutputThunk:
+            return self._make_budget_forcing_result("budget output")
+
+        with (
+            patch("mellea.backends.ollama.OllamaModelBackend", _MockBackend),
+            patch(
+                "mellea.stdlib.sampling.budget_forcing.think_budget_forcing",
+                side_effect=fake_think_budget_forcing,
+            ),
+        ):
+            await strategy.sample(
+                Instruction("Budget forcing success test"),
+                context=SimpleContext(),
+                backend=backend,
+                requirements=[self._always_pass_requirement()],
+                show_progress=False,
+            )
+
+        assert len(iter_observed) == 1
+        assert iter_observed[0].iteration == 1
+        assert iter_observed[0].all_validations_passed is True
+        assert repair_observed == []
+
+    async def test_repair_fires_between_iterations_not_after_last(self) -> None:
+        """Budget forcing emits repair only when another iteration will follow."""
+        observed: list[Any] = []
+
+        @hook("sampling_repair")
+        async def recorder(payload: Any, ctx: Any) -> Any:
+            observed.append(payload)
+            return None
+
+        register(recorder)
+        backend = _MockBackend()
+        strategy = BudgetForcingSamplingStrategy(loop_budget=2, requirements=None)
+
+        async def fake_think_budget_forcing(
+            *args: Any, **kwargs: Any
+        ) -> ModelOutputThunk:
+            return self._make_budget_forcing_result("budget output")
+
+        with (
+            patch("mellea.backends.ollama.OllamaModelBackend", _MockBackend),
+            patch(
+                "mellea.stdlib.sampling.budget_forcing.think_budget_forcing",
+                side_effect=fake_think_budget_forcing,
+            ),
+        ):
+            await strategy.sample(
+                Instruction("Budget forcing repair count test"),
+                context=SimpleContext(),
+                backend=backend,
+                requirements=[self._always_fail_requirement()],
+                show_progress=False,
+            )
+
+        assert len(observed) == 1
+        assert observed[0].repair_iteration == 1
+
+    async def test_repair_type_is_budget_forcing(self) -> None:
+        """Budget forcing repair payload advertises its repair type."""
+        observed: list[Any] = []
+
+        @hook("sampling_repair")
+        async def recorder(payload: Any, ctx: Any) -> Any:
+            observed.append(payload)
+            return None
+
+        register(recorder)
+        backend = _MockBackend()
+        strategy = BudgetForcingSamplingStrategy(loop_budget=2, requirements=None)
+
+        async def fake_think_budget_forcing(
+            *args: Any, **kwargs: Any
+        ) -> ModelOutputThunk:
+            return self._make_budget_forcing_result("budget output")
+
+        with (
+            patch("mellea.backends.ollama.OllamaModelBackend", _MockBackend),
+            patch(
+                "mellea.stdlib.sampling.budget_forcing.think_budget_forcing",
+                side_effect=fake_think_budget_forcing,
+            ),
+        ):
+            await strategy.sample(
+                Instruction("Budget forcing repair type test"),
+                context=SimpleContext(),
+                backend=backend,
+                requirements=[self._always_fail_requirement()],
+                show_progress=False,
+            )
+
+        assert len(observed) == 1
+        assert observed[0].repair_type == "budget_forcing"
+
+    async def test_sampling_id_correlates_all_events(self) -> None:
+        """Budget forcing loop hooks all share a single `sampling_id`."""
+        observed: list[tuple[str, Any]] = []
+
+        @hook("sampling_loop_start")
+        async def record_start(payload: Any, ctx: Any) -> Any:
+            observed.append(("start", payload))
+            return None
+
+        @hook("sampling_iteration")
+        async def record_iteration(payload: Any, ctx: Any) -> Any:
+            observed.append(("iteration", payload))
+            return None
+
+        @hook("sampling_repair")
+        async def record_repair(payload: Any, ctx: Any) -> Any:
+            observed.append(("repair", payload))
+            return None
+
+        @hook("sampling_loop_end")
+        async def record_end(payload: Any, ctx: Any) -> Any:
+            observed.append(("end", payload))
+            return None
+
+        register(record_start)
+        register(record_iteration)
+        register(record_repair)
+        register(record_end)
+        backend = _MockBackend()
+        strategy = BudgetForcingSamplingStrategy(loop_budget=2, requirements=None)
+
+        async def fake_think_budget_forcing(
+            *args: Any, **kwargs: Any
+        ) -> ModelOutputThunk:
+            return self._make_budget_forcing_result("budget output")
+
+        with (
+            patch("mellea.backends.ollama.OllamaModelBackend", _MockBackend),
+            patch(
+                "mellea.stdlib.sampling.budget_forcing.think_budget_forcing",
+                side_effect=fake_think_budget_forcing,
+            ),
+        ):
+            await strategy.sample(
+                Instruction("Budget forcing sampling-id test"),
+                context=SimpleContext(),
+                backend=backend,
+                requirements=[self._always_fail_requirement()],
+                show_progress=False,
+            )
+
+        assert [kind for kind, _ in observed] == [
+            "start",
+            "iteration",
+            "repair",
+            "iteration",
+            "end",
+        ]
+        sampling_ids = {payload.sampling_id for _, payload in observed}
+        assert len(sampling_ids) == 1
+
+
+class TestSOFAIHookCallSites:
+    """SOFAI emits iteration/repair hooks across S1 and S2 phases."""
+
+    @staticmethod
+    def _always_fail_requirement() -> Requirement:
+        """Return a requirement that always fails."""
+        return Requirement(
+            description="always fails",
+            validation_fn=lambda _ctx: ValidationResult(
+                result=False, reason="forced failure"
+            ),
+        )
+
+    @staticmethod
+    def _base_context() -> ChatContext:
+        """Return a minimal valid chat context for SOFAI."""
+        return ChatContext().add(Message(role="user", content="Solve this"))
+
+    async def test_s1_iteration_fires_each_attempt(self) -> None:
+        """SOFAI emits iteration hooks for each S1 attempt before S2 escalation."""
+        observed: list[Any] = []
+
+        @hook("sampling_iteration")
+        async def recorder(payload: Any, ctx: Any) -> Any:
+            observed.append(payload)
+            return None
+
+        register(recorder)
+        strategy = SOFAISamplingStrategy(
+            s1_solver_backend=_MockBackend(),
+            s2_solver_backend=_MockBackend(),
+            loop_budget=2,
+            s2_solver_mode="fresh_start",
+        )
+
+        await strategy.sample(
+            Message(role="user", content="Question"),
+            context=self._base_context(),
+            backend=_MockBackend(),
+            requirements=[self._always_fail_requirement()],
+            show_progress=False,
+        )
+
+        assert [payload.iteration for payload in observed[:2]] == [1, 2]
+
+    async def test_s2_iteration_fires_as_final_iteration(self) -> None:
+        """SOFAI emits the S2 escalation as the final iteration number."""
+        observed: list[Any] = []
+
+        @hook("sampling_iteration")
+        async def recorder(payload: Any, ctx: Any) -> Any:
+            observed.append(payload)
+            return None
+
+        register(recorder)
+        strategy = SOFAISamplingStrategy(
+            s1_solver_backend=_MockBackend(),
+            s2_solver_backend=_MockBackend(),
+            loop_budget=2,
+            s2_solver_mode="fresh_start",
+        )
+
+        await strategy.sample(
+            Message(role="user", content="Question"),
+            context=self._base_context(),
+            backend=_MockBackend(),
+            requirements=[self._always_fail_requirement()],
+            show_progress=False,
+        )
+
+        assert len(observed) == 3
+
+    async def test_s1_repair_fires_not_after_last_s1_attempt(self) -> None:
+        """SOFAI emits one S1 repair between two failed S1 attempts."""
+        observed: list[Any] = []
+
+        @hook("sampling_repair")
+        async def recorder(payload: Any, ctx: Any) -> Any:
+            observed.append(payload)
+            return None
+
+        register(recorder)
+        strategy = SOFAISamplingStrategy(
+            s1_solver_backend=_MockBackend(),
+            s2_solver_backend=_MockBackend(),
+            loop_budget=2,
+            s2_solver_mode="fresh_start",
+        )
+
+        await strategy.sample(
+            Message(role="user", content="Question"),
+            context=self._base_context(),
+            backend=_MockBackend(),
+            requirements=[self._always_fail_requirement()],
+            show_progress=False,
+        )
+
+        assert len(observed) == 1
+        assert observed[0].repair_iteration == 1
+        assert observed[0].repair_type == "sofai_s1_feedback"
+
+    async def test_no_s2_repair_event(self) -> None:
+        """Immediate S2 escalation does not emit a repair event."""
+        observed: list[Any] = []
+
+        @hook("sampling_repair")
+        async def recorder(payload: Any, ctx: Any) -> Any:
+            observed.append(payload)
+            return None
+
+        register(recorder)
+        strategy = SOFAISamplingStrategy(
+            s1_solver_backend=_MockBackend(),
+            s2_solver_backend=_MockBackend(),
+            loop_budget=1,
+            s2_solver_mode="fresh_start",
+        )
+
+        await strategy.sample(
+            Message(role="user", content="Question"),
+            context=self._base_context(),
+            backend=_MockBackend(),
+            requirements=[self._always_fail_requirement()],
+            show_progress=False,
+        )
+
+        assert observed == []
+
+    async def test_effective_budget_respected_repair_guard(self) -> None:
+        """SOFAI skips repair when a loop-start hook shrinks the effective budget to 1."""
+        observed: list[Any] = []
+
+        @hook("sampling_loop_start")
+        async def shrink_budget(payload: Any, ctx: Any) -> Any:
+            return PluginResult(
+                continue_processing=True,
+                modified_payload=payload.model_copy(update={"loop_budget": 1}),
+            )
+
+        @hook("sampling_repair")
+        async def record_repair(payload: Any, ctx: Any) -> Any:
+            observed.append(payload)
+            return None
+
+        register(shrink_budget)
+        register(record_repair)
+        strategy = SOFAISamplingStrategy(
+            s1_solver_backend=_MockBackend(),
+            s2_solver_backend=_MockBackend(),
+            loop_budget=5,
+            s2_solver_mode="fresh_start",
+        )
+
+        await strategy.sample(
+            Message(role="user", content="Question"),
+            context=self._base_context(),
+            backend=_MockBackend(),
+            requirements=[self._always_fail_requirement()],
+            show_progress=False,
+        )
+
+        assert observed == []
+
+    async def test_sampling_id_correlates_all_sofai_events(self) -> None:
+        """SOFAI loop hooks all share one `sampling_id`."""
+        observed: list[tuple[str, Any]] = []
+
+        @hook("sampling_loop_start")
+        async def record_start(payload: Any, ctx: Any) -> Any:
+            observed.append(("start", payload))
+            return None
+
+        @hook("sampling_iteration")
+        async def record_iteration(payload: Any, ctx: Any) -> Any:
+            observed.append(("iteration", payload))
+            return None
+
+        @hook("sampling_loop_end")
+        async def record_end(payload: Any, ctx: Any) -> Any:
+            observed.append(("end", payload))
+            return None
+
+        register(record_start)
+        register(record_iteration)
+        register(record_end)
+        strategy = SOFAISamplingStrategy(
+            s1_solver_backend=_MockBackend(),
+            s2_solver_backend=_MockBackend(),
+            loop_budget=1,
+            s2_solver_mode="fresh_start",
+        )
+
+        await strategy.sample(
+            Message(role="user", content="Question"),
+            context=self._base_context(),
+            backend=_MockBackend(),
+            requirements=[self._always_fail_requirement()],
+            show_progress=False,
+        )
+
+        assert [kind for kind, _ in observed] == [
+            "start",
+            "iteration",
+            "iteration",
+            "end",
+        ]
+        sampling_ids = {payload.sampling_id for _, payload in observed}
+        assert len(sampling_ids) == 1
+
+
+# ---------------------------------------------------------------------------
+# Majority-voting lifecycle hooks — regression for sampling_id propagation
+# ---------------------------------------------------------------------------
+
+
+class TestMajorityVotingHookCallSites:
+    """Majority-voting emits exactly one start/end pair per sample() call,
+    and all hooks share the same sampling_id.
+
+    This is the key regression for the change from super().sample() to
+    super()._sample_impl() in BaseMBRDSampling: the inner fan-out must reuse
+    the outer sampling_id rather than minting N independent loops.
+    """
+
+    async def test_majority_voting_emits_single_loop_start_and_end(self) -> None:
+        """MBRDRougeLStrategy.sample() fires exactly one loop_start and one loop_end."""
+        from mellea.stdlib.sampling.majority_voting import MBRDRougeLStrategy
+
+        start_events: list[Any] = []
+        end_events: list[Any] = []
+
+        @hook("sampling_loop_start")
+        async def record_start(payload: Any, ctx: Any) -> Any:
+            start_events.append(payload)
+            return None
+
+        @hook("sampling_loop_end")
+        async def record_end(payload: Any, ctx: Any) -> Any:
+            end_events.append(payload)
+            return None
+
+        register(record_start)
+        register(record_end)
+
+        backend = _MockBackend()
+        strategy = MBRDRougeLStrategy(number_of_samples=3, loop_budget=1)
+
+        await strategy.sample(
+            Instruction("majority voting hook test"),
+            context=SimpleContext(),
+            backend=backend,
+            requirements=[],
+            show_progress=False,
+        )
+
+        assert len(start_events) == 1, (
+            f"Expected exactly one sampling_loop_start, got {len(start_events)}"
+        )
+        assert len(end_events) == 1, (
+            f"Expected exactly one sampling_loop_end, got {len(end_events)}"
+        )
+
+    async def test_majority_voting_all_hooks_share_sampling_id(self) -> None:
+        """All hooks emitted during MBRDRougeLStrategy.sample() share one sampling_id.
+
+        This is the core invariant broken when the inner fan-out called
+        super().sample() (which minted a fresh UUID per inner call) and fixed by
+        calling super()._sample_impl() with the outer sampling_id instead.
+        """
+        from mellea.stdlib.sampling.majority_voting import MBRDRougeLStrategy
+
+        observed: list[tuple[str, Any]] = []
+
+        @hook("sampling_loop_start")
+        async def record_start(payload: Any, ctx: Any) -> Any:
+            observed.append(("start", payload))
+            return None
+
+        @hook("sampling_iteration")
+        async def record_iteration(payload: Any, ctx: Any) -> Any:
+            observed.append(("iteration", payload))
+            return None
+
+        @hook("sampling_loop_end")
+        async def record_end(payload: Any, ctx: Any) -> Any:
+            observed.append(("end", payload))
+            return None
+
+        register(record_start)
+        register(record_iteration)
+        register(record_end)
+
+        backend = _MockBackend()
+        number_of_samples = 3
+        strategy = MBRDRougeLStrategy(
+            number_of_samples=number_of_samples, loop_budget=1
+        )
+
+        await strategy.sample(
+            Instruction("majority voting sampling_id test"),
+            context=SimpleContext(),
+            backend=backend,
+            requirements=[],
+            show_progress=False,
+        )
+
+        kinds = [kind for kind, _ in observed]
+        # One start, N iterations (one per fan-out sample), one end.
+        assert kinds[0] == "start"
+        assert kinds[-1] == "end"
+        assert kinds.count("start") == 1
+        assert kinds.count("end") == 1
+        assert kinds.count("iteration") == number_of_samples
+
+        sampling_ids = {payload.sampling_id for _, payload in observed}
+        assert len(sampling_ids) == 1, (
+            f"All events must share one sampling_id; got {sampling_ids}"
+        )
+
+    async def test_majority_voting_repair_path_hooks_share_sampling_id(self) -> None:
+        """Iteration and repair hooks from inner fan-out loops share the outer sampling_id.
+
+        With number_of_samples=N and loop_budget=B and an always-failing requirement:
+          - each of the N inner rejection loops runs B iterations and (B-1) repairs
+          - total: N*B iteration events, N*(B-1) repair events
+          - exactly one start/end pair wrapping the whole operation
+          - every hook payload carries the same sampling_id
+        """
+        from mellea.stdlib.sampling.majority_voting import MBRDRougeLStrategy
+
+        observed: list[tuple[str, Any]] = []
+
+        @hook("sampling_loop_start")
+        async def record_start(payload: Any, ctx: Any) -> Any:
+            observed.append(("start", payload))
+            return None
+
+        @hook("sampling_iteration")
+        async def record_iteration(payload: Any, ctx: Any) -> Any:
+            observed.append(("iteration", payload))
+            return None
+
+        @hook("sampling_repair")
+        async def record_repair(payload: Any, ctx: Any) -> Any:
+            observed.append(("repair", payload))
+            return None
+
+        @hook("sampling_loop_end")
+        async def record_end(payload: Any, ctx: Any) -> Any:
+            observed.append(("end", payload))
+            return None
+
+        register(record_start)
+        register(record_iteration)
+        register(record_repair)
+        register(record_end)
+
+        number_of_samples = 2
+        loop_budget = 2
+        always_fail = Requirement(
+            description="always fails",
+            validation_fn=lambda _ctx: ValidationResult(
+                result=False, reason="forced failure"
+            ),
+        )
+        strategy = MBRDRougeLStrategy(
+            number_of_samples=number_of_samples, loop_budget=loop_budget
+        )
+
+        await strategy.sample(
+            Instruction("majority voting repair-path hook test"),
+            context=SimpleContext(),
+            backend=_MockBackend(),
+            requirements=[always_fail],
+            show_progress=False,
+        )
+
+        kinds = [kind for kind, _ in observed]
+
+        # Exactly one start/end pair.
+        assert kinds[0] == "start"
+        assert kinds[-1] == "end"
+        assert kinds.count("start") == 1
+        assert kinds.count("end") == 1
+
+        # N*B iteration events: each inner rejection loop fires loop_budget iterations.
+        expected_iterations = number_of_samples * loop_budget
+        assert kinds.count("iteration") == expected_iterations, (
+            f"Expected {expected_iterations} iteration events "
+            f"({number_of_samples} samples × {loop_budget} iterations), "
+            f"got {kinds.count('iteration')}"
+        )
+
+        # N*(B-1) repair events: repair fires between iterations but not after the last.
+        expected_repairs = number_of_samples * (loop_budget - 1)
+        assert kinds.count("repair") == expected_repairs, (
+            f"Expected {expected_repairs} repair events "
+            f"({number_of_samples} samples × {loop_budget - 1} repairs), "
+            f"got {kinds.count('repair')}"
+        )
+
+        # Every event carries the same sampling_id.
+        sampling_ids = {payload.sampling_id for _, payload in observed}
+        assert len(sampling_ids) == 1, (
+            f"All events must share one sampling_id; got {sampling_ids}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Sampling wrapper contract (mock strategy overriding only _sample_impl)
+# ---------------------------------------------------------------------------
+
+
+def _make_minimal_sampling_result(
+    context: Context, *, success: bool = True
+) -> SamplingResult:
+    """Build the smallest valid SamplingResult from a pre-computed thunk.
+
+    Used by TestSamplingWrapperContract to return a handcrafted result without
+    running any real sampling machinery.
+    """
+    mot = ModelOutputThunk(value="stub output")
+    glog = GenerateLog()
+    glog.prompt = "stub prompt"
+    mot._generate_log = glog
+    mot._gen.start = datetime.datetime.now()
+    computed = ComputedModelOutputThunk(mot)
+    return SamplingResult(
+        result_index=0,
+        success=success,
+        sample_generations=[computed],
+        sample_validations=[[]],
+        sample_actions=[CBlock("stub action")],
+        sample_contexts=[context],
+    )
+
+
+class _MinimalStrategy(RejectionSamplingStrategy):
+    """A strategy that delegates all work to a user-supplied coroutine.
+
+    Overrides only `_sample_impl` so the `SamplingStrategy.sample` wrapper is
+    the sole source of sampling lifecycle hooks.
+    """
+
+    def __init__(self, impl_fn, loop_budget: int = 1) -> None:
+        """Initialize _MinimalStrategy with a custom _sample_impl coroutine and loop budget."""
+        super().__init__(loop_budget=loop_budget)
+        self._impl_fn = impl_fn
+
+    async def _sample_impl(self, action, context, backend, requirements, **kwargs):  # type: ignore[override]
+        """Delegate to user-supplied impl_fn."""
+        return await self._impl_fn(action, context, backend, requirements, **kwargs)
+
+
+class TestSamplingWrapperContract:
+    """The `SamplingStrategy.sample` wrapper fires lifecycle hooks regardless of subclass implementation."""
+
+    async def test_loop_start_fires_from_wrapper_not_subclass(self) -> None:
+        """sampling_loop_start fires even when only _sample_impl is overridden."""
+        observed: list[Any] = []
+
+        @hook("sampling_loop_start")
+        async def recorder(payload: Any, ctx: Any) -> Any:
+            observed.append(payload)
+            return None
+
+        register(recorder)
+
+        async def _impl(action, context, backend, requirements, **kwargs):
+            return _make_minimal_sampling_result(context)
+
+        strategy = _MinimalStrategy(_impl, loop_budget=1)
+        await strategy.sample(
+            Instruction("Wrapper test"),
+            context=SimpleContext(),
+            backend=_MockBackend(),
+            requirements=[],
+            show_progress=False,
+        )
+
+        assert len(observed) == 1
+        assert "Minimal" in observed[0].strategy_name
+
+    async def test_loop_end_fires_from_wrapper_on_success(self) -> None:
+        """sampling_loop_end fires from the wrapper on the success path."""
+        observed: list[Any] = []
+
+        @hook("sampling_loop_end")
+        async def recorder(payload: Any, ctx: Any) -> Any:
+            observed.append(payload)
+            return None
+
+        register(recorder)
+
+        async def _impl(action, context, backend, requirements, **kwargs):
+            return _make_minimal_sampling_result(context)
+
+        strategy = _MinimalStrategy(_impl, loop_budget=1)
+        await strategy.sample(
+            Instruction("End-hook test"),
+            context=SimpleContext(),
+            backend=_MockBackend(),
+            requirements=[],
+            show_progress=False,
+        )
+
+        assert len(observed) == 1
+        assert observed[0].success is True
+
+    async def test_loop_end_fires_on_exception_path(self) -> None:
+        """sampling_loop_end fires from the wrapper even when _sample_impl raises."""
+        observed: list[Any] = []
+
+        @hook("sampling_loop_end")
+        async def recorder(payload: Any, ctx: Any) -> Any:
+            observed.append(payload)
+            return None
+
+        register(recorder)
+
+        async def _raising_impl(action, context, backend, requirements, **kwargs):
+            raise RuntimeError("impl boom")
+
+        strategy = _MinimalStrategy(_raising_impl, loop_budget=1)
+
+        with pytest.raises(RuntimeError, match="impl boom"):
+            await strategy.sample(
+                Instruction("Exception-path test"),
+                context=SimpleContext(),
+                backend=_MockBackend(),
+                requirements=[],
+                show_progress=False,
+            )
+
+        assert len(observed) == 1
+        assert observed[0].exception is not None
+        assert isinstance(observed[0].exception, RuntimeError)
+        assert observed[0].success is False
+
+    async def test_loop_end_fires_when_start_hook_raises(self) -> None:
+        """sampling_loop_end fires even when invoke_hook for sampling_loop_start raises.
+
+        The framework swallows ordinary plugin exceptions, but PluginViolationError
+        (and any other future leak from invoke_hook) would previously escape before
+        entering the try/finally that fires sampling_loop_end.  The fix moves the
+        start-hook call inside the protected region, so sampling_loop_end always fires.
+        """
+        from mellea.plugins import PluginViolationError
+        from mellea.plugins.types import HookType as _HookType
+
+        end_payloads: list[Any] = []
+
+        @hook("sampling_loop_end")
+        async def end_recorder(payload: Any, ctx: Any) -> Any:
+            end_payloads.append(payload)
+            return None
+
+        register(end_recorder)
+
+        async def _unreachable_impl(action, context, backend, requirements, **kwargs):
+            raise AssertionError("should not reach _sample_impl")
+
+        strategy = _MinimalStrategy(_unreachable_impl, loop_budget=1)
+
+        boom = PluginViolationError(
+            hook_type="sampling_loop_start",
+            reason="start hook boom",
+            code="TEST",
+            plugin_name="test_plugin",
+        )
+
+        # sample() does `from ..plugins.manager import has_plugins, invoke_hook`
+        # inside the function body, so patching the source module attributes
+        # affects those local references.
+        #
+        # has_plugins is patched to return True for both hook types so that both
+        # the SAMPLING_LOOP_START block and the SAMPLING_LOOP_END finally block
+        # are entered.  invoke_hook raises PluginViolationError only for
+        # SAMPLING_LOOP_START; for SAMPLING_LOOP_END it delegates to the real
+        # implementation, which dispatches to end_recorder above.
+        import mellea.plugins.manager as _mgr
+
+        real_invoke_hook = _mgr.invoke_hook
+
+        async def _start_raises(hook_type, payload, **kwargs):
+            if hook_type is _HookType.SAMPLING_LOOP_START:
+                raise boom
+            return await real_invoke_hook(hook_type, payload, **kwargs)
+
+        with (
+            patch("mellea.plugins.manager.has_plugins", side_effect=lambda _ht: True),
+            patch("mellea.plugins.manager.invoke_hook", side_effect=_start_raises),
+            pytest.raises(PluginViolationError, match="start hook boom"),
+        ):
+            await strategy.sample(
+                Instruction("Start-hook exception test"),
+                context=SimpleContext(),
+                backend=_MockBackend(),
+                requirements=[],
+                show_progress=False,
+            )
+
+        assert len(end_payloads) == 1
+        assert end_payloads[0].success is False
+        assert isinstance(end_payloads[0].exception, PluginViolationError)
+        assert "start hook boom" in str(end_payloads[0].exception)
+
+    async def test_loop_end_fires_when_merge_requirements_raises(self) -> None:
+        """sampling_loop_end fires even when _merge_requirements raises before the try block.
+
+        Previously, _merge_requirements() executed outside the try/finally, so any
+        exception there would escape without firing sampling_loop_end.  The fix moves
+        setup inside the protected region so the end-hook closure is guaranteed.
+        """
+        end_payloads: list[Any] = []
+
+        @hook("sampling_loop_end")
+        async def end_recorder(payload: Any, ctx: Any) -> Any:
+            end_payloads.append(payload)
+            return None
+
+        register(end_recorder)
+
+        async def _unreachable_impl(action, context, backend, requirements, **kwargs):
+            raise AssertionError("should not reach _sample_impl")
+
+        strategy = _MinimalStrategy(_unreachable_impl, loop_budget=1)
+
+        boom = RuntimeError("merge requirements boom")
+        with (
+            patch.object(strategy, "_merge_requirements", side_effect=boom),
+            pytest.raises(RuntimeError, match="merge requirements boom"),
+        ):
+            await strategy.sample(
+                Instruction("Merge-requirements exception test"),
+                context=SimpleContext(),
+                backend=_MockBackend(),
+                requirements=[],
+                show_progress=False,
+            )
+
+        assert len(end_payloads) == 1
+        assert end_payloads[0].success is False
+        assert end_payloads[0].exception is boom
+
+    async def test_sampling_id_correlates_start_and_end(self) -> None:
+        """sampling_loop_start and sampling_loop_end carry the same sampling_id."""
+        start_ids: list[str] = []
+        end_ids: list[str] = []
+
+        @hook("sampling_loop_start")
+        async def start_rec(payload: Any, ctx: Any) -> Any:
+            start_ids.append(payload.sampling_id)
+            return None
+
+        @hook("sampling_loop_end")
+        async def end_rec(payload: Any, ctx: Any) -> Any:
+            end_ids.append(payload.sampling_id)
+            return None
+
+        register(start_rec)
+        register(end_rec)
+
+        strategy = RejectionSamplingStrategy(loop_budget=1)
+        await strategy.sample(
+            Instruction("ID correlation test"),
+            context=SimpleContext(),
+            backend=_MockBackend(),
+            requirements=[],
+            show_progress=False,
+        )
+
+        assert len(start_ids) == 1
+        assert len(end_ids) == 1
+        assert start_ids[0] == end_ids[0]
+
+    async def test_start_hook_modified_budget_reaches_sample_impl(self) -> None:
+        """A start hook that raises loop_budget is reflected in _sample_impl's effective_loop_budget.
+
+        The wrapper reads `start_payload.loop_budget` after the hook returns and
+        forwards it as `effective_loop_budget` to `_sample_impl`.  This test
+        directly verifies that contract by inspecting the kwargs received by the
+        impl rather than inferring it through a full strategy run.
+
+        Also checks that the `sampling_id` seen by `_sample_impl` matches the one
+        emitted on the `sampling_loop_start` payload.
+        """
+        captured_start_id: list[str] = []
+        captured_impl_kwargs: list[dict] = []
+
+        @hook("sampling_loop_start")
+        async def bump_budget(payload: Any, ctx: Any) -> Any:
+            captured_start_id.append(payload.sampling_id)
+            return PluginResult(
+                continue_processing=True,
+                modified_payload=payload.model_copy(update={"loop_budget": 3}),
+            )
+
+        register(bump_budget)
+
+        async def _impl(action, context, backend, requirements, **kwargs):
+            captured_impl_kwargs.append(dict(kwargs))
+            return _make_minimal_sampling_result(context)
+
+        strategy = _MinimalStrategy(_impl, loop_budget=1)
+        await strategy.sample(
+            Instruction("Modified budget test"),
+            context=SimpleContext(),
+            backend=_MockBackend(),
+            requirements=[],
+            show_progress=False,
+        )
+
+        assert len(captured_start_id) == 1
+        assert len(captured_impl_kwargs) == 1
+
+        # The hook raised the budget from 1 to 3; _sample_impl must see 3.
+        assert captured_impl_kwargs[0]["effective_loop_budget"] == 3
+
+        # The sampling_id forwarded to _sample_impl must match what the start hook saw.
+        assert captured_impl_kwargs[0]["sampling_id"] == captured_start_id[0]
+
+    async def test_zero_budget_from_start_hook_closes_lifecycle(self) -> None:
+        """A start hook returning loop_budget=0 causes ValueError before _sample_impl.
+
+        The wrapper validates the hook-modified budget and raises ValueError for
+        any value < 1.  This test asserts that in that failure path:
+          - _sample_impl is never invoked,
+          - sample() raises ValueError,
+          - sampling_loop_end still fires (lifecycle is closed),
+          - the end payload carries success=False,
+          - the end payload exception is the same ValueError,
+          - the end payload sampling_id matches the one on the start payload.
+        """
+        captured_start_ids: list[str] = []
+        end_payloads: list[Any] = []
+        impl_called: list[bool] = []
+
+        @hook("sampling_loop_start")
+        async def zero_budget(payload: Any, ctx: Any) -> Any:
+            captured_start_ids.append(payload.sampling_id)
+            return PluginResult(
+                continue_processing=True,
+                modified_payload=payload.model_copy(update={"loop_budget": 0}),
+            )
+
+        @hook("sampling_loop_end")
+        async def end_rec(payload: Any, ctx: Any) -> Any:
+            end_payloads.append(payload)
+            return None
+
+        register(zero_budget)
+        register(end_rec)
+
+        async def _impl(action, context, backend, requirements, **kwargs):
+            impl_called.append(True)
+            return _make_minimal_sampling_result(context)
+
+        strategy = _MinimalStrategy(_impl, loop_budget=1)
+
+        with pytest.raises(ValueError, match="non-positive loop_budget"):
+            await strategy.sample(
+                Instruction("Zero budget test"),
+                context=SimpleContext(),
+                backend=_MockBackend(),
+                requirements=[],
+                show_progress=False,
+            )
+
+        # _sample_impl must never have been reached.
+        assert impl_called == []
+
+        # sampling_loop_end must still have fired once.
+        assert len(end_payloads) == 1
+        end = end_payloads[0]
+        assert end.success is False
+        assert isinstance(end.exception, ValueError)
+        assert "non-positive loop_budget" in str(end.exception)
+
+        # The end payload must use the same sampling_id as the start payload.
+        assert len(captured_start_ids) == 1
+        assert end.sampling_id == captured_start_ids[0]
 
 
 # ---------------------------------------------------------------------------

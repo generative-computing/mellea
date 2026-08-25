@@ -97,31 +97,42 @@ class BudgetForcingSamplingStrategy(RejectionSamplingStrategy):
         self.think_more_suffix = think_more_suffix
         self.answer_suffix = answer_suffix
 
-    async def sample(
+    @staticmethod
+    def _get_repair_type() -> str:
+        """Return the repair-type label for telemetry hooks."""
+        return "budget_forcing"
+
+    async def _sample_impl(
         self,
         action: Component[S] | CBlock | ModelOutputThunk,
         context: Context,
         backend: Backend,
-        requirements: list[Requirement] | None,
+        requirements: list[Requirement],
         *,
+        effective_loop_budget: int,
         validation_ctx: Context | None = None,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
+        sampling_id: str,
         show_progress: bool = True,
+        **kwargs,
     ) -> SamplingResult[S]:
-        """This method performs a sampling operation based on the given instruction.
+        """Execute the budget-forcing sampling loop.
 
         Args:
-            action : The action object to be sampled. A `Component`, `CBlock`, or `ModelOutputThunk`.
+            action: The action object to be sampled. A `Component`, `CBlock`, or `ModelOutputThunk`.
             context: The context to be passed to the sampling strategy.
             backend: The backend used for generating samples.
-            requirements: List of requirements to test against (merged with global requirements).
+            requirements: Merged and deduplicated list of requirements.
+            effective_loop_budget: The loop budget after hook modification (always >= 1).
             validation_ctx: Optional context to use for validation. If None, validation_ctx = ctx.
             format: output format for structured outputs.
             model_options: model options to pass to the backend during generation / validation.
             tool_calls: True if tool calls should be used during this sampling strategy.
+            sampling_id: UUID correlating iteration/repair/end hooks for this loop.
             show_progress: if true, a tqdm progress bar is used. Otherwise, messages will still be sent to flog.
+            **kwargs: Additional keyword arguments forwarded by `SamplingStrategy.sample()`.
 
         Returns:
             SamplingResult[S]: A result object indicating the success or failure of the sampling process.
@@ -133,7 +144,9 @@ class BudgetForcingSamplingStrategy(RejectionSamplingStrategy):
 
         flog = MelleaLogger.get_logger()
 
-        with log_context(strategy=type(self).__name__, loop_budget=self.loop_budget):
+        with log_context(
+            strategy=type(self).__name__, loop_budget=effective_loop_budget
+        ):
             sampled_results: list[ComputedModelOutputThunk] = []
             sampled_scores: list[list[tuple[Requirement, ValidationResult]]] = []
             sampled_actions: list[SampleActionType] = []
@@ -145,20 +158,11 @@ class BudgetForcingSamplingStrategy(RejectionSamplingStrategy):
                 show_progress and flog.getEffectiveLevel() <= MelleaLogger.INFO
             )
 
-            reqs = []
-            # global requirements supersede local requirements (global requirements can be defined by user)
-            # Todo: re-evaluate if this makes sense
-            if self.requirements is not None:
-                reqs += self.requirements
-            elif requirements is not None:
-                reqs += requirements
-            reqs = list(set(reqs))
-
             loop_count = 0
             loop_budget_range_iterator = (
-                tqdm.tqdm(range(self.loop_budget))  # type: ignore
+                tqdm.tqdm(range(effective_loop_budget))  # type: ignore
                 if show_progress
-                else range(self.loop_budget)  # type: ignore
+                else range(effective_loop_budget)  # type: ignore
             )
 
             next_action = deepcopy(action)
@@ -166,7 +170,7 @@ class BudgetForcingSamplingStrategy(RejectionSamplingStrategy):
             for _ in loop_budget_range_iterator:  # type: ignore
                 loop_count += 1
                 if not show_progress:
-                    flog.info(f"Running loop {loop_count} of {self.loop_budget}")
+                    flog.info(f"Running loop {loop_count} of {effective_loop_budget}")
 
                 # TODO
                 # tool_calls is not supported for budget forcing
@@ -213,7 +217,7 @@ class BudgetForcingSamplingStrategy(RejectionSamplingStrategy):
 
                 # validation pass
                 val_scores_co = mfuncs.avalidate(
-                    reqs=reqs,
+                    reqs=requirements,
                     context=result_ctx,
                     backend=backend,
                     output=result,
@@ -224,7 +228,15 @@ class BudgetForcingSamplingStrategy(RejectionSamplingStrategy):
                 val_scores = await val_scores_co
 
                 # match up reqs with scores
-                constraint_scores = list(zip(reqs, val_scores))
+                constraint_scores = list(zip(requirements, val_scores))
+                await self._emit_sampling_iteration(
+                    sampling_id=sampling_id,
+                    iteration=loop_count,
+                    action=next_action,
+                    result=result,
+                    validation_results=constraint_scores,
+                    backend=backend,
+                )
 
                 # collect all data
                 sampled_results.append(result)
@@ -257,14 +269,27 @@ class BudgetForcingSamplingStrategy(RejectionSamplingStrategy):
                     count_valid = len([s for s in constraint_scores if bool(s[1])])
                     flog.info(f"FAILED. Valid: {count_valid}/{len(constraint_scores)}")
 
-                # If we did not pass all constraints, update the instruction and try again.
-                next_action, next_context = self.repair(
-                    next_context,
-                    result_ctx,
-                    sampled_actions,
-                    sampled_results,
-                    sampled_scores,
-                )
+                if loop_count < effective_loop_budget:
+                    failed_action = next_action
+                    failed_result = result
+                    failed_validations = constraint_scores
+                    next_action, next_context = self.repair(
+                        next_context,
+                        result_ctx,
+                        sampled_actions,
+                        sampled_results,
+                        sampled_scores,
+                    )
+                    await self._emit_sampling_repair(
+                        sampling_id=sampling_id,
+                        repair_iteration=loop_count,
+                        failed_action=failed_action,
+                        failed_result=failed_result,
+                        failed_validations=failed_validations,
+                        repair_action=next_action,
+                        repair_context=next_context,
+                        backend=backend,
+                    )
 
             flog.info(
                 f"Invoking select_from_failure after {len(sampled_results)} failed attempts."

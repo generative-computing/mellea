@@ -12,6 +12,7 @@ process.
 """
 
 import abc
+import uuid
 from collections.abc import Sequence
 from typing import Generic
 
@@ -126,7 +127,6 @@ class SamplingStrategy(abc.ABC):
     It allows setting custom validation and generation functions through properties.
     """
 
-    @abc.abstractmethod
     async def sample(
         self,
         action: Component[S] | CBlock | ModelOutputThunk,
@@ -138,13 +138,17 @@ class SamplingStrategy(abc.ABC):
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
+        **kwargs,
     ) -> SamplingResult[S]:
-        """This method is the abstract method for sampling a given component.
+        """Concrete wrapper: owns the sampling lifecycle and fires loop start/end hooks.
 
-        It must be implemented by any concrete subclasses to provide specific sampling logic.
+        Mints a `sampling_id`, dispatches `sampling_loop_start` (which may modify
+        `loop_budget`), delegates to `_sample_impl`, and dispatches
+        `sampling_loop_end` on every exit path — success, budget exhaustion, and
+        raised exceptions.
 
         Args:
-            action : The action object to be sampled. A `Component`, `CBlock`, or `ModelOutputThunk`.
+            action: The action object to be sampled. A `Component`, `CBlock`, or `ModelOutputThunk`.
             context: The context to be passed to the sampling strategy.
             backend: The backend used for generating samples.
             requirements: List of requirements to test against (merged with global requirements).
@@ -152,7 +156,232 @@ class SamplingStrategy(abc.ABC):
             format: output format for structured outputs.
             model_options: model options to pass to the backend during generation / validation.
             tool_calls: True if tool calls should be used during this sampling strategy.
+            **kwargs: Additional keyword arguments forwarded to `_sample_impl`.
+
+        Returns:
+            SamplingResult[S]: A result object indicating the success or failure of the sampling process.
+
+        Raises:
+            ValueError: If a `SAMPLING_LOOP_START` hook returns a non-positive `loop_budget`.
+        """
+        from ..plugins.manager import has_plugins, invoke_hook
+        from ..plugins.types import HookType
+
+        sampling_id = str(uuid.uuid4())
+
+        exception: BaseException | None = None
+        s_result: SamplingResult | None = None
+
+        try:
+            reqs = self._merge_requirements(requirements)
+            loop_budget = self._get_loop_budget()
+            effective_loop_budget = loop_budget
+
+            # --- sampling_loop_start hook ---
+            if has_plugins(HookType.SAMPLING_LOOP_START):
+                from ..plugins.hooks.sampling import SamplingLoopStartPayload
+
+                start_payload = SamplingLoopStartPayload(
+                    sampling_id=sampling_id,
+                    strategy_name=type(self).__name__,
+                    action=action,
+                    context=context,
+                    requirements=reqs,
+                    loop_budget=loop_budget,
+                )
+                _, start_payload = await invoke_hook(
+                    HookType.SAMPLING_LOOP_START, start_payload, backend=backend
+                )
+                effective_loop_budget = start_payload.loop_budget
+
+            # Hooks can override loop_budget but bypass the constructor's
+            # validation; reject non-positive values up front.
+            if effective_loop_budget < 1:
+                raise ValueError(
+                    f"SAMPLING_LOOP_START hook returned non-positive loop_budget="
+                    f"{effective_loop_budget}; must be >= 1."
+                )
+
+            s_result = await self._sample_impl(
+                action=action,
+                context=context,
+                backend=backend,
+                requirements=reqs,
+                effective_loop_budget=effective_loop_budget,
+                validation_ctx=validation_ctx,
+                format=format,
+                model_options=model_options,
+                tool_calls=tool_calls,
+                sampling_id=sampling_id,
+                **kwargs,
+            )
+            return s_result
+
+        except BaseException as exc:
+            exception = exc
+            raise
+        finally:
+            # --- sampling_loop_end hook ---
+            if has_plugins(HookType.SAMPLING_LOOP_END):
+                from ..plugins.hooks.sampling import SamplingLoopEndPayload
+
+                if exception is not None:
+                    end_payload = SamplingLoopEndPayload(
+                        sampling_id=sampling_id,
+                        strategy_name=type(self).__name__,
+                        success=False,
+                        exception=exception,
+                    )
+                else:
+                    assert s_result is not None
+                    end_payload = SamplingLoopEndPayload(
+                        sampling_id=sampling_id,
+                        strategy_name=type(self).__name__,
+                        success=s_result.success,
+                        iterations_used=len(s_result.sample_generations),
+                        final_result=s_result.result,
+                        final_action=s_result.result_action,
+                        final_context=s_result.result_ctx,
+                        all_results=list(s_result.sample_generations),
+                        all_validations=list(s_result.sample_validations),
+                        failure_reason=(
+                            None
+                            if s_result.success
+                            else f"Budget exhausted after {len(s_result.sample_generations)} iterations"
+                        ),
+                    )
+                await invoke_hook(
+                    HookType.SAMPLING_LOOP_END, end_payload, backend=backend
+                )
+
+    @abc.abstractmethod
+    async def _sample_impl(
+        self,
+        action: Component[S] | CBlock | ModelOutputThunk,
+        context: Context,
+        backend: Backend,
+        requirements: list[Requirement],
+        *,
+        effective_loop_budget: int,
+        validation_ctx: Context | None = None,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+        sampling_id: str,
+        **kwargs,
+    ) -> SamplingResult[S]:
+        """Execute the sampling algorithm.
+
+        Called by the `sample` wrapper after lifecycle setup. Subclasses must
+        override this method instead of `sample`.
+
+        Args:
+            action: The action object to be sampled.
+            context: The context to be passed to the sampling strategy.
+            backend: The backend used for generating samples.
+            requirements: Merged and deduplicated list of requirements.
+            effective_loop_budget: The loop budget after hook modification (always >= 1).
+            validation_ctx: Optional context to use for validation.
+            format: Output format for structured outputs.
+            model_options: Model options to pass to the backend.
+            tool_calls: True if tool calls should be used.
+            sampling_id: UUID correlating iteration/repair/end hooks to this loop.
+            **kwargs: Additional keyword arguments (e.g., `show_progress`).
 
         Returns:
             SamplingResult[S]: A result object indicating the success or failure of the sampling process.
         """
+        ...
+
+    async def _emit_sampling_iteration(
+        self,
+        sampling_id: str,
+        iteration: int,
+        action: SampleActionType,
+        result: ModelOutputThunk,
+        validation_results: list[tuple[Requirement, ValidationResult]],
+        backend: Backend,
+    ) -> None:
+        """Emit the sampling-iteration hook payload if any plugin is registered."""
+        from ..plugins.manager import has_plugins, invoke_hook
+        from ..plugins.types import HookType
+
+        if not has_plugins(HookType.SAMPLING_ITERATION):
+            return
+
+        from ..plugins.hooks.sampling import SamplingIterationPayload
+
+        all_validations_passed = all(bool(s[1]) for s in validation_results)
+        iter_payload = SamplingIterationPayload(
+            sampling_id=sampling_id,
+            strategy_name=type(self).__name__,
+            iteration=iteration,
+            action=action,
+            result=result,
+            validation_results=validation_results,
+            all_validations_passed=all_validations_passed,
+            valid_count=sum(1 for s in validation_results if bool(s[1])),
+            total_count=len(validation_results),
+        )
+        await invoke_hook(HookType.SAMPLING_ITERATION, iter_payload, backend=backend)
+
+    async def _emit_sampling_repair(
+        self,
+        sampling_id: str,
+        repair_iteration: int,
+        failed_action: SampleActionType,
+        failed_result: ModelOutputThunk,
+        failed_validations: list[tuple[Requirement, ValidationResult]],
+        repair_action: SampleActionType,
+        repair_context: Context,
+        backend: Backend,
+    ) -> None:
+        """Emit the sampling-repair hook payload if any plugin is registered."""
+        from ..plugins.manager import has_plugins, invoke_hook
+        from ..plugins.types import HookType
+
+        if not has_plugins(HookType.SAMPLING_REPAIR):
+            return
+
+        from ..plugins.hooks.sampling import SamplingRepairPayload
+
+        repair_payload = SamplingRepairPayload(
+            sampling_id=sampling_id,
+            repair_type=getattr(self, "_get_repair_type", lambda: "unknown")(),
+            failed_action=failed_action,
+            failed_result=failed_result,
+            failed_validations=failed_validations,
+            repair_action=repair_action,
+            repair_context=repair_context,
+            repair_iteration=repair_iteration,
+        )
+        await invoke_hook(HookType.SAMPLING_REPAIR, repair_payload, backend=backend)
+
+    def _merge_requirements(
+        self, call_requirements: list[Requirement] | None
+    ) -> list[Requirement]:
+        """Merge global strategy requirements with per-call requirements.
+
+        Global requirements (set on the strategy) supersede per-call requirements.
+
+        Args:
+            call_requirements: Requirements provided at the call site.
+
+        Returns:
+            Deduplicated list of requirements to use for this sampling call.
+        """
+        strategy_reqs: list[Requirement] | None = getattr(self, "requirements", None)
+        reqs: list[Requirement] = []
+        if strategy_reqs is not None:
+            reqs += strategy_reqs
+        elif call_requirements is not None:
+            reqs += call_requirements
+        return list(set(reqs))
+
+    def _get_loop_budget(self) -> int:
+        """Return the strategy's configured loop budget (default 1).
+
+        Returns:
+            The loop budget from `self.loop_budget` if set, otherwise `1`.
+        """
+        return getattr(self, "loop_budget", 1)

@@ -134,47 +134,61 @@ class BaseMBRDSampling(RejectionSamplingStrategy):
 
         return scr
 
-    async def sample(
+    async def _sample_impl(
         self,
         action: Component[S] | CBlock | ModelOutputThunk,
         context: Context,
         backend: Backend,
-        requirements: list[Requirement] | None,
+        requirements: list[Requirement],
         *,
+        effective_loop_budget: int,
         validation_ctx: Context | None = None,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
+        sampling_id: str,
         show_progress: bool = True,
+        **kwargs,
     ) -> SamplingResult[S]:
         """Samples using majority voting.
 
+        Fan-out calls `_sample_impl` on the parent class directly so that each
+        inner sample does not emit its own enclosing `sampling` span — there is
+        exactly one `sampling` span for the top-level call, emitted by the
+        `SamplingStrategy.sample` wrapper.
+
         Args:
-            action : The action object to be sampled.
+            action: The action object to be sampled.
             context: The context to be passed to the sampling strategy.
             backend: The backend used for generating samples.
-            requirements: List of requirements to test against (merged with global requirements).
+            requirements: Merged and deduplicated list of requirements.
+            effective_loop_budget: The loop budget after hook modification (always >= 1).
             validation_ctx: Optional context to use for validation. If None, validation_ctx = ctx.
             format: output format for structured outputs; ignored for this sampling strategy.
             model_options: model options to pass to the backend during generation / validation.
             tool_calls: True if tool calls should be used during this sampling strategy.
+            sampling_id: UUID correlating iteration/repair/end hooks for this loop.
             show_progress: if true, a tqdm progress bar is used. Otherwise, messages will still be sent to flog.
+            **kwargs: Additional keyword arguments forwarded by `SamplingStrategy.sample()`.
 
         Returns:
             SamplingResult[S]: A result object indicating the success or failure of the sampling process.
         """
-        # execute sampling concurrently
+        # execute sampling concurrently — call _sample_impl directly on the
+        # parent so each inner sample does not fire its own lifecycle hooks.
         tasks: list[asyncio.Task[SamplingResult]] = []
         for i in range(self.number_of_samples):
             task = asyncio.create_task(
-                super().sample(
+                super()._sample_impl(
                     action,
                     context,
                     backend,
                     requirements,
+                    effective_loop_budget=effective_loop_budget,
                     validation_ctx=validation_ctx,
                     model_options=model_options,
                     tool_calls=tool_calls,
+                    sampling_id=sampling_id,
                     show_progress=show_progress,
                 )
             )
