@@ -753,6 +753,11 @@ class AdapterMixin(Backend, abc.ABC):
         deactivates. Pre-existing, not specific to the intrinsic path this
         method now supports.
 
+        `AdapterFunctionMetricsPlugin` in
+        `mellea/telemetry/metrics_plugins.py` emits the adapter-function
+        metrics; their instruments and attributes are defined in
+        `mellea/telemetry/metrics.py`.
+
         Args:
             adapter: The adapter to activate, or `None` (no-op).
 
