@@ -9,16 +9,17 @@ PEFT machinery, or model. Requires GPU and network/Hub access; not expected to
 run in CI or in sandboxes without hardware access (see test/README.md).
 
 `adapter_scope()` is asserted to really flip the real PEFT model's active
-adapter set, and to keep it active across a real generate call: the model is
-called directly (bypassing `generate_from_context()`'s standard path, which
-always deactivates adapters first via `_generate_with_adapter_lock`)
-so the active-adapter assertion straddling the generate call is a genuine
-proof that generation ran with the adapter active, not a smoke test that
-generation merely succeeded afterwards. A separate `generate_from_context()`
-call after the scope exits is the composition smoke test: mellea's own
-generation path must still work cleanly against a backend that has a
-scoped-and-released adapter registered — it does not exercise the adapter
-itself, since the standard path always deactivates first.
+adapter set, and to keep it active across a real generate call. The test holds
+`_generation_lock` across the scope and direct model call, matching the
+intrinsic generation path's reentrant lock shape. It bypasses
+`generate_from_context()` because that standard path always deactivates
+adapters first; the active-adapter assertion straddling the generate call is
+therefore proof that generation ran with the adapter active, not a smoke test
+that generation merely succeeded afterwards. A separate
+`generate_from_context()` call after the scope exits is the composition smoke
+test: mellea's own generation path must still work cleanly against a backend
+that has a scoped-and-released adapter registered — it does not exercise the
+adapter itself, since the standard path always deactivates first.
 
 Assertions are structural/functional only (adapter registered, real model
 reports it active during and after generation, adapter cleanly released), per
@@ -93,27 +94,29 @@ async def test_local_file_binding_full_lifecycle_against_real_model(backend):
     assert binding.backend is backend
     assert binding.qualified_name in backend.list_adapters()
 
-    with backend.adapter_scope(adapter):
-        # Confirms activate() really flipped the real PEFT model's active adapter.
-        assert binding.qualified_name in backend._model.active_adapters()  # type: ignore[union-attr]
+    # `_generate_intrinsic_with_adapter_scope()` holds this lock for its whole
+    # prepare -> activate -> generate -> deactivate critical section.
+    # `adapter_scope()` reacquires it during activation/deactivation, so this
+    # real-model test also proves that same-thread reentrancy works in practice.
+    with backend._generation_lock:
+        with backend.adapter_scope(adapter):
+            # Confirms activate() really flipped the real PEFT model's active adapter.
+            assert binding.qualified_name in backend._model.active_adapters()  # type: ignore[union-attr]
 
-        # Generate directly against the real model rather than through
-        # generate_from_context() — that standard path always deactivates
-        # adapters first (_generate_with_adapter_lock), which would
-        # make this a smoke test that generation merely succeeds afterwards,
-        # not a demonstration that generation ran with the adapter active.
-        toks = backend._tokenizer("Is the sky blue?", return_tensors="pt").to(  # type: ignore[union-attr]
-            backend._device  # type: ignore[union-attr]
-        )
-        # No assertion on the raw output: `model.generate` returns the prompt
-        # plus completion, so any decode would be non-empty regardless, and
-        # generated content is out of scope per the module docstring.
-        with torch.no_grad():
-            backend._model.generate(**toks, max_new_tokens=8)  # type: ignore[union-attr]
+            # Generate directly against the real model rather than through
+            # generate_from_context() — that standard path always deactivates
+            # adapters first, which would make this a smoke test that generation
+            # merely succeeds afterwards, not a demonstration that generation ran
+            # with the adapter active.
+            toks = backend._tokenizer("Is the sky blue?", return_tensors="pt").to(
+                backend._device
+            )  # type: ignore[union-attr]
+            with torch.no_grad():
+                backend._model.generate(**toks, max_new_tokens=8)  # type: ignore[union-attr]
 
-        # Still inside the scope: the adapter must still be the one active
-        # during generation, not just at scope-entry.
-        assert binding.qualified_name in backend._model.active_adapters()  # type: ignore[union-attr]
+            # Still inside the scope: the adapter must still be the one active
+            # during generation, not just at scope-entry.
+            assert binding.qualified_name in backend._model.active_adapters()  # type: ignore[union-attr]
 
     assert binding.qualified_name not in backend._model.active_adapters()  # type: ignore[union-attr]
 
