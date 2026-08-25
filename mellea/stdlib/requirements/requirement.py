@@ -3,12 +3,10 @@
 
 """Requirements are a special type of Component used as input to the "validate" step in Instruct/Validate/Repair design patterns."""
 
-import json
-import math
 from collections.abc import Callable
-from typing import Any, overload
+from typing import Any, cast, overload
 
-from ...backends.adapters import AdapterSchemaMismatchError
+from ...backends.adapters import get_io_contract
 from ...core import (
     CBlock,
     Context,
@@ -46,38 +44,22 @@ def requirement_check_to_bool(x: CBlock | ModelOutputThunk | str) -> bool:
 
     Raises:
         json.JSONDecodeError: If `x` is not valid JSON.
+        ValueError: If the parsed JSON is not an object (e.g. a list, string, or
+            number).
         AdapterSchemaMismatchError: If the parsed output does not contain the
             expected `requirement_check.score` structure, or if the score is
             not a finite number in the range 0.0-1.0.  Callers that previously
             treated `False` as "requirement not met" must now catch this error
             separately.
     """
-    output = str(x)
-    req_dict: dict[str, Any] = json.loads(output)
-
-    # Mirrors the validation in requirement_check() in core.py; Phase 2 will consolidate via IOContract.
-    req_check = req_dict.get("requirement_check", None)
-    if not isinstance(req_check, dict):
-        raise AdapterSchemaMismatchError(
-            name="requirement-check",
-            observed_keys=frozenset(req_dict.keys()),
-            expected_keys=frozenset({"requirement_check"}),
-        )
-
-    score = req_check.get("score", None)
-    if (
-        not isinstance(score, (int, float))
-        or isinstance(score, bool)  # bool subclasses int; exclude it explicitly
-        or not math.isfinite(score)
-        or not 0.0 <= score <= 1.0
-    ):
-        raise AdapterSchemaMismatchError(
-            name="requirement-check",
-            observed_keys=frozenset(req_check.keys()),
-            expected_keys=frozenset({"score"}),
-        )
-
-    return score > 0.5
+    # Delegates to the same `requirement-check` IOContract resolve_adapter() hands
+    # back to call_intrinsic() — see mellea.backends.adapters.io_contracts. A second,
+    # independent validation here is exactly the parallel-declaration problem #1516
+    # closes; ALoraRequirement (below) is the other production consumer of this
+    # capability's output alongside core.requirement_check().
+    parsed = get_io_contract("requirement-check").parse(str(x))
+    score = cast(dict[str, Any], parsed["requirement_check"])["score"]
+    return cast(float, score) > 0.5
 
 
 class ALoraRequirement(Requirement, Intrinsic):

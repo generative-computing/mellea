@@ -127,6 +127,16 @@ def test_requirement_check_to_bool_invalid_json():
         requirement_check_to_bool("not json")
 
 
+def test_requirement_check_to_bool_non_object_raises():
+    """A top-level JSON array or scalar is a ValueError, not a schema mismatch.
+
+    The replaced code raised an undocumented AttributeError here instead
+    (`list.get` on the parsed result).
+    """
+    with pytest.raises(ValueError, match="must be a JSON object"):
+        requirement_check_to_bool("[1, 2]")
+
+
 def test_requirement_check_to_bool_nan_score_raises():
     """NaN would silently evaluate as False without the finiteness guard."""
     with pytest.raises(AdapterSchemaMismatchError):

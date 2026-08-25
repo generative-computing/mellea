@@ -9,9 +9,18 @@ Introduces the composable `Adapter` dataclass and its three parts:
 - :class:`IOContract` — ABC for prompt building and output parsing
 - :class:`WeightsBinding` — pluggable ABC for weights lifecycle management
 
-Also provides :class:`LocalFileBinding`, two stub :class:`WeightsBinding`
-subclasses (:class:`EmbeddedBinding`, :class:`ServerMediatedBinding`), and
-:class:`AdapterSchemaMismatchError`.
+Also provides:
+
+- :class:`LocalFileBinding`
+- :class:`EmbeddedBinding` — stub :class:`WeightsBinding` subclass
+- :class:`ServerMediatedBinding` — stub :class:`WeightsBinding` subclass
+- :class:`AdapterSchemaMismatchError`
+- :class:`_DictContract`, :class:`_ListContract` — generic, capability-agnostic
+  :class:`IOContract` implementations that validate required keys on a JSON
+  object or a JSON array of objects, respectively. Capability-*specific*
+  contracts (e.g. the guardian adapters' nested-key shapes) live in
+  :mod:`~mellea.backends.adapters.io_contracts` instead, alongside the
+  registry that maps every catalogued adapter function to its contract.
 
 Note:
     The existing :class:`~mellea.backends.adapters.adapter.Adapter` ABC in
@@ -44,6 +53,11 @@ _PHASE_2_NOT_IMPLEMENTED = (
     "{cls} is a Phase 0 stub; implementation lands in Epic #929 Phase 2."
 )
 
+_BUILD_PROMPT_NOT_IMPLEMENTED = (
+    "build_prompt is not implemented; request construction still goes "
+    "through the legacy formatter/rewriter path, not IOContract."
+)
+
 
 class AdapterSchemaMismatchError(Exception):
     """Raised by :meth:`IOContract.parse` when output cannot satisfy the declared contract.
@@ -52,24 +66,33 @@ class AdapterSchemaMismatchError(Exception):
         name (str): Name of the adapter whose contract was violated.
         observed_keys (frozenset[str]): Keys present in the observed output.
         expected_keys (frozenset[str]): Keys required by the contract.
+        reason (str | None): Capability-specific explanation of the mismatch.
     """
 
     def __init__(
-        self, name: str, observed_keys: frozenset[str], expected_keys: frozenset[str]
+        self,
+        name: str,
+        observed_keys: frozenset[str],
+        expected_keys: frozenset[str],
+        reason: str | None = None,
     ) -> None:
         self.name = name
         self.observed_keys = observed_keys
         self.expected_keys = expected_keys
-        # Pass the structured fields (not the formatted message) to Exception so
-        # that ``self.args`` round-trips through ``pickle`` / ``copy`` — the default
-        # ``Exception.__reduce__`` reconstructs by calling ``cls(*self.args)``.
+        # Preserve the existing three-item ``args`` shape for callers and
+        # cross-version pickle compatibility. ``reason`` lives in instance state,
+        # which pickle restores after calling this constructor with ``args``.
+        self.reason = reason
         super().__init__(name, observed_keys, expected_keys)
 
     def __str__(self) -> str:
-        return (
+        message = (
             f"Adapter '{self.name}' output cannot satisfy declared contract. "
             f"Observed keys: {self.observed_keys}; expected: {self.expected_keys}."
         )
+        if self.reason is not None:
+            message += f" Reason: {self.reason}."
+        return message
 
 
 @dataclass(frozen=True)
@@ -156,9 +179,7 @@ class _DictContract(IOContract):
         self._required_keys = required_keys
 
     def build_prompt(self, **_kwargs: object) -> Component:
-        raise NotImplementedError(
-            "build_prompt is not used in Phase 1; implemented in Phase 2."
-        )
+        raise NotImplementedError(_BUILD_PROMPT_NOT_IMPLEMENTED)
 
     def parse(self, raw: str) -> dict[str, object]:
         """Parse and validate dict-shaped adapter output.
@@ -184,6 +205,63 @@ class _DictContract(IOContract):
         if missing:
             raise AdapterSchemaMismatchError(self._name, observed, self._required_keys)
         return data
+
+
+class _ListContract(IOContract):
+    """Validate list-of-dicts adapter output and wrap it under key `"items"`.
+
+    Each item in the list is checked for the declared required keys.  The
+    validated list is returned wrapped in `{"items": [...]}` so that
+    :func:`~mellea.stdlib.components.intrinsic._util.call_intrinsic` can always
+    return a plain `dict`.
+
+    Args:
+        name: Adapter capability name; included in
+            :class:`~mellea.backends.adapters.AdapterSchemaMismatchError` messages.
+        required_item_keys: Keys that must be present in every item dict.
+    """
+
+    def __init__(self, name: str, required_item_keys: frozenset[str]) -> None:
+        self._name = name
+        self._required_item_keys = required_item_keys
+
+    def build_prompt(self, **_kwargs: object) -> Component:
+        raise NotImplementedError(_BUILD_PROMPT_NOT_IMPLEMENTED)
+
+    def parse(self, raw: str) -> dict[str, object]:
+        """Parse and validate a list-of-dicts adapter output.
+
+        Args:
+            raw (str): Raw JSON string from the model.
+
+        Returns:
+            dict[str, object]: `{"items": [list of validated dicts]}`.
+                An empty list parses to `{"items": []}`.
+
+        Raises:
+            ValueError: When *raw* is not valid JSON, is not a JSON array, or
+                contains a non-object element.
+            AdapterSchemaMismatchError: When any item is missing a required key.
+        """
+        data = json.loads(raw)
+        if not isinstance(data, list):
+            raise ValueError(
+                f"Adapter '{self._name}' output must be a JSON array, "
+                f"got {type(data).__name__}."
+            )
+        for item in data:
+            if not isinstance(item, dict):
+                raise ValueError(
+                    f"Adapter '{self._name}' output array must contain only JSON "
+                    f"objects, got a {type(item).__name__} element."
+                )
+            observed = frozenset(item.keys())
+            missing = self._required_item_keys - observed
+            if missing:
+                raise AdapterSchemaMismatchError(
+                    self._name, observed, self._required_item_keys
+                )
+        return {"items": data}
 
 
 class WeightsBinding(abc.ABC):
@@ -676,10 +754,8 @@ class Adapter:
     # right invariant — the two feed different lookup paths (registration and the
     # verbs key on the binding's `qualified_name`; `_find_adapter` scans on the
     # identity) and both return `None` on a miss, so a disagreement surfaces as
-    # "adapter not found" far from its cause. But it cannot be enforced yet: the
-    # ten module-level `Adapter` constants in `stdlib/components/intrinsic/rag.py`
-    # and `guardian.py` pair an `alora` identity with a bare, deliberately
-    # unconfigured `LocalFileBinding()` that defaults to LoRA. Every catalogue
-    # entry supports both types, so those are placeholders rather than genuine
-    # conflicts, and the check fired on "not configured yet". Enforce it once
-    # #1516 gives those constants real bindings.
+    # "adapter not found" far from its cause. But it cannot be enforced yet:
+    # the deprecated shims carry a `_ShimWeightsBinding` with no `adapter_type`
+    # to compare at all (their identity tracks the configured type). Enforce
+    # the check once those constructions carry real, typed bindings (the shims
+    # retire in #1144).

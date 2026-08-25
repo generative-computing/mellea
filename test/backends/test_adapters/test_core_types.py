@@ -143,6 +143,7 @@ def test_adapter_schema_mismatch_error_format():
     assert err.name == "answerability"
     assert err.observed_keys == observed
     assert err.expected_keys == expected
+    assert err.reason is None
     msg = str(err)
     assert "answerability" in msg
     assert "Observed keys:" in msg
@@ -153,7 +154,10 @@ def test_adapter_schema_mismatch_error_pickles():
     observed = frozenset({"key_a"})
     expected = frozenset({"key_b"})
     err = AdapterSchemaMismatchError(
-        name="answerability", observed_keys=observed, expected_keys=expected
+        name="answerability",
+        observed_keys=observed,
+        expected_keys=expected,
+        reason="schema changed",
     )
 
     restored = pickle.loads(pickle.dumps(err))
@@ -162,6 +166,8 @@ def test_adapter_schema_mismatch_error_pickles():
     assert restored.name == "answerability"
     assert restored.observed_keys == observed
     assert restored.expected_keys == expected
+    assert restored.reason == "schema changed"
+    assert restored.args == ("answerability", observed, expected)
     assert str(restored) == str(err)
 
 
@@ -281,5 +287,5 @@ def test_dict_contract_reports_all_missing_multi_key():
 
 def test_dict_contract_build_prompt_not_implemented():
     contract = _DictContract("answerability", frozenset({"answerability"}))
-    with pytest.raises(NotImplementedError, match="Phase 1"):
+    with pytest.raises(NotImplementedError, match="build_prompt is not implemented"):
         contract.build_prompt()
