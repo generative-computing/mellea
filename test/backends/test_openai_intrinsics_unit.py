@@ -326,6 +326,25 @@ async def test_model_options_override_io_yaml_defaults():
     assert call_kwargs.kwargs.get("max_completion_tokens") == 64
 
 
+async def test_openai_backend_rejects_model_option_on_intrinsic_path():
+    """Regression (#1575): intrinsic calls reject per-call model selection.
+
+    Without this check, `model` survives the user option overlay after adapter
+    activation and collides with the backend's fixed OpenAI client argument.
+    """
+    backend = _make_backend_with_adapter(_SIMPLE_CONFIG)
+    ctx = _make_context()
+
+    with pytest.raises(ValueError, match="model cannot be set via model_options"):
+        await mfuncs.aact(
+            Intrinsic("answerability"),
+            ctx,
+            backend,
+            strategy=None,
+            model_options={"model": "answerability_alora"},
+        )
+
+
 async def test_model_options_forwarded():
     """All applicable model options are forwarded to the API call."""
     backend = _make_backend_with_adapter(_SIMPLE_CONFIG)

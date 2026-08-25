@@ -461,16 +461,27 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         Returns:
             a new dict
+
+        Raises:
+            ValueError: If `model_options` attempts to select a model. An
+                OpenAIBackend's model is fixed when the backend is constructed.
         """
         remap_dict = self.to_mellea_model_opts_map_chats
         if not is_chat_context:
             remap_dict = self.to_mellea_model_opts_map_completions
 
-        return resolve_model_options(
+        resolved_options = resolve_model_options(
             backend_defaults=self.model_options,
             remap=remap_dict,
             call_options=model_options,
         )
+        if "model" in resolved_options:
+            raise ValueError(
+                "model cannot be set via model_options on OpenAIBackend — model "
+                "selection happens at the backend/session level (construct a backend "
+                "per model, or start a session against the chosen model_id)."
+            )
+        return resolved_options
 
     def _make_backend_specific_and_remove(
         self, model_options: dict[str, Any], is_chat_context: bool
