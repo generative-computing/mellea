@@ -783,16 +783,15 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         # constructs one unconditionally — but the shim permits attribute
         # mutation, so a caller reassigning `.weights` must fail loudly here
         # rather than silently skip activation and send an unactivated request.
-        if isinstance(adapter.weights, EmbeddedBinding):
-            activation_request = EmbeddedActivationRequest(
-                extra_body=extra_body, api_params=api_params
-            )
-            await adapter.weights.apply_activation(activation_request, adapter.identity)
-        else:
+        if not isinstance(adapter.weights, EmbeddedBinding):
             raise TypeError(
                 f"EmbeddedIntrinsicAdapter.weights must be an EmbeddedBinding; "
                 f"got {type(adapter.weights).__name__}. Activation cannot proceed."
             )
+        activation_request = EmbeddedActivationRequest(
+            extra_body=extra_body, api_params=api_params
+        )
+        await adapter.weights.apply_activation(activation_request, adapter.identity)
 
         # Collect tools if tool_calls is enabled.
         tools: dict[str, AbstractMelleaTool] = dict()
