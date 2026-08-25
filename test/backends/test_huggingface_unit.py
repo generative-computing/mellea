@@ -4,6 +4,8 @@
 """Unit tests for HuggingFace backend pure-logic helpers — no model load required."""
 
 import asyncio
+import threading
+import time
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -23,8 +25,9 @@ import struct
 from transformers.generation.utils import GenerateDecoderOnlyOutput
 
 from mellea.backends import ModelOption
-from mellea.backends.adapters import AdapterMixin, IntrinsicAdapter
+from mellea.backends.adapters import AdapterMixin, AdapterType, IntrinsicAdapter
 from mellea.backends.adapters._core import Identity
+from mellea.backends.adapters.catalog import IntrinsicsCatalogEntry
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.core import ModelOutputThunk
 from mellea.formatters.granite.base.util import (
@@ -40,6 +43,10 @@ from mellea.stdlib.components import (
     Message,
 )
 from mellea.stdlib.context import ChatContext
+from test.backends.test_adapters._hook_capture import (
+    capture_adapter_hooks,
+    hook_payloads,
+)
 
 # Minimal 1x1 PNG for testing
 _MINIMAL_PNG = (
@@ -218,8 +225,11 @@ def _make_intrinsic_backend_stub(stub_backend):
         LocalHFBackend._make_backend_specific_and_remove(stub_backend, opts)
     )
     stub_backend.post_processing = lambda *args, **kwargs: None
-    stub_backend._generate_with_adapter_lock = (
-        lambda adapter_name, generate_func, *args: generate_func(*args)
+    # Bypasses locking/adapter_scope entirely — these tests exercise option-merging
+    # and logits capture, not activation semantics (see
+    # test_generate_intrinsic_with_adapter_scope_* below for that).
+    stub_backend._generate_intrinsic_with_adapter_scope = (
+        lambda adapter, generate_func, *args, **kwargs: generate_func(*args, **kwargs)
     )
     stub_backend._find_adapter = lambda cap, types=None: AdapterMixin._find_adapter(
         stub_backend, cap, types
@@ -227,52 +237,33 @@ def _make_intrinsic_backend_stub(stub_backend):
     return stub_backend
 
 
-def test_generate_with_adapter_lock_calls_load_peft_adapter():
-    """Regression guard: the internal adapter-lock call site (Epic #929 Phase 2,
-    issue #1140) must use the renamed `load_peft_adapter` verb, not the old
-    `load_adapter` name.
+def test_generate_with_adapter_lock_deactivates_and_calls_generate_func():
+    """_generate_with_adapter_lock delegates deactivation and runs the model call.
+
+    Standard (non-intrinsic) generation runs without adapters: the method
+    delegates to `deactivate_peft_adapter("")` (rather than calling
+    `_model.set_adapter` directly, Epic #929 Phase 2 / issue #1141), never
+    touches the activation verbs or `load_peft_adapter`, and forwards to
+    `generate_func` (its return value is the method's). Since #1465 routed
+    intrinsic generation through `_generate_intrinsic_with_adapter_scope`, no
+    production caller passes it an adapter to activate — which is why the
+    method takes no adapter name at all. The method's deactivate-then-generate
+    ordering is fixed by its body, not observable from these patched verbs.
     """
     backend = _make_backend()
-    backend._model.active_adapters.return_value = ["my_adapter"]  # type: ignore[union-attr]
-
-    with patch.object(backend, "load_peft_adapter") as mock_load:
-        backend._generate_with_adapter_lock("my_adapter", lambda: "output")
-
-    mock_load.assert_called_once_with("my_adapter")
-    # Deliberately no `_model.set_adapter` assertion. Since #1141 that call is
-    # reached via `activate_peft_adapter` rather than inlined here, so asserting
-    # it would make this test an unannounced guard for the delegation chain --
-    # failing on a change to `activate_peft_adapter` without naming it. The chain
-    # is covered by `test_generate_with_adapter_lock_uses_activate_deactivate_verbs`
-    # and the verb itself by `test_activate_peft_adapter_calls_set_adapter`.
-
-
-def test_generate_with_adapter_lock_uses_activate_deactivate_verbs():
-    """_generate_with_adapter_lock delegates to the new activate/deactivate verbs
-    rather than calling `_model.set_adapter` directly (Epic #929 Phase 2, issue #1141).
-    """
-    backend = _make_backend()
-    backend._model.active_adapters.return_value = ["my_adapter"]  # type: ignore[union-attr]
-
-    with (
-        patch.object(backend, "load_peft_adapter"),
-        patch.object(backend, "activate_peft_adapter") as mock_activate,
-        patch.object(backend, "deactivate_peft_adapter") as mock_deactivate,
-    ):
-        backend._generate_with_adapter_lock("my_adapter", lambda: "output")
-
-    mock_activate.assert_called_once_with("my_adapter")
-    mock_deactivate.assert_not_called()
-
     backend._model.active_adapters.return_value = []  # type: ignore[union-attr]
+
     with (
+        patch.object(backend, "load_peft_adapter") as mock_load,
         patch.object(backend, "activate_peft_adapter") as mock_activate,
         patch.object(backend, "deactivate_peft_adapter") as mock_deactivate,
     ):
-        backend._generate_with_adapter_lock("", lambda: "output")
+        out = backend._generate_with_adapter_lock(lambda: "output")
 
-    mock_activate.assert_not_called()
+    assert out == "output"
     mock_deactivate.assert_called_once_with("")
+    mock_activate.assert_not_called()
+    mock_load.assert_not_called()
 
 
 def test_activate_peft_adapter_calls_set_adapter():
@@ -324,6 +315,320 @@ def test_adapter_activation_lock_is_the_generation_lock():
     backend = _make_backend()
 
     assert backend._adapter_activation_lock() is backend._generation_lock
+
+
+def test_generation_lock_is_reentrant():
+    """`_generation_lock` must be a `threading.RLock`, not a plain `threading.Lock`.
+
+    `_generate_intrinsic_with_adapter_scope` (issue #1465) holds `_generation_lock`
+    for the whole prepare -> activate -> generate -> deactivate critical section
+    on one thread, and the binding's verb calls (prepare/activate/deactivate)
+    re-acquire the same lock (via `_adapter_activation_lock()`) from inside that
+    section. A plain `Lock` can't tell that the second acquisition is
+    same-thread and refuses it; only an `RLock` allows it.
+    """
+    backend = _make_backend()
+    lock = backend._generation_lock
+
+    assert lock.acquire(blocking=False)
+    reentrant = lock.acquire(blocking=False)
+    if reentrant:
+        lock.release()
+    lock.release()
+
+    assert reentrant, "expected _generation_lock to be reentrant (threading.RLock)"
+
+
+def test_generation_lock_reentrant_activation_does_not_deadlock():
+    """Regression test for #1465's known lock-reentrancy deadlock.
+
+    `activate()`/`deactivate()` (driven by `adapter_scope()`) acquire
+    `_adapter_activation_lock()`, which is `_generation_lock`. Intrinsic
+    generation holds `_generation_lock` for its whole critical section (see
+    `_generate_intrinsic_with_adapter_scope`), so that inner acquisition happens
+    on the same thread while the outer one is still held. Runs on a background
+    thread with a bounded join so a regression to a non-reentrant lock fails
+    fast instead of hanging the suite.
+    """
+    backend = _make_backend()
+    completed = threading.Event()
+
+    def nested_acquire():
+        with backend._generation_lock:
+            with backend._adapter_activation_lock():
+                completed.set()
+
+    t = threading.Thread(target=nested_acquire, daemon=True)
+    t.start()
+    t.join(timeout=5)
+
+    assert completed.is_set(), (
+        "re-acquiring _adapter_activation_lock() while already holding "
+        "_generation_lock deadlocked; _generation_lock must be reentrant"
+    )
+
+
+def _make_fake_intrinsic_adapter(
+    qualified_name: str, revision: str = "fake0000000000000000000000000000000000000"
+) -> IntrinsicAdapter:
+    """Builds a minimal `IntrinsicAdapter` stand-in, bypassing `__init__` (which
+    downloads the adapter's `io.yaml`), exposing the attribute set
+    `_generate_intrinsic_with_adapter_scope` reads — `.identity` (reused
+    directly, not rebuilt, so this must already be the real `Identity`
+    `IntrinsicAdapter.__init__` would have built), `.qualified_name`, and
+    `.intrinsic_metadata.revision` — plus `.name`/`.adapter_type` for realism
+    (the method reaches those via `identity`, not the stand-in's own fields).
+    The stand-in pins `revision` to a catalogue SHA, mirroring the real
+    `IntrinsicsCatalogEntry.revision` (a required, non-optional `str`) rather
+    than allowing `None`.
+    """
+    name, _, adapter_type_str = qualified_name.rpartition("_")
+    adapter_type = (
+        AdapterType.ALORA if adapter_type_str == "alora" else AdapterType.LORA
+    )
+    adapter = IntrinsicAdapter.__new__(IntrinsicAdapter)
+    adapter.name = name
+    adapter.qualified_name = qualified_name
+    adapter.adapter_type = adapter_type
+    adapter.intrinsic_metadata = IntrinsicsCatalogEntry(
+        name=name, repo_id="fake/repo", revision=revision
+    )
+    object.__setattr__(
+        adapter,
+        "identity",
+        Identity(name=name, adapter_type=adapter_type.value, capability=name),
+    )
+    return adapter
+
+
+def _register_fake_adapter(
+    backend: LocalHFBackend, qualified_name: str, path: str
+) -> None:
+    """Registers a minimal `IntrinsicAdapter` stand-in under `_added_adapters`,
+    satisfying what `load_peft_adapter` reads (`.path`, `.qualified_name`).
+    """
+    fake = IntrinsicAdapter.__new__(IntrinsicAdapter)
+    fake.path = path
+    fake.qualified_name = qualified_name
+    backend._added_adapters[qualified_name] = fake
+
+
+def _wire_fake_peft_model(backend: LocalHFBackend) -> None:
+    """Makes `backend._model.set_adapter`/`.active_adapters` track real state.
+
+    Without this, both are unconfigured `MagicMock`s: `set_adapter` records
+    calls but doesn't affect what `active_adapters()` returns, so activation
+    couldn't be observed from the generate callback.
+    """
+    active: list[str] = []
+
+    def fake_set_adapter(name_or_names):
+        if isinstance(name_or_names, list):
+            active.clear()
+        else:
+            active[:] = [name_or_names]
+
+    backend._model.set_adapter.side_effect = fake_set_adapter  # type: ignore[attr-defined]
+    backend._model.active_adapters.side_effect = lambda: list(active)  # type: ignore[attr-defined]
+
+
+def test_generate_intrinsic_with_adapter_scope_activates_during_generation():
+    """Generation demonstrably runs with the adapter active — asserted from
+    inside the generate callback via the real (mocked) PEFT model state, not
+    smoke-tested by checking generation merely succeeds.
+    """
+    backend = _make_backend()
+    _wire_fake_peft_model(backend)
+    adapter = _make_fake_intrinsic_adapter("answerability_alora")
+    _register_fake_adapter(backend, adapter.qualified_name, "/fake/path")
+
+    seen_during_generation = []
+
+    def fake_generate():
+        seen_during_generation.append(backend._model.active_adapters())
+        return "output"
+
+    out = backend._generate_intrinsic_with_adapter_scope(adapter, fake_generate)
+
+    assert out == "output"
+    assert seen_during_generation == [[adapter.qualified_name]]
+    assert backend._model.active_adapters() == []
+    # Asserts the real verb ran deactivation, not just that _wire_fake_peft_model's
+    # `active_adapters()` mock still happens to read back empty.
+    backend._model.set_adapter.assert_any_call([])  # type: ignore[attr-defined]
+
+
+def test_generate_intrinsic_with_adapter_scope_fires_hooks_with_correct_payload():
+    """The hooks `_generate_intrinsic_with_adapter_scope`'s docstring claims to
+    enable must actually fire, with a payload that matches reality — not just
+    smoke-tested by checking that *some* hooks fire.
+
+    Regression coverage for two bugs caught in review: `revision` reported as
+    `None` (mislabelled "unpinned") despite the adapter being pinned, and
+    `binding_type` set to an invented `"intrinsic_legacy"` value instead of the
+    `"local_file"` reality this binding actually is.
+    """
+    backend = _make_backend()
+    _wire_fake_peft_model(backend)
+    adapter = _make_fake_intrinsic_adapter(
+        "answerability_alora", revision="deadbeef00000000000000000000000000000000"
+    )
+    _register_fake_adapter(backend, adapter.qualified_name, "/fake/path")
+
+    with capture_adapter_hooks() as mock_invoke:
+        out = backend._generate_intrinsic_with_adapter_scope(adapter, lambda: "output")
+
+    assert out == "output"
+    payloads = hook_payloads(mock_invoke)
+
+    phases = [p.phase for p in payloads if hasattr(p, "phase")]
+    assert phases == ["activate", "deactivate"]
+
+    invocations = [p for p in payloads if hasattr(p, "outcome")]
+    assert len(invocations) == 1
+    invocation = invocations[0]
+    assert invocation.outcome == "success"
+    assert invocation.name == "answerability"
+    assert invocation.adapter_type == "alora"
+    assert invocation.binding_type == "local_file"
+    assert invocation.revision == "deadbeef00000000000000000000000000000000"
+
+
+def test_generate_intrinsic_with_adapter_scope_deactivates_on_error():
+    """`adapter_scope()`'s deactivate-in-finally guarantee holds on the intrinsic path."""
+    backend = _make_backend()
+    _wire_fake_peft_model(backend)
+    adapter = _make_fake_intrinsic_adapter("answerability_alora")
+    _register_fake_adapter(backend, adapter.qualified_name, "/fake/path")
+
+    def failing_generate():
+        raise RuntimeError("boom")
+
+    with pytest.raises(RuntimeError, match="boom"):
+        backend._generate_intrinsic_with_adapter_scope(adapter, failing_generate)
+
+    assert backend._model.active_adapters() == []
+    backend._model.set_adapter.assert_any_call([])  # type: ignore[attr-defined]
+
+
+def test_generate_intrinsic_with_adapter_scope_reports_error_outcome_in_hook_payload():
+    """A failed intrinsic generation reports `outcome="error"` with both phase events.
+
+    The `AdapterMixin.adapter_scope` contract for a failing body is pinned
+    generically (against a `LocalFileBinding`) in `test_adapter_scope.py`; this
+    pins it with the intrinsic payload — `name`, `adapter_type`, `binding_type`
+    and the pinned `revision` — so a regression can't silently mislabel
+    intrinsic failures while the generic coverage keeps passing.
+    """
+    backend = _make_backend()
+    _wire_fake_peft_model(backend)
+    adapter = _make_fake_intrinsic_adapter(
+        "answerability_alora", revision="deadbeef00000000000000000000000000000000"
+    )
+    _register_fake_adapter(backend, adapter.qualified_name, "/fake/path")
+
+    def failing_generate():
+        raise RuntimeError("boom")
+
+    with capture_adapter_hooks() as mock_invoke:
+        with pytest.raises(RuntimeError, match="boom"):
+            backend._generate_intrinsic_with_adapter_scope(adapter, failing_generate)
+
+    payloads = hook_payloads(mock_invoke)
+    phases = [p.phase for p in payloads if hasattr(p, "phase")]
+    assert phases == ["activate", "deactivate"]
+
+    invocations = [p for p in payloads if hasattr(p, "outcome")]
+    assert len(invocations) == 1
+    invocation = invocations[0]
+    assert invocation.outcome == "error"
+    assert isinstance(invocation.error, RuntimeError)
+    assert invocation.name == "answerability"
+    assert invocation.adapter_type == "alora"
+    assert invocation.binding_type == "local_file"
+    assert invocation.revision == "deadbeef00000000000000000000000000000000"
+
+    assert backend._model.active_adapters() == []
+
+
+def test_generate_intrinsic_with_adapter_scope_fires_no_hooks_on_prepare_failure():
+    """A `load_peft_adapter` failure happens before `adapter_scope()` is entered.
+
+    So no adapter hooks fire at all, activation state is unchanged, and the
+    next call still succeeds — a failed load must not poison later calls.
+    """
+    backend = _make_backend()
+    _wire_fake_peft_model(backend)
+    adapter = _make_fake_intrinsic_adapter("answerability_alora")
+    _register_fake_adapter(backend, adapter.qualified_name, "/fake/path")
+
+    with (
+        capture_adapter_hooks() as mock_invoke,
+        patch.object(
+            backend, "load_peft_adapter", side_effect=RuntimeError("load failed")
+        ),
+    ):
+        with pytest.raises(RuntimeError, match="load failed"):
+            backend._generate_intrinsic_with_adapter_scope(adapter, lambda: "output")
+
+    assert hook_payloads(mock_invoke) == []
+    assert backend._model.active_adapters() == []
+
+    out = backend._generate_intrinsic_with_adapter_scope(adapter, lambda: "output")
+    assert out == "output"
+    assert backend._model.active_adapters() == []
+
+
+def test_concurrent_intrinsic_calls_cannot_observe_each_others_adapter():
+    """Two concurrent intrinsic generate calls must never see each other's adapter active.
+
+    Regression coverage for the intra-scope atomicity gap `adapter_scope()`'s
+    docstring describes: if `_generation_lock` only guarded the verb calls
+    themselves (rather than the whole prepare -> activate -> generate ->
+    deactivate section its driver now holds, per #1465), one thread's
+    `activate()` could interleave during another thread's generate call. The
+    `time.sleep` below widens that window so a regression would be caught
+    reliably rather than by luck.
+    """
+    backend = _make_backend()
+    _wire_fake_peft_model(backend)
+    _register_fake_adapter(backend, "answerability_lora", "/fake/a")
+    _register_fake_adapter(backend, "uncertainty_lora", "/fake/b")
+
+    mismatches: list[tuple[str, list[str]]] = []
+    errors: list[BaseException] = []
+
+    def run(qualified_name: str):
+        adapter = _make_fake_intrinsic_adapter(qualified_name)
+
+        def fake_generate():
+            time.sleep(0.05)
+            current = backend._model.active_adapters()
+            if current != [qualified_name]:
+                mismatches.append((qualified_name, current))
+            return "ok"
+
+        try:
+            backend._generate_intrinsic_with_adapter_scope(adapter, fake_generate)
+        except Exception as exc:  # surfaced via `errors`, not swallowed
+            errors.append(exc)
+
+    threads = [
+        threading.Thread(target=run, args=("answerability_lora",)),
+        threading.Thread(target=run, args=("uncertainty_lora",)),
+    ]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=5)
+
+    assert not any(t.is_alive() for t in threads)
+    # A `Thread` swallows exceptions from its target by default, so without this
+    # check a totally broken `_generate_intrinsic_with_adapter_scope` (e.g. an
+    # AttributeError before `fake_generate` ever runs) would leave `mismatches`
+    # empty and this test would pass vacuously.
+    assert errors == []
+    assert mismatches == []
 
 
 def test_list_adapters_reflects_registration_not_just_loading():
