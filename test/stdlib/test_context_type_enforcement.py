@@ -20,10 +20,28 @@ from mellea.core import (
     Context,
     ContextTypeMismatchError,
     ModelOutputThunk,
+    Span,
 )
 from mellea.stdlib.components import Message
 from mellea.stdlib.context import ChatContext, SimpleContext
 from mellea.stdlib.functional import aact
+
+
+class _MinimalContext(Context):
+    """A minimal `Context` subclass that overrides only the two abstract methods.
+
+    Used to prove that the inherited, `Self`-typed helpers (`new_instance`,
+    `reset_to_new`) return the *subclass* type rather than the base `Context`,
+    and that a straightforward `add` override returns its own type too.
+    """
+
+    def add(self, c: Span) -> "_MinimalContext":
+        """Return a new `_MinimalContext` node with `c` appended."""
+        return _MinimalContext.from_previous(self, c)
+
+    def view_for_generation(self) -> list[Span] | None:
+        """Return the full linear history."""
+        return self.as_list()
 
 
 class _TypeChangingBackend(DummyBackend):
@@ -98,3 +116,77 @@ async def test_escape_hatch_allows_type_change():
     )
 
     assert isinstance(ctx_out, SimpleContext)
+
+
+# --- self-returning Context functions preserve the concrete subtype (#1522) ---
+#
+# The runtime guard in `functional.py` only holds if the context helpers that
+# claim to return `Self` (`add`) or the subclass type (`new_instance`,
+# `reset_to_new`) actually do so when subclassed. These tests pin that
+# invariant directly on the context types.
+
+_CONTEXT_TYPES = [ChatContext, SimpleContext, _MinimalContext]
+
+
+@pytest.mark.parametrize("ctx_cls", _CONTEXT_TYPES)
+def test_add_returns_same_subtype(ctx_cls):
+    """`ctx.add(...)` returns a context of the same subtype it was called on."""
+    ctx = ctx_cls()
+    added = ctx.add(_action())
+    assert type(added) is ctx_cls
+
+
+@pytest.mark.parametrize("ctx_cls", _CONTEXT_TYPES)
+def test_new_instance_returns_same_subtype(ctx_cls):
+    """`ctx.new_instance()` returns a fresh root context of the same subtype."""
+    ctx = ctx_cls().add(_action())
+    fresh = ctx.new_instance()
+    assert type(fresh) is ctx_cls
+    assert fresh.is_root_node
+
+
+@pytest.mark.parametrize("ctx_cls", _CONTEXT_TYPES)
+def test_reset_to_new_returns_same_subtype(ctx_cls):
+    """The `reset_to_new()` classmethod returns an instance of the class it is called on."""
+    fresh = ctx_cls.reset_to_new()
+    assert type(fresh) is ctx_cls
+    assert fresh.is_root_node
+
+
+# --- session-level allow_context_type_change flag (#1522) ---
+
+
+async def test_session_enforces_context_type_by_default():
+    """A session trips the guard when a backend changes the context type."""
+    from mellea import MelleaSession
+
+    session = MelleaSession(_TypeChangingBackend(responses=None), ChatContext())
+    assert session.allow_context_type_change is False
+
+    with pytest.raises(ContextTypeMismatchError):
+        await session.aact(_action())
+
+
+async def test_session_flag_allows_context_type_change():
+    """`allow_context_type_change=True` lets a session switch context types."""
+    from mellea import MelleaSession
+
+    session = MelleaSession(
+        _TypeChangingBackend(responses=None),
+        ChatContext(),
+        allow_context_type_change=True,
+    )
+    assert session.allow_context_type_change is True
+
+    await session.aact(_action())
+    assert isinstance(session.ctx, SimpleContext)
+
+
+def test_session_flag_preserved_across_clone():
+    """`clone()` carries the `allow_context_type_change` flag to the copy."""
+    from mellea import MelleaSession
+
+    session = MelleaSession(
+        DummyBackend(responses=None), ChatContext(), allow_context_type_change=True
+    )
+    assert session.clone().allow_context_type_change is True

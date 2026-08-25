@@ -826,6 +826,17 @@ async def aact(
             assert (
                 sampling_result is not None
             )  # Needed for the type checker but should never happen.
+            # `SamplingResult` does not statically track its context type, so the
+            # input==output convention (issue #1522) can only be enforced at
+            # runtime here. Check every sample context, not just the chosen one,
+            # so a strategy that produces a mismatched context for any attempt
+            # is caught rather than silently returned.
+            for sample_ctx in sampling_result.sample_contexts:
+                _enforce_context_type(
+                    context,
+                    sample_ctx,
+                    allow_context_type_change=allow_context_type_change,
+                )
             return sampling_result
         else:
             checked_ctx = _enforce_context_type(

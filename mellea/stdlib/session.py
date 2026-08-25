@@ -100,6 +100,7 @@ def start_session(
     context_type: Literal["simple", "chat"] | None = None,
     model_options: dict | None = None,
     plugins: list[Any] | None = None,
+    allow_context_type_change: bool = False,
     **backend_kwargs: Any,
 ) -> MelleaSession:
     """Start a new Mellea session. Can be used as a context manager or called directly.
@@ -129,6 +130,10 @@ def start_session(
         plugins: Optional list of plugins scoped to this session. Accepts
             `@hook`-decorated functions, `@plugin`-decorated class instances,
             `MelleaPlugin` instances, or `PluginSet` instances.
+        allow_context_type_change: When `True`, the session's model-interaction
+            methods permit a call to return a different `Context` subtype than
+            the session currently holds. By default (`False`), a differing type
+            raises `ContextTypeMismatchError` (issue #1522).
         **backend_kwargs: Additional keyword arguments passed to the backend constructor.
 
     Returns:
@@ -231,7 +236,12 @@ def start_session(
             + (f", model_options={model_options}" if model_options else "")
         )
 
-        session = MelleaSession(backend, resolved_ctx, session_id=session_id)
+        session = MelleaSession(
+            backend,
+            resolved_ctx,
+            session_id=session_id,
+            allow_context_type_change=allow_context_type_change,
+        )
 
         # Register session-scoped plugins
         if plugins:
@@ -276,12 +286,20 @@ class MelleaSession:
             session.
         ctx (Context | None): The conversation context. Defaults to a new
             `SimpleContext` if `None`.
+        allow_context_type_change (bool): When `True`, model-interaction methods
+            permit a call to return a different `Context` subtype than the
+            session currently holds. By default (`False`), a differing type
+            raises `ContextTypeMismatchError`, enforcing the input==output
+            context-type convention (issue #1522). Set this when a session
+            deliberately switches context types mid-run.
 
     Attributes:
         ctx (Context): The active conversation context; never `None` (defaults
             to a fresh `SimpleContext` when `None` is passed). Updated after
             every call that produces model output.
         id (str): Unique session UUID assigned at construction.
+        allow_context_type_change (bool): Whether model-interaction methods
+            permit the returned context to change subtype (see Args).
     """
 
     # ``ctx`` is exposed as a property below; backing field is ``_ctx``.
@@ -292,6 +310,7 @@ class MelleaSession:
         ctx: Context | None = None,
         *,
         session_id: str | None = None,
+        allow_context_type_change: bool = False,
     ):
         """Initialize MelleaSession with a backend and optional conversation context.
 
@@ -307,13 +326,22 @@ class MelleaSession:
             session_id if session_id is not None else str(uuid.uuid4()),
             backend,
             ctx if ctx is not None else SimpleContext(),
+            allow_context_type_change=allow_context_type_change,
         )
         self._auto_bind_model()
 
-    def _init_fields(self, session_id: str, backend: Backend, ctx: Context) -> None:
+    def _init_fields(
+        self,
+        session_id: str,
+        backend: Backend,
+        ctx: Context,
+        *,
+        allow_context_type_change: bool = False,
+    ) -> None:
         """Set all instance fields. Shared by __init__ and __copy__ so neither diverges."""
         self.id = session_id
         self.backend = backend
+        self.allow_context_type_change = allow_context_type_change
         # Bypass the ctx setter so this initial assignment doesn't count as an
         # interaction.
         self._ctx: Context = ctx
@@ -401,7 +429,12 @@ class MelleaSession:
         import uuid
 
         new = object.__new__(MelleaSession)
-        new._init_fields(str(uuid.uuid4()), self.backend, self.ctx)
+        new._init_fields(
+            str(uuid.uuid4()),
+            self.backend,
+            self.ctx,
+            allow_context_type_change=self.allow_context_type_change,
+        )
         # Do not call _auto_bind_model: the session state is already settled.
         return new
 
@@ -546,6 +579,7 @@ class MelleaSession:
             format=format,
             model_options=model_options,
             tool_calls=tool_calls,
+            allow_context_type_change=self.allow_context_type_change,
         )  # type: ignore
 
         if isinstance(r, SamplingResult):
@@ -656,6 +690,7 @@ class MelleaSession:
             format=format,
             model_options=model_options,
             tool_calls=tool_calls,
+            allow_context_type_change=self.allow_context_type_change,
         )
 
         if isinstance(r, SamplingResult):
@@ -709,6 +744,7 @@ class MelleaSession:
             format=format,
             model_options=model_options,
             tool_calls=tool_calls,
+            allow_context_type_change=self.allow_context_type_change,
         )
 
         self.ctx = context
@@ -777,6 +813,7 @@ class MelleaSession:
             format=format,
             model_options=model_options,
             tool_calls=tool_calls,
+            allow_context_type_change=self.allow_context_type_change,
         )
         self.ctx = context
         return result
@@ -809,6 +846,7 @@ class MelleaSession:
             backend=self.backend,
             format=format,
             model_options=model_options,
+            allow_context_type_change=self.allow_context_type_change,
         )
         self.ctx = context
         return result
@@ -914,6 +952,7 @@ class MelleaSession:
             model_options=model_options,
             tool_calls=tool_calls,
             await_result=await_result,
+            allow_context_type_change=self.allow_context_type_change,
         )  # type: ignore
 
         if isinstance(r, SamplingResult):
@@ -1072,6 +1111,7 @@ class MelleaSession:
             model_options=model_options,
             tool_calls=tool_calls,
             await_result=await_result,
+            allow_context_type_change=self.allow_context_type_change,
         )
 
         if isinstance(r, SamplingResult):
@@ -1125,6 +1165,7 @@ class MelleaSession:
             format=format,
             model_options=model_options,
             tool_calls=tool_calls,
+            allow_context_type_change=self.allow_context_type_change,
         )
 
         self.ctx = context
@@ -1220,6 +1261,7 @@ class MelleaSession:
             model_options=model_options,
             tool_calls=tool_calls,
             await_result=await_result,  # type: ignore[call-overload]
+            allow_context_type_change=self.allow_context_type_change,
         )
         self.ctx = context
         return result
@@ -1252,6 +1294,7 @@ class MelleaSession:
             backend=self.backend,
             format=format,
             model_options=model_options,
+            allow_context_type_change=self.allow_context_type_change,
         )
         self.ctx = context
         return result
