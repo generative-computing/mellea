@@ -97,6 +97,17 @@ mkdir -p .bob && ln -s ../.agents/skills .bob/skills
 
 Pre-commit runs: ruff, mypy, uv-lock, codespell, license-headers
 
+**Pull request template**: opening a PR fills the body from [`.github/pull_request_template.md`](.github/pull_request_template.md), which ends with four type checkboxes - `Component`, `Requirement`, `Sampling Strategy`, `Tool`. If your PR adds or modifies one of those, check the matching box; the `PR Bot` workflow ([`.github/workflows/pr-update.yml`](.github/workflows/pr-update.yml)) then posts a comment with the type-specific review checklist from `.github/PULL_REQUEST_TEMPLATE/`:
+
+| Checked box | Checklist template |
+|-------------|--------------------|
+| `Component` | `.github/PULL_REQUEST_TEMPLATE/component.md` |
+| `Requirement` | `.github/PULL_REQUEST_TEMPLATE/requirement.md` |
+| `Sampling Strategy` | `.github/PULL_REQUEST_TEMPLATE/sampling.md` |
+| `Tool` | `.github/PULL_REQUEST_TEMPLATE/tool.md` |
+
+This matters when a PR is opened outside the GitHub UI (`gh pr create --body`, from a fork, or by an agent): the template isn't applied automatically. When you open such a PR and it adds or modifies one of the four types, build the body from `.github/pull_request_template.md` with the matching box checked (if relevant) so the bot posts the checklist.
+
 **Review states**: when reviewing a PR, see [CONTRIBUTING.md → Review States](CONTRIBUTING.md#review-states) for when to use `APPROVE` vs `REQUEST CHANGES` vs `COMMENT`.
 
 For AI attribution trailers, see [Section 7 (AI Attribution)](#7-ai-attribution).
