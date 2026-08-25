@@ -94,10 +94,3 @@ def _coerce_to_documents(
                 )
             result.append(d)
     return result
-
-
-def _coerce_to_document(document: str | Document) -> Document:
-    """Convert a single string or Document into a Document."""
-    if isinstance(document, str):
-        return Document(text=document)
-    return document

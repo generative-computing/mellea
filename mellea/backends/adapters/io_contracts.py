@@ -206,9 +206,6 @@ _INTRINSIC_IO_CONTRACTS: dict[str, IOContract] = {
             }
         ),
     ),
-    "context_relevance": _DictContract(
-        "context_relevance", frozenset({"context_relevance"})
-    ),
     "hallucination_detection": _ListContract(
         "hallucination_detection",
         frozenset(

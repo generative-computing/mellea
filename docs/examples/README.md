@@ -53,7 +53,6 @@ Specialized model capabilities through adapters.
 - Answer relevance checking
 - Hallucination detection
 - Citation validation
-- Context relevance assessment
 
 **[sofai/](sofai/)**
 Two-tier sampling with fast and slow models.

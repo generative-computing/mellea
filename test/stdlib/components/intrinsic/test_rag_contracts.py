@@ -118,26 +118,6 @@ def test_find_citations_forward_compat() -> None:
 
 
 # ---------------------------------------------------------------------------
-# check_context_relevance
-# ---------------------------------------------------------------------------
-
-
-def test_check_context_relevance_contract_enforced() -> None:
-    contract = get_io_contract("context_relevance")
-    with pytest.raises(AdapterSchemaMismatchError) as exc_info:
-        contract.parse(json.dumps({"wrong_key": "value"}))
-    err = exc_info.value
-    assert err.name == "context_relevance"
-    assert "context_relevance" in err.expected_keys
-
-
-def test_check_context_relevance_forward_compat() -> None:
-    contract = get_io_contract("context_relevance")
-    result = contract.parse(json.dumps({"context_relevance": "relevant", "score": 0.8}))
-    assert result["context_relevance"] == "relevant"
-
-
-# ---------------------------------------------------------------------------
 # flag_hallucinated_content
 # ---------------------------------------------------------------------------
 

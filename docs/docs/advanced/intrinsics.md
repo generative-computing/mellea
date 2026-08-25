@@ -72,55 +72,6 @@ print(rag.check_answerability(question, docs_answerable, context, backend))   # 
 print(rag.check_answerability(question, docs_not_answerable, context, backend))  # False
 ```
 
-## Context relevance
-
-:::warning Deprecated
-`check_context_relevance()` is deprecated and will be removed in a future release.
-The underlying adapter is Granite 4.0 only and will not receive a Granite 4.1 version.
-
-**There is no direct adapter replacement.** `check_answerability()` addresses a
-related but different question — it asks whether a *set* of documents can collectively
-answer a question (binary result), while `check_context_relevance()` scores a *single*
-document on a three-way scale. They operate at different stages of a RAG pipeline and
-are not interchangeable.
-
-For per-document relevance filtering, use a `@generative` function with any current
-Granite backend:
-
-```python
-from mellea import generative
-
-@generative
-def is_relevant(document: str, question: str) -> bool:
-    """Determine whether the document contains information relevant to the question."""
-```
-
-See [Build a RAG pipeline](../how-to/build-a-rag-pipeline.md) for a full example.
-:::
-
-Assess whether a document is relevant to a question:
-
-```python
-# Requires: mellea[hf]
-# Returns: str
-from mellea.backends.huggingface import LocalHFBackend
-from mellea.stdlib.components import Document
-from mellea.stdlib.components.intrinsic import rag
-from mellea.stdlib.context import ChatContext
-
-# NOTE: no context_relevance adapter for Granite 4.1 — use granite-4.0-micro
-backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
-context = ChatContext()
-question = "Who is the CEO of Microsoft?"
-document = Document(
-    "Microsoft Corporation is an American multinational corporation "
-    "headquartered in Redmond, Washington."
-)
-
-result = rag.check_context_relevance(question, document, context, backend)
-print(result)  # 'partially relevant' — doc is about Microsoft but not its CEO
-```
-
 ## Hallucination detection
 
 Flag sentences in an assistant response that are not grounded in the source documents:

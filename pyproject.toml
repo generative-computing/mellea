@@ -392,7 +392,6 @@ filterwarnings = [
 
     # Keep specific deprecations visible (important for migration)
     "default:.*Watsonx Backend is deprecated.*:DeprecationWarning",
-    "default:.*check_context_relevance.*:DeprecationWarning",
 ]
 
 # -----------------------------

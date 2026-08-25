@@ -275,7 +275,7 @@ Granite Libraries is the collective name for the three curated collections of
 | Collection | Purpose |
 |-----------|---------|
 | **Granite Libraries Core** | General-purpose capabilities: certainty checking, requirement verification, context attribution |
-| **Granite Libraries RAG** | Retrieval-Augmented Generation pipeline: answerability, citations, context relevance, hallucination detection, query rewriting |
+| **Granite Libraries RAG** | Retrieval-Augmented Generation pipeline: answerability, citations, hallucination detection, query rewriting |
 | **Granite Libraries Guardian** | Safety and compliance: guardian checks, policy guardrails, factuality detection and correction |
 
 These adapter functions are distributed as Hugging Face repositories under
@@ -1014,5 +1014,5 @@ External resources for the key technologies underlying Mellea's adapter function
 
 - **Granite Switch**: [github.com/generative-computing/granite-switch](https://github.com/generative-computing/granite-switch) — the architecture and composer toolchain for building Granite Switch checkpoints.
 - **Granite Libraries Core**: [huggingface.co/ibm-granite/granitelib-core-r1.0](https://huggingface.co/ibm-granite/granitelib-core-r1.0) — certainty, requirement-check, context-attribution adapter functions.
-- **Granite Libraries RAG**: [huggingface.co/ibm-granite/granitelib-rag-r1.0](https://huggingface.co/ibm-granite/granitelib-rag-r1.0) — answerability, citations, context relevance, hallucination detection, query rewriting.
+- **Granite Libraries RAG**: [huggingface.co/ibm-granite/granitelib-rag-r1.0](https://huggingface.co/ibm-granite/granitelib-rag-r1.0) — answerability, citations, hallucination detection, query rewriting.
 - **Granite Libraries Guardian**: [huggingface.co/ibm-granite/granitelib-guardian-r1.0](https://huggingface.co/ibm-granite/granitelib-guardian-r1.0) — guardian checks, policy guardrails, factuality detection and correction.
