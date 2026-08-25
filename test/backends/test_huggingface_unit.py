@@ -926,6 +926,7 @@ async def test_intrinsic_logits_populated_when_option_set(stub_backend):
     assert len(output.generation.logits) == len(fake_scores)
     assert all(t.shape == (vocab_size,) for t in output.generation.logits)
 
+
 @pytest.mark.asyncio
 async def test_intrinsic_closure_cell_and_kv_cache_released_after_post_processing(
     stub_backend,
@@ -1011,18 +1012,12 @@ async def test_intrinsic_closure_cell_and_kv_cache_released_after_post_processin
             return chunk
 
     def fake_transformers_inputs(
-        rewritten: Any,
-        tokenizer: Any,
-        model: Any,
-        ll_tokenizer: Any = None,
+        rewritten: Any, tokenizer: Any, model: Any, ll_tokenizer: Any = None
     ) -> tuple[dict, dict]:
         return {"input_tokens": torch.tensor([[1]])}, {}
 
     def fake_generate_with_transformers(
-        tokenizer: Any,
-        model: Any,
-        generate_input: Any,
-        other_input: Any,
+        tokenizer: Any, model: Any, generate_input: Any, other_input: Any
     ) -> Any:
         model.generate(inputs=generate_input["input_tokens"])
         return _FakeChatCompletionResponse()
@@ -1077,13 +1072,7 @@ async def test_intrinsic_closure_cell_and_kv_cache_released_after_post_processin
     del fake_scores
 
     await backend.post_processing(
-        output,
-        [],
-        None,
-        False,
-        {},
-        None,
-        torch.tensor([[1]]),
+        output, [], None, False, {}, None, torch.tensor([[1]])
     )
 
     gc.collect()
@@ -1108,6 +1097,7 @@ async def test_intrinsic_closure_cell_and_kv_cache_released_after_post_processin
             f"KV-cache tensor {i} is still alive while the MOT is held; "
             "past_key_values or another reference path is retaining it"
         )
+
 
 @pytest.mark.parametrize("images,audio", _MULTIMODAL_CASES)
 @pytest.mark.asyncio
