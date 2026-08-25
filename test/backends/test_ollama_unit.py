@@ -261,6 +261,42 @@ def test_simplify_and_merge_per_call_overrides_backend(mock_ollama_backend):
     assert result[ModelOption.MAX_NEW_TOKENS] == 256
 
 
+def test_simplify_and_merge_construction_thinking_false_persists(mock_ollama_backend):
+    """Construction-time THINKING=False survives into the merged options (#1552).
+
+    This is the exact path start_session(model_options={ModelOption.THINKING: False})
+    relies on to suppress thinking across every call in a session.
+    """
+    b = mock_ollama_backend(
+        model_id="granite3.3:8b", model_options={ModelOption.THINKING: False}
+    )
+    result = b._simplify_and_merge(None)
+    assert result[ModelOption.THINKING] is False
+
+
+def test_simplify_and_merge_per_call_thinking_overrides_construction(
+    mock_ollama_backend,
+):
+    """A per-call THINKING value wins over the construction-time default (#1552)."""
+    b = mock_ollama_backend(
+        model_id="granite3.3:8b", model_options={ModelOption.THINKING: False}
+    )
+    result = b._simplify_and_merge({ModelOption.THINKING: True})
+    assert result[ModelOption.THINKING] is True
+
+
+def test_simplify_and_merge_construction_thinking_survives_unrelated_per_call_opts(
+    mock_ollama_backend,
+):
+    """Construction-time THINKING=False is untouched by unrelated per-call opts (#1552)."""
+    b = mock_ollama_backend(
+        model_id="granite3.3:8b", model_options={ModelOption.THINKING: False}
+    )
+    result = b._simplify_and_merge({"num_predict": 256})
+    assert result[ModelOption.THINKING] is False
+    assert result[ModelOption.MAX_NEW_TOKENS] == 256
+
+
 # --- _make_backend_specific_and_remove ---
 
 
