@@ -45,6 +45,7 @@ from ..helpers import (
     chat_completion_delta_merge,
     extract_model_tool_requests,
     get_current_event_loop,
+    merge_provider_fields,
     send_to_queue,
     should_replay_reasoning,
 )
@@ -432,6 +433,11 @@ class WatsonxAIBackend(FormatterBackend):
                 message_dict["tool_call_id"] = m.tool_call_id
             if replay and m.thinking:
                 message_dict["reasoning_content"] = m.thinking
+            # Merge any author-declared provider fields (Mellea's known fields win;
+            # a mismatched target raises). Must run after the known fields are set.
+            message_dict = merge_provider_fields(
+                message_dict, m.provider_fields, self._provider
+            )
             conversation.append(message_dict)
 
         if _format is not None:

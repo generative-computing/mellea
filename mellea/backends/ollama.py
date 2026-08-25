@@ -35,6 +35,7 @@ from ..helpers import (
     DEFAULT_CHUNK_TIMEOUT,
     ClientCache,
     get_current_event_loop,
+    merge_provider_fields,
     send_to_queue,
     should_replay_reasoning,
 )
@@ -548,6 +549,11 @@ class OllamaModelBackend(FormatterBackend):
                 tool_name = m.tool_name or getattr(m, "name", None)
                 if tool_name is not None:
                     message_dict["tool_name"] = tool_name
+            # Merge any author-declared provider fields (Mellea's known fields win;
+            # a mismatched target raises). Must run after the known fields are set.
+            message_dict = merge_provider_fields(
+                message_dict, m.provider_fields, self._provider
+            )
             conversation.append(message_dict)
 
         # Append tool call information if applicable.

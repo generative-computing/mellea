@@ -12,11 +12,89 @@ from typing import TYPE_CHECKING, Any, Literal, TypedDict
 from pydantic import BaseModel
 
 from ..core.base import AudioBlock, AudioUrlBlock, ImageUrlBlock
+from ..core.utils import MelleaLogger
 
 if TYPE_CHECKING:
     from ..core import Formatter, ModelToolCall
     from ..core.base import AbstractMelleaTool, ModelOutputThunk
     from ..stdlib.components import Document, Message
+
+
+# The providers whose request/wire serialization is OpenAI-compatible — the set a
+# `provider_fields` `{"openai": ...}` declaration reaches. This is the *serialization*
+# family: `message_to_openai_message` is the shared serializer for `openai`, `litellm`,
+# and `huggingface` (huggingface.py), and `watsonx` emits the same wire shape via its
+# own inline loop. It is deliberately NOT `Message._parse`'s response tuple
+# `("openai", "watsonx", "litellm")`, which groups by *response* shape and excludes HF
+# (HF returns token tensors, not a `choices[0].message` dict). Keeping these separate
+# prevents a `{"openai": ...}` declaration from wrongly raising on the HuggingFace path.
+OPENAI_COMPATIBLE_WIRE_PROVIDERS = frozenset(
+    {"openai", "litellm", "watsonx", "huggingface"}
+)
+
+
+def merge_provider_fields(
+    base: dict[str, Any],
+    provider_fields: dict[str, dict[str, Any]] | None,
+    provider: str,
+) -> dict[str, Any]:
+    """Merge author-declared `provider_fields` into a wire message dict.
+
+    A key matches `provider` iff it is `"*"`, equals `provider` exactly, or is
+    `"openai"` and `provider` is in `OPENAI_COMPATIBLE_WIRE_PROVIDERS`. Fields from
+    every matching key are merged into `base`, but only for keys `base` did not
+    already set — Mellea's known fields always win, and a dropped colliding key is
+    debug-logged. `"*"` always matches, so its presence never triggers the mismatch
+    error.
+
+    Args:
+        base: The wire message dict built from Mellea's known fields; mutated and
+            returned.
+        provider_fields: The author's provider-keyed extra fields, or `None`.
+        provider: The provider string of the backend performing serialization.
+
+    Returns:
+        `base`, with fields from every matching provider key merged in.
+
+    Raises:
+        ValueError: If `provider_fields` is non-empty, contains no `"*"`, and no key
+            matches `provider` — the component targeted a backend it did not hit.
+    """
+    if not provider_fields:
+        return base
+
+    def _matches(key: str) -> bool:
+        return (
+            key == "*"
+            or key == provider
+            or (key == "openai" and provider in OPENAI_COMPATIBLE_WIRE_PROVIDERS)
+        )
+
+    matched_any = False
+    for key, fields in provider_fields.items():
+        if not _matches(key):
+            continue
+        matched_any = True
+        for field, value in fields.items():
+            if field in base:
+                MelleaLogger.get_logger().debug(
+                    "provider_fields[%r][%r] collides with a Mellea-known field; "
+                    "dropping the author value (known field wins).",
+                    key,
+                    field,
+                )
+                continue
+            base[field] = value
+
+    if not matched_any:
+        raise ValueError(
+            f"provider_fields declares target(s) {sorted(provider_fields)} but the "
+            f"request is running on provider {provider!r}, which none of them match. "
+            'Add a "*" key to declare the field valid on every backend, or target the '
+            "provider this component actually runs on."
+        )
+
+    return base
 
 
 class ToolCallFunction(TypedDict):
@@ -244,7 +322,11 @@ def should_replay_reasoning(
 
 
 def message_to_openai_message(
-    msg: Message, formatter: Formatter | None = None, *, replay_reasoning: bool = False
+    msg: Message,
+    formatter: Formatter | None = None,
+    *,
+    replay_reasoning: bool = False,
+    provider: str = "openai",
 ) -> dict:
     """Serialise a Mellea `Message` to the format required by OpenAI-compatible API providers.
 
@@ -258,6 +340,10 @@ def message_to_openai_message(
             the provider receives the model's prior reasoning. Defaults to `False`
             (reasoning is stripped), preserving the historical behaviour; callers
             decide per-turn via their replay policy (see `should_replay_reasoning`).
+        provider: The calling backend's provider string, used to match the message's
+            `provider_fields` declaration. Defaults to `"openai"`; OpenAI-compatible
+            callers pass their own provider (`"litellm"`, `"watsonx"`, `"huggingface"`)
+            so an `"openai"`-family declaration still reaches the wire.
 
     Returns:
         A dict with `"role"` and `"content"` fields. When the message carries
@@ -277,6 +363,8 @@ def message_to_openai_message(
         ValueError: If the message contains an `AudioUrlBlock`. The OpenAI Chat
             Completions audio schema does not support audio by URL; fetch the
             audio and pass it as an `AudioBlock` with base64 data instead.
+        ValueError: If the message's `provider_fields` names a target that does not
+            match `provider` and includes no `"*"` (see `merge_provider_fields`).
     """
     # NOTE: `self.formatter.to_chat_messages` explicitly skips `Message` objects. However, we need
     # to print `Message`s to correctly serialize any documents with the message. Do the printing here.
@@ -346,7 +434,8 @@ def message_to_openai_message(
 
     if replay_reasoning and msg.thinking:
         result["reasoning_content"] = msg.thinking
-    return result
+
+    return merge_provider_fields(result, msg.provider_fields, provider)
 
 
 def messages_to_docs(msgs: list[Message]) -> list[dict[str, str]]:

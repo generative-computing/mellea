@@ -655,7 +655,12 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         # conversation, not multi-turn generation, so reasoning is never replayed
         # here (no `replay_reasoning=`). The HF chat path serializes via
         # `to_chat`/`apply_chat_template`, not this helper.
-        conversation.extend([message_to_openai_message(m) for m in ctx_as_message_list])
+        conversation.extend(
+            [
+                message_to_openai_message(m, provider=self._provider)
+                for m in ctx_as_message_list
+            ]
+        )
 
         docs = messages_to_docs(ctx_as_message_list)
 

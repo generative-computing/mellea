@@ -362,7 +362,9 @@ class LiteLLMBackend(FormatterBackend):
         replay_flags = should_replay_reasoning(messages, self._provider)
         conversation.extend(
             [
-                message_to_openai_message(m, self.formatter, replay_reasoning=replay)
+                message_to_openai_message(
+                    m, self.formatter, replay_reasoning=replay, provider=self._provider
+                )
                 for m, replay in zip(messages, replay_flags)
             ]
         )
