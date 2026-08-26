@@ -225,7 +225,7 @@ if [[ "$WITH_VLLM" == "1" ]]; then
             log "Reusing existing vLLM venv at $VLLM_VENV (KEEP_VLLM_VENV=1)"
         else
             log "Creating isolated vLLM venv at $VLLM_VENV ..."
-            uv venv "$VLLM_VENV" --python 3.11 --clear
+            uv venv "$VLLM_VENV" --python 3.12 --clear
             log "Installing vllm into $VLLM_VENV ..."
             uv pip install --python "$VLLM_VENV/bin/python" vllm \
                 > "$LOGDIR/vllm_install.log" 2>&1 \
