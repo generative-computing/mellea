@@ -161,9 +161,17 @@ jobs:
         run: echo "Tests failed. Please verify that tests are working locally."
       - name: Dump Ollama server log on failure
         if: failure() # Only the test step can produce a useful server log here.
+        # The raw log is far too verbose to dump whole (slot print_timing lines
+        # every ~25 tokens: a plain tail of 100 lines only covers ~30 s of the
+        # run and misses multi-minute stall windows), so dump the request-level
+        # story instead: one GIN line per HTTP request (with its duration), any
+        # error/warning lines, and model load/unload events -- then a short raw
+        # tail for the final moment.
         run: |
-          echo "=== ollama serve log (last 100 lines) ==="
-          tail -n 100 /tmp/ollama-serve.log || echo "(no ollama serve log found)"
+          echo "=== ollama serve log: requests (GIN), errors, model events ==="
+          grep -iE 'GIN|error|warn|panic|loading|unload' /tmp/ollama-serve.log | tail -n 500 || echo "(no matching lines)"
+          echo "=== ollama serve log (last 50 raw lines) ==="
+          tail -n 50 /tmp/ollama-serve.log || echo "(no ollama serve log found)"
       - name: Write job summary
         if: always()
         run: |
