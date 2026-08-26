@@ -583,11 +583,11 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         adapter is deactivated before the model call, and the model's active
         state is asserted before and after. Adapter-active generation goes
         elsewhere — `_generate_intrinsic_with_adapter_scope` for intrinsics
-        (routed through `adapter_scope`, with its lifecycle hooks), and, once
-        #1018 lands, Granite Switch's embedded activation through a binding
-        `apply_activation` verb (not yet implemented — that is #1142's work) —
-        so no current path activates through this method, which is why it
-        takes no adapter name.
+        (routed through `adapter_scope`, with its lifecycle hooks). Granite
+        Switch's `EmbeddedBinding.apply_activation()` is implemented for the
+        OpenAI backend; local Hugging Face integration remains pending (#1018).
+        No current path activates through this method, which is why it takes no
+        adapter name.
 
         Args:
             generate_func: The synchronous generation callable to invoke.
@@ -664,15 +664,14 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         Returns:
             Whatever `generate_func` returns.
         """
+        weights = _IntrinsicPeftBinding(
+            self, adapter.qualified_name, adapter.intrinsic_metadata.revision
+        )
         scope_adapter = _AdapterCore(
-            identity=adapter.identity,
-            io_contract=_UnusedIOContract(),
-            weights=_IntrinsicPeftBinding(
-                self, adapter.qualified_name, adapter.intrinsic_metadata.revision
-            ),
+            identity=adapter.identity, io_contract=_UnusedIOContract(), weights=weights
         )
         with self._generation_lock:
-            scope_adapter.weights.prepare()
+            weights.prepare()
             with self.adapter_scope(scope_adapter):
                 _assert_correct_adapters(adapter.qualified_name, self._model)
                 out = generate_func(*args, **kwargs)

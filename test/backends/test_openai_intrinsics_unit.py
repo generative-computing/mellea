@@ -543,6 +543,63 @@ async def test_user_extra_body_merges_into_intrinsic_extra_body():
     assert call_kwargs["reasoning_effort"] == "medium"
 
 
+async def test_user_extra_body_cannot_override_embedded_adapter():
+    """The resolved embedded adapter overrides a caller-supplied adapter_name."""
+    backend = _make_backend_with_adapter(_SIMPLE_CONFIG)
+    ctx = _make_context()
+    mock_create = AsyncMock(return_value=_simple_chat_completion())
+
+    mock_client = MagicMock()
+    mock_client.chat.completions.create = mock_create
+
+    with patch.object(
+        OpenAIBackend,
+        "_async_client",
+        new_callable=PropertyMock,
+        return_value=mock_client,
+    ):
+        mot, _ = await mfuncs.aact(
+            Intrinsic("answerability"),
+            ctx,
+            backend,
+            strategy=None,
+            model_options={
+                "extra_body": {
+                    "chat_template_kwargs": {"adapter_name": "caller-selected"}
+                }
+            },
+        )
+        await mot.avalue()
+
+    extra_body = mock_create.call_args.kwargs["extra_body"]
+    assert extra_body["chat_template_kwargs"]["adapter_name"] == "answerability"
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [("model", "other-model"), ("messages", []), ("stream", True), ("tools", [])],
+)
+async def test_intrinsic_extra_body_rejects_protected_request_fields(
+    field: str, value: object
+):
+    """Provider-specific extra_body values cannot override intrinsic invariants."""
+    backend = _make_backend_with_adapter(_SIMPLE_CONFIG)
+    ctx = _make_context()
+
+    with pytest.raises(
+        ValueError,
+        match=rf"extra_body cannot override intrinsic request fields: {field}",
+    ):
+        mot, _ = await mfuncs.aact(
+            Intrinsic("answerability"),
+            ctx,
+            backend,
+            strategy=None,
+            model_options={"extra_body": {field: value}},
+        )
+        await mot.avalue()
+
+
 async def test_user_extra_body_without_thinking():
     """User extra_body merges when THINKING is unset; the #1241 reproduction."""
     backend = _make_backend_with_adapter(_SIMPLE_CONFIG)

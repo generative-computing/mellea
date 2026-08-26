@@ -227,6 +227,81 @@ For OpenAI backends with Granite Switch, adapters are loaded from the model's
 Hugging Face repository configuration instead of the adapter function catalog.
 Output format is task-specific — `requirement-check` returns `{"requirement_check": {"score": <float>}}`.
 
+## Composable adapter construction (advanced)
+
+> **Advanced:** `Adapter` composes an `Identity`, an `IOContract`, and a
+> weights binding into a single, inspectable object. It's scaffolding for a
+> future backend-integration surface (Epic #929) — today, neither backend
+> accepts a composed `Adapter` directly: `LocalHFBackend.add_adapter` takes a
+> `LocalFileBinding` or the `LocalHFAdapter` shim, while
+> `OpenAIBackend.add_adapter` takes only the deprecated
+> `EmbeddedIntrinsicAdapter` shim, which builds an `EmbeddedBinding`
+> internally. The construction below is illustrative of the binding shapes;
+> write a new backend integration against the bindings themselves.
+
+Each weights binding models how its deployment turns an adapter on.
+`LocalFileBinding` downloads and loads LoRA/aLoRA weights, so it exposes a
+`prepare`/`activate`/`deactivate`/`release` lifecycle:
+
+```python
+# Requires: mellea[hf]
+from mellea.backends.adapters import Adapter, EmbeddedBinding, Identity, IOContract, LocalFileBinding
+from mellea.backends.huggingface import LocalHFBackend
+from mellea.backends.openai import OpenAIBackend
+from mellea.core import Component
+
+
+class AnswerabilityContract(IOContract):
+    def build_prompt(self, **kwargs: object) -> Component:
+        raise NotImplementedError  # request formatting lands with #1516
+
+    def parse(self, raw: str) -> dict[str, object]:
+        import json
+
+        return json.loads(raw)
+
+
+# LocalFile/PEFT reality — LocalHFBackend downloads and loads the weights.
+hf_backend = LocalHFBackend(model_id="ibm-granite/granite-4.1-3b")
+hf_binding = LocalFileBinding.from_catalog("answerability")
+hf_binding.bind_backend(hf_backend)
+# hf_binding.prepare() downloads the weights and loads them into hf_backend.
+# adapter_type must match the binding — from_catalog loads the first
+# catalog-listed adapter type, which is LoRA for answerability.
+hf_adapter = Adapter(
+    identity=Identity(name="answerability", adapter_type="lora"),
+    io_contract=AnswerabilityContract(),
+    weights=hf_binding,
+)
+```
+
+`EmbeddedBinding` has no weights to manage — the adapter is already part of
+the served base model — so it exposes a single method, `apply_activation`,
+that edits the outgoing request instead of a lifecycle:
+
+```python
+switch_backend = OpenAIBackend(
+    model_id="granite-switch",
+    api_key="EMPTY",
+    base_url="http://localhost:8000/v1",
+)
+switch_adapter = Adapter(
+    identity=Identity(name="answerability", adapter_type="alora"),
+    io_contract=AnswerabilityContract(),
+    weights=EmbeddedBinding.from_base_model(switch_backend),
+)
+```
+
+Weights-binding support by backend today — this tracks the binding
+implementations, not whether a composed `Adapter` can be registered directly:
+
+| Backend | `LocalFileBinding` (LocalFile/PEFT) | `EmbeddedBinding` (Embedded/Granite Switch) | `ServerMediatedBinding` |
+| --- | --- | --- | --- |
+| `LocalHFBackend` | ✅ shipping — `add_adapter` accepts a `LocalFileBinding` directly | 🔜 planned (#1018) | — |
+| `OpenAIBackend` | — | ✅ shipping, via the deprecated `EmbeddedIntrinsicAdapter` shim above, which builds an `EmbeddedBinding` internally | — |
+
+`ServerMediatedBinding` has no backend implementation yet — see discussion #1486.
+
 ---
 
 ## Guardian adapter functions
