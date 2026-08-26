@@ -24,6 +24,7 @@ torch = pytest.importorskip("torch", reason="torch not installed — install mel
 
 from mellea.backends import ModelOption
 from mellea.backends.huggingface import (
+    _CHAT_TEMPLATE_THINKING_VARS,
     _GENERATE_KWARGS_ALLOWLIST,
     _HF_INTERNAL_TEMPLATE_VARS,
     LocalHFBackend,
@@ -285,6 +286,34 @@ def test_filter_for_chat_template_renames_sentinel() -> None:
     b = _make_backend(template)
     result = b._filter_for_chat_template({ModelOption.MAX_NEW_TOKENS: 256})
     assert result == {"max_new_tokens": 256}
+
+
+@pytest.mark.parametrize(
+    "template", ["{{ think }}", "{{ thinking }}", "{{ enable_thinking }}"]
+)
+def test_filter_for_chat_template_maps_thinking_to_template_variable(
+    template: str,
+) -> None:
+    """THINKING reaches the thinking variable detected from the template."""
+    b = _make_backend(template)
+    expected_key = next(
+        variable
+        for variable in _CHAT_TEMPLATE_THINKING_VARS
+        if variable in b._chat_template_allowlist
+    )
+
+    result = b._filter_for_chat_template({ModelOption.THINKING: True})
+
+    assert result == {expected_key: True}
+
+
+def test_filter_for_chat_template_drops_thinking_without_template_variable() -> None:
+    """THINKING does not invent a chat-template variable when none is recognised."""
+    b = _make_backend("{{ custom_tools }}")
+
+    result = b._filter_for_chat_template({ModelOption.THINKING: True})
+
+    assert result == {}
 
 
 def test_filter_for_chat_template_empty_input() -> None:

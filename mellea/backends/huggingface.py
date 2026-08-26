@@ -269,6 +269,8 @@ _HF_INTERNAL_TEMPLATE_VARS: frozenset[str] = frozenset(
     }
 )
 
+_CHAT_TEMPLATE_THINKING_VARS: tuple[str, ...] = ("think", "thinking", "enable_thinking")
+
 
 def _compute_generate_kwargs_allowlist() -> frozenset[str]:
     """Names that `transformers`' `model.generate` accepts as keyword arguments.
@@ -2338,6 +2340,16 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         backend_opts = self._make_backend_specific_and_remove(
             model_options, for_generate=False
         )
+        thinking_template_var = next(
+            (
+                variable
+                for variable in _CHAT_TEMPLATE_THINKING_VARS
+                if variable in self._chat_template_allowlist
+            ),
+            None,
+        )
+        if thinking_template_var is not None and ModelOption.THINKING in model_options:
+            backend_opts[thinking_template_var] = model_options[ModelOption.THINKING]
         return {
             k: v for k, v in backend_opts.items() if k in self._chat_template_allowlist
         }
