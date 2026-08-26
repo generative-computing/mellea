@@ -29,6 +29,7 @@ from ...core import (
     ValidationResult,
 )
 from ...helpers.annotation_helpers import resolve_signature_annotations
+from ..context import ChatContext
 from ..requirements.requirement import reqify
 from ..session import MelleaSession
 
@@ -625,23 +626,20 @@ class SyncGenerativeStub(GenerativeStub, Generic[P, R]):
 
         # Do precondition validation first.
         if stub_copy._arguments is not None:
-            if extracted.m is not None:
-                val_results = extracted.m.validate(
-                    reqs=stub_copy.precondition_requirements,
-                    model_options=extracted.model_options,
-                    output=ModelOutputThunk(stub_copy._arguments.value),
-                )
-            else:
-                # We know these aren't None from the `extract_args_and_kwargs` function.
-                assert extracted.context is not None
-                assert extracted.backend is not None
-                val_results = mfuncs.validate(
-                    reqs=stub_copy.precondition_requirements,
-                    context=extracted.context,
-                    backend=extracted.backend,
-                    model_options=extracted.model_options,
-                    output=ModelOutputThunk(stub_copy._arguments.value),
-                )
+            # Preconditions are judged over the arguments alone, so they get a fresh
+            # context rather than the caller's/session's conversation history.
+            precondition_backend = (
+                extracted.m.backend if extracted.m is not None else extracted.backend
+            )
+            # We know this isn't None from the `extract_args_and_kwargs` function.
+            assert precondition_backend is not None
+            val_results = mfuncs.validate(
+                reqs=stub_copy.precondition_requirements,
+                context=ChatContext(),
+                backend=precondition_backend,
+                model_options=extracted.model_options,
+                output=ModelOutputThunk(stub_copy._arguments.value),
+            )
 
             # No retries if precondition validation fails.
             if not all(bool(val_result) for val_result in val_results):
@@ -771,23 +769,22 @@ class AsyncGenerativeStub(GenerativeStub, Generic[P, R]):
 
             # Do precondition validation first.
             if stub_copy._arguments is not None:
-                if extracted.m is not None:
-                    val_results = await extracted.m.avalidate(
-                        reqs=stub_copy.precondition_requirements,
-                        model_options=extracted.model_options,
-                        output=ModelOutputThunk(stub_copy._arguments.value),
-                    )
-                else:
-                    # We know these aren't None from the `extract_args_and_kwargs` function.
-                    assert extracted.context is not None
-                    assert extracted.backend is not None
-                    val_results = await mfuncs.avalidate(
-                        reqs=stub_copy.precondition_requirements,
-                        context=extracted.context,
-                        backend=extracted.backend,
-                        model_options=extracted.model_options,
-                        output=ModelOutputThunk(stub_copy._arguments.value),
-                    )
+                # Preconditions are judged over the arguments alone, so they get a fresh
+                # context rather than the caller's/session's conversation history.
+                precondition_backend = (
+                    extracted.m.backend
+                    if extracted.m is not None
+                    else extracted.backend
+                )
+                # We know this isn't None from the `extract_args_and_kwargs` function.
+                assert precondition_backend is not None
+                val_results = await mfuncs.avalidate(
+                    reqs=stub_copy.precondition_requirements,
+                    context=ChatContext(),
+                    backend=precondition_backend,
+                    model_options=extracted.model_options,
+                    output=ModelOutputThunk(stub_copy._arguments.value),
+                )
 
                 # No retries if precondition validation fails.
                 if not all(bool(val_result) for val_result in val_results):

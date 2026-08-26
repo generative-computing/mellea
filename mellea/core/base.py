@@ -1976,7 +1976,14 @@ class TemplateRepresentation:
     obj: Any
     args: dict[
         str,
-        str | Component | CBlock | Iterable | Mapping | TemplateRepresentation | None,
+        str
+        | Component
+        | CBlock
+        | ModelOutputThunk
+        | Iterable
+        | Mapping
+        | TemplateRepresentation
+        | None,
     ]
     tools: dict[str, AbstractMelleaTool] | None = (
         None  # the key must be the name of the function.

@@ -148,7 +148,8 @@ class SamplingStrategy(abc.ABC):
             context: The context to be passed to the sampling strategy.
             backend: The backend used for generating samples.
             requirements: List of requirements to test against (merged with global requirements).
-            validation_ctx: Optional context to use for validation. If None, validation_ctx = ctx.
+            validation_ctx: Optional context to validate over. If None, each sample is validated
+                over its own post-generation context.
             format: output format for structured outputs.
             model_options: model options to pass to the backend during generation / validation.
             tool_calls: True if tool calls should be used during this sampling strategy.
