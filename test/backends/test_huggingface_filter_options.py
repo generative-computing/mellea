@@ -520,14 +520,15 @@ def test_generate_kwargs_allowlist_includes_known_generate_kwargs() -> None:
 # ---------------------------------------------------------------------------
 
 _GRANITE_MODEL_ID = "ibm-granite/granite-3.3-8b-instruct"
+_GRANITE_THINKING_MODEL_ID = "ibm-granite/granite-4.2-3b"
 
 
-def _try_load_granite_tokenizer():
-    """Return the Granite tokenizer if cached locally, else None."""
+def _try_load_granite_tokenizer(model_id: str):
+    """Return a Granite tokenizer from the local cache, or None."""
     try:
         from transformers import AutoTokenizer
 
-        return AutoTokenizer.from_pretrained(_GRANITE_MODEL_ID, local_files_only=True)
+        return AutoTokenizer.from_pretrained(model_id, local_files_only=True)
     except Exception:
         return None
 
@@ -544,7 +545,7 @@ def test_granite_allowlist_includes_known_template_vars() -> None:
     it means either the Granite template changed or _HF_INTERNAL_TEMPLATE_VARS
     is now incorrectly excluding something it should not.
     """
-    tok = _try_load_granite_tokenizer()
+    tok = _try_load_granite_tokenizer(_GRANITE_MODEL_ID)
     if tok is None:
         pytest.skip(
             f"{_GRANITE_MODEL_ID} not in local HF cache — run qualitative tests first"
@@ -575,7 +576,7 @@ def test_granite_allowlist_excludes_generate_only_options() -> None:
     Failure here means the Granite template now references a GenerationConfig
     parameter name as a Jinja variable, which would require revisiting the design.
     """
-    tok = _try_load_granite_tokenizer()
+    tok = _try_load_granite_tokenizer(_GRANITE_MODEL_ID)
     if tok is None:
         pytest.skip(
             f"{_GRANITE_MODEL_ID} not in local HF cache — run qualitative tests first"
@@ -614,7 +615,7 @@ def test_granite_allowlist_excludes_hf_internal_vars() -> None:
     leaks into the allowlist, forwarding it from model_options would duplicate
     a kwarg that apply_chat_template already provides, causing a TypeError.
     """
-    tok = _try_load_granite_tokenizer()
+    tok = _try_load_granite_tokenizer(_GRANITE_MODEL_ID)
     if tok is None:
         pytest.skip(
             f"{_GRANITE_MODEL_ID} not in local HF cache — run qualitative tests first"
@@ -631,6 +632,38 @@ def test_granite_allowlist_excludes_hf_internal_vars() -> None:
             f"HF-internal var '{var}' leaked into Granite allowlist — "
             f"check _HF_INTERNAL_TEMPLATE_VARS against the installed transformers version"
         )
+
+
+@pytest.mark.huggingface
+def test_granite_thinking_option_uses_detected_template_variable() -> None:
+    """Granite 4.2 receives THINKING under its detected template variable."""
+    tok = _try_load_granite_tokenizer(_GRANITE_THINKING_MODEL_ID)
+    if tok is None:
+        pytest.skip(
+            f"{_GRANITE_THINKING_MODEL_ID} not in local HF cache — "
+            "run the Granite 4.2 HF test lane first"
+        )
+
+    b: LocalHFBackend = LocalHFBackend.__new__(LocalHFBackend)
+    b._tokenizer = tok
+    b._model_id = _GRANITE_THINKING_MODEL_ID
+    b.from_mellea_model_opts_map = {ModelOption.MAX_NEW_TOKENS: "max_new_tokens"}
+
+    expected_key = next(
+        (
+            variable
+            for variable in _CHAT_TEMPLATE_THINKING_VARS
+            if variable in b._chat_template_allowlist
+        ),
+        None,
+    )
+
+    assert expected_key is not None, (
+        f"no recognised thinking variable in {sorted(b._chat_template_allowlist)}"
+    )
+    assert b._filter_for_chat_template({ModelOption.THINKING: False}) == {
+        expected_key: False
+    }
 
 
 if __name__ == "__main__":
