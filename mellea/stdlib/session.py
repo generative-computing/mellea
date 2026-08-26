@@ -18,7 +18,7 @@ import contextlib
 import contextvars
 import inspect
 from copy import copy
-from typing import Any, Literal, overload
+from typing import Any, Generic, Literal, TypeVar, cast, overload
 
 from PIL import Image as PILImage
 
@@ -69,6 +69,12 @@ from .start_backend import (
     backend_name_to_class,
 )
 
+# Bound to Context so a session remembers the concrete subtype it was built
+# with and exposes it statically via `ctx` (issue #1522): a session created with
+# a `ChatContext` is a `MelleaSession[ChatContext]`, so `session.ctx` narrows to
+# `ChatContext` rather than the base `Context`.
+ContextT = TypeVar("ContextT", bound=Context)
+
 # Global context variable for the context session
 _context_session: contextvars.ContextVar[MelleaSession | None] = contextvars.ContextVar(
     "context_session", default=None
@@ -90,6 +96,62 @@ def get_session() -> MelleaSession:
             "No active session found. Use 'with start_session(...):' to create one."
         )
     return session
+
+
+@overload
+def start_session(
+    backend_name: Literal["ollama", "hf", "openai", "watsonx", "litellm"],
+    model_id: str | ModelIdentifier,
+    ctx: ContextT,
+    *,
+    context_type: None = None,
+    model_options: dict | None = ...,
+    plugins: list[Any] | None = ...,
+    allow_context_type_change: bool = ...,
+    **backend_kwargs: Any,
+) -> MelleaSession[ContextT]: ...
+
+
+@overload
+def start_session(
+    backend_name: Literal["ollama", "hf", "openai", "watsonx", "litellm"] = ...,
+    model_id: str | ModelIdentifier = ...,
+    *,
+    ctx: ContextT,
+    context_type: None = None,
+    model_options: dict | None = ...,
+    plugins: list[Any] | None = ...,
+    allow_context_type_change: bool = ...,
+    **backend_kwargs: Any,
+) -> MelleaSession[ContextT]: ...
+
+
+@overload
+def start_session(
+    backend_name: Literal["ollama", "hf", "openai", "watsonx", "litellm"] = ...,
+    model_id: str | ModelIdentifier = ...,
+    ctx: None = None,
+    *,
+    context_type: Literal["chat"],
+    model_options: dict | None = ...,
+    plugins: list[Any] | None = ...,
+    allow_context_type_change: bool = ...,
+    **backend_kwargs: Any,
+) -> MelleaSession[ChatContext]: ...
+
+
+@overload
+def start_session(
+    backend_name: Literal["ollama", "hf", "openai", "watsonx", "litellm"] = ...,
+    model_id: str | ModelIdentifier = ...,
+    ctx: None = None,
+    *,
+    context_type: Literal["simple"] | None = None,
+    model_options: dict | None = ...,
+    plugins: list[Any] | None = ...,
+    allow_context_type_change: bool = ...,
+    **backend_kwargs: Any,
+) -> MelleaSession[SimpleContext]: ...
 
 
 def start_session(
@@ -268,7 +330,7 @@ def start_session(
     return session
 
 
-class MelleaSession:
+class MelleaSession(Generic[ContextT]):
     """Mellea sessions are a THIN wrapper around `m` convenience functions with NO special semantics.
 
     Using a Mellea session is not required, but it does represent the "happy path" of Mellea programming. Some nice things about ussing a `MelleaSession`:
@@ -293,16 +355,43 @@ class MelleaSession:
             context-type convention (issue #1522). Set this when a session
             deliberately switches context types mid-run.
 
+    The session is generic in its context type (issue #1522): the concrete
+    `Context` subtype passed at construction is remembered as the type parameter,
+    so `session.ctx` narrows to that subtype statically. `MelleaSession(backend,
+    ChatContext())` is a `MelleaSession[ChatContext]` whose `ctx` is typed
+    `ChatContext`; omitting `ctx` yields a `MelleaSession[SimpleContext]`.
+
     Attributes:
         ctx (Context): The active conversation context; never `None` (defaults
             to a fresh `SimpleContext` when `None` is passed). Updated after
-            every call that produces model output.
+            every call that produces model output. Statically typed as the
+            session's context type parameter.
         id (str): Unique session UUID assigned at construction.
         allow_context_type_change (bool): Whether model-interaction methods
             permit the returned context to change subtype (see Args).
     """
 
     # ``ctx`` is exposed as a property below; backing field is ``_ctx``.
+
+    @overload
+    def __init__(
+        self: MelleaSession[SimpleContext],
+        backend: Backend,
+        ctx: None = None,
+        *,
+        session_id: str | None = None,
+        allow_context_type_change: bool = False,
+    ) -> None: ...
+
+    @overload
+    def __init__(
+        self: MelleaSession[ContextT],
+        backend: Backend,
+        ctx: ContextT,
+        *,
+        session_id: str | None = None,
+        allow_context_type_change: bool = False,
+    ) -> None: ...
 
     def __init__(
         self,
@@ -322,10 +411,14 @@ class MelleaSession:
         """
         import uuid
 
+        # The overloads above bind ContextT (to the ctx's type, or SimpleContext
+        # when ctx is None); the implementation body is unparameterized, so cast
+        # the resolved context back to ContextT for the typed _init_fields.
+        resolved_ctx = cast(ContextT, ctx if ctx is not None else SimpleContext())
         self._init_fields(
             session_id if session_id is not None else str(uuid.uuid4()),
             backend,
-            ctx if ctx is not None else SimpleContext(),
+            resolved_ctx,
             allow_context_type_change=allow_context_type_change,
         )
         self._auto_bind_model()
@@ -334,17 +427,17 @@ class MelleaSession:
         self,
         session_id: str,
         backend: Backend,
-        ctx: Context,
+        ctx: ContextT,
         *,
         allow_context_type_change: bool = False,
     ) -> None:
         """Set all instance fields. Shared by __init__ and __copy__ so neither diverges."""
         self.id = session_id
-        self.backend = backend
+        self.backend: Backend = backend
         self.allow_context_type_change = allow_context_type_change
         # Bypass the ctx setter so this initial assignment doesn't count as an
         # interaction.
-        self._ctx: Context = ctx
+        self._ctx: ContextT = ctx
         self._interaction_count: int = 0
         self._session_logger = MelleaLogger.get_logger()
         self._context_token = None
@@ -352,12 +445,12 @@ class MelleaSession:
         self._exit_stack: contextlib.ExitStack | None = None
 
     @property
-    def ctx(self) -> Context:
-        """The session's current conversation context."""
+    def ctx(self) -> ContextT:
+        """The session's current conversation context, typed as the session's context subtype."""
         return self._ctx
 
     @ctx.setter
-    def ctx(self, value: Context) -> None:
+    def ctx(self, value: ContextT) -> None:
         """Replace the context and count this as one interaction.
 
         Every model-interaction code path in this class assigns to `self.ctx`
@@ -378,7 +471,11 @@ class MelleaSession:
             and getattr(self.backend, "model_id", None) is not None
         ):
             # Bypass the setter — binding at construction is not an interaction.
-            self._ctx = self.ctx._bind_model(getattr(self.backend, "model_id"))
+            # `_bind_model` returns a `ChatContext`; the `isinstance` guard above
+            # means `ContextT` is `ChatContext` here, so the cast is sound.
+            self._ctx = cast(
+                ContextT, self.ctx._bind_model(getattr(self.backend, "model_id"))
+            )
 
     def __enter__(self):
         """Enter context manager and set this session as the current global session."""
@@ -424,11 +521,13 @@ class MelleaSession:
             self._exit_stack = None
         finish_session_span(self.id, exception=exc_val)
 
-    def __copy__(self):
+    def __copy__(self) -> MelleaSession[ContextT]:
         """Use self.clone. Copies the current session but keeps references to the backend and context."""
         import uuid
 
-        new = object.__new__(MelleaSession)
+        new: MelleaSession[ContextT] = object.__new__(
+            cast("type[MelleaSession[ContextT]]", MelleaSession)
+        )
         new._init_fields(
             str(uuid.uuid4()),
             self.backend,
@@ -438,7 +537,7 @@ class MelleaSession:
         # Do not call _auto_bind_model: the session state is already settled.
         return new
 
-    def clone(self) -> MelleaSession:
+    def clone(self) -> MelleaSession[ContextT]:
         """Useful for running multiple generation requests while keeping the context at a given point in time.
 
         Returns:
@@ -583,7 +682,10 @@ class MelleaSession:
         )  # type: ignore
 
         if isinstance(r, SamplingResult):
-            self.ctx = r.result_ctx
+            # SamplingResult doesn't track its context type statically; the
+            # runtime guard in mfuncs already enforced input==output type
+            # (unless allow_context_type_change), so this cast is sound.
+            self.ctx = cast(ContextT, r.result_ctx)
             return r
         else:
             result, context = r
@@ -694,7 +796,10 @@ class MelleaSession:
         )
 
         if isinstance(r, SamplingResult):
-            self.ctx = r.result_ctx
+            # SamplingResult doesn't track its context type statically; the
+            # runtime guard in mfuncs already enforced input==output type
+            # (unless allow_context_type_change), so this cast is sound.
+            self.ctx = cast(ContextT, r.result_ctx)
             return r
         else:
             # It's a tuple[ModelOutputThunk, Context].
@@ -956,7 +1061,10 @@ class MelleaSession:
         )  # type: ignore
 
         if isinstance(r, SamplingResult):
-            self.ctx = r.result_ctx
+            # SamplingResult doesn't track its context type statically; the
+            # runtime guard in mfuncs already enforced input==output type
+            # (unless allow_context_type_change), so this cast is sound.
+            self.ctx = cast(ContextT, r.result_ctx)
             return r
         else:
             result, context = r
@@ -1115,7 +1223,10 @@ class MelleaSession:
         )
 
         if isinstance(r, SamplingResult):
-            self.ctx = r.result_ctx
+            # SamplingResult doesn't track its context type statically; the
+            # runtime guard in mfuncs already enforced input==output type
+            # (unless allow_context_type_change), so this cast is sound.
+            self.ctx = cast(ContextT, r.result_ctx)
             return r
         else:
             # It's a tuple[ModelOutputThunk, Context].
