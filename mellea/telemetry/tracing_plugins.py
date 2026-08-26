@@ -19,8 +19,8 @@ pipelines to automatically emit spans when tracing is enabled:
 - ValidationTracingPlugin: Emits a `validation` span per requirement-check batch.
 - AdapterFunctionTracingPlugin: Emits the `adapter_function` span tree (one
   parent span per invocation, one `adapter_function.<phase>` child per
-  lifecycle phase) for the adapter-function lifecycle. Covers
-  prepare/activate/deactivate only as of #1466; generate/parse land with #1465.
+  lifecycle phase) for adapter activation. Covers activate/deactivate only as
+  of #1466; generate/parse land with #1465.
 """
 
 from __future__ import annotations
@@ -717,6 +717,8 @@ class AdapterFunctionTracingPlugin(
         self, payload: AdapterFunctionPhaseCompletePayload, context: dict[str, Any]
     ) -> None:
         """Close the `adapter_function.<phase>` child span."""
+        if payload.adapter_function_invocation_id is None:
+            return
         from mellea.telemetry.tracing import finish_adapter_function_phase_span
 
         finish_adapter_function_phase_span(

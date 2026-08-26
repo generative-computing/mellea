@@ -1075,8 +1075,10 @@ def finish_adapter_function_span(
     `adapter_function_phase_start` but never its own
     `adapter_function_phase_complete` (that hook's contract is success-only),
     so without this the child span would never close and the in-flight
-    registry would never drain. The dangling child is marked ERROR with the
-    same exception as the invocation.
+    registry would never drain. The dangling child receives the invocation
+    exception unless it is `deactivate` and the invocation body also failed:
+    that exception remains primary, so copying it onto the deactivation child
+    would misattribute the failure.
 
     Args:
         invocation_id: Correlation key from the matching `start_adapter_function_span` call.
@@ -1095,10 +1097,26 @@ def finish_adapter_function_span(
         if entry is None:
             continue
         phase_span, _phase_token = entry
+        phase = key.removeprefix(prefix)
+        deactivation_failure_noted = (
+            phase == "deactivate"
+            and exception is not None
+            and any(
+                note.startswith("Adapter deactivation also failed:")
+                for note in getattr(exception, "__notes__", ())
+            )
+        )
         if exception is not None:
-            phase_span.record_exception(exception)
-            phase_span.set_status(trace.Status(trace.StatusCode.ERROR, str(exception)))
-            phase_span.set_attribute("error.type", type(exception).__name__)
+            if deactivation_failure_noted:
+                phase_span.set_status(
+                    trace.Status(trace.StatusCode.ERROR, "Phase did not complete")
+                )
+            else:
+                phase_span.record_exception(exception)
+                phase_span.set_status(
+                    trace.Status(trace.StatusCode.ERROR, str(exception))
+                )
+                phase_span.set_attribute("error.type", type(exception).__name__)
         phase_span.end()
 
     entry = _in_flight_spans.pop(invocation_id, None)

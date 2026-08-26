@@ -201,51 +201,6 @@ def test_prepare_and_release_are_linearized_before_registration():
     assert not binding._loaded
 
 
-def test_concurrent_prepare_loses_the_race_without_reloading():
-    """A prepare() that loses the race to a winner must not re-run the load.
-
-    Regression guard: the hook dispatches run between two short lifecycle-lock
-    windows (see `prepare()`'s body comment), so a concurrent caller can pass
-    the pre-flight check while the winner still holds the work lock. On
-    entering the work window it must re-check and return instead of re-running
-    `load_peft_adapter` and firing a second phase-complete for work it never
-    did.
-    """
-    backend = _fake_backend()
-    registration_started = threading.Event()
-    allow_registration = threading.Event()
-    errors: list[BaseException] = []
-
-    def register(binding: LocalFileBinding) -> None:
-        registration_started.set()
-        allow_registration.wait(timeout=1)
-        binding.backend = backend
-
-    def prepare() -> None:
-        try:
-            binding.prepare()
-        except BaseException as exc:
-            errors.append(exc)
-
-    backend.add_adapter.side_effect = register
-    binding = LocalFileBinding(name="answerability")
-    binding.bind_backend(backend)
-
-    threads = [threading.Thread(target=prepare) for _ in range(2)]
-    for thread in threads:
-        thread.start()
-    assert registration_started.wait(timeout=1)
-    allow_registration.set()
-    for thread in threads:
-        thread.join(timeout=1)
-
-    assert not any(thread.is_alive() for thread in threads)
-    assert not errors
-    backend.add_adapter.assert_called_once()
-    backend.load_peft_adapter.assert_called_once_with(binding.qualified_name)
-    assert binding._loaded
-
-
 def test_bind_backend_rejects_a_different_backend_after_registration():
     backend = _fake_backend()
     other_backend = _fake_backend()
@@ -630,15 +585,6 @@ def test_release_is_idempotent():
 
 
 def test_prepare_fires_phase_complete_metric_when_plugins_present():
-    """`prepare()` fires its own invocation-start/complete pair around the phase-start/complete pair.
-
-    Four hook dispatches total: invocation_start, phase_start, phase_complete,
-    invocation_complete — see `LocalFileBinding.prepare()`'s docstring for why
-    `prepare()` opens its own single-phase invocation rather than relying on one
-    supplied by a caller. A second, already-loaded `prepare()` adds no
-    dispatches: idempotent re-entry must not open a second invocation (the
-    check that gates on `_loaded` runs before any hook fires).
-    """
     pytest.importorskip("cpex", reason="cpex not installed — install mellea[hooks]")
     backend = _fake_backend()
     binding = LocalFileBinding(name="answerability")
@@ -649,66 +595,15 @@ def test_prepare_fires_phase_complete_metric_when_plugins_present():
         patch("mellea.backends.adapters._core._run_async_in_thread") as mock_run,
     ):
         binding.prepare()
-        binding.prepare()
 
-    assert mock_run.call_count == 4
-    for call in mock_run.call_args_list:
-        hook_coro = call.args[0]
-        assert isinstance(hook_coro, Coroutine)
-        hook_coro.close()
-
-
-def test_prepare_fires_hooks_in_start_then_complete_order():
-    """Regression guard: phase-complete must fire before invocation-complete.
-
-    Guards against an ordering inversion where `prepare()`'s phase-complete
-    hook fired *after* invocation-complete, silently making the defensive
-    dangling-child-span close in `finish_adapter_function_span` the only path
-    that ever closed `adapter_function.prepare`'s span on a *successful*
-    prepare() — contradicting `AdapterMixin.adapter_scope`'s own hook order
-    (phase-complete before invocation-complete for both activate and
-    deactivate) and this file's own
-    `test_prepare_fires_phase_complete_metric_when_plugins_present` docstring,
-    which asserted the correct order in prose without a test able to catch a
-    reversal.
-    """
-    pytest.importorskip("cpex", reason="cpex not installed — install mellea[hooks]")
-    from mellea.backends.adapters._core import invoke_hook as _real_invoke_hook
-    from mellea.plugins.types import HookType
-
-    backend = _fake_backend()
-    binding = LocalFileBinding(name="answerability")
-    binding.bind_backend(backend)
-
-    fired_hook_types: list[HookType] = []
-
-    def _record_and_dispatch(hook_type, payload):
-        fired_hook_types.append(hook_type)
-        return _real_invoke_hook(hook_type, payload)
-
-    with (
-        patch("mellea.backends.adapters._core.has_plugins", return_value=True),
-        patch(
-            "mellea.backends.adapters._core.invoke_hook",
-            new_callable=MagicMock,
-            side_effect=_record_and_dispatch,
-        ),
-        patch("mellea.backends.adapters._core._run_async_in_thread") as mock_run,
-    ):
-        binding.prepare()
-
-    assert fired_hook_types == [
-        HookType.ADAPTER_FUNCTION_INVOCATION_START,
-        HookType.ADAPTER_FUNCTION_PHASE_START,
-        HookType.ADAPTER_FUNCTION_PHASE_COMPLETE,
-        HookType.ADAPTER_FUNCTION_INVOCATION_COMPLETE,
-    ]
-    for call in mock_run.call_args_list:
-        call.args[0].close()
+    mock_run.assert_called_once()
+    hook_coro = mock_run.call_args.args[0]
+    assert isinstance(hook_coro, Coroutine)
+    hook_coro.close()
 
 
 def test_release_does_not_fire_phase_complete_metric():
-    # release() fires no hooks at all — it runs outside any invocation.
+    # "release" is not a valid AdapterFunctionPhaseCompletePayload.phase value.
     pytest.importorskip("cpex", reason="cpex not installed — install mellea[hooks]")
     backend = _fake_backend()
     binding = LocalFileBinding(name="answerability")

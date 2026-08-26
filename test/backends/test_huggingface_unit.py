@@ -46,6 +46,7 @@ from mellea.stdlib.context import ChatContext
 from test.backends.test_adapters._hook_capture import (
     capture_adapter_hooks,
     hook_payloads,
+    phase_payloads,
 )
 
 # Minimal 1x1 PNG for testing
@@ -481,7 +482,7 @@ def test_generate_intrinsic_with_adapter_scope_fires_hooks_with_correct_payload(
     assert out == "output"
     payloads = hook_payloads(mock_invoke)
 
-    phases = [p.phase for p in payloads if hasattr(p, "phase")]
+    phases = [p.phase for p in phase_payloads(mock_invoke)]
     assert phases == ["activate", "deactivate"]
 
     invocations = [p for p in payloads if hasattr(p, "outcome")]
@@ -535,7 +536,7 @@ def test_generate_intrinsic_with_adapter_scope_reports_error_outcome_in_hook_pay
             backend._generate_intrinsic_with_adapter_scope(adapter, failing_generate)
 
     payloads = hook_payloads(mock_invoke)
-    phases = [p.phase for p in payloads if hasattr(p, "phase")]
+    phases = [p.phase for p in phase_payloads(mock_invoke)]
     assert phases == ["activate", "deactivate"]
 
     invocations = [p for p in payloads if hasattr(p, "outcome")]

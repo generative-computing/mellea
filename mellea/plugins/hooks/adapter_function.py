@@ -12,7 +12,8 @@ from mellea.plugins.base import MelleaBasePayload
 # Every lifecycle phase that fires (or is expected to fire in a future issue)
 # ADAPTER_FUNCTION_PHASE_START / ADAPTER_FUNCTION_PHASE_COMPLETE. Firing sites,
 # issue #1466:
-#   prepare    -- LocalFileBinding.prepare()
+#   prepare    -- metric-only completion in LocalFileBinding.prepare(); tracing
+#                 is deferred because setup is not an adapter-function invocation
 #   activate   -- AdapterMixin.adapter_scope()
 #   deactivate -- AdapterMixin.adapter_scope()
 #   generate   -- none yet; blocked on #1465 wiring generation through adapter_scope
@@ -89,10 +90,7 @@ class AdapterFunctionPhaseStartPayload(MelleaBasePayload):
         name: Adapter function name (e.g. `"answerability"`).
         phase: Lifecycle phase about to run. See `AdapterFunctionPhase` for which
             values currently have a firing site.
-        revision: Catalog revision of the adapter, or `None` if unpinned. Recorded
-            here (rather than only on the invocation) so a phase's own span can
-            carry it directly — e.g. `adapter_function.prepare` records the
-            resolved Hugging Face SHA.
+        revision: Catalog revision of the adapter, or `None` if unpinned.
     """
 
     adapter_function_invocation_id: str
@@ -109,15 +107,15 @@ class AdapterFunctionPhaseCompletePayload(MelleaBasePayload):
     `adapter_function_invocation_complete`'s `outcome`/`error`.
 
     Attributes:
-        adapter_function_invocation_id: Correlation id of the enclosing invocation (shared with the
-            `adapter_function_invocation_start`/`_complete` events).
+        adapter_function_invocation_id: Correlation id of the enclosing invocation,
+            or `None` for an existing metric-only completion with no span.
         name: Adapter function name (e.g. `"answerability"`).
         phase: Lifecycle phase that completed. See `AdapterFunctionPhase` for
             which values currently have a firing site.
         duration_ms: Wall-clock duration of the phase in milliseconds.
     """
 
-    adapter_function_invocation_id: str
+    adapter_function_invocation_id: str | None = None
     name: str
     # Constrained to a Literal so a typo can't silently spawn a new metric-label
     # series (the phase becomes a metric dimension). Required, with no unset

@@ -3,8 +3,8 @@
 
 """Tests for adapter-function tracing — the `adapter_function` span tree (#1466).
 
-Covers prepare/activate/deactivate only, matching #1466's scope; generate/parse
-have no firing hooks yet (blocked on #1465).
+Covers activate/deactivate only; generate/parse have no firing hooks yet
+(blocked on #1465).
 
 Three layers, mirroring `test_tracing_application.py`:
 
@@ -15,10 +15,10 @@ Three layers, mirroring `test_tracing_application.py`:
 2. Plugin unit tests (mock tracer): `AdapterFunctionTracingPlugin`'s hooks
    translate payload fields into span opens/closes.
 3. Integration tests (real OTel SDK, in-memory exporter, real
-   `AdapterMixin.adapter_scope`/`LocalFileBinding.prepare` call sites): verify
-   the full `adapter_function` > `adapter_function.<phase>` nesting, the
-   dangling-child-span cleanup on a raised phase, and that the in-flight span
-   registry drains to zero.
+   `AdapterMixin.adapter_scope` call sites): verify the full
+   `adapter_function` > `adapter_function.<phase>` nesting, the dangling-child
+   span cleanup on a raised phase, and that the in-flight span registry drains
+   to zero.
 """
 
 from unittest.mock import MagicMock, patch
@@ -276,6 +276,35 @@ def test_finish_adapter_function_span_closes_dangling_phase_span(enabled_tracing
     assert "inv-7:phase:activate" not in tracing._in_flight_spans
 
 
+def test_finish_adapter_function_span_avoids_misattributing_dual_failure(
+    enabled_tracing,
+):
+    """A body error must not be attached to a failed deactivate child span."""
+    fake_tracer = MagicMock()
+    fake_parent_span = MagicMock()
+    fake_phase_span = MagicMock()
+    fake_tracer.start_span.side_effect = [fake_parent_span, fake_phase_span]
+    body_error = ValueError("body failed")
+    body_error.add_note("Adapter deactivation also failed: RuntimeError: stop failed")
+
+    with patch("mellea.telemetry.tracing.get_backend_tracer", return_value=fake_tracer):
+        start_adapter_function_span(
+            "inv-dual",
+            name="answerability",
+            revision="r1",
+            binding_type="local_file",
+            adapter_type="lora",
+        )
+        start_adapter_function_phase_span("inv-dual", "deactivate")
+        finish_adapter_function_span("inv-dual", outcome="error", exception=body_error)
+
+    fake_phase_span.record_exception.assert_not_called()
+    assert (
+        fake_phase_span.set_status.call_args.args[0].description
+        == "Phase did not complete"
+    )
+
+
 def test_helpers_are_silent_when_tracing_disabled(disabled_tracing):
     assert (
         start_adapter_function_span(
@@ -367,13 +396,13 @@ async def test_plugin_phase_start_and_complete_open_and_close_child_span(
     start_payload = AdapterFunctionPhaseStartPayload(
         adapter_function_invocation_id="p-inv-3",
         name="answerability",
-        phase="prepare",
+        phase="activate",
         revision="sha1",
     )
     complete_payload = AdapterFunctionPhaseCompletePayload(
         adapter_function_invocation_id="p-inv-3",
         name="answerability",
-        phase="prepare",
+        phase="activate",
         duration_ms=5.0,
     )
     with patch("mellea.telemetry.tracing.get_backend_tracer", return_value=fake_tracer):
@@ -382,10 +411,29 @@ async def test_plugin_phase_start_and_complete_open_and_close_child_span(
 
     # No invocation "p-inv-3" in flight, so no explicit parent context is passed.
     fake_tracer.start_span.assert_called_once_with(
-        "adapter_function.prepare", context=None
+        "adapter_function.activate", context=None
     )
     fake_span.end.assert_called_once()
-    assert "p-inv-3:phase:prepare" not in tracing._in_flight_spans
+    assert "p-inv-3:phase:activate" not in tracing._in_flight_spans
+
+
+@pytest.mark.asyncio
+async def test_plugin_ignores_uncorrelated_phase_complete(adapter_function_plugin):
+    """A metric-only completion must not be treated as a trace lifecycle event."""
+    from mellea.plugins.hooks.adapter_function import (
+        AdapterFunctionPhaseCompletePayload,
+    )
+
+    payload = AdapterFunctionPhaseCompletePayload(
+        name="answerability", phase="activate", duration_ms=5.0
+    )
+
+    with patch(
+        "mellea.telemetry.tracing.finish_adapter_function_phase_span"
+    ) as finish_phase:
+        await adapter_function_plugin.on_phase_complete(payload, {})
+
+    finish_phase.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -471,107 +519,4 @@ def test_activate_raising_still_drains_registry_and_marks_error(span_exporter):
 
     # The registry drains to zero even though the phase never fired its own
     # completion hook — finish_adapter_function_span's defensive cleanup closed it.
-    assert tracing._in_flight_spans == {}
-
-
-@pytest.mark.integration
-def test_prepare_raising_drains_registry_and_marks_error(span_exporter):
-    """A failing `prepare()` still closes both spans and drains the registry.
-
-    `prepare()`'s own invocation-start/complete pair (unlike `adapter_scope`'s)
-    has never been exercised at the span level before — only via mocked hook
-    counts in `test_local_file_binding.py`. This is the direct span-level
-    counterpart to `test_activate_raising_still_drains_registry_and_marks_error`.
-    """
-    from opentelemetry.trace import StatusCode
-
-    backend = MagicMock()
-    backend.add_adapter.side_effect = lambda binding: setattr(
-        binding, "backend", backend
-    )
-    backend.load_peft_adapter.side_effect = RuntimeError("load boom")
-    binding = LocalFileBinding(name="answerability")
-    binding.bind_backend(backend)
-
-    with pytest.raises(RuntimeError, match="load boom"):
-        binding.prepare()
-
-    by_name = _spans_by_name(span_exporter)
-    assert "adapter_function" in by_name
-    assert "adapter_function.prepare" in by_name
-    assert by_name["adapter_function"].status.status_code == StatusCode.ERROR
-    assert by_name["adapter_function.prepare"].status.status_code == StatusCode.ERROR
-    assert tracing._in_flight_spans == {}
-
-
-@pytest.mark.integration
-def test_prepare_emits_its_own_invocation_and_records_resolved_revision(span_exporter):
-    """`LocalFileBinding.prepare()` opens its own `adapter_function` invocation.
-
-    `adapter_function.prepare` records the resolved catalogue revision, not the
-    unresolved `None` a lazily-pinned binding starts with — regression coverage
-    for the moved-from-#1141 acceptance criterion ("not 'main'").
-    """
-    backend = MagicMock()
-    backend.add_adapter.side_effect = lambda binding: setattr(
-        binding, "backend", backend
-    )
-    binding = LocalFileBinding(name="answerability")  # revision=None, lazily resolved
-    binding.bind_backend(backend)
-    assert binding.revision is None
-
-    binding.prepare()
-
-    by_name = _spans_by_name(span_exporter)
-    assert "adapter_function" in by_name
-    assert "adapter_function.prepare" in by_name
-
-    parent = by_name["adapter_function"]
-    prepare_span = by_name["adapter_function.prepare"]
-
-    resolved = binding.resolved_revision()
-    assert resolved != "main"
-    assert parent.attributes is not None
-    assert parent.attributes.get("mellea.adapter_function.revision") == resolved
-    assert prepare_span.attributes is not None
-    assert prepare_span.attributes.get("mellea.adapter_function.revision") == resolved
-    assert prepare_span.attributes.get("mellea.adapter_function.phase") == "prepare"
-
-    assert prepare_span.parent is not None
-    assert prepare_span.parent.span_id == parent.context.span_id
-
-    assert tracing._in_flight_spans == {}
-
-
-@pytest.mark.integration
-def test_prepare_and_activate_open_independent_invocations(span_exporter):
-    """`prepare()` and the later `adapter_scope()` call are separate invocations, not nested.
-
-    `prepare()` typically runs once at setup, well before any `adapter_scope`
-    call — they don't share a parent `adapter_function` span in this
-    architecture; each gets its own.
-    """
-    backend = MagicMock()
-    backend.add_adapter.side_effect = lambda binding: setattr(
-        binding, "backend", backend
-    )
-    binding = LocalFileBinding(name="answerability")
-    binding.bind_backend(backend)
-    binding.prepare()
-
-    adapter = Adapter(
-        identity=Identity(name="answerability", adapter_type="lora"),
-        io_contract=_Contract(),
-        weights=binding,
-    )
-    mock_backend = MagicMock(spec=AdapterMixin)
-    with AdapterMixin.adapter_scope(mock_backend, adapter):
-        pass
-
-    tracing._tracer_provider.force_flush()  # type: ignore[union-attr]
-    parents = [
-        s for s in span_exporter.get_finished_spans() if s.name == "adapter_function"
-    ]
-    assert len(parents) == 2
-    assert parents[0].context.span_id != parents[1].context.span_id
     assert tracing._in_flight_spans == {}

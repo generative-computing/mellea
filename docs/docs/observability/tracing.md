@@ -254,11 +254,13 @@ for RAG, safety, and core capability checks (`answerability`,
 `requirement_check`, etc.). On `mellea.backend`: adapter/model lifecycle work
 is a backend concern, not a user-facing operation.
 
-**As of #1466, this covers `prepare`/`activate`/`deactivate` only.**
+**As of #1466, this covers `activate`/`deactivate` only.**
 `generate`/`parse` fire no spans yet — that lands with #1465, which wires real
-generation through `AdapterMixin.adapter_scope`. `release` fires no span at
-all: `WeightsBinding.release()` runs outside any invocation and has no
-hook-firing site (see below).
+generation through `AdapterMixin.adapter_scope`. `prepare` remains metric-only:
+it is setup work rather than an adapter-function invocation, so tracing it
+needs a separate contract that does not change invocation metrics. `release`
+fires no span at all: `WeightsBinding.release()` runs outside any invocation
+and has no hook-firing site (see below).
 
 One `adapter_function` parent span per invocation:
 
@@ -270,19 +272,11 @@ One `adapter_function` parent span per invocation:
 | `mellea.adapter_function.adapter_type` | Adapter mechanism (`lora` or `alora`) |
 | `mellea.adapter_function.outcome` | `success`, `schema_error`, or `error` — set when the span closes |
 
-**Two distinct kinds of invocation exist in this architecture, not one:**
-`LocalFileBinding.prepare()` typically runs once at setup and opens its own
-single-phase invocation (a parent span with just an `adapter_function.prepare`
-child); `AdapterMixin.adapter_scope()` opens a separate invocation per call,
-wrapping `adapter_function.activate` and `adapter_function.deactivate` (and,
-once #1465 lands, `generate`/`parse`). `prepare()` and a later `adapter_scope()`
-call on the same adapter do **not** share a parent span.
-
 One `adapter_function.<phase>` child span per lifecycle phase that ran:
 
 | Attribute | Description |
 | --------- | ----------- |
-| `mellea.adapter_function.phase` | `prepare`, `activate`, `deactivate` (`generate`/`parse` once #1465 lands) |
+| `mellea.adapter_function.phase` | `activate`, `deactivate` (`generate`/`parse` once #1465 lands) |
 | `mellea.adapter_function.revision` | Same revision as the parent, recorded directly on the phase span too |
 
 A phase that raises opens its child span but never fires its own completion
@@ -297,7 +291,7 @@ Every other family nests via ambient OTel context attach, which needs
 Python 3.12+ (see the note under "Span hierarchy" below) — `adapter_function`
 children instead parent explicitly via `trace.set_span_in_context`, because
 `ADAPTER_FUNCTION_*_START`/`_COMPLETE` fire from **synchronous** code
-(`adapter_scope`, `prepare()`) through `_run_async_in_thread`, under which
+(`adapter_scope`) through `_run_async_in_thread`, under which
 ambient attach can't establish a parent/child edge at all (each dispatched
 hook call gets an independent `contextvars` snapshot of the calling thread).
 So `adapter_function.<phase>` nests under `adapter_function` the same way on
