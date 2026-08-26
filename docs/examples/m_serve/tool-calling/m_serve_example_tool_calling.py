@@ -187,7 +187,7 @@ def _extract_mellea_tools_from_model_options(
 def serve(
     input: list[ChatMessage],
     requirements: list[str] | None = None,
-    model_options: None | dict = None,
+    model_options: dict | None = None,
 ) -> ModelOutputThunk:
     """Serve function that handles tool calling.
 

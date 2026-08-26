@@ -147,7 +147,7 @@ async def wait_for_all_mots(mots: list[ModelOutputThunk]) -> None:
     await asyncio.gather(*coroutines)
 
 
-def get_current_event_loop() -> None | asyncio.AbstractEventLoop:
+def get_current_event_loop() -> asyncio.AbstractEventLoop | None:
     """Get the current event loop without having to catch exceptions.
 
     Returns:

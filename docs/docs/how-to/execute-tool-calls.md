@@ -175,10 +175,10 @@ from mellea.stdlib.context import ChatContext
 async def simple_react(goal: str, backend, tools: list, max_steps: int = 5):
     """Simple ReACT: Think → Act → Observe → Repeat"""
     ctx = ChatContext().add(Message("user", f"Goal: {goal}"))
-    
+
     for step in range(max_steps):
         print(f"\n--- Step {step + 1} ---")
-        
+
         # Think & Act: Generate with tool calls enabled
         result, ctx = await aact(
             Message("system", "Reason about the goal, then call a tool if needed."),
@@ -188,22 +188,22 @@ async def simple_react(goal: str, backend, tools: list, max_steps: int = 5):
             await_result=True,
         )
         print(f"Thought: {result.value[:200]}...")
-        
+
         # Check for final answer
         if "FINAL ANSWER" in result.value:
             return result.value
-        
+
         # Observe: Execute tools
         tool_messages = await acall_tools(result, backend)
         if not tool_messages:
             print("No tools called. Stopping.")
             break
-        
+
         # Add observations to context
         for msg in tool_messages:
             ctx = ctx.add(msg)
             print(f"Observation: {msg.name} → {msg.content[:100]}...")
-    
+
     return "Max steps reached"
 ```
 

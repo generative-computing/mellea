@@ -2079,7 +2079,7 @@ def blockify(s: str | Span) -> Span:
             raise Exception("Type Error")
 
 
-def get_images_from_component(c: Component) -> None | list[ImageBlock | ImageUrlBlock]:
+def get_images_from_component(c: Component) -> list[ImageBlock | ImageUrlBlock] | None:
     """Return the images attached to a `Component`, or `None` if absent or empty.
 
     Args:
@@ -2107,7 +2107,7 @@ def get_images_from_component(c: Component) -> None | list[ImageBlock | ImageUrl
         return None
 
 
-def get_audio_from_component(c: Component) -> None | list[AudioBlock | AudioUrlBlock]:
+def get_audio_from_component(c: Component) -> list[AudioBlock | AudioUrlBlock] | None:
     """Return the audio attached to a `Component`, or `None` if absent or empty.
 
     Args:

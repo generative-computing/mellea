@@ -83,9 +83,9 @@ class Message(Component["Message"]):
         role: "Message.Role",
         content: str,
         *,
-        images: None | list[ImageBlock | ImageUrlBlock] = None,
-        audio: None | list[AudioBlock | AudioUrlBlock] = None,
-        documents: None | Iterable[str | Document] = None,
+        images: list[ImageBlock | ImageUrlBlock] | None = None,
+        audio: list[AudioBlock | AudioUrlBlock] | None = None,
+        documents: Iterable[str | Document] | None = None,
         tool_calls: list[dict[str, Any]] | None = None,
         tool_call_id: str | None = None,
         tool_name: str | None = None,
@@ -108,12 +108,12 @@ class Message(Component["Message"]):
         self._tool_name = tool_name
 
     @property
-    def images(self) -> None | list[ImageBlock | ImageUrlBlock]:
+    def images(self) -> list[ImageBlock | ImageUrlBlock] | None:
         """Returns the images associated with this message."""
         return self._images
 
     @property
-    def audio(self) -> None | list[AudioBlock | AudioUrlBlock]:
+    def audio(self) -> list[AudioBlock | AudioUrlBlock] | None:
         """Returns the audio associated with this message."""
         return self._audio
 
