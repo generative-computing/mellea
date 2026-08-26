@@ -284,16 +284,22 @@ else
 fi
 
 # WITH_TOOLING_TESTS=1 includes test/tooling/ (ignored by default)
-IGNORE_TOOLING=""
+PYTEST_ARGS=()
 if [[ "${WITH_TOOLING_TESTS:-0}" != "1" ]]; then
-    IGNORE_TOOLING="--ignore=tooling"
+    PYTEST_ARGS+=("--ignore=tooling")
     log "Tooling tests disabled (WITH_TOOLING_TESTS=0). Pass WITH_TOOLING_TESTS=1 to include test/tooling/."
+fi
+
+if [[ "$#" -eq 0 ]]; then
+    PYTEST_ARGS+=("--group-by-backend")
+else
+    PYTEST_ARGS+=("$@")
 fi
 
 # --- Run tests ---
 log "Starting pytest..."
 log "Log directory: $LOGDIR"
-log "Pytest args: ${*---group-by-backend}"
+log "Pytest args: ${PYTEST_ARGS[*]}"
 ${UV_PYTHON:+log "Python version: $UV_PYTHON"}
 
 # Use UV_PYTHON env var if set, otherwise use default Python
@@ -308,7 +314,7 @@ uv run --quiet --frozen --all-groups --all-extras $UV_PYTHON_ARG \
     python -c "import nltk; nltk.download('punkt_tab', quiet=True)" || true
 
 uv run --quiet --frozen --all-groups --all-extras $UV_PYTHON_ARG \
-    pytest "$PYTEST_DIR" $IGNORE_TOOLING ${@---group-by-backend} \
+    pytest "$PYTEST_DIR" "${PYTEST_ARGS[@]}" \
     2>&1 | tee "$LOGDIR/pytest_full.log"
 
 EXIT_CODE=${PIPESTATUS[0]}
