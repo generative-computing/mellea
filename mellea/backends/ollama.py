@@ -550,7 +550,11 @@ class OllamaModelBackend(FormatterBackend):
                 if tool_name is not None:
                     message_dict["tool_name"] = tool_name
             # Merge any author-declared provider fields (Mellea's known fields win;
-            # a mismatched target raises). Must run after the known fields are set.
+            # a target the request does not hit raises). Must run after the known
+            # fields are set. Note: Ollama's SDK re-validates each message through a
+            # pydantic model with the default `extra="ignore"`, so a field it does
+            # not recognize is silently dropped here rather than sent — merging only
+            # guarantees the field reaches the payload, not that Ollama honors it.
             message_dict = merge_provider_fields(
                 message_dict, m.provider_fields, self._provider
             )

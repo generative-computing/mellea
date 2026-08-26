@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import uuid
 from typing import TYPE_CHECKING, Any, Literal, TypedDict
@@ -47,10 +48,26 @@ def merge_provider_fields(
     debug-logged. `"*"` always matches, so its presence never triggers the mismatch
     error.
 
+    Merged values are deep-copied on the way in, so the wire dict never aliases the
+    source `provider_fields`. Mutating a nested value on the originating `Message`
+    after serialization (or vice versa) cannot leak across the boundary.
+
+    Whether an unmatched-but-declared field actually reaches the model depends on
+    the backend SDK, not this function. This helper only raises when a `provider`
+    key names a target the request did not hit (see `Raises`); a field that *does*
+    match but that the provider does not recognize is left in the wire dict and
+    handled downstream. Ollama and HuggingFace re-validate messages through their
+    own schemas and silently drop unknown keys (Ollama via pydantic's default
+    `extra="ignore"`; HuggingFace via `apply_chat_template`), so on those paths an
+    unrecognized field is dropped rather than surfaced as an error. Only providers
+    whose SDK rejects unknown keys will raise, and that error originates in the SDK.
+
     Args:
         base: The wire message dict built from Mellea's known fields; mutated and
             returned.
-        provider_fields: The author's provider-keyed extra fields, or `None`.
+        provider_fields: The author's provider-keyed extra fields, or `None`. Must
+            be a `dict` mapping each provider target to a `dict` of field name to
+            value.
         provider: The provider string of the backend performing serialization.
 
     Returns:
@@ -59,9 +76,18 @@ def merge_provider_fields(
     Raises:
         ValueError: If `provider_fields` is non-empty, contains no `"*"`, and no key
             matches `provider` — the component targeted a backend it did not hit.
+        TypeError: If `provider_fields` itself is not a `dict`, or a matching value
+            within it is not a `dict` — each level must map keys to their values so
+            the merge fails with a named error rather than a bare `AttributeError`.
     """
     if not provider_fields:
         return base
+
+    if not isinstance(provider_fields, dict):
+        raise TypeError(
+            "provider_fields must be a dict of provider target to field mapping, "
+            f"got {type(provider_fields).__name__}."
+        )
 
     def _matches(key: str) -> bool:
         return (
@@ -75,6 +101,11 @@ def merge_provider_fields(
         if not _matches(key):
             continue
         matched_any = True
+        if not isinstance(fields, dict):
+            raise TypeError(
+                f"provider_fields[{key!r}] must be a dict of field name to value, "
+                f"got {type(fields).__name__}."
+            )
         for field, value in fields.items():
             if field in base:
                 MelleaLogger.get_logger().debug(
@@ -84,7 +115,9 @@ def merge_provider_fields(
                     field,
                 )
                 continue
-            base[field] = value
+            # Deep-copy so the wire dict never aliases the source Message's
+            # provider_fields; later mutation of either side stays isolated.
+            base[field] = copy.deepcopy(value)
 
     if not matched_any:
         raise ValueError(
@@ -365,6 +398,8 @@ def message_to_openai_message(
             audio and pass it as an `AudioBlock` with base64 data instead.
         ValueError: If the message's `provider_fields` names a target that does not
             match `provider` and includes no `"*"` (see `merge_provider_fields`).
+        TypeError: If `provider_fields` is not a `dict`, or a matching value within
+            it is not a `dict` (see `merge_provider_fields`).
     """
     # NOTE: `self.formatter.to_chat_messages` explicitly skips `Message` objects. However, we need
     # to print `Message`s to correctly serialize any documents with the message. Do the printing here.

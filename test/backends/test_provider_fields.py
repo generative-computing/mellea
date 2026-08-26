@@ -134,6 +134,63 @@ def test_merge_known_fields_win_and_collision_debug_logged(caplog):
     assert out["extra"] == "kept"
 
 
+# --- merge helper: source isolation (no aliasing) ---
+
+
+def test_merge_does_not_alias_source_provider_fields():
+    """Merged values are deep-copied; mutating the source never leaks to the wire dict."""
+    pf = {"openai": {"prediction": {"type": "content"}}}
+    out = merge_provider_fields({"role": "user", "content": "hi"}, pf, "openai")
+    assert out["prediction"] == {"type": "content"}
+
+    # Mutating the source's nested value must not change the already-merged dict.
+    pf["openai"]["prediction"]["type"] = "new"
+    assert out["prediction"] == {"type": "content"}
+
+    # And mutating the merged dict must not reach back into the source.
+    out["prediction"]["type"] = "other"
+    assert pf["openai"]["prediction"]["type"] == "new"
+
+
+def test_message_serialization_does_not_alias_provider_fields():
+    """Mutating a Message's provider_fields after serialization cannot leak to the wire dict."""
+    pf = {"openai": {"prediction": {"type": "content"}}}
+    msg = Message("user", "hi", provider_fields=pf)
+    wire = message_to_openai_message(msg, provider="openai")
+    assert wire["prediction"] == {"type": "content"}
+
+    pf["openai"]["prediction"]["type"] = "new"
+    assert wire["prediction"] == {"type": "content"}
+
+
+# --- merge helper: malformed values raise a clear error ---
+
+
+@pytest.mark.parametrize("not_a_dict", [["openai"], "openai", 42])
+def test_merge_non_dict_provider_fields_raises_typeerror(not_a_dict):
+    """A truthy non-dict provider_fields raises a named TypeError, not a bare AttributeError."""
+    with pytest.raises(TypeError):
+        merge_provider_fields({"role": "user", "content": "hi"}, not_a_dict, "openai")
+
+
+def test_merge_non_dict_value_raises_typeerror():
+    """A matching provider_fields value that is not a dict raises TypeError, not a generic error."""
+    with pytest.raises(TypeError):
+        merge_provider_fields(
+            {"role": "user", "content": "hi"}, {"openai": "not-a-dict"}, "openai"
+        )
+
+
+def test_merge_non_dict_value_ignored_when_unmatched():
+    """A non-dict value under an unmatched key never runs .items() and never raises."""
+    out = merge_provider_fields(
+        {"role": "user", "content": "hi"},
+        {"ollama": "not-a-dict", "openai": {"x": 1}},
+        "openai",
+    )
+    assert out["x"] == 1
+
+
 # --- per-backend reach: field lands on the wire dict ---
 
 
