@@ -127,7 +127,7 @@ jobs:
         # projector Ollama needs for image input). Drop the hf.co prefix if the
         # model is ever published to the Ollama library directly.
         run: |
-          for model in granite4.2:3b hf.co/ibm-granite/granite-vision-4.1-4b-GGUF:Q4_K_M; do
+          for model in granite4.2:3b granite4:micro-h hf.co/ibm-granite/granite-vision-4.1-4b-GGUF:Q4_K_M; do
             pulled=false
             for i in 1 2 3 4 5; do
               ollama pull "$model" && { pulled=true; break; }

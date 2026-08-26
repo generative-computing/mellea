@@ -594,6 +594,7 @@ def pytest_runtest_setup(item):
             )
             for model in [
                 "granite4.2:3b",
+                "granite4:micro-h",
                 "hf.co/ibm-granite/granite-vision-4.1-4b-GGUF:Q4_K_M",
             ]:
                 try:
@@ -619,6 +620,7 @@ def pytest_runtest_setup(item):
             logger.info("Evicting ollama models from VRAM after ollama group...")
             for model in [
                 "granite4.2:3b",
+                "granite4:micro-h",
                 "hf.co/ibm-granite/granite-vision-4.1-4b-GGUF:Q4_K_M",
             ]:
                 try:

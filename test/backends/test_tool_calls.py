@@ -4,6 +4,7 @@
 import pytest
 
 from mellea.backends import ModelOption
+from mellea.backends.model_ids import IBM_GRANITE_4_HYBRID_MICRO
 from mellea.backends.ollama import OllamaModelBackend
 from mellea.backends.tools import (
     AbstractMelleaTool,
@@ -23,7 +24,14 @@ pytestmark = [pytest.mark.ollama, pytest.mark.e2e]
 
 @pytest.fixture(scope="module")
 def m() -> MelleaSession:
-    return MelleaSession(backend=OllamaModelBackend(), ctx=ChatContext())
+    assert IBM_GRANITE_4_HYBRID_MICRO.ollama_name is not None
+    return MelleaSession(
+        backend=OllamaModelBackend(
+            model_id=IBM_GRANITE_4_HYBRID_MICRO,
+            model_options={ModelOption.CONTEXT_WINDOW: 2048},
+        ),
+        ctx=ChatContext(),
+    )
 
 
 @pytest.fixture(scope="module")

@@ -45,6 +45,7 @@ OLLAMA_BIN="${OLLAMA_BIN:-$(command -v ollama 2>/dev/null || echo "$HOME/.local/
 OLLAMA_CONTEXT_LENGTH="${OLLAMA_CONTEXT_LENGTH:-2048}"
 OLLAMA_MODEL_LIST=(
     "granite4.2:3b"
+    "granite4:micro-h"
     "hf.co/ibm-granite/granite-vision-4.1-4b-GGUF:Q4_K_M"
     "llama3.2"
     "qwen2.5vl:7b"
@@ -108,18 +109,19 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# --- Install ollama binary if missing ---
-if [[ ! -x "$OLLAMA_BIN" ]]; then
-    log "Ollama binary not found at $OLLAMA_BIN — downloading latest release..."
+# --- Install a compatible Ollama binary ---
+OLLAMA_MIN_VERSION="${OLLAMA_MIN_VERSION:-0.32.2}"
+ollama_current_version=""
+if [[ -x "$OLLAMA_BIN" ]]; then
+    ollama_current_version=$("$OLLAMA_BIN" --version 2>/dev/null | awk '{print $NF}' | sed 's/^v//')
+fi
+
+if [[ ! -x "$OLLAMA_BIN" ]] || ! printf '%s\n%s\n' "$OLLAMA_MIN_VERSION" "$ollama_current_version" | sort -V -C; then
+    log "Installing Ollama $OLLAMA_MIN_VERSION (current: ${ollama_current_version:-missing})..."
     OLLAMA_INSTALL_DIR="$(dirname "$OLLAMA_BIN")"
     mkdir -p "$OLLAMA_INSTALL_DIR"
 
-    # Get latest release tag from GitHub API
-    OLLAMA_VERSION=$(curl -fsSL https://api.github.com/repos/ollama/ollama/releases/latest \
-        | grep '"tag_name"' | head -1 | cut -d'"' -f4)
-    log "Latest ollama version: $OLLAMA_VERSION"
-
-    DOWNLOAD_URL="https://github.com/ollama/ollama/releases/download/${OLLAMA_VERSION}/ollama-linux-amd64.tar.zst"
+    DOWNLOAD_URL="https://github.com/ollama/ollama/releases/download/v${OLLAMA_MIN_VERSION}/ollama-linux-amd64.tar.zst"
     log "Downloading from $DOWNLOAD_URL (includes CUDA libs, ~1.9GB)..."
 
     # Extract everything (bin/ollama + lib/ollama/cuda_v*/) into OLLAMA_INSTALL_DIR's parent
@@ -128,7 +130,7 @@ if [[ ! -x "$OLLAMA_BIN" ]]; then
     OLLAMA_PREFIX="$(dirname "$OLLAMA_INSTALL_DIR")"
     curl -fsSL "$DOWNLOAD_URL" | tar --use-compress-program=unzstd -x -C "$OLLAMA_PREFIX"
     chmod +x "$OLLAMA_BIN"
-    log "Installed ollama $OLLAMA_VERSION to $OLLAMA_PREFIX (bin + CUDA libs)"
+    log "Installed Ollama $OLLAMA_MIN_VERSION to $OLLAMA_PREFIX (bin + CUDA libs)"
 fi
 
 # --- Check if ollama is already running ---
