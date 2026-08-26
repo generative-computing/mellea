@@ -273,6 +273,7 @@ class WindowCompactor(InlineCompactor):
             compactor=ctx._compactor,
             token_context_length_limit=ctx._token_context_length_limit,
             model_id=ctx._model_id,
+            cls=type(ctx),
         )
 
 
@@ -619,4 +620,5 @@ class LLMSummarizeCompactor:
             compactor=ctx._compactor,
             token_context_length_limit=ctx._token_context_length_limit,
             model_id=ctx._model_id,
+            cls=type(ctx),
         )

@@ -117,8 +117,12 @@ class ChatContext(Context):
         return self._model_id
 
     def _make_root(self, model_id: str | ModelIdentifier | None) -> ChatContext:
-        """Return a new empty root `ChatContext`, propagating all `_propagated_fields` then binding `model_id`."""
-        new = ChatContext()
+        """Return a new empty root `ChatContext`, propagating all `_propagated_fields` then binding `model_id`.
+
+        Uses `type(self)`, not `ChatContext`, so a subclass gets an instance of
+        itself back rather than being silently demoted to `ChatContext`.
+        """
+        new = type(self)()
         for field in self._propagated_fields:
             setattr(new, field, getattr(self, field))
         # Override whatever _propagated_fields copied for _model_id: the caller
@@ -175,9 +179,12 @@ class ChatContext(Context):
                 block, or model output to append.
 
         Returns:
-            ChatContext: A new `ChatContext` carrying the same configuration.
+            ChatContext: A new context of the same concrete subtype carrying the
+            same configuration.
         """
-        new = ChatContext.from_previous(self, c)
+        # `type(self)`, not `ChatContext`, so a subclass gets an instance of
+        # itself back rather than being silently demoted to `ChatContext`.
+        new = type(self).from_previous(self, c)
         for field in self._propagated_fields:
             setattr(new, field, getattr(self, field))
         if self._compactor is not None:
@@ -278,6 +285,7 @@ def _rebuild_chat_context(
     compactor: InlineCompactor | None = None,
     token_context_length_limit: int | None = None,
     model_id: str | ModelIdentifier | None = None,
+    cls: type[ChatContext] = ChatContext,
 ) -> ChatContext:
     """Build a fresh `ChatContext` linked-list without triggering compaction.
 
@@ -291,9 +299,12 @@ def _rebuild_chat_context(
         compactor: Compactor to attach to every node of the rebuilt context.
         token_context_length_limit: Token budget to attach to every node.
         model_id: Model identifier to attach to every node.
+        cls: The concrete `ChatContext` subtype to construct. Compactors pass
+            `type(ctx)` so a subclassed context is rebuilt as its own type
+            rather than being demoted to `ChatContext`.
 
     Returns:
-        A new `ChatContext` whose linear history is exactly `components`.
+        A new context of type `cls` whose linear history is exactly `components`.
     """
 
     def _configure(node: ChatContext) -> None:
@@ -301,11 +312,11 @@ def _rebuild_chat_context(
         node._token_context_length_limit = token_context_length_limit
         node._model_id = model_id
 
-    ctx: ChatContext = ChatContext.__new__(ChatContext)
+    ctx: ChatContext = cls.__new__(cls)
     Context.__init__(ctx)
     _configure(ctx)
     for c in components:
-        new: ChatContext = ChatContext.__new__(ChatContext)
+        new: ChatContext = cls.__new__(cls)
         new._previous = ctx
         new._data = c
         new._is_root = False

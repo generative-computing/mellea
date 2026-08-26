@@ -19,10 +19,12 @@ class SimpleContext(Context):
                 block, or model output to record.
 
         Returns:
-            SimpleContext: A new `SimpleContext` containing only the added entry;
-            prior history is not retained.
+            SimpleContext: A new context of the same concrete subtype containing
+            only the added entry; prior history is not retained.
         """
-        return SimpleContext.from_previous(self, c)
+        # `type(self)`, not `SimpleContext`, so a subclass gets an instance of
+        # itself back rather than being silently demoted to `SimpleContext`.
+        return type(self).from_previous(self, c)
 
     def view_for_generation(self) -> list[Span] | None:
         """Return an empty list, since `SimpleContext` does not pass history to the model.

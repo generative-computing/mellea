@@ -17,9 +17,13 @@ from mellea.core import (
     C,
     CBlock,
     Component,
+    ComputedModelOutputThunk,
     Context,
     ContextTypeMismatchError,
+    GenerateLog,
     ModelOutputThunk,
+    SamplingResult,
+    SamplingStrategy,
     Span,
 )
 from mellea.stdlib.components import Message
@@ -125,7 +129,32 @@ async def test_escape_hatch_allows_type_change():
 # `reset_to_new`) actually do so when subclassed. These tests pin that
 # invariant directly on the context types.
 
-_CONTEXT_TYPES = [ChatContext, SimpleContext, _MinimalContext]
+
+class _ChatSubclass(ChatContext):
+    """A bare subclass of `ChatContext` that adds no behaviour of its own.
+
+    Inherits `add` / `new_instance` unchanged. If those helpers construct the
+    hard-coded `ChatContext` type instead of `type(self)`, an instance of this
+    class silently degrades to `ChatContext` on the first `add` — the exact
+    regression these tests guard against.
+    """
+
+
+class _SimpleSubclass(SimpleContext):
+    """A bare subclass of `SimpleContext`; see `_ChatSubclass` for the rationale."""
+
+
+# The stdlib contexts, a direct `Context` subclass, and bare subclasses of the
+# stdlib contexts. The subclasses are what catch the "named constructor instead
+# of `type(self)`" bug: they inherit `add` verbatim, so they only stay their own
+# type if the inherited helper builds `type(self)`.
+_CONTEXT_TYPES = [
+    ChatContext,
+    SimpleContext,
+    _MinimalContext,
+    _ChatSubclass,
+    _SimpleSubclass,
+]
 
 
 @pytest.mark.parametrize("ctx_cls", _CONTEXT_TYPES)
@@ -134,6 +163,13 @@ def test_add_returns_same_subtype(ctx_cls):
     ctx = ctx_cls()
     added = ctx.add(_action())
     assert type(added) is ctx_cls
+
+
+@pytest.mark.parametrize("ctx_cls", _CONTEXT_TYPES)
+def test_add_twice_preserves_subtype(ctx_cls):
+    """Chaining `add` keeps the subtype, so history nodes never demote."""
+    ctx = ctx_cls().add(_action()).add(Message(role="assistant", content="hi"))
+    assert type(ctx) is ctx_cls
 
 
 @pytest.mark.parametrize("ctx_cls", _CONTEXT_TYPES)
@@ -151,6 +187,38 @@ def test_reset_to_new_returns_same_subtype(ctx_cls):
     fresh = ctx_cls.reset_to_new()
     assert type(fresh) is ctx_cls
     assert fresh.is_root_node
+
+
+def test_chat_subclass_survives_compaction():
+    """A `ChatContext` subclass stays its own type after the compactor fires.
+
+    Compaction rebuilds the linked list via `_rebuild_chat_context`, which must
+    reconstruct the concrete subtype (`type(ctx)`) rather than a plain
+    `ChatContext`. A `window_size` of 1 forces the `WindowCompactor` to run on
+    the third `add`.
+    """
+    ctx = _ChatSubclass(window_size=1)
+    ctx = (
+        ctx.add(_action()).add(Message(role="assistant", content="one")).add(_action())
+    )
+    assert type(ctx) is _ChatSubclass
+
+
+async def test_chat_subclass_passes_functional_guard():
+    """A subclassed `ChatContext` round-trips through `aact` without tripping the guard.
+
+    This is the end-to-end payoff of the `type(self)` fix: because `add`
+    preserves the subtype, input type == output type and
+    `_enforce_context_type` is satisfied with no escape hatch.
+    """
+    backend = DummyBackend(responses=None)
+    ctx_in = _ChatSubclass()
+
+    _, ctx_out = await aact(
+        _action(), ctx_in, backend, silence_context_type_warning=True
+    )
+
+    assert type(ctx_out) is _ChatSubclass
 
 
 # --- session-level allow_context_type_change flag (#1522) ---
@@ -190,3 +258,115 @@ def test_session_flag_preserved_across_clone():
         DummyBackend(responses=None), ChatContext(), allow_context_type_change=True
     )
     assert session.clone().allow_context_type_change is True
+
+
+# --- context-type enforcement over ALL sample contexts (#1522) ---
+#
+# `aact(..., return_sampling_results=True)` returns a `SamplingResult` whose
+# type is not statically tracked, so the input==output convention is enforced at
+# runtime against *every* `sample_contexts` entry — not just the chosen one — so
+# a strategy that produces a mismatched context for any attempt is caught rather
+# than silently returned. These tests drive that loop with a stub strategy that
+# lets each test dictate the exact contexts attached to the result.
+
+
+def _computed(value: str) -> ComputedModelOutputThunk:
+    """Build a computed thunk with a final-marked `GenerateLog`, as `aact` requires."""
+    mot: ModelOutputThunk = ModelOutputThunk(value=value)
+    mot._generate_log = GenerateLog(is_final_result=True)
+    return ComputedModelOutputThunk(mot)
+
+
+class _StubStrategy(SamplingStrategy):
+    """A sampling strategy that returns a caller-supplied list of sample contexts.
+
+    Bypasses real generation entirely: `sample` ignores the backend and returns
+    a `SamplingResult` whose `sample_contexts` are exactly `self._contexts`, with
+    one computed generation per context. This lets a test attach a deliberately
+    mismatched context to any slot and assert whether the functional guard fires.
+    """
+
+    def __init__(self, contexts: list[Context]) -> None:
+        """Store the contexts to attach, one per generation, to the result."""
+        self._contexts = contexts
+
+    async def sample(
+        self,
+        action,
+        context,
+        backend,
+        requirements,
+        *,
+        validation_ctx=None,
+        format=None,
+        model_options=None,
+        tool_calls=False,
+    ) -> SamplingResult:
+        """Return a `SamplingResult` wrapping `self._contexts`; the last is chosen."""
+        gens = [_computed(f"gen{i}") for i in range(len(self._contexts))]
+        return SamplingResult(
+            result_index=len(gens) - 1,
+            success=True,
+            sample_generations=gens,
+            sample_contexts=list(self._contexts),
+        )
+
+
+async def test_sampling_result_all_contexts_type_checked():
+    """A mismatched context in a *non-chosen* sample slot trips the guard.
+
+    The chosen (last) context matches the input type, but an earlier attempt is a
+    `SimpleContext`. The guard must still catch it — enforcement covers the whole
+    `sample_contexts` list, not just `result_ctx`.
+    """
+    backend = DummyBackend(responses=None)
+    ctx_in = ChatContext()
+    strategy = _StubStrategy([SimpleContext(), ChatContext()])
+
+    with pytest.raises(ContextTypeMismatchError):
+        await aact(
+            _action(),
+            ctx_in,
+            backend,
+            strategy=strategy,
+            return_sampling_results=True,
+            silence_context_type_warning=True,
+        )
+
+
+async def test_sampling_result_matching_contexts_pass():
+    """When every sample context matches the input type, the result is returned."""
+    backend = DummyBackend(responses=None)
+    ctx_in = ChatContext()
+    strategy = _StubStrategy([ChatContext(), ChatContext()])
+
+    result = await aact(
+        _action(),
+        ctx_in,
+        backend,
+        strategy=strategy,
+        return_sampling_results=True,
+        silence_context_type_warning=True,
+    )
+
+    assert isinstance(result, SamplingResult)
+    assert all(type(c) is ChatContext for c in result.sample_contexts)
+
+
+async def test_sampling_result_escape_hatch_allows_all_mismatches():
+    """`allow_context_type_change=True` skips the per-sample check entirely."""
+    backend = DummyBackend(responses=None)
+    ctx_in = ChatContext()
+    strategy = _StubStrategy([SimpleContext(), SimpleContext()])
+
+    result = await aact(
+        _action(),
+        ctx_in,
+        backend,
+        strategy=strategy,
+        return_sampling_results=True,
+        silence_context_type_warning=True,
+        allow_context_type_change=True,
+    )
+
+    assert isinstance(result, SamplingResult)
