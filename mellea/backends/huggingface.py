@@ -270,6 +270,9 @@ _HF_INTERNAL_TEMPLATE_VARS: frozenset[str] = frozenset(
 )
 
 _CHAT_TEMPLATE_THINKING_VARS: tuple[str, ...] = ("think", "thinking", "enable_thinking")
+_CHAT_TEMPLATE_THINKING_OPTION_MAP: dict[str, str] = dict.fromkeys(
+    _CHAT_TEMPLATE_THINKING_VARS, ModelOption.THINKING
+)
 
 
 def _compute_generate_kwargs_allowlist() -> frozenset[str]:
@@ -451,6 +454,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             "tools": ModelOption.TOOLS,
             "stream": ModelOption.STREAM,
             "stop_strings": ModelOption.STOP_SEQUENCES,
+            **_CHAT_TEMPLATE_THINKING_OPTION_MAP,
         }
 
         # A mapping of Mellea specific ModelOptions to the specific names for this backend.
@@ -2348,7 +2352,10 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             ),
             None,
         )
-        if thinking_template_var is not None and ModelOption.THINKING in model_options:
+        if (
+            thinking_template_var is not None
+            and type(model_options.get(ModelOption.THINKING)) is bool
+        ):
             backend_opts[thinking_template_var] = model_options[ModelOption.THINKING]
         return {
             k: v for k, v in backend_opts.items() if k in self._chat_template_allowlist

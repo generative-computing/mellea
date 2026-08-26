@@ -24,6 +24,7 @@ torch = pytest.importorskip("torch", reason="torch not installed — install mel
 
 from mellea.backends import ModelOption
 from mellea.backends.huggingface import (
+    _CHAT_TEMPLATE_THINKING_OPTION_MAP,
     _CHAT_TEMPLATE_THINKING_VARS,
     _GENERATE_KWARGS_ALLOWLIST,
     _HF_INTERNAL_TEMPLATE_VARS,
@@ -45,6 +46,8 @@ def _make_backend(template: object) -> LocalHFBackend:
     b: LocalHFBackend = LocalHFBackend.__new__(LocalHFBackend)
     object.__setattr__(b, "_tokenizer", _FakeTokenizer())
     b._model_id = "test-org/test-model"
+    b.model_options = {}
+    b.to_mellea_model_opts_map = _CHAT_TEMPLATE_THINKING_OPTION_MAP
     b.from_mellea_model_opts_map = {ModelOption.MAX_NEW_TOKENS: "max_new_tokens"}
     return b
 
@@ -312,6 +315,26 @@ def test_filter_for_chat_template_drops_thinking_without_template_variable() -> 
     b = _make_backend("{{ custom_tools }}")
 
     result = b._filter_for_chat_template({ModelOption.THINKING: True})
+
+    assert result == {}
+
+
+def test_filter_for_chat_template_uses_per_call_thinking_alias_over_default() -> None:
+    """A per-call alias overrides a backend THINKING default before template filtering."""
+    b = _make_backend("{{ thinking }}")
+    b.model_options = {ModelOption.THINKING: False}
+
+    model_options = b._simplify_and_merge({"thinking": True})
+    result = b._filter_for_chat_template(model_options)
+
+    assert result == {"thinking": True}
+
+
+def test_filter_for_chat_template_drops_thinking_effort_level() -> None:
+    """HF does not send string THINKING levels to boolean chat-template variables."""
+    b = _make_backend("{{ thinking }}")
+
+    result = b._filter_for_chat_template({ModelOption.THINKING: "low"})
 
     assert result == {}
 
