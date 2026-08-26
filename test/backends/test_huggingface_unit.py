@@ -1394,6 +1394,41 @@ async def test_multimodal_blocks_in_raw_action_raises_error(images, audio):
         await backend._generate_from_raw([action], ctx, model_options={})
 
 
+@pytest.mark.asyncio
+async def test_multimodal_declared_only_on_representation_raises_error():
+    """Audio declared solely on a TemplateRepresentation must still be rejected.
+
+    A custom component may carry attachments without exposing an `audio`/`images`
+    attribute. Such components are invisible to the attribute check, so without the
+    representation fallback in `get_audio_from_component` the clip would be dropped
+    silently and the model would answer about audio it never received.
+    """
+    from mellea.core import AudioBlock, Component, TemplateRepresentation
+
+    class _AudioOnRepresentation(Component):
+        def parts(self):
+            return []
+
+        def format_for_llm(self) -> TemplateRepresentation:
+            return TemplateRepresentation(
+                obj=self,
+                args={"t": "rate this"},
+                template="{{ t }}",
+                audio=[AudioBlock(_B64_WAV, format="wav")],
+            )
+
+        def _parse(self, computed):
+            return str(computed.value)
+
+    backend = _make_backend()
+    ctx = ChatContext().add(Message("user", "Hello"))
+
+    with pytest.raises(ValueError, match="LocalHFBackend does not support audio"):
+        await backend._generate_from_context_standard(
+            _AudioOnRepresentation(), ctx, model_options={}
+        )
+
+
 @pytest.mark.parametrize("images,audio", _MULTIMODAL_CASES)
 @pytest.mark.asyncio
 async def test_multimodal_blocks_in_raw_ctx_not_checked(images, audio):

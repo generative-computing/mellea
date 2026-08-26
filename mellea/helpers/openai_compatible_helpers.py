@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import uuid
 from typing import TYPE_CHECKING, Any, Literal, TypedDict
@@ -243,6 +244,34 @@ def should_replay_reasoning(
     return flags
 
 
+async def prefetch_audio_urls(messages: list[Message]) -> None:
+    """Warm the audio download cache for any `AudioUrlBlock` in `messages`.
+
+    No provider accepts audio by URL, so `message_to_openai_message` resolves such
+    blocks to inline base64. That resolution is blocking, and the serializer is sync;
+    awaiting this first moves the fetch onto a worker thread so the event loop is not
+    stalled, leaving the serializer's call a cache hit. Mirrors how the Ollama backend
+    offloads `ImageUrlBlock` downloads with `asyncio.to_thread`.
+
+    Safe to call when there is nothing to fetch, and safe to skip — the serializer still
+    produces correct output either way, just with a blocking download.
+
+    Args:
+        messages: The messages about to be serialised.
+
+    Raises:
+        ValueError: If a URL cannot be downloaded or exceeds the size cap.
+    """
+    pending = [
+        a for m in messages for a in (m.audio or []) if isinstance(a, AudioUrlBlock)
+    ]
+    if not pending:
+        return
+    await asyncio.gather(
+        *(asyncio.to_thread(a.resolve_base64) for a in pending), return_exceptions=False
+    )
+
+
 def message_to_openai_message(
     msg: Message, formatter: Formatter | None = None, *, replay_reasoning: bool = False
 ) -> dict:
@@ -312,12 +341,19 @@ def message_to_openai_message(
                         }
                     )
                 elif isinstance(audio, AudioUrlBlock):
-                    # OpenAI Chat Completions does not support audio by URL;
-                    # AudioUrlBlock cannot be serialised to this schema.
-                    raise ValueError(
-                        f"AudioUrlBlock cannot be serialised to the OpenAI Chat Completions "
-                        f"audio schema (URL: {audio.value!r}). "
-                        "Fetch the audio and use AudioBlock with base64 data instead."
+                    # OpenAI Chat Completions has no audio-by-URL content part, so
+                    # resolve it to inline base64 the way Ollama does for images.
+                    # Normally a cache hit: `prefetch_audio_urls` warms it off-thread
+                    # before serialisation. Falls back to a blocking fetch if some
+                    # caller path did not prefetch.
+                    parts.append(
+                        {
+                            "type": "input_audio",
+                            "input_audio": {
+                                "data": audio.resolve_base64(),
+                                "format": audio.format,
+                            },
+                        }
                     )
 
         result: dict[str, Any] = {"role": msg.role, "content": parts}

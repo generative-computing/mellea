@@ -53,6 +53,7 @@ const sidebars: SidebarsConfig = {
         'how-to/evaluate-with-llm-as-a-judge',
         'how-to/configure-model-options',
         'how-to/use-images-and-vision',
+        'how-to/use-speech-and-audio',
         'how-to/build-a-rag-pipeline',
         'how-to/safety-guardrails',
         'how-to/refactor-prompts-with-cli',

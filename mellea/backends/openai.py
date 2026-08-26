@@ -46,6 +46,7 @@ from ..helpers import (
     is_vllm_server_with_structured_output,
     message_to_openai_message,
     messages_to_docs,
+    prefetch_audio_urls,
     send_to_queue,
     should_replay_reasoning,
 )
@@ -1004,6 +1005,10 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         # _generate is responsible for logging a warning in that case.
 
         conversation: list[dict] = []
+
+        # Resolve any audio URLs off-thread so the sync serializer below hits the cache
+        # instead of blocking the event loop on a download.
+        await prefetch_audio_urls(messages)
 
         system_prompt = model_opts.get(ModelOption.SYSTEM_PROMPT, "")
         if system_prompt != "":

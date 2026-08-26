@@ -25,6 +25,7 @@ from .openai_compatible_helpers import (
     extract_model_tool_requests,
     message_to_openai_message,
     messages_to_docs,
+    prefetch_audio_urls,
     should_replay_reasoning,
 )
 from .server_type import (
@@ -45,6 +46,7 @@ __all__ = [
     "is_vllm_server_with_structured_output",
     "message_to_openai_message",
     "messages_to_docs",
+    "prefetch_audio_urls",
     "send_to_queue",
     "should_replay_reasoning",
     "wait_for_all_mots",
