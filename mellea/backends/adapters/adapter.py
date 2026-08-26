@@ -434,7 +434,7 @@ class AdapterMixin(Backend, abc.ABC):
 
     Three verbs are universal across every adapter reality (LocalFile/PEFT,
     Embedded/Granite Switch, ServerMediated): `base_model_name`,
-    `add_adapter`, and `list_adapters`. The remaining seven verbs are
+    `add_adapter`, and `list_adapters`. The remaining five verbs are
     reality-specific — a concrete backend overrides only the verb(s) matching
     its own reality; the others keep raising `NotImplementedError`.
 

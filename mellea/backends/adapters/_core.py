@@ -687,9 +687,10 @@ class EmbeddedActivationRequest:
 
     Bundles the two dicts an OpenAI-compatible call site builds separately —
     `extra_body` and the top-level API call kwargs — so a binding can edit
-    both in one call. Both are mutated in place; the caller keeps its own
-    references and can keep layering other edits (tool wiring, thinking mode,
-    user overrides) on top after `apply_activation` returns.
+    both in one call. Both are mutated in place. The caller must merge its
+    other edits (tool wiring, thinking mode, user options) before calling
+    `apply_activation`, because the binding performs the final framework edit
+    and the selected adapter is authoritative.
 
     Attributes:
         extra_body (dict[str, Any]): The provider's `extra_body` payload.

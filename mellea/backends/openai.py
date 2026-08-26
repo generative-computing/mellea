@@ -777,22 +777,6 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         if rewriter.parameters:
             api_params.update(rewriter.parameters)
 
-        # Embedded adapters activate via control tokens in the chat template;
-        # the binding owns the request edit (issue #1142). `adapter.weights` is
-        # always an EmbeddedBinding here — EmbeddedIntrinsicAdapter.__init__
-        # constructs one unconditionally — but the shim permits attribute
-        # mutation, so a caller reassigning `.weights` must fail loudly here
-        # rather than silently skip activation and send an unactivated request.
-        if not isinstance(adapter.weights, EmbeddedBinding):
-            raise TypeError(
-                f"EmbeddedIntrinsicAdapter.weights must be an EmbeddedBinding; "
-                f"got {type(adapter.weights).__name__}. Activation cannot proceed."
-            )
-        activation_request = EmbeddedActivationRequest(
-            extra_body=extra_body, api_params=api_params
-        )
-        await adapter.weights.apply_activation(activation_request, adapter.identity)
-
         # Collect tools if tool_calls is enabled.
         tools: dict[str, AbstractMelleaTool] = dict()
         if tool_calls:
@@ -809,6 +793,22 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             model_options, is_chat_context=True
         )
         user_extra_body = user_api_params.pop("extra_body", None)
+        if user_extra_body is not None:
+            protected_extra_body_keys = {
+                "messages",
+                "model",
+                "parallel_tool_calls",
+                "stream",
+                "stream_options",
+                "tool_choice",
+                "tools",
+            }
+            overridden_keys = protected_extra_body_keys.intersection(user_extra_body)
+            if overridden_keys:
+                raise ValueError(
+                    "extra_body cannot override intrinsic request fields: "
+                    + ", ".join(sorted(overridden_keys))
+                )
         api_params.update(user_api_params)
 
         # Map THINKING to the correct backend parameter(s). Two mechanisms:
@@ -829,6 +829,23 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 api_params["reasoning_effort"] = thinking
 
         extra_body = self._merge_user_extra_body(extra_body, user_extra_body)
+
+        # Embedded adapters activate via control tokens in the chat template;
+        # the binding owns the final request edit so callers cannot override
+        # the adapter selected for this intrinsic. `adapter.weights` is always
+        # an EmbeddedBinding here — EmbeddedIntrinsicAdapter.__init__
+        # constructs one unconditionally — but the shim permits attribute
+        # mutation, so a caller reassigning `.weights` must fail loudly here
+        # rather than silently skip activation and send an unactivated request.
+        if not isinstance(adapter.weights, EmbeddedBinding):
+            raise TypeError(
+                f"EmbeddedIntrinsicAdapter.weights must be an EmbeddedBinding; "
+                f"got {type(adapter.weights).__name__}. Activation cannot proceed."
+            )
+        activation_request = EmbeddedActivationRequest(
+            extra_body=extra_body, api_params=api_params
+        )
+        await adapter.weights.apply_activation(activation_request, adapter.identity)
 
         # --- call the OpenAI-compatible API --------------------------------
         # The rewriter may add instruction messages where 'role' is a default
