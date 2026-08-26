@@ -1216,23 +1216,7 @@ class ModelOutputThunk(Generic[S]):
             assert self._gen.post_process is not None
             await self._gen.post_process(self)
 
-            match self._call.action:
-                case Component():
-                    self.parsed_repr = self._call.action._parse(self)
-                case CBlock():
-                    assert self.value is not None, (
-                        "value must be non-None since this thunk is computed"
-                    )
-                    self.parsed_repr = self.value  # type: ignore
-                case ModelOutputThunk():
-                    assert self.value is not None, (
-                        "value must be non-None since this thunk is computed"
-                    )
-                    self.parsed_repr = self.value  # type: ignore
-                case _:
-                    raise ValueError(
-                        "attempted to astream from a model output thunk with no originating action set"
-                    )
+            self._set_parsed_repr()
             assert self.parsed_repr is not None, (
                 "enforce constraint that a computed ModelOutputThunk has a non-None parsed_repr"
             )
@@ -1327,6 +1311,47 @@ class ModelOutputThunk(Generic[S]):
     async def __aexit__(self, *exc_info: object) -> None:
         """Exit the context manager, cancelling any in-flight generation."""
         await self.aclose()
+
+    def _set_parsed_repr(self) -> None:
+        """Compute `parsed_repr` from the originating action once the thunk is computed.
+
+        Dispatches on the originating `action`: a `Component` action parses via its
+        own `_parse`; a `ModelOutputThunk` action (a computed thunk reused as the
+        next incoming turn) is re-parsed through `Message._parse` so its role,
+        tool calls, and reasoning survive the round-trip rather than degrading to a
+        raw string; a `CBlock` action keeps its raw string value.
+
+        Raises:
+            ValueError: If the thunk has no originating action set.
+        """
+        match self._call.action:
+            case Component():
+                self.parsed_repr = self._call.action._parse(self)
+            case CBlock():
+                assert self.value is not None, (
+                    "value must be non-None since this thunk is computed"
+                )
+                self.parsed_repr = self.value  # type: ignore[assignment]
+            case ModelOutputThunk():
+                assert self.value is not None, (
+                    "value must be non-None since this thunk is computed"
+                )
+                # A computed thunk reused as the incoming turn is re-parsed through
+                # `Message._parse` (the same provider-native recovery the `Component`
+                # /`Message` action path uses) so its role, tool calls, and reasoning
+                # survive rather than degrading to the raw string value.
+                # Deferred import: `chat` imports `mellea.core`, so a top-level import
+                # here would be circular. `Message._parse` reads only its `computed`
+                # argument, so a throwaway `Message` instance is a safe vehicle.
+                from ..stdlib.components.chat import Message
+
+                self.parsed_repr = Message(role="assistant", content=self.value)._parse(
+                    self
+                )  # type: ignore[assignment]
+            case _:
+                raise ValueError(
+                    "attempted to astream from a model output thunk with no originating action set"
+                )
 
     def __str__(self) -> str:
         """Stringifies the thunk value."""
@@ -1942,6 +1967,9 @@ class TemplateRepresentation:
             tool calls to carry onto the serialized message. Defaults to `None`.
         tool_call_id (str | None): For a `role="tool"` component, the provider-supplied
             tool-call id, when available. Defaults to `None`.
+        tool_name (str | None): For a `role="tool"` component, the name of the tool
+            whose result this message carries (e.g. Ollama's tool-result turn keys on
+            it). Defaults to `None`.
 
     """
 
@@ -1962,6 +1990,7 @@ class TemplateRepresentation:
     thinking: str | None = None
     tool_calls: list[dict[str, Any]] | None = None
     tool_call_id: str | None = None
+    tool_name: str | None = None
 
 
 @dataclass
@@ -2050,7 +2079,7 @@ def blockify(s: str | Span) -> Span:
             raise Exception("Type Error")
 
 
-def get_images_from_component(c: Component) -> list[ImageBlock | ImageUrlBlock] | None:
+def get_images_from_component(c: Component) -> None | list[ImageBlock | ImageUrlBlock]:
     """Return the images attached to a `Component`, or `None` if absent or empty.
 
     Args:
@@ -2078,7 +2107,7 @@ def get_images_from_component(c: Component) -> list[ImageBlock | ImageUrlBlock] 
         return None
 
 
-def get_audio_from_component(c: Component) -> list[AudioBlock | AudioUrlBlock] | None:
+def get_audio_from_component(c: Component) -> None | list[AudioBlock | AudioUrlBlock]:
     """Return the audio attached to a `Component`, or `None` if absent or empty.
 
     Args:

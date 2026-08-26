@@ -20,7 +20,7 @@ def validate_email_len(email: str) -> bool:
 def serve(
     input: list[ChatMessage],
     requirements: list[str] | None = None,
-    model_options: dict | None = None,
+    model_options: None | dict = None,
 ) -> ModelOutputThunk | SamplingResult:
     """Takes a prompt as input and runs it through an M program."""
     requirements = requirements if requirements else []

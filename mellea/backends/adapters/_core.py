@@ -9,9 +9,19 @@ Introduces the composable `Adapter` dataclass and its three parts:
 - :class:`IOContract` — ABC for prompt building and output parsing
 - :class:`WeightsBinding` — pluggable ABC for weights lifecycle management
 
-Also provides :class:`LocalFileBinding`, two stub :class:`WeightsBinding`
-subclasses (:class:`EmbeddedBinding`, :class:`ServerMediatedBinding`), and
-:class:`AdapterSchemaMismatchError`.
+Also provides:
+
+- :class:`LocalFileBinding`
+- :class:`EmbeddedBinding` — Embedded/Granite Switch binding; `apply_activation`,
+  no weights lifecycle (issue #1142)
+- :class:`ServerMediatedBinding` — stub :class:`WeightsBinding` subclass
+- :class:`AdapterSchemaMismatchError`
+- :class:`_DictContract`, :class:`_ListContract` — generic, capability-agnostic
+  :class:`IOContract` implementations that validate required keys on a JSON
+  object or a JSON array of objects, respectively. Capability-*specific*
+  contracts (e.g. the guardian adapters' nested-key shapes) live in
+  :mod:`~mellea.backends.adapters.io_contracts` instead, alongside the
+  registry that maps every catalogued adapter function to its contract.
 
 Note:
     The existing :class:`~mellea.backends.adapters.adapter.Adapter` ABC in
@@ -29,7 +39,7 @@ import time
 import uuid
 import warnings
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, ClassVar, Literal
+from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
 from ...core import Component, MelleaLogger
 from ...helpers.event_loop_helper import _run_async_in_thread
@@ -45,6 +55,11 @@ _PHASE_2_NOT_IMPLEMENTED = (
     "{cls} is a Phase 0 stub; implementation lands in Epic #929 Phase 2."
 )
 
+_BUILD_PROMPT_NOT_IMPLEMENTED = (
+    "build_prompt is not implemented; request construction still goes "
+    "through the legacy formatter/rewriter path, not IOContract."
+)
+
 
 class AdapterSchemaMismatchError(Exception):
     """Raised by :meth:`IOContract.parse` when output cannot satisfy the declared contract.
@@ -53,24 +68,33 @@ class AdapterSchemaMismatchError(Exception):
         name (str): Name of the adapter whose contract was violated.
         observed_keys (frozenset[str]): Keys present in the observed output.
         expected_keys (frozenset[str]): Keys required by the contract.
+        reason (str | None): Capability-specific explanation of the mismatch.
     """
 
     def __init__(
-        self, name: str, observed_keys: frozenset[str], expected_keys: frozenset[str]
+        self,
+        name: str,
+        observed_keys: frozenset[str],
+        expected_keys: frozenset[str],
+        reason: str | None = None,
     ) -> None:
         self.name = name
         self.observed_keys = observed_keys
         self.expected_keys = expected_keys
-        # Pass the structured fields (not the formatted message) to Exception so
-        # that ``self.args`` round-trips through ``pickle`` / ``copy`` — the default
-        # ``Exception.__reduce__`` reconstructs by calling ``cls(*self.args)``.
+        # Preserve the existing three-item ``args`` shape for callers and
+        # cross-version pickle compatibility. ``reason`` lives in instance state,
+        # which pickle restores after calling this constructor with ``args``.
+        self.reason = reason
         super().__init__(name, observed_keys, expected_keys)
 
     def __str__(self) -> str:
-        return (
+        message = (
             f"Adapter '{self.name}' output cannot satisfy declared contract. "
             f"Observed keys: {self.observed_keys}; expected: {self.expected_keys}."
         )
+        if self.reason is not None:
+            message += f" Reason: {self.reason}."
+        return message
 
 
 @dataclass(frozen=True)
@@ -157,9 +181,7 @@ class _DictContract(IOContract):
         self._required_keys = required_keys
 
     def build_prompt(self, **_kwargs: object) -> Component:
-        raise NotImplementedError(
-            "build_prompt is not used in Phase 1; implemented in Phase 2."
-        )
+        raise NotImplementedError(_BUILD_PROMPT_NOT_IMPLEMENTED)
 
     def parse(self, raw: str) -> dict[str, object]:
         """Parse and validate dict-shaped adapter output.
@@ -185,6 +207,63 @@ class _DictContract(IOContract):
         if missing:
             raise AdapterSchemaMismatchError(self._name, observed, self._required_keys)
         return data
+
+
+class _ListContract(IOContract):
+    """Validate list-of-dicts adapter output and wrap it under key `"items"`.
+
+    Each item in the list is checked for the declared required keys.  The
+    validated list is returned wrapped in `{"items": [...]}` so that
+    :func:`~mellea.stdlib.components.intrinsic._util.call_intrinsic` can always
+    return a plain `dict`.
+
+    Args:
+        name: Adapter capability name; included in
+            :class:`~mellea.backends.adapters.AdapterSchemaMismatchError` messages.
+        required_item_keys: Keys that must be present in every item dict.
+    """
+
+    def __init__(self, name: str, required_item_keys: frozenset[str]) -> None:
+        self._name = name
+        self._required_item_keys = required_item_keys
+
+    def build_prompt(self, **_kwargs: object) -> Component:
+        raise NotImplementedError(_BUILD_PROMPT_NOT_IMPLEMENTED)
+
+    def parse(self, raw: str) -> dict[str, object]:
+        """Parse and validate a list-of-dicts adapter output.
+
+        Args:
+            raw (str): Raw JSON string from the model.
+
+        Returns:
+            dict[str, object]: `{"items": [list of validated dicts]}`.
+                An empty list parses to `{"items": []}`.
+
+        Raises:
+            ValueError: When *raw* is not valid JSON, is not a JSON array, or
+                contains a non-object element.
+            AdapterSchemaMismatchError: When any item is missing a required key.
+        """
+        data = json.loads(raw)
+        if not isinstance(data, list):
+            raise ValueError(
+                f"Adapter '{self._name}' output must be a JSON array, "
+                f"got {type(data).__name__}."
+            )
+        for item in data:
+            if not isinstance(item, dict):
+                raise ValueError(
+                    f"Adapter '{self._name}' output array must contain only JSON "
+                    f"objects, got a {type(item).__name__} element."
+                )
+            observed = frozenset(item.keys())
+            missing = self._required_item_keys - observed
+            if missing:
+                raise AdapterSchemaMismatchError(
+                    self._name, observed, self._required_item_keys
+                )
+        return {"items": data}
 
 
 class WeightsBinding(abc.ABC):
@@ -482,6 +561,13 @@ class LocalFileBinding(WeightsBinding):
                             "instead."
                         )
 
+                    # `add_adapter`'s duplicate-name check runs under only this
+                    # binding's `_lifecycle_lock`, while `release()` pops the
+                    # registry under the backend's `_generation_lock` — so a
+                    # concurrent `release()` of a same-qualified-name binding can
+                    # make this registration transiently refuse a name that is in
+                    # fact free. Retryable; no shipped path registers two bindings
+                    # of one capability concurrently (that is #1465's per-call case).
                     self._staged_backend.add_adapter(self)
                     # `add_adapter` signals success by setting `.backend`; it has early-return
                     # paths (notably: a different object already registered under this
@@ -492,11 +578,9 @@ class LocalFileBinding(WeightsBinding):
                     # instead, where the cause is still visible.
                     if self.backend is None:
                         raise RuntimeError(
-                            f"Backend refused to register adapter {self.qualified_name!r}; see the "
-                            "backend's warning log. Either another adapter is already registered "
-                            "under this qualified name, or this binding was previously released — "
-                            "`release()` is terminal and does not free the name for re-use "
-                            "(see #1528)."
+                            f"Backend refused to register adapter {self.qualified_name!r}; see "
+                            "the backend's warning log — another adapter is already registered "
+                            "under this qualified name."
                         )
                 # `load_peft_adapter` mutates the backend's underlying PEFT model, the
                 # same shared state `activate_peft_adapter`/`deactivate_peft_adapter`
@@ -565,20 +649,26 @@ class LocalFileBinding(WeightsBinding):
             self._active = False
 
     def release(self) -> None:
-        """Unloads the adapter's weights from the backend and clears local state.
+        """Unloads the adapter's weights and deregisters it from the backend.
 
-        Idempotent: a no-op if never prepared, or already released. Terminal, per
-        the `WeightsBinding` contract — enforced: `bind_backend()` and
-        `prepare()` both raise `RuntimeError` if called after `release()`,
-        rather than silently reviving the binding on a new backend.
+        Idempotent: a no-op if never prepared, or already released. Terminal
+        for *this binding*, per the `WeightsBinding` contract — enforced:
+        `bind_backend()` and `prepare()` both raise `RuntimeError` if called
+        after `release()`, rather than silently reviving the binding on a new
+        backend.
 
-        Does **not** fully deregister. `unload_peft_adapter` removes the adapter
-        from the backend's *loaded* set, but the backend's *registered* set
-        (`_added_adapters` on `LocalHFBackend`) keeps its entry, because
-        `add_adapter` has no inverse verb. So the `qualified_name` stays claimed
-        for the backend's lifetime and no later binding can register under it.
-        Tracked in #1528, which also asks whether re-registration should be
-        supported at all given the terminal contract.
+        Terminal does not mean the `qualified_name` stays claimed forever,
+        though: alongside `unload_peft_adapter` (which reverses the *load*),
+        `release()` calls the backend's `remove_adapter` (which reverses the
+        *registration*, `add_adapter`'s inverse — see #1528). So once this
+        binding releases, a **different**, freshly constructed
+        `LocalFileBinding` for the same capability can register under the
+        same `qualified_name` on the same backend — on a backend that
+        implements `remove_adapter`. A backend that supports the LocalFile/PEFT
+        reality (`load_peft_adapter`/`unload_peft_adapter`) but predates
+        `remove_adapter` and hasn't overridden it degrades gracefully instead
+        of raising: the binding still fully releases, but the `qualified_name`
+        stays claimed for that backend's lifetime (the pre-#1528 behaviour).
 
         Raises:
             RuntimeError: The binding is active; call `deactivate()` before
@@ -604,6 +694,18 @@ class LocalFileBinding(WeightsBinding):
                         "LocalFileBinding.release() requires deactivate() to be called first."
                     )
                 backend.unload_peft_adapter(self.qualified_name)
+                try:
+                    backend.remove_adapter(self.qualified_name)
+                except NotImplementedError:
+                    # State the observable fact, not the presumed cause: a real
+                    # implementation can raise NotImplementedError internally, and
+                    # that would be misdiagnosed as "does not implement it".
+                    MelleaLogger.get_logger().warning(
+                        f"{type(backend).__name__}.remove_adapter() raised "
+                        f"NotImplementedError; {self.qualified_name!r} stays registered "
+                        "for the backend's lifetime even though this binding has "
+                        "released."
+                    )
                 self.backend = None
                 self.path = None
                 self._staged_backend = None
@@ -779,30 +881,160 @@ class LocalFileBinding(WeightsBinding):
             )
 
 
-class EmbeddedBinding(WeightsBinding):
-    """Stub binding for weights embedded in a model artifact."""
+@dataclass
+class EmbeddedActivationRequest:
+    """Mutable outgoing-request state that `EmbeddedBinding.apply_activation` edits.
+
+    Bundles the two dicts an OpenAI-compatible call site builds separately —
+    `extra_body` and the top-level API call kwargs — so a binding can edit
+    both in one call. Both are mutated in place. The caller must merge its
+    other edits (tool wiring, thinking mode, user options) before calling
+    `apply_activation`, because the binding performs the final framework edit
+    and the selected adapter is authoritative.
+
+    Attributes:
+        extra_body (dict[str, Any]): The provider's `extra_body` payload.
+            `apply_activation` writes the activation field here (e.g.
+            `chat_template_kwargs.adapter_name` for Granite Switch).
+        api_params (dict[str, Any]): Top-level request kwargs (e.g. `model`).
+            `apply_activation` removes entries an embedded adapter's
+            activation would make incorrect.
+    """
+
+    extra_body: dict[str, Any]
+    api_params: dict[str, Any]
+
+
+class EmbeddedBinding:
+    """Weights binding for the Embedded/Granite Switch reality (Epic #929 Phase 2).
+
+    Adapter weights for this reality are already baked into the base model —
+    there is nothing to download, load, toggle, or unload. The only thing
+    that varies per call is one field on the outgoing request, so this
+    binding has a single method, `apply_activation`, rather than the four
+    `WeightsBinding` lifecycle verbs (see discussion #1486, which rescoped
+    issue #1142: declaring the four verbs here would mean four raises with
+    nothing behind them, as the previous stub did).
+
+    Stateless across calls: `apply_activation` reads only its arguments, so
+    activating one adapter for a call never leaks into the request built for
+    the next.
+
+    Attributes:
+        binding_type (ClassVar[str]): `"embedded"`.
+        source (str): Base model identifier this binding activates adapters
+            against — the backend's `base_model_name` (e.g. `granite-4.1-3b`
+            for a backend built against `ibm-granite/granite-4.1-3b`).
+            Stamped by `OpenAIBackend.add_adapter` at registration; not
+            otherwise used by `apply_activation`.
+    """
 
     binding_type: ClassVar[str] = "embedded"
 
-    def prepare(self) -> None:
-        raise NotImplementedError(
-            _PHASE_2_NOT_IMPLEMENTED.format(cls="EmbeddedBinding")
+    def __init__(self, source: str = "") -> None:
+        """Constructs an EmbeddedBinding.
+
+        Args:
+            source: Base model identifier this binding activates adapters
+                against. Prefer `from_base_model` when a backend is on hand.
+        """
+        self.source = source
+
+    @classmethod
+    def from_base_model(cls, backend: "AdapterMixin") -> "EmbeddedBinding":
+        """Builds an EmbeddedBinding recording `backend`'s base model as the source.
+
+        Args:
+            backend: The backend whose base model has the adapter embedded
+                (e.g. an `OpenAIBackend` pointed at a Granite Switch deployment).
+
+        Returns:
+            An `EmbeddedBinding` with `source` set to `backend.base_model_name`.
+        """
+        return cls(source=backend.base_model_name)
+
+    async def apply_activation(
+        self, request: EmbeddedActivationRequest, identity: "Identity"
+    ) -> None:
+        """Edits `request` so the served model activates `identity`'s adapter.
+
+        Granite Switch (the only Embedded deployment today) reads the
+        adapter to activate from `chat_template_kwargs["adapter_name"]` in
+        the chat template. The rewriter config can also set the top-level
+        `model` parameter to the adapter's name; for an embedded adapter the
+        real model is the base model already being served, so that value is
+        dropped here rather than sent to the API.
+
+        Fires `adapter_function_phase_complete` (phase `"activate"`), so
+        Embedded calls contribute to the `mellea.adapter_function.phase_duration`
+        metric like every other binding. Does **not** fire
+        `adapter_function_invocation_complete`: unlike `LocalFileBinding`'s
+        verbs (driven by `adapter_scope`, which wraps the whole call and
+        knows the real outcome), this method only edits a request — the
+        actual generation and parsing happen later, asynchronously, once the
+        caller awaits the resulting `ModelOutputThunk`. Firing an
+        invocation-complete event here would have to guess an `outcome` that
+        this method cannot know, which is worse than not firing it: it would
+        report `outcome="success"` for calls that go on to fail. Wiring a
+        real invocation-complete signal in requires the caller (currently
+        `OpenAIBackend._generate_from_intrinsic`) to fire it once generation
+        and parsing resolve — tracked as a follow-up, not part of this method.
+
+        This method is `async` (unlike the rest of `EmbeddedBinding`'s
+        surface) purely because hook dispatch (`invoke_hook`) is async; its
+        own work is synchronous. Its one caller,
+        `OpenAIBackend._generate_from_intrinsic`, is already a coroutine, so
+        `await`ing here — rather than bridging through
+        `_run_async_in_thread`, which is for calling async code from sync
+        code — avoids spawning a throwaway event loop and thread per call.
+
+        Args:
+            request: The outgoing request state to edit; both of its dicts
+                are mutated in place.
+            identity: Identifies the adapter to activate.
+        """
+        started_at = time.monotonic()
+        chat_template_kwargs = request.extra_body.pop("chat_template_kwargs", {}) or {}
+        chat_template_kwargs["adapter_name"] = identity.name
+        request.extra_body["chat_template_kwargs"] = chat_template_kwargs
+        request.api_params.pop("model", None)
+        duration_s = time.monotonic() - started_at
+
+        await self._fire_activate_phase_complete(identity.name, duration_s)
+
+    async def _fire_activate_phase_complete(self, name: str, duration_s: float) -> None:
+        """Fires `adapter_function_phase_complete` for the activate phase.
+
+        `duration_s` is the cost of editing a dict, not of an adapter
+        activation in the sense `LocalFileBinding`'s real PEFT activation is —
+        the resulting `phase_duration` samples for `binding_type="embedded"`
+        are not comparable to `binding_type="local_file"` samples for the
+        same adapter name; the histogram carries no `binding_type` attribute
+        to separate them.
+
+        Args:
+            name: Adapter function name, used as the metric's `name` field.
+            duration_s: Wall-clock duration of `apply_activation`'s request edit.
+        """
+        if not has_plugins(HookType.ADAPTER_FUNCTION_PHASE_COMPLETE):
+            return
+
+        from ...plugins.hooks.adapter_function import (
+            AdapterFunctionPhaseCompletePayload,
         )
 
-    def activate(self) -> None:
-        raise NotImplementedError(
-            _PHASE_2_NOT_IMPLEMENTED.format(cls="EmbeddedBinding")
-        )
-
-    def deactivate(self) -> None:
-        raise NotImplementedError(
-            _PHASE_2_NOT_IMPLEMENTED.format(cls="EmbeddedBinding")
-        )
-
-    def release(self) -> None:
-        raise NotImplementedError(
-            _PHASE_2_NOT_IMPLEMENTED.format(cls="EmbeddedBinding")
-        )
+        try:
+            payload = AdapterFunctionPhaseCompletePayload(
+                name=name, phase="activate", duration_ms=duration_s * 1000.0
+            )
+            await invoke_hook(HookType.ADAPTER_FUNCTION_PHASE_COMPLETE, payload)
+        except Exception:
+            MelleaLogger.get_logger().warning(
+                f"adapter_function_phase_complete hook dispatch failed for {name!r} "
+                "during 'activate'; ignoring so it does not turn a completed "
+                "request edit into an operation failure.",
+                exc_info=True,
+            )
 
 
 class ServerMediatedBinding(WeightsBinding):
@@ -835,28 +1067,30 @@ class ServerMediatedBinding(WeightsBinding):
 class Adapter:
     """Composable adapter dataclass (Epic #929 Phase 0).
 
-    Composes an :class:`Identity`, an :class:`IOContract`, and a
-    :class:`WeightsBinding` into a single, inspectable object.
+    Composes an :class:`Identity`, an :class:`IOContract`, and a weights
+    binding (a :class:`WeightsBinding` or :class:`EmbeddedBinding`) into a
+    single, inspectable object.
 
     Attributes:
         identity (Identity): Name, type, and capability for this adapter.
         io_contract (IOContract): Prompt builder and output parser.
-        weights (WeightsBinding): Pluggable weights lifecycle handler.
+        weights (WeightsBinding | EmbeddedBinding): Pluggable weights handler —
+            either a `WeightsBinding` (a lifecycle to stage and switch on) or
+            an `EmbeddedBinding` (nothing to stage; activation edits the
+            outgoing request instead).
     """
 
     identity: Identity
     io_contract: IOContract
-    weights: WeightsBinding
+    weights: WeightsBinding | EmbeddedBinding
 
     # NOTE(#1516): a construction-time cross-check that `weights.adapter_type`
     # agrees with `identity.adapter_type` was tried here and backed out. It is the
     # right invariant — the two feed different lookup paths (registration and the
     # verbs key on the binding's `qualified_name`; `_find_adapter` scans on the
     # identity) and both return `None` on a miss, so a disagreement surfaces as
-    # "adapter not found" far from its cause. But it cannot be enforced yet: the
-    # ten module-level `Adapter` constants in `stdlib/components/intrinsic/rag.py`
-    # and `guardian.py` pair an `alora` identity with a bare, deliberately
-    # unconfigured `LocalFileBinding()` that defaults to LoRA. Every catalogue
-    # entry supports both types, so those are placeholders rather than genuine
-    # conflicts, and the check fired on "not configured yet". Enforce it once
-    # #1516 gives those constants real bindings.
+    # "adapter not found" far from its cause. But it cannot be enforced yet:
+    # the deprecated shims carry a `_ShimWeightsBinding` with no `adapter_type`
+    # to compare at all (their identity tracks the configured type). Enforce
+    # the check once those constructions carry real, typed bindings (the shims
+    # retire in #1144).

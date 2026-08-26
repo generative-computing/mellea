@@ -124,7 +124,6 @@ Use the tool's common name (e.g., GitHub Copilot, Cursor, etc.).
 | Telemetry import errors | Run `uv sync` to install OpenTelemetry deps |
 | Silent empty strings from async backends | Check for `asyncio.gather(..., return_exceptions=True)` — exceptions become values silently; use `return_exceptions=False` unless callers explicitly handle `BaseException` values |
 | GitHub Actions workflow injection warning | Never use `${{ expression }}` directly inside `run:` shell commands — always route through `env:` (`env: MY_VAR: ${{ expr }}` then `"$MY_VAR"` in the script). This rule applies only to `run:` steps; `${{ }}` in `if:` conditions and `with:` action inputs is fine. |
-| Docstring quality gate false-flags "missing Raises section" with no actual `raise` in the function | `tooling/docs-autogen/audit_coverage.py`'s check is `if "raise " in source` — a substring match over the whole function source, including comments and docstrings, not an AST check for real `raise` statements. A comment containing the literal text `raise ` (e.g. "can't raise X here") triggers it. Reword the comment to avoid the substring; don't add a fake `Raises:` section. |
 
 ## 10. Self-Review (before notifying user)
 1. `uv run pytest test/ -m "not qualitative"` passes?
@@ -195,7 +194,6 @@ Adapter functions are specialized LoRA/aLoRA adapters that add task-specific cap
 | `rag` | `rewrite_question(question, context, backend)` | Rewrite question into a retrieval query |
 | `rag` | `clarify_query(question, documents, context, backend)` | Generate clarification or return "CLEAR" |
 | `rag` | `find_citations(response, documents, context, backend)` | Document sentences supporting the response |
-| `rag` | `check_context_relevance(question, document, context, backend)` | **Deprecated.** Granite 4.0 only; no Granite 4.1 adapter and none planned. Will be removed in a future release. Use a prompted relevance check instead. |
 | `rag` | `flag_hallucinated_content(response, documents, context, backend)` | Flag potentially hallucinated sentences |
 
 ```python
@@ -215,6 +213,18 @@ score = core.check_certainty(context, backend)
 
 For lower-level control (custom adapters, model options), use `mfuncs.act()` with `Intrinsic` directly — see examples in `docs/examples/intrinsics/`.
 
+### Weights binding shapes
+
+`Adapter.weights` normalizes each deployment's activation mechanism behind one of
+two shapes — a `WeightsBinding` lifecycle for weights you stage yourself, or
+`EmbeddedBinding.apply_activation` for weights already in the served model. The
+post-activation shape each produces:
+
+| Binding | Reality | Lifecycle verbs | Caller invokes | Normalized post-activation state |
+|---------|---------|------------------|-----------------|-----------------------------------|
+| `LocalFileBinding` | LocalFile/PEFT | `prepare` / `activate` / `deactivate` / `release` | `activate()` / `deactivate()`, via `adapter_scope` | Backend-internal PEFT adapter state toggled; the outgoing request is untouched |
+| `EmbeddedBinding` | Embedded/Granite Switch | none — weights are already in the served model | `apply_activation(request, identity)` | `request.extra_body["chat_template_kwargs"]["adapter_name"]` set; `request.api_params["model"]` removed if present |
+
 ### Project Resources
 
 - **Canonical catalog**: `mellea/backends/adapters/catalog.py` — source of truth for adapter function names, HF repo IDs, and adapter types
@@ -229,7 +239,7 @@ When adding support for a new adapter function (not just using an existing one),
 
 | Repo | Purpose | Adapter functions |
 |------|---------|------------|
-| [`ibm-granite/granitelib-rag-r1.0`](https://huggingface.co/ibm-granite/granitelib-rag-r1.0) | RAG pipeline | answerability, citations, context_relevance, hallucination_detection, query_rewrite, query_clarification |
+| [`ibm-granite/granitelib-rag-r1.0`](https://huggingface.co/ibm-granite/granitelib-rag-r1.0) | RAG pipeline | answerability, citations, hallucination_detection, query_rewrite, query_clarification |
 | [`ibm-granite/granitelib-core-r1.0`](https://huggingface.co/ibm-granite/granitelib-core-r1.0) | Core capabilities | context-attribution, requirement-check, uncertainty |
 | [`ibm-granite/granitelib-guardian-r1.0`](https://huggingface.co/ibm-granite/granitelib-guardian-r1.0) | Safety & compliance | guardian-core, policy-guardrails, factuality-detection, factuality-correction |
 

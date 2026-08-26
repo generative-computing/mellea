@@ -15,7 +15,12 @@ from unittest.mock import MagicMock, mock_open, patch
 
 import pytest
 
-from mellea.backends.adapters import Adapter, EmbeddedIntrinsicAdapter, IntrinsicAdapter
+from mellea.backends.adapters import (
+    Adapter,
+    EmbeddedIntrinsicAdapter,
+    IntrinsicAdapter,
+    get_io_contract,
+)
 from mellea.backends.adapters._core import Identity, LocalFileBinding
 from mellea.backends.adapters.adapter import AdapterMixin
 from mellea.backends.adapters.catalog import AdapterType, IntrinsicsCatalogEntry
@@ -92,6 +97,21 @@ def test_embedded_identity_populated():
     assert adapter.identity.adapter_type == "alora"
 
 
+def test_embedded_carries_the_declared_io_contract_not_a_shim():
+    """resolve_adapter()'s shim path must carry a real contract (issue #1516).
+
+    Regression guard: without this, reverting `get_io_contract(intrinsic_name)`
+    back to the Phase 1 `_ShimIOContract()` placeholder would pass every other
+    test in this file, since none of them inspect `.io_contract`.
+    """
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        adapter = EmbeddedIntrinsicAdapter(
+            "answerability", config={}, technology="alora"
+        )
+    assert adapter.io_contract is get_io_contract("answerability")
+
+
 def test_embedded_identity_lora_technology():
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", DeprecationWarning)
@@ -99,6 +119,38 @@ def test_embedded_identity_lora_technology():
             "answerability", config={}, technology="lora"
         )
     assert adapter.identity.adapter_type == "lora"
+
+
+def test_embedded_catalog_capability_avoids_spurious_registry_warning():
+    """Regression (#1563): catalog aliases use their effective capability.
+
+    Before this fix, the hyphenated catalog name emitted a KNOWN_CAPABILITIES
+    warning even though the adapter function was registered.
+    """
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        adapter = EmbeddedIntrinsicAdapter(
+            "guardian-core", config={}, technology="alora"
+        )
+
+    assert adapter.identity.capability == "guardian_core"
+    assert not any(
+        warning.category is UserWarning and "KNOWN_CAPABILITIES" in str(warning.message)
+        for warning in caught
+    )
+
+
+def test_embedded_custom_capability_still_emits_registry_warning():
+    """Custom embedded adapters retain their user-provided capability token."""
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        adapter = EmbeddedIntrinsicAdapter("custom-adapter", config={})
+
+    assert adapter.identity.capability == "custom-adapter"
+    assert any(
+        warning.category is UserWarning and "KNOWN_CAPABILITIES" in str(warning.message)
+        for warning in caught
+    )
 
 
 def test_embedded_legacy_attributes_preserved():
@@ -170,6 +222,17 @@ def test_intrinsic_identity_populated():
     assert adapter.identity.adapter_type == "alora"
 
 
+def test_intrinsic_carries_the_declared_io_contract_not_a_shim():
+    """resolve_adapter()'s shim path must carry a real contract (issue #1516).
+
+    Regression guard: without this, reverting `get_io_contract(intrinsic_name)`
+    back to the Phase 1 `_ShimIOContract()` placeholder would pass every other
+    test in this file, since none of them inspect `.io_contract`.
+    """
+    adapter = _make_intrinsic_adapter("answerability")
+    assert adapter.io_contract is get_io_contract("answerability")
+
+
 def test_intrinsic_identity_lora_adapter_type():
     with (
         patch(
@@ -190,6 +253,27 @@ def test_intrinsic_identity_lora_adapter_type():
             config_dict={"dummy": "config"},
         )
     assert adapter.identity.adapter_type == "lora"
+
+
+def test_intrinsic_catalog_capability_avoids_spurious_registry_warning():
+    """Regression (#1563): catalog aliases use their effective capability.
+
+    Before this fix, the hyphenated catalog name emitted a KNOWN_CAPABILITIES
+    warning even though the adapter function was registered.
+    """
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        adapter = IntrinsicAdapter(
+            "guardian-core",
+            adapter_type=AdapterType.ALORA,
+            config_dict={"dummy": "config"},
+        )
+
+    assert adapter.identity.capability == "guardian_core"
+    assert not any(
+        warning.category is UserWarning and "KNOWN_CAPABILITIES" in str(warning.message)
+        for warning in caught
+    )
 
 
 def test_intrinsic_legacy_attributes_preserved():
@@ -247,9 +331,33 @@ def test_adapter_scope_raises_for_a_shim_backed_adapter():
     mock_backend = MagicMock(spec=AdapterMixin)
     adapter = _make_intrinsic_adapter("answerability")
 
-    with pytest.raises(NotImplementedError, match="Phase 2"):
+    with pytest.raises(NotImplementedError, match="WeightsBinding not yet implemented"):
         with AdapterMixin.adapter_scope(mock_backend, adapter):
             pytest.fail("body must not run when the shim's activate() raises")
+
+
+def test_adapter_scope_rejects_an_embedded_binding():
+    """adapter_scope drives the WeightsBinding lifecycle; EmbeddedBinding has none.
+
+    Deliberate behaviour change from #1142: `adapter_scope` used to raise
+    `NotImplementedError` from `_ShimWeightsBinding.activate()` for an
+    `EmbeddedIntrinsicAdapter` and fire `invocation_complete(outcome="error")`;
+    it now raises `TypeError` before entering the try/finally and fires
+    nothing. This pins the new guard (`adapter.py`'s `isinstance(adapter.weights,
+    WeightsBinding)` check) rather than leaving it to surface as an
+    `AttributeError` from `adapter.weights.activate()` the next time someone
+    wires embedded generation through this scope.
+    """
+    mock_backend = MagicMock(spec=AdapterMixin)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        adapter = EmbeddedIntrinsicAdapter(
+            "answerability", config={}, technology="alora"
+        )
+
+    with pytest.raises(TypeError, match=r"have no activate\(\)/deactivate\(\)"):
+        with AdapterMixin.adapter_scope(mock_backend, adapter):
+            pytest.fail("body must not run for a binding with no lifecycle")
 
 
 def test_resolve_adapter_returns_existing_by_capability():
@@ -284,6 +392,143 @@ def test_find_adapter_honours_type_preference_order():
         mock_backend, "answerability", ("alora", "lora")
     )
     assert result is alora, "alora must win over lora regardless of insertion order"
+
+
+class _MutatingCapability:
+    """Capability sentinel whose `__eq__` deletes an entry from the registry
+    it is compared against, simulating a concurrent `release()` mutating
+    `_added_adapters` mid-iteration.
+
+    `_find_adapter` compares `a.identity.capability == capability` for each
+    registered adapter in turn; a real `str.__eq__` against this sentinel
+    returns `NotImplemented`, so Python falls back to this class's reflected
+    `__eq__` — firing the side effect from inside the loop, deterministically,
+    with no actual threading required.
+    """
+
+    def __init__(self, registry: dict, key_to_remove: str) -> None:
+        self._registry = registry
+        self._key_to_remove = key_to_remove
+        self.fired = False
+
+    def __eq__(self, other: object) -> bool:
+        if not self.fired:
+            self.fired = True
+            self._registry.pop(self._key_to_remove, None)
+        return False
+
+    def __hash__(self) -> int:
+        return hash("mutating-capability-sentinel")
+
+
+class _MutatingName:
+    """Capability-name sentinel whose `__str__` pops an entry from the
+    registry, simulating a concurrent `release()` mutating
+    `_added_adapters` while `resolve_adapter`'s collision scan builds
+    `f"{name}_"` on every iteration.
+
+    Companion to `_MutatingCapability` (which fires from a reflected
+    `str.__eq__` inside `_find_adapter`): the collision scan never compares
+    `name` with `==`, so the side effect hooks `__str__` instead — the
+    f-string build fires it from inside the scan, deterministically, with no
+    threading. `__add__` answers without firing: `Adapter.__init__` builds
+    `qualified_name` as `name + "_" + ...` during the lazy-registration
+    step, and the mutation must land in the scan, not in registration.
+    """
+
+    def __init__(self, registry: dict, key_to_remove: str, prefix: str) -> None:
+        self._registry = registry
+        self._key_to_remove = key_to_remove
+        self._prefix = prefix
+        self.fired = False
+
+    def __add__(self, other: str) -> str:
+        return self._prefix + other
+
+    def __str__(self) -> str:
+        if not self.fired:
+            self.fired = True
+            self._registry.pop(self._key_to_remove, None)
+        return self._prefix
+
+    def __repr__(self) -> str:
+        return f"_MutatingName({self._prefix!r})"
+
+
+def test_find_adapter_survives_concurrent_removal_during_iteration():
+    """`_find_adapter` must not iterate a live view over `_added_adapters`.
+
+    `_added_adapters` was insert-only until `remove_adapter()` (#1528) added
+    the first runtime deletion from it. A concurrent `release()` mutating the
+    dict while `_find_adapter` holds a live `.values()` view raises
+    `RuntimeError: dictionary changed size during iteration`. `_find_adapter`
+    must snapshot into a list first.
+    """
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        first = EmbeddedIntrinsicAdapter("answerability", config={}, technology="lora")
+        second = EmbeddedIntrinsicAdapter("uncertainty", config={}, technology="lora")
+
+    mock_backend = MagicMock(spec=AdapterMixin)
+    registry = {first.qualified_name: first, second.qualified_name: second}
+    mock_backend._added_adapters = registry
+
+    capability = _MutatingCapability(registry, second.qualified_name)
+    result = AdapterMixin._find_adapter(mock_backend, capability)  # must not raise
+
+    assert capability.fired, "the mutation must have fired during iteration"
+    assert result is None
+    assert second.qualified_name not in registry
+
+
+def test_resolve_adapter_survives_concurrent_removal_during_iteration():
+    """`resolve_adapter`'s collision scan must not iterate a live view of `_added_adapters`.
+
+    Guards the `list(...)` snapshot with the same deterministic sentinel
+    pattern as
+    `test_find_adapter_survives_concurrent_removal_during_iteration`: the
+    pop fires from the scan's `f"{name}_"` build on the first (non-matching)
+    entry, so a live `.items()` view raises
+    `RuntimeError: dictionary changed size during iteration` when the scan
+    then advances, while the snapshot iterates on.
+    """
+    binding = LocalFileBinding(name="answerability", adapter_type=AdapterType.LORA)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        distractor = EmbeddedIntrinsicAdapter(
+            "uncertainty", config={}, technology="lora"
+        )
+
+    mock_backend = MagicMock(spec=AdapterMixin)
+    mock_backend.base_model_name = "ibm-granite/granite-4.1-3b"
+    mock_backend._uses_embedded_adapters = False
+    registry = {distractor.qualified_name: distractor, binding.qualified_name: binding}
+    mock_backend._added_adapters = registry
+    mock_backend._find_adapter.side_effect = lambda cap, types=None: (
+        AdapterMixin._find_adapter(mock_backend, cap, types)
+    )
+    # Nothing new lands in the registry: the binding keeps the name, exactly
+    # as the real duplicate-key guard would.
+    mock_backend.add_adapter.side_effect = lambda a: None
+
+    name = _MutatingName(registry, distractor.qualified_name, "answerability")
+    with (
+        patch(
+            "mellea.backends.adapters.adapter.fetch_intrinsic_metadata",
+            return_value=_MOCK_CATALOG_ENTRY,
+        ),
+        patch(
+            "mellea.backends.adapters.adapter.intrinsics.obtain_io_yaml",
+            return_value="/fake/adapter.yaml",
+        ),
+        patch("builtins.open", mock_open(read_data="key: value")),
+    ):
+        with pytest.raises(KeyError, match=r"LocalFileBinding.*answerability_lora"):
+            AdapterMixin.resolve_adapter(mock_backend, name)
+
+    assert name.fired, "the mutation must have fired during the collision scan"
+    assert distractor.qualified_name not in registry
+    assert binding.qualified_name in registry
 
 
 def test_resolve_adapter_names_the_conflict_when_a_binding_blocks_registration():
@@ -380,3 +625,48 @@ def test_resolve_adapter_lazy_creates_and_returns():
     assert isinstance(created_adapters[0], IntrinsicAdapter)
     assert created_adapters[0].adapter_type == AdapterType.LORA
     assert result is created_adapters[0]
+
+
+def test_resolve_adapter_catalog_alias_returns_registered_adapter():
+    """Regression (#1563): lookup accepts the catalog's public alias.
+
+    The shim stores `guardian_core` as its canonical capability, while callers
+    resolve the adapter via the catalog name `guardian-core`, including when
+    they constrain the adapter type.
+    """
+    mock_catalog_entry = IntrinsicsCatalogEntry(
+        name="guardian-core",
+        capability="guardian_core",
+        repo_id="ibm-granite/granitelib-guardian-r1.0",
+        revision="abc123",
+        adapter_types=(AdapterType.LORA,),
+    )
+    mock_backend = MagicMock(spec=AdapterMixin)
+    mock_backend.base_model_name = "ibm-granite/granite-4.1-3b"
+    mock_backend._uses_embedded_adapters = False
+    mock_backend._added_adapters = {}
+    mock_backend.add_adapter.side_effect = lambda adapter: (
+        mock_backend._added_adapters.__setitem__(adapter.qualified_name, adapter)
+    )
+    mock_backend._find_adapter.side_effect = lambda cap, types=None: (
+        AdapterMixin._find_adapter(mock_backend, cap, types)
+    )
+
+    with (
+        patch(
+            "mellea.backends.adapters.adapter.fetch_intrinsic_metadata",
+            return_value=mock_catalog_entry,
+        ),
+        patch(
+            "mellea.backends.adapters.adapter.intrinsics.obtain_io_yaml",
+            return_value="/fake/adapter.yaml",
+        ),
+        patch("builtins.open", mock_open(read_data="key: value")),
+    ):
+        result = AdapterMixin.resolve_adapter(mock_backend, "guardian-core")
+
+    assert result.identity.name == "guardian-core"
+    assert result.identity.capability == "guardian_core"
+    assert (
+        AdapterMixin._find_adapter(mock_backend, "guardian-core", ("lora",)) is result
+    )

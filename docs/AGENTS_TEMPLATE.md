@@ -15,6 +15,38 @@ Use `mellea` for LLM interactions. No direct OpenAI/Anthropic calls or LangChain
 
 **Prerequisites**: `pip install mellea` · [Docs](https://mellea.ai) · [Repo](https://github.com/generative-computing/mellea)
 
+**Imports** — prefer the top-level prelude. Most names are re-exported from
+`mellea` itself, so a program rarely needs more than one or two import lines:
+
+```python
+from mellea import ChatContext, Instruction, Message, Requirement, req, start_session
+```
+
+The prelude covers sessions (`start_session`, `MelleaSession`, `start_backend`,
+`generative`, `mfuncs`), components (`Message`, `Instruction`, `Document`,
+`Intrinsic`, `SimpleComponent`, `mify`, `CBlock`, `Component`, `ModelOutputThunk`,
+`TemplateRepresentation`), contexts (`ChatContext`, `SimpleContext`, `Context`),
+requirements (`Requirement`, `ValidationResult`, `req`, `check`, `simple_validate`),
+sampling (`RejectionSamplingStrategy`, `SamplingResult`), and backend config
+(`Backend`, `ModelOption`, `model_ids`).
+
+Many symbols are reachable from several modules. Use the canonical path so
+imports stay consistent across a codebase:
+
+- Anything listed above → `mellea`, not a sub-package.
+- Other protocols and data types → `mellea.core`, not `mellea.core.base` /
+  `.backend` / `.requirement`.
+- Other components, contexts, requirements, strategies →
+  `mellea.stdlib.<subpkg>`, not leaf modules like `.chat` or `.simple`.
+- A concrete backend → `mellea.backends.<provider>`.
+
+Concrete backends are intentionally **not** in the prelude — import them explicitly
+so a missing optional dependency gives a targeted install hint:
+
+```python
+from mellea.backends.ollama import OllamaModelBackend
+```
+
 #### 1. The `@generative` Pattern
 **Don't** write prompt templates or regex parsers:
 ```python

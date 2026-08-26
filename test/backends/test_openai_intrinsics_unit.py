@@ -326,6 +326,25 @@ async def test_model_options_override_io_yaml_defaults():
     assert call_kwargs.kwargs.get("max_completion_tokens") == 64
 
 
+async def test_openai_backend_rejects_model_option_on_intrinsic_path():
+    """Regression (#1575): intrinsic calls reject per-call model selection.
+
+    Without this check, `model` survives the user option overlay after adapter
+    activation and collides with the backend's fixed OpenAI client argument.
+    """
+    backend = _make_backend_with_adapter(_SIMPLE_CONFIG)
+    ctx = _make_context()
+
+    with pytest.raises(ValueError, match="model cannot be set via model_options"):
+        await mfuncs.aact(
+            Intrinsic("answerability"),
+            ctx,
+            backend,
+            strategy=None,
+            model_options={"model": "answerability_alora"},
+        )
+
+
 async def test_model_options_forwarded():
     """All applicable model options are forwarded to the API call."""
     backend = _make_backend_with_adapter(_SIMPLE_CONFIG)
@@ -522,6 +541,63 @@ async def test_user_extra_body_merges_into_intrinsic_extra_body():
     assert extra_body["chat_template_kwargs"]["enable_thinking"] is True
     assert extra_body["chat_template_kwargs"]["caller_key"] == "caller-value"
     assert call_kwargs["reasoning_effort"] == "medium"
+
+
+async def test_user_extra_body_cannot_override_embedded_adapter():
+    """The resolved embedded adapter overrides a caller-supplied adapter_name."""
+    backend = _make_backend_with_adapter(_SIMPLE_CONFIG)
+    ctx = _make_context()
+    mock_create = AsyncMock(return_value=_simple_chat_completion())
+
+    mock_client = MagicMock()
+    mock_client.chat.completions.create = mock_create
+
+    with patch.object(
+        OpenAIBackend,
+        "_async_client",
+        new_callable=PropertyMock,
+        return_value=mock_client,
+    ):
+        mot, _ = await mfuncs.aact(
+            Intrinsic("answerability"),
+            ctx,
+            backend,
+            strategy=None,
+            model_options={
+                "extra_body": {
+                    "chat_template_kwargs": {"adapter_name": "caller-selected"}
+                }
+            },
+        )
+        await mot.avalue()
+
+    extra_body = mock_create.call_args.kwargs["extra_body"]
+    assert extra_body["chat_template_kwargs"]["adapter_name"] == "answerability"
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [("model", "other-model"), ("messages", []), ("stream", True), ("tools", [])],
+)
+async def test_intrinsic_extra_body_rejects_protected_request_fields(
+    field: str, value: object
+):
+    """Provider-specific extra_body values cannot override intrinsic invariants."""
+    backend = _make_backend_with_adapter(_SIMPLE_CONFIG)
+    ctx = _make_context()
+
+    with pytest.raises(
+        ValueError,
+        match=rf"extra_body cannot override intrinsic request fields: {field}",
+    ):
+        mot, _ = await mfuncs.aact(
+            Intrinsic("answerability"),
+            ctx,
+            backend,
+            strategy=None,
+            model_options={"extra_body": {field: value}},
+        )
+        await mot.avalue()
 
 
 async def test_user_extra_body_without_thinking():

@@ -40,7 +40,7 @@ def pii_remove_validate(
     text: str,
     requirements: list[str] | None = None,
     loop_budget: int = 3,
-    model_options: dict | None = None,
+    model_options: None | dict = None,
 ) -> ModelOutputThunk | SamplingResult | str:
     """PII scrubbing in mellea with validation."""
     # Extra requirements if any.
@@ -74,7 +74,7 @@ def pii_remove_validate(
 def serve(
     input: list[ChatMessage],
     requirements: list[str] | None = None,
-    model_options: dict | None = None,
+    model_options: None | dict = None,
 ) -> ModelOutputThunk | SamplingResult | str:
     """Simple serve example to do PII stuff."""
     message = input[-1].get_text_content()
