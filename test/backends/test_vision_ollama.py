@@ -110,7 +110,7 @@ def test_image_block_construction_from_pil(pil_image: Image.Image):
 @pytest.fixture
 def mocked_session(mock_ollama_backend):
     canned = ollama.ChatResponse(
-        model="granite-4.2-3b:latest",
+        model="granite4.2:3b",
         created_at=None,
         message=ollama.Message(role="assistant", content="no"),
         done=True,

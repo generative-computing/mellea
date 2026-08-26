@@ -35,9 +35,9 @@ _OLLAMA_IDS = [
 @pytest.mark.parametrize(
     ("model_id", "expected_ollama_name"),
     [
-        (model_ids.IBM_GRANITE_4_2_3B, "granite-4.2-3b:latest"),
-        (model_ids.IBM_GRANITE_4_2_8B, "granite-4.2-8b:latest"),
-        (model_ids.IBM_GRANITE_4_2_30B, "granite-4.2-30b:latest"),
+        (model_ids.IBM_GRANITE_4_2_3B, "granite4.2:3b"),
+        (model_ids.IBM_GRANITE_4_2_8B, "granite4.2:8b"),
+        (model_ids.IBM_GRANITE_4_2_30B, "granite4.2:30b"),
     ],
 )
 def test_granite_4_2_ollama_names(

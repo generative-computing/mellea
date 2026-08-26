@@ -43,7 +43,7 @@ else
 fi
 OLLAMA_BIN="${OLLAMA_BIN:-$(command -v ollama 2>/dev/null || echo "$HOME/.local/bin/ollama")}"
 OLLAMA_MODEL_LIST=(
-    "granite-4.2-3b:latest"
+    "granite4.2:3b"
     "hf.co/ibm-granite/granite-vision-4.1-4b-GGUF:Q4_K_M"
     "llama3.2"
     "qwen2.5vl:7b"

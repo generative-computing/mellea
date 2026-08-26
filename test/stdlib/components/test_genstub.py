@@ -22,7 +22,7 @@ from mellea.stdlib.context import ChatContext, Context
 from mellea.stdlib.requirements import simple_validate
 from mellea.stdlib.sampling import RejectionSamplingStrategy
 
-# Module-level markers: Uses granite-4.2-3b:latest (3B, lightweight) in local mode
+# Module-level markers: Uses granite4.2:3b (3B, lightweight) in local mode
 pytestmark = [pytest.mark.ollama, pytest.mark.e2e]
 
 

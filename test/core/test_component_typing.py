@@ -124,7 +124,7 @@ def test_incorrect_type_override():
 
 
 # Marking as qualitative for now since there's so much generation required for this.
-# Uses granite-4.2-3b:latest (3B, lightweight) in local mode
+# Uses granite4.2:3b (3B, lightweight) in local mode
 @pytest.mark.qualitative
 @pytest.mark.ollama
 @pytest.mark.e2e

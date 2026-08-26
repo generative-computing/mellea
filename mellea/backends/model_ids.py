@@ -118,19 +118,19 @@ IBM_GRANITE_4_1_30B = ModelIdentifier(
 # Granite 4.2 Dense Models
 IBM_GRANITE_4_2_3B = ModelIdentifier(
     hf_model_name="ibm-granite/granite-4.2-3b",
-    ollama_name="granite-4.2-3b:latest",
+    ollama_name="granite4.2:3b",
     context_length=131072,
 )
 
 IBM_GRANITE_4_2_8B = ModelIdentifier(
     hf_model_name="ibm-granite/granite-4.2-8b",
-    ollama_name="granite-4.2-8b:latest",
+    ollama_name="granite4.2:8b",
     context_length=131072,
 )
 
 IBM_GRANITE_4_2_30B = ModelIdentifier(
     hf_model_name="ibm-granite/granite-4.2-30b",
-    ollama_name="granite-4.2-30b:latest",
+    ollama_name="granite4.2:30b",
     context_length=131072,
 )
 

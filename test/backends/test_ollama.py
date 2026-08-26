@@ -27,7 +27,7 @@ TEST_CONTEXT_WINDOW = 2048
 def _ollama_model_for_eval() -> str:
     """Return the Ollama model tag driven by GRANITE42_MODEL env var.
 
-    Accepts either an Ollama tag (granite-4.2-8b:latest) or an HF model ID
+    Accepts either an Ollama tag (granite4.2:8b) or an HF model ID
     (ibm-granite/granite-4.2-8b) — both select the right size.
     Defaults to 3B.
     """
@@ -56,7 +56,7 @@ def _ensure_model_warm() -> None:
     `keep_alive=-1` pins the model in memory until the conftest module-boundary
     eviction fires at the end of this test file.
 
-    Set GRANITE42_MODEL=granite-4.2-8b:latest (or ibm-granite/granite-4.2-8b)
+    Set GRANITE42_MODEL=granite4.2:8b (or ibm-granite/granite-4.2-8b)
     to warm a different size.
     """
     _model = _ollama_model_for_eval()

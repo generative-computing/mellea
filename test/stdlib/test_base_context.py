@@ -419,10 +419,10 @@ def test_session_does_not_bind_when_context_has_history():
 
 
 def test_get_context_length_litellm_prefixed_string():
-    # LiteLLM prefixes model names with a provider slug, e.g. "ollama_chat/granite-4.2-3b:latest".
+    # LiteLLM prefixes model names with a provider slug, e.g. "ollama_chat/granite4.2:3b".
     # The stripped bare name should resolve to the correct context length.
-    assert get_context_length("ollama_chat/granite-4.2-3b:latest") == 131072
-    assert get_context_length("ollama/granite-4.2-8b:latest") == 131072
+    assert get_context_length("ollama_chat/granite4.2:3b") == 131072
+    assert get_context_length("ollama/granite4.2:8b") == 131072
     # Multi-segment strip still resolves when the remainder is a known HF name.
     assert get_context_length("huggingface/ibm-granite/granite-4.2-3b") == 131072
     # Completely unknown prefix+name returns None.
