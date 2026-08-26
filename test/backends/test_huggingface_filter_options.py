@@ -24,7 +24,6 @@ torch = pytest.importorskip("torch", reason="torch not installed — install mel
 
 from mellea.backends import ModelOption
 from mellea.backends.huggingface import (
-    _CHAT_TEMPLATE_THINKING_OPTION_MAP,
     _CHAT_TEMPLATE_THINKING_VARS,
     _GENERATE_KWARGS_ALLOWLIST,
     _HF_INTERNAL_TEMPLATE_VARS,
@@ -47,7 +46,7 @@ def _make_backend(template: object) -> LocalHFBackend:
     object.__setattr__(b, "_tokenizer", _FakeTokenizer())
     b._model_id = "test-org/test-model"
     b.model_options = {}
-    b.to_mellea_model_opts_map = _CHAT_TEMPLATE_THINKING_OPTION_MAP
+    b.to_mellea_model_opts_map = {}
     b.from_mellea_model_opts_map = {ModelOption.MAX_NEW_TOKENS: "max_new_tokens"}
     return b
 
@@ -339,6 +338,16 @@ def test_filter_for_chat_template_drops_thinking_effort_level() -> None:
     assert result == {}
 
 
+def test_filter_for_chat_template_preserves_native_thinking_value() -> None:
+    """A native template variable is not restricted to ModelOption boolean values."""
+    b = _make_backend("{{ thinking }}")
+
+    model_options = b._simplify_and_merge({"thinking": "low"})
+    result = b._filter_for_chat_template(model_options)
+
+    assert result == {"thinking": "low"}
+
+
 def test_filter_for_chat_template_empty_input() -> None:
     """Empty model_options produces an empty dict."""
     b = _make_backend("{{ think }}")
@@ -525,14 +534,16 @@ _GRANITE_THINKING_MODEL_ID = "ibm-granite/granite-4.2-3b"
 
 def _try_load_granite_tokenizer(model_id: str):
     """Return a Granite tokenizer from the local cache, or None."""
-    try:
-        from transformers import AutoTokenizer
+    from huggingface_hub import _CACHED_NO_EXIST, try_to_load_from_cache
+    from transformers import AutoTokenizer
 
-        return AutoTokenizer.from_pretrained(model_id, local_files_only=True)
-    except Exception:
+    cached_config = try_to_load_from_cache(model_id, "config.json")
+    if cached_config is None or cached_config is _CACHED_NO_EXIST:
         return None
+    return AutoTokenizer.from_pretrained(model_id, local_files_only=True)
 
 
+@pytest.mark.integration
 @pytest.mark.huggingface
 def test_granite_allowlist_includes_known_template_vars() -> None:
     """Granite's chat template exposes 'thinking' as a Jinja var.
@@ -565,6 +576,7 @@ def test_granite_allowlist_includes_known_template_vars() -> None:
     )
 
 
+@pytest.mark.integration
 @pytest.mark.huggingface
 def test_granite_allowlist_excludes_generate_only_options() -> None:
     """The Granite template does not reference GenerationConfig param names as Jinja vars.
@@ -606,6 +618,7 @@ def test_granite_allowlist_excludes_generate_only_options() -> None:
         )
 
 
+@pytest.mark.integration
 @pytest.mark.huggingface
 def test_granite_allowlist_excludes_hf_internal_vars() -> None:
     """HF-internal vars are excluded from the Granite allowlist.
@@ -634,6 +647,7 @@ def test_granite_allowlist_excludes_hf_internal_vars() -> None:
         )
 
 
+@pytest.mark.integration
 @pytest.mark.huggingface
 def test_granite_thinking_option_uses_detected_template_variable() -> None:
     """Granite 4.2 receives THINKING under its detected template variable."""
