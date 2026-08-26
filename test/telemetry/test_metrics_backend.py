@@ -379,10 +379,20 @@ async def test_litellm_token_metrics_integration(
     provider = _setup_metrics_provider(metrics_module, metric_reader)
 
     # Use LiteLLM with openai/ prefix - it will use the OPENAI_BASE_URL env var
-    # This tests LiteLLM with a provider that properly returns token usage
+    # This tests LiteLLM with a provider that properly returns token usage.
+    #
+    # "timeout" bounds each attempt to the same 300 s the native
+    # OllamaModelBackend uses, and "num_retries": 0 stops the OpenAI SDK from
+    # silently retrying a stalled attempt: without both, a single stalled
+    # request can consume the whole 900 s pytest-timeout budget (litellm falls
+    # back to a 600 s per-attempt timeout and the SDK retries twice), so the
+    # test dies to the watchdog with no retryable error. With the bound in
+    # place, a stall raises litellm.Timeout, whose APITimeoutError message the
+    # conftest flaky marker (OLLAMA_TIMEOUT_RERUN_PATTERNS) retries like a
+    # native ReadTimeout.
     backend = LiteLLMBackend(  # type: ignore
         model_id=f"openai/{IBM_GRANITE_4_2_3B.ollama_name}",
-        model_options={ModelOption.THINKING: False},
+        model_options={ModelOption.THINKING: False, "timeout": 300.0, "num_retries": 0},
     )
     ctx = SimpleContext()
     ctx = ctx.add(Message(role="user", content="Say 'hello' and nothing else"))

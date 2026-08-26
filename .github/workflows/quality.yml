@@ -120,7 +120,10 @@ jobs:
         # path).
         run: curl -fsSL https://ollama.com/install.sh | OLLAMA_VERSION=0.32.2 sh
       - name: Start serving ollama
-        run: nohup ollama serve &
+        # Capture the server log: live-model stalls (read timeouts, empty
+        # responses) are server-side, and without these lines the job log
+        # shows nothing but the test failures. Dumped on failure below.
+        run: nohup ollama serve > /tmp/ollama-serve.log 2>&1 &
       - name: Pull models
         # granite-vision-4.1 is not in the Ollama library, so it is pulled from
         # IBM's official GGUF repo on Hugging Face (that build ships the mmproj
@@ -156,6 +159,11 @@ jobs:
       - name: Send failure message tests
         if: failure() # This step will only run if a previous step failed
         run: echo "Tests failed. Please verify that tests are working locally."
+      - name: Dump Ollama server log on failure
+        if: failure() # Only the test step can produce a useful server log here.
+        run: |
+          echo "=== ollama serve log (last 100 lines) ==="
+          tail -n 100 /tmp/ollama-serve.log || echo "(no ollama serve log found)"
       - name: Write job summary
         if: always()
         run: |

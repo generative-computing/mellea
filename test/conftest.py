@@ -473,6 +473,21 @@ def cleanup_gpu_backend(backend, backend_name="unknown"):
 # Test Collection Filtering
 # ============================================================================
 
+# Transient Ollama-timeout shapes that the flaky retry net covers.
+# Ollama stalls a request past its read timeout on loaded runners; only those
+# stalls are retried, never real failures. The match target is
+# `f"{excinfo.type.__name__}: {excinfo.value}"` (pytest-rerunfailures), so:
+#   - "ReadTimeout"     native OllamaModelBackend httpx.ReadTimeout
+#   - "APITimeoutError" LiteLLM OpenAI-compatible path: litellm.exceptions.
+#                       Timeout whose message embeds APITimeoutError (verified
+#                       against litellm 1.95.0: "Timeout: litellm.Timeout:
+#                       APITimeoutError - Request timed out. ...")
+# Deliberately NOT matched: pytest-timeout's watchdog kill
+# ("Failed: Timeout (>900.0s) from pytest-timeout.") -- it already consumed
+# the whole per-attempt budget, so retrying it only burns the next one.
+# See test/test_flaky_ollama_rerun.py for the pinned match behaviour.
+OLLAMA_TIMEOUT_RERUN_PATTERNS = ["ReadTimeout", "APITimeoutError"]
+
 
 def pytest_collection_modifyitems(config, items):
     """Skip tests at collection time based on markers and optionally reorder by backend.
@@ -498,10 +513,13 @@ def pytest_collection_modifyitems(config, items):
                 item.add_marker(skip_ollama)
             else:
                 # Ollama stalls a request past its read timeout on loaded
-                # runners; retry only that transient error, not real failures.
+                # runners; retry only those transient timeout shapes (see
+                # OLLAMA_TIMEOUT_RERUN_PATTERNS), not real failures.
                 item.add_marker(
                     pytest.mark.flaky(
-                        reruns=2, reruns_delay=5, only_rerun="ReadTimeout"
+                        reruns=2,
+                        reruns_delay=5,
+                        only_rerun=OLLAMA_TIMEOUT_RERUN_PATTERNS,
                     )
                 )
 
