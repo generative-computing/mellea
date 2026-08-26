@@ -205,7 +205,7 @@ BACKEND_GROUPS = {
 }
 
 # Execution order when --group-by-backend is used
-BACKEND_GROUP_ORDER = ["huggingface", "openai_vllm", "ollama", "api"]
+BACKEND_GROUP_ORDER = ["huggingface", "ollama", "openai_vllm", "api"]
 
 
 # ============================================================================
@@ -486,6 +486,7 @@ def pytest_collection_modifyitems(config, items):
     skip_ollama = pytest.mark.skip(
         reason="Ollama not available (port 11434 not listening)"
     )
+    skip_vllm = pytest.mark.skip(reason="vLLM disabled by WITH_VLLM=0")
 
     # Auto-apply 'unit' marker to tests without explicit granularity markers.
     # This enables `pytest -m unit` without per-file maintenance burden.
@@ -504,6 +505,9 @@ def pytest_collection_modifyitems(config, items):
                         reruns=2, reruns_delay=5, only_rerun="ReadTimeout"
                     )
                 )
+
+        if os.environ.get("WITH_VLLM") == "0" and item.get_closest_marker("vllm"):
+            item.add_marker(skip_vllm)
 
         # Auto-apply unit marker
         if not any(item.get_closest_marker(m) for m in _NON_UNIT):
@@ -564,7 +568,8 @@ def pytest_runtest_setup(item):
     # Track backend group transitions when --group-by-backend is used
     if config.getoption("--group-by-backend", default=False):
         current_group = None
-        for group_name, group_info in BACKEND_GROUPS.items():
+        for group_name in BACKEND_GROUP_ORDER:
+            group_info = BACKEND_GROUPS[group_name]
             markers = group_info.get("markers") or [group_info["marker"]]
             if any(item.get_closest_marker(m) for m in markers):
                 current_group = group_name

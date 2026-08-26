@@ -42,6 +42,7 @@ else
     OLLAMA_DIR="$HOME/.ollama"
 fi
 OLLAMA_BIN="${OLLAMA_BIN:-$(command -v ollama 2>/dev/null || echo "$HOME/.local/bin/ollama")}"
+OLLAMA_CONTEXT_LENGTH="${OLLAMA_CONTEXT_LENGTH:-2048}"
 OLLAMA_MODEL_LIST=(
     "granite4.2:3b"
     "hf.co/ibm-granite/granite-vision-4.1-4b-GGUF:Q4_K_M"
@@ -146,6 +147,7 @@ else
     log "Starting ollama server on ${OLLAMA_HOST}:${OLLAMA_PORT}..."
     export OLLAMA_HOST="${OLLAMA_HOST}:${OLLAMA_PORT}"
     export OLLAMA_MODELS="${OLLAMA_DIR}/models"
+    export OLLAMA_CONTEXT_LENGTH
     mkdir -p "$OLLAMA_MODELS"
 
     # Ensure ollama can find system CUDA libraries
@@ -154,6 +156,7 @@ else
         log "Added system CUDA to LD_LIBRARY_PATH"
     fi
 
+    log "Using Ollama default context length: $OLLAMA_CONTEXT_LENGTH"
     "$OLLAMA_BIN" serve > "$LOGDIR/ollama.log" 2>&1 &
     OLLAMA_PID=$!
     log "Ollama server PID: $OLLAMA_PID"

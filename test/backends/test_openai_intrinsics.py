@@ -13,6 +13,7 @@ import os
 import pathlib
 import signal
 import subprocess
+import sys
 import time
 
 import pytest
@@ -89,6 +90,12 @@ def vllm_switch_process():
         yield None
         return
 
+    if os.environ.get("VLLM_TEST_BASE_URL"):
+        pytest.skip(
+            "Generic vLLM server is active; Granite Switch tests require a separate server",
+            allow_module_level=True,
+        )
+
     # Require CUDA — vLLM does not support MPS
     try:
         subprocess.run(["nvidia-smi", "-L"], check=True, capture_output=True)
@@ -100,8 +107,24 @@ def vllm_switch_process():
 
     vllm_venv = os.environ.get("VLLM_VENV_PATH", ".vllm-venv")
     vllm_python = os.path.join(vllm_venv, "bin", "python")
-    if not os.path.isfile(vllm_python):
-        subprocess.run(["uv", "venv", vllm_venv, "--python", "3.11"], check=True)
+    expected_python = f"{sys.version_info.major}.{sys.version_info.minor}"
+    existing_python = (
+        subprocess.run(
+            [
+                vllm_python,
+                "-c",
+                "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        if os.path.isfile(vllm_python)
+        else None
+    )
+    if existing_python is None or existing_python.stdout.strip() != expected_python:
+        subprocess.run(
+            ["uv", "venv", vllm_venv, "--python", sys.executable, "--clear"], check=True
+        )
         subprocess.run(
             ["uv", "pip", "install", "--python", vllm_python, "vllm"], check=True
         )
