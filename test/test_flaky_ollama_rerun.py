@@ -32,6 +32,15 @@ LITELLM_TIMEOUT = (
     "Error_str: Request timed out. - timeout value=300.0, time taken=300.12 seconds"
 )
 
+# The streaming stream-guard abort (mellea/helpers/async_helpers.py,
+# DEFAULT_CHUNK_TIMEOUT=120.0): the builtin TimeoutError is raised verbatim at
+# the consumer (mellea/core/base.py) when a stalled stream goes quiet for 120 s.
+STREAM_GUARD_TIMEOUT = (
+    "TimeoutError: Stream timed out after 120.0s without a chunk "
+    "(covers time-to-first-token and inter-chunk gaps). "
+    "Set ModelOption.STREAM_TIMEOUT to a larger value or None to disable."
+)
+
 # pytest-timeout watchdog kill of an attempt that consumed the 900 s budget.
 WATCHDOG_KILL = "Failed: Timeout (>900.0s) from pytest-timeout."
 
@@ -51,6 +60,11 @@ def test_native_ollama_readtimeout_is_rerunnable():
 def test_litellm_openai_compatible_timeout_is_rerunnable():
     """The LiteLLM path's litellm.Timeout (APITimeoutError message) must rerun."""
     assert _matches_any(OLLAMA_TIMEOUT_RERUN_PATTERNS, LITELLM_TIMEOUT)
+
+
+def test_streaming_stream_guard_timeout_is_rerunnable():
+    """A stalled stream aborted by the 120 s chunk guard must rerun."""
+    assert _matches_any(OLLAMA_TIMEOUT_RERUN_PATTERNS, STREAM_GUARD_TIMEOUT)
 
 
 def test_pytest_timeout_watchdog_kill_is_not_rerunnable():

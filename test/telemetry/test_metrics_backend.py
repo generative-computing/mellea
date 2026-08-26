@@ -180,6 +180,12 @@ async def test_ollama_token_metrics_integration(
         model_options={
             ModelOption.CONTEXT_WINDOW: TEST_CONTEXT_WINDOW,
             ModelOption.THINKING: False,
+            # Bound the worst case: this "say hello" prompt has produced
+            # 1800+ token generations on CI, and at CI's ~9 t/s CPU decode
+            # that is a 3-15 minute single request that can eat the test's
+            # entire pytest-timeout budget. 64 tokens is far more than a
+            # "hello" answer needs.
+            ModelOption.MAX_NEW_TOKENS: 64,
         },
     )
     ctx = SimpleContext()
@@ -260,6 +266,10 @@ async def test_openai_token_metrics_integration(enable_metrics, metric_reader, s
         base_url=f"http://{os.environ.get('OLLAMA_HOST', 'localhost:11434')}/v1",
         api_key="ollama",
         default_extra_body={"chat_template_kwargs": {"enable_thinking": False}},
+        # Same output bound as the other live "say hello" tests: without it a
+        # non-compliant generation (observed 1800+ tokens on CI) can run for
+        # minutes on a ~9 t/s CPU runner and eat the test's entire budget.
+        model_options={ModelOption.MAX_NEW_TOKENS: 64},
     )
     ctx = SimpleContext()
     ctx = ctx.add(Message(role="user", content="Say 'hello' and nothing else"))
@@ -392,7 +402,14 @@ async def test_litellm_token_metrics_integration(
     # native ReadTimeout.
     backend = LiteLLMBackend(  # type: ignore
         model_id=f"openai/{IBM_GRANITE_4_2_3B.ollama_name}",
-        model_options={ModelOption.THINKING: False, "timeout": 300.0, "num_retries": 0},
+        # MAX_NEW_TOKENS: same output bound as the other live "say hello"
+        # tests (see test_ollama_token_metrics_integration).
+        model_options={
+            ModelOption.THINKING: False,
+            "timeout": 300.0,
+            "num_retries": 0,
+            ModelOption.MAX_NEW_TOKENS: 64,
+        },
     )
     ctx = SimpleContext()
     ctx = ctx.add(Message(role="user", content="Say 'hello' and nothing else"))
@@ -547,7 +564,8 @@ async def test_ollama_sampling_metrics_integration(enable_metrics, metric_reader
 
     backend = OllamaModelBackend(  # type: ignore
         model_id=IBM_GRANITE_4_2_3B.ollama_name,
-        model_options={ModelOption.THINKING: False},
+        # Same output bound as the other live "say hello" tests.
+        model_options={ModelOption.THINKING: False, ModelOption.MAX_NEW_TOKENS: 64},
     )
     strategy = RejectionSamplingStrategy(loop_budget=1)
     ctx = SimpleContext()
@@ -594,7 +612,8 @@ async def test_ollama_generate_from_raw_metrics_integration(
 
     backend = OllamaModelBackend(  # type: ignore
         model_id=IBM_GRANITE_4_2_3B.ollama_name,
-        model_options={ModelOption.THINKING: False},
+        # Same output bound as the other live "say hello" tests.
+        model_options={ModelOption.THINKING: False, ModelOption.MAX_NEW_TOKENS: 64},
     )
     ctx = SimpleContext()
     actions = [CBlock("Say 'hi' and nothing else."), CBlock("Say 'hello'.")]

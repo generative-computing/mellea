@@ -482,11 +482,19 @@ def cleanup_gpu_backend(backend, backend_name="unknown"):
 #                       Timeout whose message embeds APITimeoutError (verified
 #                       against litellm 1.95.0: "Timeout: litellm.Timeout:
 #                       APITimeoutError - Request timed out. ...")
+#   - "TimeoutError"    streaming stream-guard abort: a stalled stream quiet
+#                       for DEFAULT_CHUNK_TIMEOUT (120 s) is aborted by
+#                       send_to_queue and the builtin TimeoutError is raised
+#                       verbatim at the consumer (mellea/core/base.py). This
+#                       is the bounded form of the same stall on the
+#                       streaming path; without it, a stalled stream re-arms
+#                       the 120 s per-chunk guard until the 900 s pytest
+#                       watchdog kills the job (observed: run 32991484037).
 # Deliberately NOT matched: pytest-timeout's watchdog kill
 # ("Failed: Timeout (>900.0s) from pytest-timeout.") -- it already consumed
 # the whole per-attempt budget, so retrying it only burns the next one.
 # See test/test_flaky_ollama_rerun.py for the pinned match behaviour.
-OLLAMA_TIMEOUT_RERUN_PATTERNS = ["ReadTimeout", "APITimeoutError"]
+OLLAMA_TIMEOUT_RERUN_PATTERNS = ["ReadTimeout", "APITimeoutError", "TimeoutError"]
 
 
 def pytest_collection_modifyitems(config, items):
