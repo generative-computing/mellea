@@ -147,6 +147,25 @@ jobs:
           # The names below are what the tests match against; print them so a
           # tag-name mismatch is diagnosable from the log alone.
           ollama list
+      - name: Constrain the granite4.2:3b context for the CI runner
+        # The published granite4.2:3b tag ships `num_ctx 131072` in its
+        # Modelfile (granite4.1:3b carries no num_ctx, so CI always ran the
+        # Ollama 4096 default). On the 4-vCPU/16 GB CPU-only runner the 131K
+        # context allocates a ~6 GB KV cache at load time; the memory
+        # pressure wedges inference for 15-30 minute windows, with requests
+        # hanging at the client timeout and decodes crawling to ~0.3 tok/s
+        # (runs 33048969379 and 33067783570; tracked in #1589). Re-point the
+        # local tag at an 8192-context build of the same weights: tests
+        # request the same tag name, so no test code changes. 8192 is 2x the
+        # context every Ollama test on main uses.
+        run: |
+          ollama cp granite4.2:3b granite4.2:3b-128k
+          printf 'FROM granite4.2:3b-128k\nPARAMETER num_ctx 8192\n' \
+            > /tmp/MODELFILE-granite42-ci
+          ollama create granite4.2:3b -f /tmp/MODELFILE-granite42-ci
+          # grep exits non-zero (failing the step) if the parameter did not
+          # land, so a silently-wrong build cannot pass CI.
+          ollama show granite4.2:3b --modelfile | grep '^PARAMETER'
       - name: Run Tests
         id: tests
         env:

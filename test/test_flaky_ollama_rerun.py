@@ -24,6 +24,11 @@ from test.conftest import OLLAMA_TIMEOUT_RERUN_PATTERNS
 # The live "say hello" telemetry tests whose timeout shapes are pinned here.
 METRICS_TEST_PATH = Path(__file__).parent / "telemetry" / "test_metrics_backend.py"
 
+# The quality workflow whose Ollama model provisioning is pinned here.
+QUALITY_WORKFLOW_PATH = (
+    Path(__file__).parents[1] / ".github" / "workflows" / "quality.yml"
+)
+
 # Match strings captured from the exception shapes each path raises, using the
 # same f"{type.__name__}: {value}" construction pytest-rerunfailures uses.
 
@@ -114,3 +119,20 @@ def test_live_tests_bound_the_avalue_consumption():
     """
     src = METRICS_TEST_PATH.read_text()
     assert src.count("asyncio.wait_for(mot.avalue(), timeout=300.0)") == 4
+
+
+def test_ci_constrains_the_granite_4_2_context_window():
+    """CI must re-point granite4.2:3b at a constrained-context build.
+
+    The published granite4.2:3b tag ships `num_ctx 131072` in its Modelfile
+    (granite4.1:3b carries no num_ctx, so CI ran the 4096 default). On the
+    16 GB CPU runner the 131K context allocates a ~6 GB KV cache at load
+    time (8.35 GB total vs 2.75 GB at 8192, measured locally); the memory
+    pressure wedges inference for 15-30 minute windows that outlast the
+    3x300 s retry budget (runs 33048969379 and 33067783570, tracked in
+    #1589). main-based runs never hit this, which is why the correlation
+    with the 4.2 model switch in this PR is exact.
+    """
+    src = QUALITY_WORKFLOW_PATH.read_text()
+    assert "PARAMETER num_ctx 8192" in src
+    assert "ollama create granite4.2:3b -f" in src
