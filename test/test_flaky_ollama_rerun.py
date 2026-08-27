@@ -17,8 +17,12 @@ consumed the whole per-attempt budget.
 """
 
 import re
+from pathlib import Path
 
 from test.conftest import OLLAMA_TIMEOUT_RERUN_PATTERNS
+
+# The live "say hello" telemetry tests whose timeout shapes are pinned here.
+METRICS_TEST_PATH = Path(__file__).parent / "telemetry" / "test_metrics_backend.py"
 
 # Match strings captured from the exception shapes each path raises, using the
 # same f"{type.__name__}: {value}" construction pytest-rerunfailures uses.
@@ -84,3 +88,29 @@ def test_streaming_total_budget_timeout_is_rerunnable():
 def test_pytest_timeout_watchdog_kill_is_not_rerunnable():
     """A watchdog kill already spent the attempt budget; rerunning is pure waste."""
     assert not _matches_any(OLLAMA_TIMEOUT_RERUN_PATTERNS, WATCHDOG_KILL)
+
+
+def test_live_openai_compat_tests_send_the_max_tokens_cap():
+    """The /v1 live tests must cap output with the raw ``max_tokens`` key.
+
+    ModelOption.MAX_NEW_TOKENS maps to ``max_completion_tokens`` on the
+    OpenAI/LiteLLM paths, but the CI-pinned Ollama 0.32.2 /v1 handler only
+    maps ``max_tokens`` -> num_predict (openai/openai.go at v0.32.2) and
+    silently ignores max_completion_tokens. With the sentinel, the
+    generation ran uncapped on CI for 15 m (run 33048969379, 3.12 lane);
+    local Ollama 0.33.0 accepts both, which is why the sentinel looked
+    fine locally.
+    """
+    src = METRICS_TEST_PATH.read_text()
+    assert src.count('"max_tokens": 64') == 2  # openai + litellm live tests
+
+
+def test_live_tests_bound_the_avalue_consumption():
+    """All four live consumption paths must stay inside the 300 s budget.
+
+    astream() returns as soon as its queue drains, so a long stream is
+    finished by avalue(); without the bound it rides to the 900 s pytest
+    watchdog (run 33048969379: a 15 m stream escaped the astream bound).
+    """
+    src = METRICS_TEST_PATH.read_text()
+    assert src.count("asyncio.wait_for(mot.avalue(), timeout=300.0)") == 4

@@ -208,7 +208,10 @@ async def test_ollama_token_metrics_integration(
         # TimeoutError the flaky marker retries, matching non-streaming
         # behaviour.
         await asyncio.wait_for(mot.astream(), timeout=300.0)
-    await mot.avalue()
+    # astream() returns as soon as its queue drains, so a long stream is
+    # finished by avalue(); keep that inside the same 300 s budget (run
+    # 33048969379: a 15 m stream escaped the astream bound above).
+    await asyncio.wait_for(mot.avalue(), timeout=300.0)
 
     # Force metrics export and collection
     await drain_background_tasks()
@@ -278,7 +281,14 @@ async def test_openai_token_metrics_integration(enable_metrics, metric_reader, s
         # Same output bound as the other live "say hello" tests: without it a
         # non-compliant generation (observed 1800+ tokens on CI) can run for
         # minutes on a ~9 t/s CPU runner and eat the test's entire budget.
-        model_options={ModelOption.MAX_NEW_TOKENS: 64},
+        # Send it as the raw "max_tokens" key, not ModelOption.MAX_NEW_TOKENS:
+        # mellea maps the sentinel to max_completion_tokens, which the
+        # CI-pinned Ollama 0.32.2 /v1 handler silently ignores (it only maps
+        # max_tokens -> num_predict; see openai/openai.go at v0.32.2). With
+        # the sentinel, the generation ran uncapped on CI for 15 m (run
+        # 33048969379, 3.12 lane); local Ollama 0.33.0 accepts both, which is
+        # why the sentinel looked fine locally.
+        model_options={"max_tokens": 64},
         # Disable the OpenAI SDK's automatic retries and bound each request to
         # the 300 s the other live paths use. With the SDK defaults (2 retries,
         # 600 s read timeout) a stalled server multiplies into a
@@ -307,7 +317,10 @@ async def test_openai_token_metrics_integration(enable_metrics, metric_reader, s
         # TimeoutError the flaky marker retries, matching non-streaming
         # behaviour.
         await asyncio.wait_for(mot.astream(), timeout=300.0)
-    await mot.avalue()
+    # astream() returns as soon as its queue drains, so a long stream is
+    # finished by avalue(); keep that inside the same 300 s budget (run
+    # 33048969379: a 15 m stream escaped the astream bound above).
+    await asyncio.wait_for(mot.avalue(), timeout=300.0)
 
     await drain_background_tasks()
     provider.force_flush()
@@ -427,13 +440,18 @@ async def test_litellm_token_metrics_integration(
     # native ReadTimeout.
     backend = LiteLLMBackend(  # type: ignore
         model_id=f"openai/{IBM_GRANITE_4_2_3B.ollama_name}",
-        # MAX_NEW_TOKENS: same output bound as the other live "say hello"
-        # tests (see test_ollama_token_metrics_integration).
+        # "max_tokens": same output bound as the other live "say hello"
+        # tests (see test_ollama_token_metrics_integration). Sent as the raw
+        # key, not ModelOption.MAX_NEW_TOKENS: mellea maps the sentinel to
+        # max_completion_tokens, which the CI-pinned Ollama 0.32.2 /v1
+        # handler silently ignores (it only maps max_tokens -> num_predict;
+        # see openai/openai.go at v0.32.2), leaving the generation uncapped
+        # on CI (15 m stream, run 33048969379, 3.12 lane).
         model_options={
             ModelOption.THINKING: False,
             "timeout": 300.0,
             "num_retries": 0,
-            ModelOption.MAX_NEW_TOKENS: 64,
+            "max_tokens": 64,
         },
     )
     ctx = SimpleContext()
@@ -455,7 +473,10 @@ async def test_litellm_token_metrics_integration(
         # TimeoutError the flaky marker retries, matching non-streaming
         # behaviour.
         await asyncio.wait_for(mot.astream(), timeout=300.0)
-    await mot.avalue()
+    # astream() returns as soon as its queue drains, so a long stream is
+    # finished by avalue(); keep that inside the same 300 s budget (run
+    # 33048969379: a 15 m stream escaped the astream bound above).
+    await asyncio.wait_for(mot.avalue(), timeout=300.0)
 
     await drain_background_tasks()
     provider.force_flush()
@@ -521,7 +542,10 @@ async def test_huggingface_token_metrics_integration(
         # TimeoutError the flaky marker retries, matching non-streaming
         # behaviour.
         await asyncio.wait_for(mot.astream(), timeout=300.0)
-    await mot.avalue()
+    # astream() returns as soon as its queue drains, so a long stream is
+    # finished by avalue(); keep that inside the same 300 s budget (run
+    # 33048969379: a 15 m stream escaped the astream bound above).
+    await asyncio.wait_for(mot.avalue(), timeout=300.0)
 
     await drain_background_tasks()
     provider.force_flush()
