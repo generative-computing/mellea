@@ -91,11 +91,11 @@ def test_pytest_timeout_watchdog_kill_is_not_rerunnable():
 
 
 def test_live_openai_compat_tests_send_the_max_tokens_cap():
-    """The /v1 live tests must cap output with the raw ``max_tokens`` key.
+    """The /v1 live tests must cap output with the raw `max_tokens` key.
 
-    ModelOption.MAX_NEW_TOKENS maps to ``max_completion_tokens`` on the
+    ModelOption.MAX_NEW_TOKENS maps to `max_completion_tokens` on the
     OpenAI/LiteLLM paths, but the CI-pinned Ollama 0.32.2 /v1 handler only
-    maps ``max_tokens`` -> num_predict (openai/openai.go at v0.32.2) and
+    maps `max_tokens` -> num_predict (openai/openai.go at v0.32.2) and
     silently ignores max_completion_tokens. With the sentinel, the
     generation ran uncapped on CI for 15 m (run 33048969379, 3.12 lane);
     local Ollama 0.33.0 accepts both, which is why the sentinel looked
