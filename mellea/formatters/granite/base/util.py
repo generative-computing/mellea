@@ -10,7 +10,7 @@ import itertools
 import json
 import os
 import uuid
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 # Third Party
 import pydantic
@@ -232,6 +232,30 @@ def chat_completion_request_to_transformers_inputs(
         and request["extra_body"].get("documents") is not None
     ):
         tokenizer_input["documents"] = request["extra_body"]["documents"]
+
+    if request.get("extra_body") is not None:
+        chat_template_kwargs = request["extra_body"].get("chat_template_kwargs")
+        if chat_template_kwargs is not None:
+            if not isinstance(chat_template_kwargs, dict):
+                raise TypeError(
+                    "extra_body.chat_template_kwargs must be a dict for "
+                    "Hugging Face chat-template rendering"
+                )
+            reserved_template_kwargs = {
+                "conversation",
+                "tools",
+                "documents",
+                "add_generation_prompt",
+            }
+            overridden_keys = reserved_template_kwargs.intersection(
+                chat_template_kwargs
+            )
+            if overridden_keys:
+                raise ValueError(
+                    "extra_body.chat_template_kwargs cannot override Hugging Face "
+                    "chat-template inputs: " + ", ".join(sorted(overridden_keys))
+                )
+            tokenizer_input.update(cast(dict[str, Any], chat_template_kwargs))
 
     input_tokens = tokenizer.apply_chat_template(**tokenizer_input, return_tensors="pt")  # type: ignore[union-attr]
 

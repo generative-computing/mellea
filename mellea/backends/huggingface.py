@@ -81,14 +81,20 @@ from ..stdlib.components import Intrinsic, Message
 from ..stdlib.requirements import ALoraRequirement, LLMaJRequirement
 from ..telemetry.context import generate_request_id, with_context
 from ._options import resolve_model_options
-from .adapters import AdapterMixin, IntrinsicAdapter, LocalHFAdapter
+from .adapters import (
+    AdapterMixin,
+    EmbeddedActivationRequest,
+    EmbeddedBinding,
+    IntrinsicAdapter,
+    LocalHFAdapter,
+)
 from .adapters._core import (
     Adapter as _AdapterCore,
     IOContract,
     LocalFileBinding,
     WeightsBinding,
 )
-from .adapters.adapter import AdapterInput
+from .adapters.adapter import AdapterInput, EmbeddedIntrinsicAdapter
 from .backend import FormatterBackend
 from .cache import Cache, SimpleLRUCache
 from .model_ids import ModelIdentifier
@@ -344,6 +350,11 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             tokenizer/model/device; if provided, `model_id` is not used for loading.
         default_to_constraint_checking_alora (bool): If `False`, aLoRA constraint
             checking is deactivated; mainly for benchmarking and debugging.
+        load_embedded_adapters (bool): If `True`, register adapter functions
+            embedded in the Granite Switch checkpoint named by `adapter_source`
+            (or `model_id` when `adapter_source` is not set).
+        adapter_source (str | None): Local checkpoint directory or Hugging Face
+            Hub repository used to discover embedded adapter functions.
         model_options (dict | None): Default model options for generation requests.
 
     Attributes:
@@ -368,6 +379,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         cache: Cache | None = None,
         custom_config: TransformersTorchConfig | None = None,
         default_to_constraint_checking_alora: bool = True,
+        load_embedded_adapters: bool = False,
+        adapter_source: str | None = None,
         model_options: dict | None = None,
     ):
         """Load model weights from the given model ID, or from a custom config if provided."""
@@ -459,8 +472,12 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         )
 
         # Adapters can be made known to the backend (added) and loaded.
-        self._added_adapters: dict[str, LocalHFAdapter | LocalFileBinding] = {}
+        self._added_adapters: dict[
+            str, LocalHFAdapter | LocalFileBinding | EmbeddedIntrinsicAdapter
+        ] = {}
         self._loaded_adapters: dict[str, LocalHFAdapter | LocalFileBinding] = {}
+        self._adapter_source = adapter_source
+        self._uses_embedded_adapters = load_embedded_adapters
 
         self._generation_lock = threading.RLock()
         """Forces generation requests to be non-concurrent, and guards adapter
@@ -473,6 +490,9 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         inside that section, on the same thread, via `_adapter_activation_lock()`.
         A plain `Lock` deadlocks on that same-thread re-acquisition (#1465).
         """
+
+        if load_embedded_adapters:
+            self.register_embedded_adapter_model(self._adapter_source or self._model_id)
 
     def _make_dc_cache(self, toks, **model_options):
         dc = DynamicCache()
@@ -610,6 +630,27 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             _assert_correct_adapters("", self._model)
             return out
 
+    def _generate_embedded_with_generation_lock(
+        self, generate_func: Callable[..., _T], *args: Any, **kwargs: Any
+    ) -> _T:
+        """Run embedded-adapter generation while serialising model access.
+
+        Embedded adapter functions select their control token while rendering
+        the chat template. They must not use the PEFT lifecycle, but local
+        Transformers generation still shares the backend's model and therefore
+        remains serialised with every other generation path.
+
+        Args:
+            generate_func: The synchronous generation callable to invoke.
+            *args: Positional arguments forwarded to `generate_func`.
+            **kwargs: Keyword arguments forwarded to `generate_func`.
+
+        Returns:
+            Whatever `generate_func` returns.
+        """
+        with self._generation_lock:
+            return generate_func(*args, **kwargs)
+
     def _generate_intrinsic_with_adapter_scope(
         self,
         adapter: IntrinsicAdapter,
@@ -718,7 +759,9 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             ValueError: If no adapter is registered for the requested intrinsic,
                 or if the context contains images or audio; `LocalHFBackend`
                 does not support multimodal inputs.
-            TypeError: If the adapter isn't an IntrinsicAdapter.
+            TypeError: If the adapter is neither an `IntrinsicAdapter` nor an
+                `EmbeddedIntrinsicAdapter`, or if an embedded adapter does not
+                have an `EmbeddedBinding`.
         """
         if not ctx.is_chat_context:
             raise Exception("Does not yet support non-chat contexts.")
@@ -780,9 +823,10 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
         # TODO: Code below this point is mostly specific to RagIntrinsics
         #       It should be refactored into a specific adapter.transform() function.
-        if not isinstance(adapter, IntrinsicAdapter):
+        if not isinstance(adapter, (IntrinsicAdapter, EmbeddedIntrinsicAdapter)):
             raise TypeError(
-                f"LocalHFBackend only supports IntrinsicAdapters, got: {type(adapter).__name__}"
+                "LocalHFBackend only supports IntrinsicAdapter or "
+                f"EmbeddedIntrinsicAdapter, got: {type(adapter).__name__}"
             )
 
         intrinsic_config = adapter.config
@@ -819,9 +863,26 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         #       so we will have to invalidate the cache on our side. This requires
         #       us having specific caching for each Component/Message.
 
+        rewritten_request = rewritten.model_dump()
+        if isinstance(adapter, EmbeddedIntrinsicAdapter):
+            if not isinstance(adapter.weights, EmbeddedBinding):
+                raise TypeError(
+                    "EmbeddedIntrinsicAdapter.weights must be an EmbeddedBinding; "
+                    f"got {type(adapter.weights).__name__}. Activation cannot proceed."
+                )
+            extra_body = rewritten_request.setdefault("extra_body", {})
+            if not isinstance(extra_body, dict):
+                raise TypeError(
+                    "Embedded adapter generation requires extra_body to be a dict."
+                )
+            await adapter.weights.apply_activation(
+                EmbeddedActivationRequest(extra_body=extra_body, api_params={}),
+                adapter.identity,
+            )
+
         generate_input, other_input = (
             granite_formatters.base.util.chat_completion_request_to_transformers_inputs(  # type: ignore
-                rewritten,
+                rewritten_request,
                 self._tokenizer,
                 self._model,
                 ll_tokenizer=self._llguidance_tokenizer,
@@ -881,16 +942,27 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
             model_arg = _CapturingModelProxy()  # type: ignore[assignment]
 
-        chat_response = asyncio.to_thread(
-            self._generate_intrinsic_with_adapter_scope,
-            adapter,
-            granite_formatters.base.util.generate_with_transformers,  # type: ignore
-            # Passed as args/kwargs to generate.
-            self._tokenizer,
-            model_arg,
-            generate_input,
-            other_input,
-        )
+        if isinstance(adapter, IntrinsicAdapter):
+            chat_response = asyncio.to_thread(
+                self._generate_intrinsic_with_adapter_scope,
+                adapter,
+                granite_formatters.base.util.generate_with_transformers,  # type: ignore
+                # Passed as args/kwargs to generate.
+                self._tokenizer,
+                model_arg,
+                generate_input,
+                other_input,
+            )
+        else:
+            chat_response = asyncio.to_thread(
+                self._generate_embedded_with_generation_lock,
+                granite_formatters.base.util.generate_with_transformers,  # type: ignore
+                # Passed as args/kwargs to generate.
+                self._tokenizer,
+                model_arg,
+                generate_input,
+                other_input,
+            )
 
         output = ModelOutputThunk(None)
         output._gen.start = datetime.datetime.now()
@@ -2212,32 +2284,36 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
     @property
     def base_model_name(self):
         """Returns the base_model_id of the model used by the backend. For example, `granite-3.3-8b-instruct` for `ibm-granite/granite-3.3-8b-instruct`."""
-        return self._model_id.split("/")[1]
+        return self._model_id.rsplit("/", maxsplit=1)[-1]
 
     def add_adapter(self, adapter: AdapterInput) -> None:
-        """Register a LoRA/aLoRA adapter with this backend so it can be loaded later.
+        """Register an adapter function with this backend.
 
         Downloads the adapter weights (via `adapter.get_local_hf_path`) and records
         the adapter in the backend's registry. The adapter must not already be
         registered with a different backend.
 
         Accepts the full `AdapterInput` union to honour the mixin contract, but
-        only the LocalFile/PEFT reality is supported here — other realities are
-        rejected at runtime rather than narrowing the signature.
+        LocalFile/PEFT and Embedded/Granite Switch realities are supported.
+        Embedded adapter functions are already present in the model, so they
+        are registered without downloading or loading PEFT weights.
 
         Args:
             adapter (AdapterInput): The adapter to register. Must be a
-                `LocalHFAdapter` or `LocalFileBinding`; other adapter realities
-                are rejected.
+                `LocalHFAdapter`, `LocalFileBinding`, or
+                `EmbeddedIntrinsicAdapter`; other adapter realities are
+                rejected.
 
         Raises:
-            TypeError: If `adapter` is not a `LocalHFAdapter` or `LocalFileBinding`.
+            TypeError: If `adapter` is not a supported local or embedded adapter.
             Exception: If `adapter` has already been added to a different backend.
         """
-        if not isinstance(adapter, (LocalHFAdapter, LocalFileBinding)):
+        if not isinstance(
+            adapter, (LocalHFAdapter, LocalFileBinding, EmbeddedIntrinsicAdapter)
+        ):
             raise TypeError(
-                f"LocalHFBackend requires a LocalHFAdapter or LocalFileBinding; got "
-                f"{type(adapter).__name__}."
+                "LocalHFBackend requires a LocalHFAdapter, LocalFileBinding, or "
+                f"EmbeddedIntrinsicAdapter; got {type(adapter).__name__}."
             )
         if adapter.backend is not None:
             if adapter.backend is self:
@@ -2262,9 +2338,40 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             )
             return None
 
+        if isinstance(adapter, EmbeddedIntrinsicAdapter):
+            adapter.backend = self
+            if not isinstance(adapter.weights, EmbeddedBinding):
+                raise TypeError(
+                    "EmbeddedIntrinsicAdapter.weights must be an EmbeddedBinding; "
+                    f"got {type(adapter.weights).__name__}."
+                )
+            adapter.weights.source = self.base_model_name
+            self._added_adapters[adapter.qualified_name] = adapter
+            return
+
         adapter.path = adapter.get_local_hf_path(self.base_model_name)
         adapter.backend = self
         self._added_adapters[adapter.qualified_name] = adapter
+
+    def register_embedded_adapter_model(
+        self, source: str, *, revision: str = "main", cache_dir: str | None = None
+    ) -> list[str]:
+        """Register embedded adapter functions from a Granite Switch checkpoint.
+
+        Args:
+            source: Local checkpoint directory or Hugging Face Hub repository ID.
+            revision: Git revision when loading from the Hub.
+            cache_dir: Cache directory for Hub downloads.
+
+        Returns:
+            Names of the registered adapter functions.
+        """
+        adapters = EmbeddedIntrinsicAdapter.from_source(
+            source, revision=revision, cache_dir=cache_dir
+        )
+        for adapter in adapters:
+            self.add_adapter(adapter)
+        return [adapter.intrinsic_name for adapter in adapters]
 
     def load_peft_adapter(self, adapter_qualified_name: str) -> None:
         """Load a previously registered adapter into the underlying Hugging Face model.
@@ -2284,6 +2391,11 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         if adapter is None:
             raise ValueError(
                 f"could not load adapter {adapter_qualified_name} for backend {self}: adapter was not previously added"
+            )
+        if isinstance(adapter, EmbeddedIntrinsicAdapter):
+            raise TypeError(
+                f"cannot load embedded adapter {adapter_qualified_name} through PEFT; "
+                "it is activated by the chat template"
             )
 
         try:

@@ -15,7 +15,9 @@ reliable than prompting a general-purpose model for these specialized micro-task
 > **Backend note:** Adapter functions work with two backends:
 >
 > - **LocalHFBackend** — loads LoRA/aLoRA adapters from the catalog at runtime.
->   All adapter functions are available. Requires a GPU or Apple Silicon Mac.
+>   A local Granite Switch checkpoint can instead use
+>   `load_embedded_adapters=True`; then only adapter functions embedded in the
+>   checkpoint are available. Requires a GPU or Apple Silicon Mac.
 > - **OpenAIBackend** — uses a Granite Switch model served via vLLM with
 >   `load_embedded_adapters=True`. Only adapter functions embedded in the model are
 >   available — check the model's `adapter_index.json` for the list.
@@ -297,7 +299,7 @@ implementations, not whether a composed `Adapter` can be registered directly:
 
 | Backend | `LocalFileBinding` (LocalFile/PEFT) | `EmbeddedBinding` (Embedded/Granite Switch) | `ServerMediatedBinding` |
 | --- | --- | --- | --- |
-| `LocalHFBackend` | ✅ shipping — `add_adapter` accepts a `LocalFileBinding` directly | 🔜 planned (#1018) | — |
+| `LocalHFBackend` | ✅ shipping — `add_adapter` accepts a `LocalFileBinding` directly | ✅ shipping — `load_embedded_adapters=True` registers embedded adapter functions | — |
 | `OpenAIBackend` | — | ✅ shipping, via the deprecated `EmbeddedIntrinsicAdapter` shim above, which builds an `EmbeddedBinding` internally | — |
 
 `ServerMediatedBinding` has no backend implementation yet — see discussion #1486.
