@@ -99,6 +99,52 @@ class CBlock:
         return f"CBlock({self.value}, {self._meta.__repr__()})"
 
 
+class PreTokenizedCBlock(CBlock):
+    """A block of content already tokenized into model vocabulary ids.
+
+    Use this when the exact token ids matter and re-deriving them from text is not
+    acceptable -- for example when a prompt's ids must match a server's prefix cache
+    byte for byte. `value` is always `None`: there is no string form, because
+    `encode(decode(ids))` is not guaranteed to reproduce `ids`.
+
+    Args:
+        token_ids (list[int]): Vocabulary ids to send verbatim. A tuple is accepted.
+        meta (dict[str, Any] | None): Optional metadata, as on `CBlock`.
+
+    Attributes:
+        token_ids (list[int]): The ids, always stored as a new `list` even when a tuple
+            was passed, so later mutation of the caller's sequence cannot change them.
+
+    Raises:
+        TypeError: If `token_ids` is not a sequence of ints. `bool` is rejected even
+            though it subclasses `int`, because it is never a valid token id.
+        ValueError: If `token_ids` is empty. An empty block has no text form and no
+            ids, so it would reach the wire as an empty prompt.
+    """
+
+    def __init__(self, token_ids: list[int], meta: dict[str, Any] | None = None):
+        """Initialize with token ids and optional metadata."""
+        if not isinstance(token_ids, (list, tuple)) or not all(
+            isinstance(t, int) and not isinstance(t, bool) for t in token_ids
+        ):
+            raise TypeError(
+                "token_ids to a PreTokenizedCBlock must be a list of ints; got "
+                f"{token_ids!r}"
+            )
+        if len(token_ids) == 0:
+            raise ValueError(
+                "token_ids to a PreTokenizedCBlock must be non-empty: `value` is "
+                "always None, so an empty block carries no content at all and would "
+                "be sent as an empty prompt."
+            )
+        super().__init__(None, meta)
+        self.token_ids: list[int] = list(token_ids)
+
+    def __repr__(self) -> str:
+        """Provides a python-parsable representation of the block."""
+        return f"PreTokenizedCBlock({self.token_ids!r}, {self._meta.__repr__()})"
+
+
 class ImageBlock(CBlock):
     """A `ImageBlock` represents an image (as base64 PNG).
 
