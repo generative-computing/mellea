@@ -229,7 +229,7 @@ def main() -> None:
 
     # Check if tool calls were made and execute them
     if hasattr(response, "tool_calls") and response.tool_calls:
-        print(f"Tool calls requested: {list(response.tool_calls.keys())}")
+        print(f"Tool calls requested: {[tc.name for tc in response.tool_calls]}")
         print(
             "\nExecuting tool calls via Mellea's pipeline (enables telemetry recording):"
         )
