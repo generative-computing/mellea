@@ -476,8 +476,8 @@ def _make_kv_cache() -> DynamicCache:
 
 
 async def _post_process_holding_only_weakrefs(
-    backend: LocalHFBackend, n_steps: int
-) -> tuple[ModelOutputThunk, dict[str, Any]]:
+    backend: LocalHFBackend, n_steps: int, *, retain_output: bool = False
+) -> tuple[ModelOutputThunk, dict[str, Any], GenerateDecoderOnlyOutput | None]:
     """Run `post_processing` and return the MOT plus weakrefs to the HF output tensors."""
     kv_cache = _make_kv_cache()
     sequences = torch.zeros(1, _SEQ_LEN, dtype=torch.long)
@@ -515,12 +515,13 @@ async def _post_process_holding_only_weakrefs(
     mot._call.action = Message("user", "noop")
     mot._call.model_options = {}
     mot.raw.response = hf_out
+    retained = hf_out if retain_output else None
     del hf_out
 
     await backend.post_processing(
         mot, [], None, False, {}, None, torch.zeros(1, _PROMPT_LEN, dtype=torch.long)
     )
-    return mot, refs
+    return mot, refs, retained
 
 
 async def test_post_processing_clearing_raw_logits_actually_releases_them():
@@ -535,7 +536,7 @@ async def test_post_processing_clearing_raw_logits_actually_releases_them():
     backend = _make_backend(1)
     backend._use_caches = True  # keeps raw.response, so the container survives
 
-    mot, refs = await _post_process_holding_only_weakrefs(backend, n_steps=2)
+    mot, refs, _ = await _post_process_holding_only_weakrefs(backend, n_steps=2)
     gc.collect()
     gc.collect()
 
@@ -552,6 +553,17 @@ async def test_post_processing_clearing_raw_logits_actually_releases_them():
                 f"hf_output.{field} was cleared"
             )
 
+    # The retained ModelOutput must remain a valid OrderedDict after cleanup.
+    # `dict.__delitem__` bypasses OrderedDict bookkeeping and corrupts these
+    # mapping operations even though the tensor references are released.
+    assert tuple(mot.raw.response.keys()) == ("sequences",)
+    assert [key for key, _value in mot.raw.response.items()] == ["sequences"]
+
+    deep = copy.deepcopy(mot.raw.response)
+    assert tuple(deep.keys()) == ("sequences",)
+    assert [key for key, _value in deep.items()] == ["sequences"]
+    assert deep.sequences is not None
+
 
 async def test_post_processing_clears_all_tensor_fields_when_caching_disabled():
     """When `_use_caches=False`, `post_processing` clears tensor-bearing fields.
@@ -562,7 +574,9 @@ async def test_post_processing_clears_all_tensor_fields_when_caching_disabled():
     backend = _make_backend(1)
     backend._use_caches = False  # triggers the no-caching clearing path
 
-    mot, refs = await _post_process_holding_only_weakrefs(backend, n_steps=2)
+    mot, refs, retained = await _post_process_holding_only_weakrefs(
+        backend, n_steps=2, retain_output=True
+    )
 
     gc.collect()
     gc.collect()
@@ -570,6 +584,7 @@ async def test_post_processing_clears_all_tensor_fields_when_caching_disabled():
     assert mot.raw.response is None, (
         "raw.response should be dropped on the no-caching path"
     )
+    assert retained is not None, "test setup: retain the output container"
 
     for field in ("sequences", "scores", "logits", "past_key_values"):
         for i, ref in enumerate(refs[field]):
@@ -577,3 +592,15 @@ async def test_post_processing_clears_all_tensor_fields_when_caching_disabled():
                 f"{field} tensor {i} is still alive after post_processing "
                 "with _use_caches=False"
             )
+    # Even though raw.response was dropped, another caller may still retain the
+    # ModelOutput. The no-cache cleanup must not corrupt its OrderedDict state.
+    assert tuple(retained.keys()) == ()
+    assert list(retained.items()) == []
+
+    deep = copy.deepcopy(retained)
+    assert tuple(deep.keys()) == ()
+    assert list(deep.items()) == []
+    assert deep.sequences is None
+    assert deep.scores is None
+    assert deep.logits is None
+    assert deep.past_key_values is None

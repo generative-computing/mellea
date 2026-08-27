@@ -1577,7 +1577,7 @@ async def test_whitespace_pattern_cannot_be_defeated_by_schema():
 def _make_raw_fake_setup(
     batch_size: int, vocab_size: int, n_tokens: int, prompt_len: int
 ):
-    """Return (backend, fake_encoding, fake_outputs, actions) for generate_from_raw tests."""
+    """Return (backend, fake_encoding, fake_input_ids) for generate_from_raw tests."""
     backend = _make_backend()
     fake_input_ids = torch.zeros(batch_size, prompt_len, dtype=torch.long)
     fake_encoding = MagicMock()
@@ -1602,7 +1602,7 @@ async def test_generate_from_raw_raw_response_set_per_mot():
     Asserts:
     - raw.response is not None for each MOT.
     - raw.response.sequences.shape == (1, full_seq_len).
-    - raw.response.sequences shares storage with the original batch sequences tensor (Clone, not view).
+    - raw.response.sequences must be a clone with distinct storage
     - raw.response.past_key_values is None.
     - raw.response.attentions is None.
     - raw.response.hidden_states is None.

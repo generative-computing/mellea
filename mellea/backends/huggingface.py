@@ -15,6 +15,7 @@ import datetime
 import functools
 import json
 import threading
+from collections import OrderedDict
 from collections.abc import Callable, Coroutine, Sequence
 from typing import Any, cast
 
@@ -1529,20 +1530,14 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             # its tensor — alive.
             for _field in ("past_key_values", "scores"):
                 if _field in hf_output:
-                    dict.__delitem__(hf_output, _field)
-                try:
-                    object.__delattr__(hf_output, _field)
-                except AttributeError:
-                    pass
+                    OrderedDict.__delitem__(hf_output, _field)
+                setattr(hf_output, _field, None)
 
         # Clear the raw logits tensor (scores already cleared above if cached).
         if isinstance(hf_output, GenerateDecoderOnlyOutput):
             if "logits" in hf_output:
-                dict.__delitem__(hf_output, "logits")
-            try:
-                object.__delattr__(hf_output, "logits")
-            except AttributeError:
-                pass
+                OrderedDict.__delitem__(hf_output, "logits")
+            hf_output.logits = None
 
         # Only scan for tools if we are not doing structured output and tool calls were provided to the model.
         if _format is None and tool_calls:
@@ -1628,11 +1623,9 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             # Clear both the dict entry and the instance attribute to release them.
             for field in ("sequences", "scores", "logits", "past_key_values"):
                 if field in hf_out:
-                    dict.__delitem__(hf_out, field)
-                try:
-                    object.__delattr__(hf_out, field)
-                except AttributeError:
-                    pass
+                    OrderedDict.__delitem__(hf_out, field)
+                setattr(hf_out, field, None)
+
             mot.raw.response = None
 
             if torch.cuda.is_available():
