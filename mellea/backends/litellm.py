@@ -387,9 +387,9 @@ class LiteLLMBackend(FormatterBackend):
 
         # Map THINKING to the correct backend parameter(s). Two mechanisms:
         # - chat_template_kwargs.enable_thinking: vLLM/Qwen3/Gemma4 (bool toggle)
-        # - reasoning_effort: LiteLLM/OpenAI-compatible (string level, or True → "medium")
-        # Both are set for True so each server picks up whichever it understands.
-        # NOTE: don't pass reasoning_effort=False — it is invalid; absence disables reasoning.
+        # - reasoning_effort: LiteLLM/OpenAI-compatible (string level; True → "medium",
+        #   False → "none")
+        # Both are set so each server picks up whichever it understands.
         thinking = model_opts.get(ModelOption.THINKING, None)
         original_thinking = thinking  # preserve raw caller value for the generate log
         reasoning_params: dict[str, Any] = {}
@@ -402,8 +402,12 @@ class LiteLLMBackend(FormatterBackend):
                 extra_params["extra_body"] = ctk_body
                 if thinking:
                     reasoning_params["reasoning_effort"] = "medium"
-                # False: do not send reasoning_effort — absent param disables reasoning;
-                # passing False would be invalid.
+                else:
+                    # Ollama-served thinking models (e.g. granite4.2) default to
+                    # thinking ON when reasoning_effort is absent; "none" is the
+                    # OpenAI enum value their /v1 endpoint maps to think=false
+                    # (Ollama >= 0.33.1).
+                    reasoning_params["reasoning_effort"] = "none"
             else:
                 reasoning_params["reasoning_effort"] = thinking
 

@@ -297,7 +297,10 @@ async def test_reasoning_effort_conditional_passing(backend) -> None:
             is True
         )
 
-    # Test 4: THINKING=False sets chat_template_kwargs but NOT reasoning_effort
+    # Test 4: THINKING=False sets both chat_template_kwargs and
+    # reasoning_effort="none" (Ollama /v1 disables thinking only via
+    # reasoning_effort; absence means the model default, which is ON for
+    # e.g. granite4.2)
     with patch.object(
         backend._async_client.chat.completions, "create", new_callable=AsyncMock
     ) as mock_create:
@@ -306,8 +309,9 @@ async def test_reasoning_effort_conditional_passing(backend) -> None:
             CBlock(value="Hi"), ctx, model_options={ModelOption.THINKING: False}
         )
         call_kwargs = mock_create.call_args.kwargs
-        assert "reasoning_effort" not in call_kwargs, (
-            "reasoning_effort must not be sent for THINKING=False (invalid for OpenAI)"
+        assert call_kwargs.get("reasoning_effort") == "none", (
+            "reasoning_effort should be 'none' for THINKING=False "
+            "(disables thinking on Ollama /v1, which defaults it on)"
         )
         assert (
             call_kwargs.get("extra_body", {})

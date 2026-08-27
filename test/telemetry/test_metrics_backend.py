@@ -277,18 +277,24 @@ async def test_openai_token_metrics_integration(enable_metrics, metric_reader, s
         model_id=IBM_GRANITE_4_2_3B.ollama_name,  # type: ignore
         base_url=f"http://{os.environ.get('OLLAMA_HOST', 'localhost:11434')}/v1",
         api_key="ollama",
-        default_extra_body={"chat_template_kwargs": {"enable_thinking": False}},
+        # granite4.2 thinks by default and Ollama's /v1 endpoint exposes no
+        # template-kwargs control for it: THINKING: False sends
+        # reasoning_effort="none", which the CI-pinned Ollama 0.33.1 maps to
+        # think=false. Without it a 64-token generation is ~45 thinking
+        # tokens — minutes on a 4-vCPU runner, blowing the 300 s request cap
+        # whenever the runner is 2-3x slower than nominal (runs
+        # 33093698028, 33104419835). The vLLM-style
+        # chat_template_kwargs.enable_thinking workaround was ignored by
+        # Ollama, which is why every /v1 CI run wedged in the openai/litellm
+        # phase.
         # Same output bound as the other live "say hello" tests: without it a
         # non-compliant generation (observed 1800+ tokens on CI) can run for
         # minutes on a ~9 t/s CPU runner and eat the test's entire budget.
-        # Send it as the raw "max_tokens" key, not ModelOption.MAX_NEW_TOKENS:
-        # mellea maps the sentinel to max_completion_tokens, which the
-        # CI-pinned Ollama 0.32.2 /v1 handler silently ignores (it only maps
-        # max_tokens -> num_predict; see openai/openai.go at v0.32.2). With
-        # the sentinel, the generation ran uncapped on CI for 15 m (run
-        # 33048969379, 3.12 lane); local Ollama 0.33.0 accepts both, which is
-        # why the sentinel looked fine locally.
-        model_options={"max_tokens": 64},
+        # Sent as the raw "max_tokens" key for consistency with the litellm
+        # test (Ollama 0.33.1 /v1 accepts both max_tokens and
+        # max_completion_tokens; 0.32.2 accepted only max_tokens, which is
+        # why the raw key was introduced).
+        model_options={ModelOption.THINKING: False, "max_tokens": 64},
         # Disable the OpenAI SDK's automatic retries and bound each request to
         # the 300 s the other live paths use. With the SDK defaults (2 retries,
         # 600 s read timeout) a stalled server multiplies into a
@@ -442,11 +448,14 @@ async def test_litellm_token_metrics_integration(
         model_id=f"openai/{IBM_GRANITE_4_2_3B.ollama_name}",
         # "max_tokens": same output bound as the other live "say hello"
         # tests (see test_ollama_token_metrics_integration). Sent as the raw
-        # key, not ModelOption.MAX_NEW_TOKENS: mellea maps the sentinel to
-        # max_completion_tokens, which the CI-pinned Ollama 0.32.2 /v1
-        # handler silently ignores (it only maps max_tokens -> num_predict;
-        # see openai/openai.go at v0.32.2), leaving the generation uncapped
-        # on CI (15 m stream, run 33048969379, 3.12 lane).
+        # key for consistency with the openai test (Ollama 0.33.1 /v1
+        # accepts both max_tokens and max_completion_tokens; 0.32.2
+        # accepted only max_tokens, which is why the raw key was
+        # introduced). THINKING: False is required: granite4.2 thinks by
+        # default and a 64-token generation is ~45 thinking tokens —
+        # minutes on a 4-vCPU CI runner, blowing the 300 s request cap
+        # (runs 33093698028, 33104419835); mellea maps it to
+        # reasoning_effort="none" for the /v1 endpoint.
         model_options={
             ModelOption.THINKING: False,
             "timeout": 300.0,

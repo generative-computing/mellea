@@ -297,16 +297,24 @@ async def test_thinking_true_sets_reasoning_effort_and_enable_thinking(
     ), "extra_body.chat_template_kwargs.enable_thinking should be True"
 
 
-async def test_thinking_false_omits_reasoning_effort_and_sets_disable(
+async def test_thinking_false_sets_reasoning_effort_none_and_disable(
     chat_backend: LiteLLMBackend,
 ) -> None:
-    """THINKING=False: reasoning_effort absent, extra_body.chat_template_kwargs.enable_thinking=False."""
+    """THINKING=False: reasoning_effort='none' AND extra_body.chat_template_kwargs.enable_thinking=False.
+
+    Both mechanisms are sent so each server type picks up the one it
+    understands: vLLM honours chat_template_kwargs, Ollama's /v1 endpoint
+    (>= 0.33.1) honours reasoning_effort — where absence means the model
+    default (thinking ON for e.g. granite4.2), so "none" is required to
+    actually disable the think block.
+    """
     from mellea.backends import ModelOption
 
     kwargs = await _call_and_capture(chat_backend, {ModelOption.THINKING: False})
 
-    assert "reasoning_effort" not in kwargs, (
-        "reasoning_effort must not be sent for THINKING=False (invalid value)"
+    assert kwargs.get("reasoning_effort") == "none", (
+        "reasoning_effort should be 'none' for THINKING=False "
+        "(disables thinking on Ollama /v1, which defaults it on)"
     )
     assert (
         kwargs.get("extra_body", {})

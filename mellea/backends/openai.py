@@ -811,8 +811,9 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         # Map THINKING to the correct backend parameter(s). Two mechanisms:
         # - chat_template_kwargs.enable_thinking: vLLM/Qwen3 (bool toggle)
-        # - reasoning_effort: OpenAI/DeepSeek (string level, or True → "medium")
-        # Both are set for True so the right server picks up whichever it understands.
+        # - reasoning_effort: OpenAI/DeepSeek/Ollama (string level; True → "medium",
+        #   False → "none")
+        # Both are set so the right server picks up whichever it understands.
         thinking = model_options.get(ModelOption.THINKING)
         if thinking is not None:  # False is a valid value — cannot use `if thinking`
             if type(thinking) is bool:
@@ -821,8 +822,12 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 extra_body["chat_template_kwargs"] = ctk
                 if thinking:
                     api_params["reasoning_effort"] = "medium"
-                # False: don't send reasoning_effort — OpenAI disables reasoning by
-                # default when the param is absent; passing False would be invalid.
+                else:
+                    # Ollama-served thinking models (e.g. granite4.2) default to
+                    # thinking ON when reasoning_effort is absent, so "none" is
+                    # required to actually disable the think block on their /v1
+                    # endpoint (Ollama >= 0.33.1 maps it to think=false).
+                    api_params["reasoning_effort"] = "none"
             else:
                 api_params["reasoning_effort"] = thinking
 
@@ -1050,8 +1055,10 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         # Map THINKING to the correct backend parameter(s). Two mechanisms:
         # - chat_template_kwargs.enable_thinking: vLLM/Qwen3 (bool toggle)
-        # - reasoning_effort: OpenAI/DeepSeek (string level, or True → "medium")
-        # NOTE: don't pass reasoning_effort to non-reasoning models (e.g. gpt-4o).
+        # - reasoning_effort: OpenAI/DeepSeek/Ollama (string level; True → "medium",
+        #   False → "none")
+        # Both are set so the right server picks up whichever it understands.
+        # NOTE: don't pass THINKING to non-reasoning models (e.g. gpt-4o).
         thinking = model_opts.get(ModelOption.THINKING)
         reasoning_params: dict[str, Any] = {}
         if thinking is not None:  # False is a valid value — cannot use `if thinking`
@@ -1063,8 +1070,12 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 extra_params["extra_body"] = ctk_body
                 if thinking:
                     reasoning_params["reasoning_effort"] = "medium"
-                # False: don't send reasoning_effort — OpenAI disables reasoning by
-                # default when the param is absent; passing False would be invalid.
+                else:
+                    # Ollama-served thinking models (e.g. granite4.2) default to
+                    # thinking ON when reasoning_effort is absent; "none" is the
+                    # OpenAI enum value their /v1 endpoint maps to think=false
+                    # (Ollama >= 0.33.1).
+                    reasoning_params["reasoning_effort"] = "none"
             else:
                 reasoning_params["reasoning_effort"] = thinking
 
