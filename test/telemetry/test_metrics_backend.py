@@ -279,6 +279,14 @@ async def test_openai_token_metrics_integration(enable_metrics, metric_reader, s
         # non-compliant generation (observed 1800+ tokens on CI) can run for
         # minutes on a ~9 t/s CPU runner and eat the test's entire budget.
         model_options={ModelOption.MAX_NEW_TOKENS: 64},
+        # Disable the OpenAI SDK's automatic retries and bound each request to
+        # the 300 s the other live paths use. With the SDK defaults (2 retries,
+        # 600 s read timeout) a stalled server multiplies into a
+        # 600 s + 600 s chain inside one attempt (observed in run
+        # 33039206380: a request timed out at 10m0s, the SDK retried, and the
+        # second attempt was killed by the 900 s pytest watchdog mid-flight).
+        max_retries=0,
+        timeout=300.0,
     )
     ctx = SimpleContext()
     ctx = ctx.add(Message(role="user", content="Say 'hello' and nothing else"))
