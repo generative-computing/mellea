@@ -65,6 +65,22 @@ class ChatContext(Context):
             `token_context_length_limit` is not provided,
             `view_for_generation` looks up the model's known context length
             and uses it as the token budget.
+        retain_token_ids (bool): Opt into id-preserving history. When `True`, a
+            backend that supports it sends the exact token ids already sent plus
+            only the new turn's, instead of re-rendering the conversation from
+            text. Re-rendering drops the control tokens a chat template inserted
+            and cannot reproduce ids exactly (`encode(decode(ids))` is not the
+            identity), both of which break a server's prefix cache. Defaults to
+            `False`, so behaviour is unchanged unless asked for.
+        sent_token_ids (tuple[int, ...]): Ids the server has already seen,
+            verbatim. Empty until a backend records a turn. A tuple so a caller
+            cannot mutate the context's state through it.
+        sent_model_id (str | None): Model those ids were produced by. Ids are not
+            portable across vocabularies, so a backend can refuse rather than
+            reinterpret a prefix produced by a different model.
+        sent_message_count (int): How many chat messages `sent_token_ids` covers. A
+            backend needs this to re-render exactly the already-sent side of the
+            conversation, which is what the new turn's ids are subtracted against.
 
     Class Attributes:
         _propagated_fields: Instance-attribute names copied by `add()` and
@@ -76,7 +92,23 @@ class ChatContext(Context):
         "_compactor",
         "_token_context_length_limit",
         "_model_id",
+        "_retain_token_ids",
+        "_sent_token_ids",
+        "_sent_model_id",
+        "_sent_message_count",
     )
+
+    # Class-level defaults, the same way `Context` declares `_is_chat_context`.
+    # `_rebuild_chat_context` builds nodes with `ChatContext.__new__` to avoid
+    # recursing into compaction, so `__init__` does not run for them and it sets only
+    # the three fields it takes. These defaults are what keeps `_propagated_fields`
+    # iteration from raising AttributeError on the first `add()` afterwards. They make
+    # that failure quiet rather than absent, which is why `add()` reapplies the fields
+    # to whatever a compactor returns.
+    _retain_token_ids: bool = False
+    _sent_token_ids: tuple[int, ...] = ()
+    _sent_model_id: str | None = None
+    _sent_message_count: int = 0
 
     def __init__(
         self,
@@ -85,8 +117,9 @@ class ChatContext(Context):
         window_size: int | None = None,
         token_context_length_limit: int | None = None,
         model_id: str | ModelIdentifier | None = None,
+        retain_token_ids: bool = False,
     ) -> None:
-        """Initialize a ChatContext with an optional compactor, token budget, and model binding."""
+        """Initialize a ChatContext with an optional compactor, token budget, model binding, and id-retention policy."""
         if compactor is not None and window_size is not None:
             raise ValueError(
                 "ChatContext: pass either `compactor` or `window_size`, not both."
@@ -110,11 +143,75 @@ class ChatContext(Context):
             self._compactor = compactor
         self._token_context_length_limit = token_context_length_limit
         self._model_id: str | ModelIdentifier | None = model_id
+        # Policy (propagates and survives a root reset) vs. state (propagates but
+        # is per-conversation, so `_make_root` clears it below).
+        self._retain_token_ids: bool = retain_token_ids
+        self._sent_token_ids: tuple[int, ...] = ()
+        self._sent_model_id: str | None = None
+        self._sent_message_count: int = 0
 
     @property
     def model_id(self) -> str | ModelIdentifier | None:
         """The model identifier bound to this context, or `None` if unbound."""
         return self._model_id
+
+    @property
+    def retains_token_ids(self) -> bool:
+        """Whether this context asked for id-preserving history."""
+        return self._retain_token_ids
+
+    @property
+    def sent_token_ids(self) -> tuple[int, ...]:
+        """Ids the server has already seen, verbatim. Empty if none recorded."""
+        return self._sent_token_ids
+
+    @property
+    def sent_model_id(self) -> str | None:
+        """Model the retained ids were produced by, or `None` if none are held."""
+        return self._sent_model_id
+
+    @property
+    def sent_message_count(self) -> int:
+        """How many chat messages `sent_token_ids` covers. `0` if none are held."""
+        return self._sent_message_count
+
+    def with_sent_token_ids(
+        self, ids: list[int], model_id: str | None = None, message_count: int = 0
+    ) -> ChatContext:
+        """Return a copy of this context whose retained ids are `ids`.
+
+        A `Context` is immutable, so recording what the server has now seen
+        produces a new node at the same position rather than mutating this one.
+        `Context.from_previous` cannot be used to build it: that asserts
+        `data is not None` (`mellea/core/base.py:1540`), so it rejects a root
+        node, whose `node_data` is `None` by construction. A root must stay a
+        root -- grafting a phantom empty node would put an empty turn into the
+        linearized history.
+
+        Args:
+            ids (list[int]): The full id sequence the server has now seen -- the
+                prompt that was sent plus the answer it produced.
+            model_id (str | None): Model that produced them, recorded so a later
+                turn against a different model can be refused rather than decoded
+                against the wrong vocabulary.
+            message_count (int): How many chat messages these ids cover, so the next
+                turn can re-render exactly that side of the conversation.
+
+        Returns:
+            ChatContext: A new context at the same position in the history, of
+                this same class; this one is unchanged.
+        """
+        new = type(self)()
+        for field in self._propagated_fields:
+            setattr(new, field, getattr(self, field))
+        new._previous = self._previous
+        new._data = self._data
+        new._is_root = self._is_root
+        new._is_chat_context = self._is_chat_context
+        new._sent_token_ids = tuple(int(i) for i in ids)
+        new._sent_model_id = model_id
+        new._sent_message_count = message_count
+        return new
 
     def _make_root(self, model_id: str | ModelIdentifier | None) -> ChatContext:
         """Return a new empty root `ChatContext`, propagating all `_propagated_fields` then binding `model_id`."""
@@ -124,6 +221,13 @@ class ChatContext(Context):
         # Override whatever _propagated_fields copied for _model_id: the caller
         # explicitly supplies the model_id to bind (e.g. _bind_model changes it).
         new._model_id = model_id
+        # `_retain_token_ids` is policy and is kept, but the ids themselves are
+        # per-conversation state: a fresh root has sent nothing, and carrying a
+        # stale prefix into it would make the next delta subtract ids the server
+        # never saw for this conversation.
+        new._sent_token_ids = ()
+        new._sent_model_id = None
+        new._sent_message_count = 0
         return new
 
     def _bind_model(self, model_id: str | ModelIdentifier) -> ChatContext:
@@ -182,6 +286,15 @@ class ChatContext(Context):
             setattr(new, field, getattr(self, field))
         if self._compactor is not None:
             new = self._compactor.compact(new)
+            # Reapplied because a compactor builds the context it returns however it
+            # likes -- `_rebuild_chat_context` is a convenience, not a contract, and a
+            # hand-rolled one that copies nothing would otherwise hand back a context
+            # with every propagated field at its class default. That is silent: the
+            # compactor would switch off a token-budget view or id retention with
+            # nothing to indicate it. Enforcing the guarantee here, where `add` makes
+            # it, means no compactor has to remember.
+            for field in self._propagated_fields:
+                setattr(new, field, getattr(self, field))
         return new
 
     def view_for_generation(self) -> list[Span] | None:
