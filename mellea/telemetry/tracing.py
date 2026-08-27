@@ -1024,21 +1024,17 @@ def start_adapter_function_span(
 
     Never attached as the ambient OTel context, unlike every other
     `start_*_span` helper — deliberately, not as an oversight.
-    `ADAPTER_FUNCTION_INVOCATION_START`/`_PHASE_START` fire from sync code
-    (`AdapterMixin.adapter_scope`, `LocalFileBinding.prepare`) via
-    `_run_async_in_thread`, which runs each hook as an independent task on a
-    shared background event loop, seeded from a *fresh* `contextvars.copy_context()`
-    snapshot of the calling thread taken at that call — mutations inside one
-    hook's task (like an ambient-context attach) never leak back to the
-    calling thread and so are invisible to the *next* `_run_async_in_thread`
-    call's snapshot. Ambient attach/detach across two such calls therefore
-    can't establish a parent/child edge (and mismatched attach/detach tasks
-    would trigger "Detaching an OTel context token across asyncio tasks"
-    warnings) — `start_adapter_function_phase_span` instead parents explicitly
+    `ADAPTER_FUNCTION_INVOCATION_START`/`_PHASE_START` fire from synchronous
+    `AdapterMixin.adapter_scope` code via `_run_async_in_thread`, which runs
+    each hook as an independent task on a shared background event loop, seeded
+    from a *fresh* `contextvars.copy_context()` snapshot of the calling thread.
+    Mutations inside one hook's task (like an ambient-context attach) never
+    leak back to the calling thread and are invisible to the next dispatch.
+    Ambient attach/detach across these calls therefore cannot establish a
+    parent/child edge — `start_adapter_function_phase_span` parents explicitly
     via `trace.set_span_in_context` using the span object looked up by
-    `invocation_id`, which needs no ambient context at all. Exposing an
-    `attach_context` parameter here (as the sibling helpers do) would only
-    offer a setting that breaks whenever used, so there isn't one.
+    `invocation_id`. Exposing an `attach_context` parameter here would offer a
+    setting that breaks whenever used, so there isn't one.
 
     Args:
         invocation_id: Correlation key for the matching `finish_adapter_function_span` call.
