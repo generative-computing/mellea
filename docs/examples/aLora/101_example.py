@@ -35,8 +35,9 @@ m = MelleaSession(backend=backend, ctx=ChatContext())
 # whose prompt asks for a plain "yes"/"no" answer — but the result is still
 # parsed as JSON by requirement_check_to_bool: a plain yes/no reply raises
 # json.JSONDecodeError (it is not JSON), and a JSON reply that doesn't match
-# the schema raises AdapterSchemaMismatchError — either way the error
-# propagates out of validate() instead of returning a failed check. The ALORA
+# the schema raises AdapterSchemaMismatchError — either way validate() surfaces
+# the error on ValidationResult.error and fails the check closed rather than
+# returning an ordinary failed check or propagating the exception. The ALORA
 # type is also load-bearing here: routing only looks up ("alora",), so
 # registering the LORA variant instead would hit the same failure.
 backend.add_adapter(

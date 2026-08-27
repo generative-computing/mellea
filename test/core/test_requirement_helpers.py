@@ -56,6 +56,45 @@ def test_validation_result_defaults_none():
     assert r.score is None
     assert r.thunk is None
     assert r.context is None
+    assert r.error is None
+
+
+# --- ValidationResult error state (issue #1358) ---
+
+
+def test_validation_result_error_field():
+    """The error field stores an exception and defaults to None."""
+    exc = ValueError("bad output")
+    r = ValidationResult(result=False, error=exc)
+    assert r.error is exc
+
+
+def test_bool_result_false_when_error_set():
+    """`bool(result)` / `as_bool()` fail closed when error is set, even if result=True."""
+    r = ValidationResult(result=True, error=RuntimeError("parse failed"))
+    assert r.as_bool() is False
+    assert bool(r) is False
+
+
+def test_bool_result_uses_result_when_no_error():
+    """Without an error, as_bool reflects the underlying result verbatim."""
+    assert ValidationResult(result=True).as_bool() is True
+    assert ValidationResult(result=False).as_bool() is False
+
+
+def test_callers_can_distinguish_failure_from_error():
+    """A plain failure has error=None; a parse failure carries the exception."""
+    plain_failure = ValidationResult(result=False)
+    parse_failure = ValidationResult(result=False, error=KeyError("score"))
+
+    assert plain_failure.error is None
+    assert isinstance(parse_failure.error, KeyError)
+
+
+def test_validation_result_repr_includes_error():
+    """repr surfaces the error so a swallowed exception is still visible in logs."""
+    r = ValidationResult(result=False, error=ValueError("boom"))
+    assert "error=" in repr(r)
 
 
 # --- default_output_to_bool ---
@@ -175,6 +214,71 @@ async def test_validate_yes_in_sentence_preserves_output(mock_backend):
     )
     assert result.as_bool() is True
     assert result.reason == "Yes, the email has a salutation"
+
+
+# --- validate() surfaces parse errors as a third outcome (issue #1358) ---
+
+
+async def _validate_with_output_to_bool(
+    backend, output_to_bool, judge_value: str = "some judge output"
+):
+    """Run Requirement.validate with a mocked backend and a custom output_to_bool."""
+    req = Requirement("some requirement", output_to_bool=output_to_bool)
+    ctx = ChatContext().add(ModelOutputThunk("some output"))
+    judge_thunk = ModelOutputThunk(value=judge_value)
+    val_ctx = ctx.add(judge_thunk)
+
+    with patch.object(
+        backend,
+        "generate_from_context",
+        new=AsyncMock(return_value=(judge_thunk, val_ctx)),
+    ):
+        return await req.validate(backend, ctx)
+
+
+async def test_validate_returns_error_state_on_schema_mismatch(mock_backend):
+    """A raising output_to_bool becomes a ValidationResult carrying the exception."""
+    exc = ValueError("unrecognizable adapter output")
+
+    def raising_output_to_bool(x):
+        raise exc
+
+    result = await _validate_with_output_to_bool(mock_backend, raising_output_to_bool)
+
+    assert result.error is exc
+    assert bool(result) is False
+
+
+async def test_validate_error_state_has_no_reason(mock_backend):
+    """Parse-error results carry reason=None so repair uses the description fallback.
+
+    Repair strategies treat a truthy reason as literal prompt text. The judge
+    output that triggered the parse error is malformed, so surfacing it as a
+    reason would produce useless repair guidance; reason must be None even when
+    the judge produced non-binary, truthy text.
+    """
+
+    def raising_output_to_bool(x):
+        raise ValueError("unrecognizable adapter output")
+
+    result = await _validate_with_output_to_bool(
+        mock_backend,
+        raising_output_to_bool,
+        judge_value="malformed non-binary judge output that is truthy",
+    )
+
+    assert result.error is not None
+    assert result.reason is None
+    # The diagnostic thunk is still retained for direct inspection.
+    assert result.thunk is not None
+
+
+async def test_validate_happy_path_unaffected(mock_backend):
+    """A non-raising output_to_bool leaves error unset and honors the result."""
+    result = await _validate_with_output_to_bool(mock_backend, lambda x: True)
+
+    assert result.error is None
+    assert bool(result) is True
 
 
 if __name__ == "__main__":

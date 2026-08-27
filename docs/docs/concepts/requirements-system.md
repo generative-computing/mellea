@@ -162,6 +162,7 @@ last output.
 | `score` | `float \| None` | Optional numeric score from your validator. |
 | `thunk` | `ModelOutputThunk \| None` | The model output used, if your validator ran a backend call. |
 | `context` | `Context \| None` | The context snapshot at validation time. |
+| `error` | `Exception \| None` | The exception raised while parsing validator output, if any. When set, `bool(result)` is `False` (fails closed) and `reason` is `None`; lets callers tell an unparsable response apart from an ordinary "requirement not met". |
 
 The `reason` field is the most useful in practice — a clear reason string helps the
 model make a targeted repair rather than regenerating blindly.
