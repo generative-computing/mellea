@@ -5,13 +5,15 @@
 
 from __future__ import annotations
 
+from typing import Self
+
 from mellea.core import Context, Span
 
 
 class SimpleContext(Context):
     """A `SimpleContext` is a context in which each interaction is a separate and independent turn. The history of all previous turns is NOT saved.."""
 
-    def add(self, c: Span) -> SimpleContext:
+    def add(self, c: Span) -> Self:
         """Add a new component or CBlock to the context and return the updated context.
 
         Args:
@@ -19,8 +21,9 @@ class SimpleContext(Context):
                 block, or model output to record.
 
         Returns:
-            SimpleContext: A new context of the same concrete subtype containing
-            only the added entry; prior history is not retained.
+            Self: A new context of the same concrete subtype containing only the
+            added entry; prior history is not retained. Returning `Self` (not the
+            hard-coded `SimpleContext`) keeps a subclass statically its own type.
         """
         # `type(self)`, not `SimpleContext`, so a subclass gets an instance of
         # itself back rather than being silently demoted to `SimpleContext`.

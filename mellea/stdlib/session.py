@@ -107,9 +107,23 @@ def start_session(
     context_type: None = None,
     model_options: dict | None = ...,
     plugins: list[Any] | None = ...,
-    allow_context_type_change: bool = ...,
+    allow_context_type_change: Literal[False] = ...,
     **backend_kwargs: Any,
 ) -> MelleaSession[ContextT]: ...
+
+
+@overload
+def start_session(
+    backend_name: Literal["ollama", "hf", "openai", "watsonx", "litellm"],
+    model_id: str | ModelIdentifier,
+    ctx: Context,
+    *,
+    context_type: None = None,
+    model_options: dict | None = ...,
+    plugins: list[Any] | None = ...,
+    allow_context_type_change: Literal[True],
+    **backend_kwargs: Any,
+) -> MelleaSession[Context]: ...
 
 
 @overload
@@ -121,9 +135,23 @@ def start_session(
     context_type: None = None,
     model_options: dict | None = ...,
     plugins: list[Any] | None = ...,
-    allow_context_type_change: bool = ...,
+    allow_context_type_change: Literal[False] = ...,
     **backend_kwargs: Any,
 ) -> MelleaSession[ContextT]: ...
+
+
+@overload
+def start_session(
+    backend_name: Literal["ollama", "hf", "openai", "watsonx", "litellm"] = ...,
+    model_id: str | ModelIdentifier = ...,
+    *,
+    ctx: Context,
+    context_type: None = None,
+    model_options: dict | None = ...,
+    plugins: list[Any] | None = ...,
+    allow_context_type_change: Literal[True],
+    **backend_kwargs: Any,
+) -> MelleaSession[Context]: ...
 
 
 @overload
@@ -849,7 +877,7 @@ class MelleaSession(Generic[ContextT]):
             format=format,
             model_options=model_options,
             tool_calls=tool_calls,
-            allow_context_type_change=self.allow_context_type_change,
+            allow_context_type_change=self.allow_context_type_change,  # type: ignore[call-overload, misc]
         )
 
         self.ctx = context
@@ -918,7 +946,7 @@ class MelleaSession(Generic[ContextT]):
             format=format,
             model_options=model_options,
             tool_calls=tool_calls,
-            allow_context_type_change=self.allow_context_type_change,
+            allow_context_type_change=self.allow_context_type_change,  # type: ignore[call-overload]
         )
         self.ctx = context
         return result
@@ -951,7 +979,7 @@ class MelleaSession(Generic[ContextT]):
             backend=self.backend,
             format=format,
             model_options=model_options,
-            allow_context_type_change=self.allow_context_type_change,
+            allow_context_type_change=self.allow_context_type_change,  # type: ignore[call-overload]
         )
         self.ctx = context
         return result
@@ -1405,7 +1433,7 @@ class MelleaSession(Generic[ContextT]):
             backend=self.backend,
             format=format,
             model_options=model_options,
-            allow_context_type_change=self.allow_context_type_change,
+            allow_context_type_change=self.allow_context_type_change,  # type: ignore[call-overload]
         )
         self.ctx = context
         return result

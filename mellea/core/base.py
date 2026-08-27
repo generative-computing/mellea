@@ -1904,15 +1904,23 @@ class Context(abc.ABC):
     # Abstract methods below this line.
 
     @abc.abstractmethod
-    def add(self, c: Span) -> Self:
+    def add(self, c: Span) -> Context:
         """Returns a new context obtained by appending `c` to this context.
+
+        The abstract signature returns the base `Context` so that existing typed
+        third-party subclasses whose override is annotated `-> Context` continue
+        to satisfy mypy's override check (changing this to `Self` would be a
+        breaking API change for them). Built-in contexts narrow the return to
+        `Self` on their concrete overrides, so `ChatContext.add(...)` statically
+        yields a `ChatContext` and a subclass yields its own type.
 
         Args:
             c (Span): The component, content block, or model output to add to the context.
 
         Returns:
-            Self: A new context node of the same type with `c` as its data and this
-            context as its previous node.
+            Context: A new context node of the same runtime type with `c` as its
+            data and this context as its previous node. Concrete built-in
+            subclasses narrow this to `Self`.
         """
         # something along ....from_previous(self, c)
         ...

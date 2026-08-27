@@ -8,9 +8,15 @@ a widened base `Context`. These `assert_type` checks fail under mypy until the
 functional layer threads the input context subtype through to its return type.
 """
 
-from typing import Any, assert_type, cast
+from typing import Any, Self, assert_type, cast
 
-from mellea.core import Backend, ComputedModelOutputThunk, ModelOutputThunk
+from mellea.core import (
+    Backend,
+    ComputedModelOutputThunk,
+    Context,
+    ModelOutputThunk,
+    Span,
+)
 from mellea.stdlib.components import Instruction, Message
 from mellea.stdlib.context import ChatContext, SimpleContext
 from mellea.stdlib.functional import (
@@ -19,6 +25,7 @@ from mellea.stdlib.functional import (
     act,
     ainstruct,
     aquery,
+    atransform,
     chat,
     instruct,
     query,
@@ -90,3 +97,73 @@ async def check_aquery_simple_ctx() -> None:
 async def check_achat_chat_ctx() -> None:
     r = await achat("hi", chat_ctx, backend)
     assert_type(r, tuple[Message, ChatContext])
+
+
+# --- allow_context_type_change=True widens the returned context to `Context` ---
+#
+# The escape hatch permits the returned context to differ in subtype from the
+# input, so the static return type must widen to the base `Context` rather than
+# keep the input subtype (which would be an unsound narrowing).
+
+
+def check_act_allow_change_widens() -> None:
+    r = act(action, chat_ctx, backend, allow_context_type_change=True)
+    assert_type(r, tuple[ComputedModelOutputThunk[str], Context])
+
+
+def check_instruct_allow_change_widens() -> None:
+    r = instruct("test", chat_ctx, backend, allow_context_type_change=True)
+    assert_type(r, tuple[ComputedModelOutputThunk[str], Context])
+
+
+def check_transform_allow_change_widens() -> None:
+    r = transform(object(), "t", chat_ctx, backend, allow_context_type_change=True)
+    assert_type(r, tuple[ModelOutputThunk[Any] | Any, Context])
+
+
+async def check_aact_allow_change_widens() -> None:
+    r = await aact(
+        action,
+        chat_ctx,
+        backend,
+        strategy=None,
+        await_result=True,
+        allow_context_type_change=True,
+    )
+    assert_type(r, tuple[ComputedModelOutputThunk[str], Context])
+
+
+async def check_atransform_allow_change_widens() -> None:
+    r = await atransform(
+        object(), "t", chat_ctx, backend, allow_context_type_change=True
+    )
+    assert_type(r, tuple[ModelOutputThunk[Any] | Any, Context])
+
+
+# --- a user-defined subclass keeps its own type through `.add()` ---
+#
+# `Context.add` narrows to `Self` on the built-in contexts, so a subclass that
+# does not override `add` inherits a `-> Self` signature and `.add()` stays the
+# subclass type rather than widening to `ChatContext`/`SimpleContext`.
+
+
+class MyChatContext(ChatContext):
+    """A user subclass that does not override `add`."""
+
+
+class MySimpleContext(SimpleContext):
+    """A user subclass that does not override `add`."""
+
+
+def check_subclass_add_preserves_type() -> None:
+    span = cast(Span, None)
+    my_chat = cast(MyChatContext, None)
+    my_simple = cast(MySimpleContext, None)
+    assert_type(my_chat.add(span), MyChatContext)
+    assert_type(my_simple.add(span), MySimpleContext)
+
+
+def check_builtin_add_is_self() -> None:
+    span = cast(Span, None)
+    assert_type(chat_ctx.add(span), ChatContext)
+    assert_type(simple_ctx.add(span), SimpleContext)

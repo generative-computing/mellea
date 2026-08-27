@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Self, cast
 
 from mellea.backends.context_lengths import get_context_length
 from mellea.backends.model_ids import ModelIdentifier
@@ -171,7 +171,7 @@ class ChatContext(Context):
         """
         return self._make_root(self._model_id)
 
-    def add(self, c: Span) -> ChatContext:
+    def add(self, c: Span) -> Self:
         """Append `c` and run the compactor; return the resulting context.
 
         Args:
@@ -179,17 +179,23 @@ class ChatContext(Context):
                 block, or model output to append.
 
         Returns:
-            ChatContext: A new context of the same concrete subtype carrying the
-            same configuration.
+            Self: A new context of the same concrete subtype carrying the same
+            configuration. Returning `Self` (not the hard-coded `ChatContext`)
+            keeps a subclass statically its own type, matching the runtime
+            `type(self)` construction below.
         """
         # `type(self)`, not `ChatContext`, so a subclass gets an instance of
         # itself back rather than being silently demoted to `ChatContext`.
-        new = type(self).from_previous(self, c)
+        # Typed as `ChatContext` (not `Self`) because `compact()` below returns
+        # `ChatContext`; the final `cast` re-narrows to `Self` for the return.
+        new: ChatContext = type(self).from_previous(self, c)
         for field in self._propagated_fields:
             setattr(new, field, getattr(self, field))
         if self._compactor is not None:
             new = self._compactor.compact(new)
-        return new
+        # The compactor's rebuild preserves `type(self)`, so `new` is a `Self`
+        # instance; cast informs the checker of what the runtime guarantees.
+        return cast("Self", new)
 
     def view_for_generation(self) -> list[Span] | None:
         """Return the components to forward to the model.
@@ -282,10 +288,11 @@ class ChatContext(Context):
 def _rebuild_chat_context(
     components: list[Span],
     *,
+    source: ChatContext,
     compactor: InlineCompactor | None = None,
     token_context_length_limit: int | None = None,
     model_id: str | ModelIdentifier | None = None,
-    cls: type[ChatContext] = ChatContext,
+    cls: type[ChatContext] | None = None,
 ) -> ChatContext:
     """Build a fresh `ChatContext` linked-list without triggering compaction.
 
@@ -294,29 +301,60 @@ def _rebuild_chat_context(
     given the same configuration so the rebuilt context behaves identically to
     its source (e.g. token-budget views still apply).
 
+    Subclass state is preserved: every attribute named in the concrete class's
+    `_propagated_fields` is copied from `source` onto each rebuilt node — not
+    just the three built-in `ChatContext` fields — so a subclass that registers
+    its own field there keeps it across compaction rather than losing it (and
+    then raising `AttributeError` on the next `add`). The three built-in fields
+    can be overridden via the explicit `compactor` / `token_context_length_limit`
+    / `model_id` arguments; any that is left `None` falls back to `source`'s
+    value.
+
+    Note:
+        Nodes are constructed via `cls.__new__(cls)` and configured by copying
+        fields, so the subclass initializer is deliberately not re-run. A
+        subclass whose invariants live only in `__init__` (rather than in
+        `_propagated_fields`) will not have them re-established here; register
+        such state in `_propagated_fields` so it propagates.
+
     Args:
         components: Components to materialise as the new context, in order.
-        compactor: Compactor to attach to every node of the rebuilt context.
-        token_context_length_limit: Token budget to attach to every node.
-        model_id: Model identifier to attach to every node.
-        cls: The concrete `ChatContext` subtype to construct. Compactors pass
-            `type(ctx)` so a subclassed context is rebuilt as its own type
+        source: The context being rebuilt. Its `_propagated_fields` values are
+            copied onto every node so subclass-owned state survives.
+        compactor: Compactor to attach to every node; when `None`, `source`'s
+            compactor is used.
+        token_context_length_limit: Token budget to attach to every node; when
+            `None`, `source`'s value is used.
+        model_id: Model identifier to attach to every node; when `None`,
+            `source`'s value is used.
+        cls: The concrete `ChatContext` subtype to construct. Defaults to
+            `type(source)` so a subclassed context is rebuilt as its own type
             rather than being demoted to `ChatContext`.
 
     Returns:
         A new context of type `cls` whose linear history is exactly `components`.
     """
+    target_cls = cls if cls is not None else type(source)
+    overrides = {
+        "_compactor": compactor,
+        "_token_context_length_limit": token_context_length_limit,
+        "_model_id": model_id,
+    }
 
     def _configure(node: ChatContext) -> None:
-        node._compactor = compactor
-        node._token_context_length_limit = token_context_length_limit
-        node._model_id = model_id
+        # Copy every propagated field from the source so subclass-owned state
+        # survives compaction; explicit non-None overrides take precedence.
+        for field in source._propagated_fields:
+            setattr(node, field, getattr(source, field))
+        for field, value in overrides.items():
+            if value is not None:
+                setattr(node, field, value)
 
-    ctx: ChatContext = cls.__new__(cls)
+    ctx: ChatContext = target_cls.__new__(target_cls)
     Context.__init__(ctx)
     _configure(ctx)
     for c in components:
-        new: ChatContext = cls.__new__(cls)
+        new: ChatContext = target_cls.__new__(target_cls)
         new._previous = ctx
         new._data = c
         new._is_root = False
