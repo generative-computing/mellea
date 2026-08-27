@@ -344,9 +344,16 @@ class Requirement(Component[str]):
                 # Surface that as a third outcome rather than propagating: the
                 # result fails closed and carries the exception for callers that
                 # want to distinguish it from an ordinary failure.
+                #
+                # reason is deliberately None here. Repair strategies treat a
+                # truthy reason as literal prompt text; the judge output that
+                # triggered the parse error is malformed and would make useless
+                # repair guidance. None routes repair to the existing
+                # requirement-description fallback, while error and thunk retain
+                # the diagnostic for callers that inspect the result directly.
                 return ValidationResult(
                     result=False,
-                    reason=reason,
+                    reason=None,
                     thunk=llm_as_a_judge_result,
                     context=val_ctx,
                     error=exc,

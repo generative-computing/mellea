@@ -219,11 +219,13 @@ async def test_validate_yes_in_sentence_preserves_output(mock_backend):
 # --- validate() surfaces parse errors as a third outcome (issue #1358) ---
 
 
-async def _validate_with_output_to_bool(backend, output_to_bool):
+async def _validate_with_output_to_bool(
+    backend, output_to_bool, judge_value: str = "some judge output"
+):
     """Run Requirement.validate with a mocked backend and a custom output_to_bool."""
     req = Requirement("some requirement", output_to_bool=output_to_bool)
     ctx = ChatContext().add(ModelOutputThunk("some output"))
-    judge_thunk = ModelOutputThunk(value="some judge output")
+    judge_thunk = ModelOutputThunk(value=judge_value)
     val_ctx = ctx.add(judge_thunk)
 
     with patch.object(
@@ -245,6 +247,30 @@ async def test_validate_returns_error_state_on_schema_mismatch(mock_backend):
 
     assert result.error is exc
     assert bool(result) is False
+
+
+async def test_validate_error_state_has_no_reason(mock_backend):
+    """Parse-error results carry reason=None so repair uses the description fallback.
+
+    Repair strategies treat a truthy reason as literal prompt text. The judge
+    output that triggered the parse error is malformed, so surfacing it as a
+    reason would produce useless repair guidance; reason must be None even when
+    the judge produced non-binary, truthy text.
+    """
+
+    def raising_output_to_bool(x):
+        raise ValueError("unrecognizable adapter output")
+
+    result = await _validate_with_output_to_bool(
+        mock_backend,
+        raising_output_to_bool,
+        judge_value="malformed non-binary judge output that is truthy",
+    )
+
+    assert result.error is not None
+    assert result.reason is None
+    # The diagnostic thunk is still retained for direct inspection.
+    assert result.thunk is not None
 
 
 async def test_validate_happy_path_unaffected(mock_backend):
