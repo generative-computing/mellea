@@ -6,6 +6,7 @@
 Tests that backends correctly record token metrics through the telemetry system.
 """
 
+import asyncio
 import os
 
 import pytest
@@ -198,7 +199,15 @@ async def test_ollama_token_metrics_integration(
 
     # For streaming, consume the stream fully before checking metrics
     if stream:
-        await mot.astream()
+        # The 120 s per-chunk stream guard does not bound total request time:
+        # a stalled or queued stream that keeps the HTTP connection alive
+        # (observed on CI: a 900 s /v1 stream, run 33015176815) keeps the
+        # per-chunk guard re-armed and rides to the 900 s pytest watchdog,
+        # killing the job. Bound the stream to the same 300 s the
+        # non-streaming paths use so a genuine stall surfaces as a bounded
+        # TimeoutError the flaky marker retries, matching non-streaming
+        # behaviour.
+        await asyncio.wait_for(mot.astream(), timeout=300.0)
     await mot.avalue()
 
     # Force metrics export and collection
@@ -281,7 +290,15 @@ async def test_openai_token_metrics_integration(enable_metrics, metric_reader, s
 
     # For streaming, consume the stream fully before checking metrics
     if stream:
-        await mot.astream()
+        # The 120 s per-chunk stream guard does not bound total request time:
+        # a stalled or queued stream that keeps the HTTP connection alive
+        # (observed on CI: a 900 s /v1 stream, run 33015176815) keeps the
+        # per-chunk guard re-armed and rides to the 900 s pytest watchdog,
+        # killing the job. Bound the stream to the same 300 s the
+        # non-streaming paths use so a genuine stall surfaces as a bounded
+        # TimeoutError the flaky marker retries, matching non-streaming
+        # behaviour.
+        await asyncio.wait_for(mot.astream(), timeout=300.0)
     await mot.avalue()
 
     await drain_background_tasks()
@@ -421,7 +438,15 @@ async def test_litellm_token_metrics_integration(
 
     # For streaming, consume the stream fully before checking metrics
     if stream:
-        await mot.astream()
+        # The 120 s per-chunk stream guard does not bound total request time:
+        # a stalled or queued stream that keeps the HTTP connection alive
+        # (observed on CI: a 900 s /v1 stream, run 33015176815) keeps the
+        # per-chunk guard re-armed and rides to the 900 s pytest watchdog,
+        # killing the job. Bound the stream to the same 300 s the
+        # non-streaming paths use so a genuine stall surfaces as a bounded
+        # TimeoutError the flaky marker retries, matching non-streaming
+        # behaviour.
+        await asyncio.wait_for(mot.astream(), timeout=300.0)
     await mot.avalue()
 
     await drain_background_tasks()
@@ -479,7 +504,15 @@ async def test_huggingface_token_metrics_integration(
 
     # For streaming, consume the stream fully before checking metrics
     if stream:
-        await mot.astream()
+        # The 120 s per-chunk stream guard does not bound total request time:
+        # a stalled or queued stream that keeps the HTTP connection alive
+        # (observed on CI: a 900 s /v1 stream, run 33015176815) keeps the
+        # per-chunk guard re-armed and rides to the 900 s pytest watchdog,
+        # killing the job. Bound the stream to the same 300 s the
+        # non-streaming paths use so a genuine stall surfaces as a bounded
+        # TimeoutError the flaky marker retries, matching non-streaming
+        # behaviour.
+        await asyncio.wait_for(mot.astream(), timeout=300.0)
     await mot.avalue()
 
     await drain_background_tasks()

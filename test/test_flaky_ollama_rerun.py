@@ -41,6 +41,10 @@ STREAM_GUARD_TIMEOUT = (
     "Set ModelOption.STREAM_TIMEOUT to a larger value or None to disable."
 )
 
+# Raised by asyncio.wait_for when the test-level 300 s total-stream budget
+# (test/telemetry/test_metrics_backend.py) is exhausted: no message.
+STREAM_WAIT_FOR_TIMEOUT = "TimeoutError: "
+
 # pytest-timeout watchdog kill of an attempt that consumed the 900 s budget.
 WATCHDOG_KILL = "Failed: Timeout (>900.0s) from pytest-timeout."
 
@@ -65,6 +69,16 @@ def test_litellm_openai_compatible_timeout_is_rerunnable():
 def test_streaming_stream_guard_timeout_is_rerunnable():
     """A stalled stream aborted by the 120 s chunk guard must rerun."""
     assert _matches_any(OLLAMA_TIMEOUT_RERUN_PATTERNS, STREAM_GUARD_TIMEOUT)
+
+
+def test_streaming_total_budget_timeout_is_rerunnable():
+    """A stalled stream that exhausts the 300 s wait_for budget must rerun.
+
+    asyncio.wait_for raises the builtin TimeoutError with an empty message;
+    the per-chunk guard only bounds inter-chunk gaps, so a stream that keeps
+    the connection alive but never finishes needs this total-time backstop.
+    """
+    assert _matches_any(OLLAMA_TIMEOUT_RERUN_PATTERNS, STREAM_WAIT_FOR_TIMEOUT)
 
 
 def test_pytest_timeout_watchdog_kill_is_not_rerunnable():
