@@ -1143,10 +1143,9 @@ def start_adapter_function_phase_span(
 
     Args:
         invocation_id: Correlation key of the enclosing `adapter_function` span.
-        phase: Lifecycle phase name (e.g. `"prepare"`, `"activate"`).
+        phase: Lifecycle phase name (e.g. `"activate"`, `"deactivate"`).
         revision: Catalog revision of the adapter, or `None` if unpinned. Recorded
-            directly on this phase span — e.g. `adapter_function.prepare` records
-            the resolved Hugging Face SHA here, not just on the parent.
+            directly on the phase span as well as the parent.
 
     Returns:
         The span, or `None` if tracing is disabled.

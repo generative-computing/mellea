@@ -638,20 +638,18 @@ class AdapterFunctionTracingPlugin(
     On the `mellea.backend` tracer (adapter/model lifecycle work, not a
     user-facing operation — see `docs/docs/observability/tracing.md`).
 
-    Covers `prepare`/`activate`/`deactivate` only as of #1466. `generate`/
-    `parse` fire no hooks yet (blocked on #1465 wiring generation through
-    `AdapterMixin.adapter_scope`), so this plugin does not yet emit
-    `adapter_function.generate`/`adapter_function.parse` — it will, once those
-    hooks fire, with no changes needed here. `release` fires no hooks at all
-    (see `AdapterFunctionPhaseCompletePayload`'s `phase` field for why) and so
-    never gets a span either. Content capture (`MELLEA_TRACES_CONTENT`) is not
-    wired here: no phase in scope carries adapter input/output content —
-    `generate`/`parse` are where that will apply.
+    Covers `activate`/`deactivate` only as of #1466. `prepare` remains
+    metric-only because it is setup work rather than an adapter-function
+    invocation. `generate`/`parse` fire no spans yet (blocked on #1465 wiring
+    generation through `AdapterMixin.adapter_scope`). `release` has no
+    invocation-scoped hook site, so it is untraced. Content capture
+    (`MELLEA_TRACES_CONTENT`) is deferred until `generate`/`parse` carry
+    adapter input/output content.
 
     Unlike every other plugin in this module, these hooks don't rely on
     `_CONTEXT_ATTACH_SUPPORTED` ambient-context attach/detach at all — they
-    fire from sync code (`AdapterMixin.adapter_scope`, `LocalFileBinding.prepare`)
-    via `_run_async_in_thread`, under which ambient attach can't establish a
+    fire from synchronous `AdapterMixin.adapter_scope` code via
+    `_run_async_in_thread`, under which ambient attach can't establish a
     parent/child edge (see `start_adapter_function_span`'s docstring).
     `start_adapter_function_phase_span` parents each child explicitly instead,
     so nesting works identically on every Python version.
