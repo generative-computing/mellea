@@ -618,18 +618,26 @@ def pytest_runtest_setup(item):
             logger.info(
                 "Warming up ollama models before ollama group (keep_alive=-1)..."
             )
-            for model in [
-                "granite4.2:3b",
-                "granite4:micro-h",
-                "hf.co/ibm-granite/granite-vision-4.1-4b-GGUF:Q4_K_M",
-            ]:
+            # Warm each model with the num_ctx its live tests actually use.
+            # Ollama loads a per-model runner sized to the *first* request's
+            # num_ctx, and a later request needing a larger context forces a
+            # full runner reload (Ollama 0.33.1 on x86 has a bug where such a
+            # reloaded runner ignores num_predict — see PR #1587 update
+            # 2026-08-28 and runs 33122730668 / 33152524235). Pining the
+            # right size from the first request avoids the reload entirely.
+            warmup_models = {
+                "granite4.2:3b": 8192,
+                "granite4:micro-h": 2048,
+                "hf.co/ibm-granite/granite-vision-4.1-4b-GGUF:Q4_K_M": 4096,
+            }
+            for model, num_ctx in warmup_models.items():
                 try:
                     requests.post(
                         f"{ollama_base}/api/generate",
                         json={
                             "model": model,
                             "prompt": "hi",
-                            "options": {"num_ctx": 2048, "num_predict": 1},
+                            "options": {"num_ctx": num_ctx, "num_predict": 1},
                             "stream": False,
                             "keep_alive": -1,
                         },

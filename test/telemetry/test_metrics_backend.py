@@ -19,7 +19,7 @@ from mellea.plugins.manager import (
     enable_background_collection,
 )
 from mellea.stdlib.components import Message
-from mellea.stdlib.context import SimpleContext
+from mellea.stdlib.context import ChatContext
 from test.conftest import hf_skip
 from test.predicates import require_api_key, require_gpu
 from test.telemetry.conftest import reset_metrics_state
@@ -38,7 +38,9 @@ pytestmark = [
     pytest.mark.e2e,
 ]
 
-TEST_CONTEXT_WINDOW = 2048
+# Match granite4.2:3b's constrained default (Modelfile num_ctx: 8192) so the
+# runner is loaded once and never reloaded for a context-size mismatch.
+TEST_CONTEXT_WINDOW = 8192
 
 
 @pytest.fixture
@@ -189,7 +191,7 @@ async def test_ollama_token_metrics_integration(
             ModelOption.MAX_NEW_TOKENS: 64,
         },
     )
-    ctx = SimpleContext()
+    ctx = ChatContext()
     ctx = ctx.add(Message(role="user", content="Say 'hello' and nothing else"))
 
     model_options = {ModelOption.STREAM: True} if stream else {}
@@ -304,7 +306,7 @@ async def test_openai_token_metrics_integration(enable_metrics, metric_reader, s
         max_retries=0,
         timeout=300.0,
     )
-    ctx = SimpleContext()
+    ctx = ChatContext()
     ctx = ctx.add(Message(role="user", content="Say 'hello' and nothing else"))
 
     model_options = {ModelOption.STREAM: True} if stream else {}
@@ -374,7 +376,7 @@ async def test_watsonx_token_metrics_integration(enable_metrics, metric_reader):
         model_id=IBM_GRANITE_4_HYBRID_SMALL.watsonx_name,  # type: ignore
         project_id=os.getenv("WATSONX_PROJECT_ID", "test-project"),
     )
-    ctx = SimpleContext()
+    ctx = ChatContext()
     ctx = ctx.add(Message(role="user", content="Say 'hello' and nothing else"))
 
     mot, _ = await backend.generate_from_context(
@@ -463,7 +465,7 @@ async def test_litellm_token_metrics_integration(
             "max_tokens": 64,
         },
     )
-    ctx = SimpleContext()
+    ctx = ChatContext()
     ctx = ctx.add(Message(role="user", content="Say 'hello' and nothing else"))
 
     model_options = {ModelOption.STREAM: True} if stream else {}
@@ -532,7 +534,7 @@ async def test_huggingface_token_metrics_integration(
 
     provider = _setup_metrics_provider(metrics_module, metric_reader)
 
-    ctx = SimpleContext()
+    ctx = ChatContext()
     ctx = ctx.add(Message(role="user", content="Say 'hello' and nothing else"))
 
     model_options = {ModelOption.STREAM: True} if stream else {}
@@ -594,7 +596,7 @@ async def test_error_metrics_on_backend_failure(enable_metrics, metric_reader):
         base_url=f"http://{os.environ.get('OLLAMA_HOST', 'localhost:11434')}/v1",
         api_key="dummy",
     )
-    ctx = SimpleContext()
+    ctx = ChatContext()
     ctx = ctx.add(Message(role="user", content="Say hello"))
 
     mot, _ = await backend.generate_from_context(
@@ -630,7 +632,7 @@ async def test_ollama_sampling_metrics_integration(enable_metrics, metric_reader
     from mellea.backends.model_options import ModelOption
     from mellea.backends.ollama import OllamaModelBackend
     from mellea.stdlib.components import Instruction
-    from mellea.stdlib.context import SimpleContext
+    from mellea.stdlib.context import ChatContext
     from mellea.stdlib.sampling import RejectionSamplingStrategy
     from mellea.telemetry import metrics as metrics_module
 
@@ -642,7 +644,7 @@ async def test_ollama_sampling_metrics_integration(enable_metrics, metric_reader
         model_options={ModelOption.THINKING: False, ModelOption.MAX_NEW_TOKENS: 64},
     )
     strategy = RejectionSamplingStrategy(loop_budget=1)
-    ctx = SimpleContext()
+    ctx = ChatContext()
 
     result = await strategy.sample(
         action=Instruction("Say hello"), context=ctx, backend=backend, requirements=None
@@ -679,7 +681,7 @@ async def test_ollama_generate_from_raw_metrics_integration(
     from mellea.backends.model_options import ModelOption
     from mellea.backends.ollama import OllamaModelBackend
     from mellea.core import CBlock
-    from mellea.stdlib.context import SimpleContext
+    from mellea.stdlib.context import ChatContext
     from mellea.telemetry import metrics as metrics_module
 
     provider = _setup_metrics_provider(metrics_module, metric_reader)
@@ -689,7 +691,7 @@ async def test_ollama_generate_from_raw_metrics_integration(
         # Same output bound as the other live "say hello" tests.
         model_options={ModelOption.THINKING: False, ModelOption.MAX_NEW_TOKENS: 64},
     )
-    ctx = SimpleContext()
+    ctx = ChatContext()
     actions = [CBlock("Say 'hi' and nothing else."), CBlock("Say 'hello'.")]
 
     results = await backend.generate_from_raw(actions, ctx=ctx)
@@ -722,7 +724,7 @@ async def test_generate_from_raw_error_metrics_integration(
     """Test that error metrics are recorded when `generate_from_raw` fails."""
     from mellea.backends.openai import OpenAIBackend
     from mellea.core import CBlock
-    from mellea.stdlib.context import SimpleContext
+    from mellea.stdlib.context import ChatContext
     from mellea.telemetry import metrics as metrics_module
 
     provider = _setup_metrics_provider(metrics_module, metric_reader)
@@ -732,7 +734,7 @@ async def test_generate_from_raw_error_metrics_integration(
         base_url=f"http://{os.environ.get('OLLAMA_HOST', 'localhost:11434')}/v1",
         api_key="dummy",
     )
-    ctx = SimpleContext()
+    ctx = ChatContext()
     actions = [CBlock("Say 'hi'.")]
 
     with pytest.raises(Exception):

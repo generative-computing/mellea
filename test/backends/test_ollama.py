@@ -21,7 +21,9 @@ from mellea.stdlib.requirements import simple_validate
 # Mark all tests in this module as requiring Ollama
 pytestmark = [pytest.mark.ollama, pytest.mark.e2e]
 
-TEST_CONTEXT_WINDOW = 2048
+# Match granite4.2:3b's constrained default (Modelfile num_ctx: 8192) so the
+# runner is loaded once and never reloaded for a context-size mismatch.
+TEST_CONTEXT_WINDOW = 8192
 
 
 def _ollama_model_for_eval() -> str:
@@ -175,7 +177,7 @@ async def test_generate_from_raw(session) -> None:
         actions=[CBlock(value=prompt) for prompt in prompts],
         ctx=session.ctx,
         model_options={
-            ModelOption.CONTEXT_WINDOW: 2048,
+            ModelOption.CONTEXT_WINDOW: TEST_CONTEXT_WINDOW,
             # With raw prompts and high temperature, a response of arbitrary
             # length is normal operation.
             ModelOption.MAX_NEW_TOKENS: 100,
@@ -200,7 +202,7 @@ async def test_generate_from_raw_with_format(session) -> None:
         actions=[CBlock(value=prompt) for prompt in prompts],
         ctx=session.ctx,
         format=Answer,
-        model_options={ModelOption.CONTEXT_WINDOW: 2048},
+        model_options={ModelOption.CONTEXT_WINDOW: TEST_CONTEXT_WINDOW},
     )
 
     assert len(results) == len(prompts)

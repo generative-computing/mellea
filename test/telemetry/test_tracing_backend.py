@@ -19,7 +19,7 @@ from mellea.plugins.manager import (
     enable_background_collection,
 )
 from mellea.stdlib.components import Message
-from mellea.stdlib.context import SimpleContext
+from mellea.stdlib.context import ChatContext
 from test.telemetry.conftest import reset_tracing_state
 
 # Check if OpenTelemetry is available
@@ -38,7 +38,9 @@ pytestmark = pytest.mark.skipif(
     not OTEL_AVAILABLE, reason="OpenTelemetry not installed"
 )
 
-TEST_CONTEXT_WINDOW = 2048
+# Match granite4.2:3b's constrained default (Modelfile num_ctx: 8192) so the
+# runner is loaded once and never reloaded for a context-size mismatch.
+TEST_CONTEXT_WINDOW = 8192
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -163,7 +165,7 @@ async def test_stream_mocked(span_exporter, monkeypatch, emit):
         mock_async_client_cls.return_value = mock_async_instance
 
         backend = OllamaModelBackend(model_id="test-model")
-        ctx = SimpleContext().add(Message(role="user", content="Count to 3"))
+        ctx = ChatContext().add(Message(role="user", content="Count to 3"))
 
         async with await stream(
             Message(role="assistant", content=""), backend, ctx
@@ -218,9 +220,7 @@ async def test_span_duration_captures_async_operation_mocked(
     span_exporter, mocked_tracing_backend
 ):
     """Test span duration without requiring a live Ollama server."""
-    ctx = SimpleContext().add(
-        Message(role="user", content="Say 'test' and nothing else")
-    )
+    ctx = ChatContext().add(Message(role="user", content="Say 'test' and nothing else"))
 
     mot, _ = await mocked_tracing_backend.generate_from_context(
         Message(role="assistant", content=""), ctx
@@ -251,9 +251,7 @@ async def test_context_propagation_parent_child_mocked(
     span_exporter, mocked_tracing_backend
 ):
     """Test parent-child span propagation without a live Ollama server."""
-    ctx = SimpleContext().add(
-        Message(role="user", content="Say 'test' and nothing else")
-    )
+    ctx = ChatContext().add(Message(role="user", content="Say 'test' and nothing else"))
 
     from mellea.telemetry import tracing
 
@@ -290,9 +288,7 @@ async def test_token_usage_recorded_after_completion_mocked(
     span_exporter, mocked_tracing_backend
 ):
     """Test deterministic token usage without a live Ollama server."""
-    ctx = SimpleContext().add(
-        Message(role="user", content="Say 'test' and nothing else")
-    )
+    ctx = ChatContext().add(Message(role="user", content="Say 'test' and nothing else"))
 
     mot, _ = await mocked_tracing_backend.generate_from_context(
         Message(role="assistant", content=""), ctx
@@ -323,7 +319,7 @@ async def test_span_not_closed_prematurely_mocked(
     span_exporter, mocked_tracing_backend
 ):
     """Test that a mocked async operation keeps its span open until completion."""
-    ctx = SimpleContext().add(Message(role="user", content="Count to 5"))
+    ctx = ChatContext().add(Message(role="user", content="Count to 5"))
 
     mot, _ = await mocked_tracing_backend.generate_from_context(
         Message(role="assistant", content=""), ctx
@@ -352,7 +348,7 @@ async def test_multiple_generations_separate_spans_mocked(
     span_exporter, mocked_tracing_backend
 ):
     """Test separate generation spans without a live Ollama server."""
-    ctx = SimpleContext().add(Message(role="user", content="Say 'test'"))
+    ctx = ChatContext().add(Message(role="user", content="Say 'test'"))
 
     mot1, _ = await mocked_tracing_backend.generate_from_context(
         Message(role="assistant", content=""), ctx
@@ -389,9 +385,13 @@ async def test_span_duration_captures_async_operation(span_exporter):
         model_options={
             ModelOption.CONTEXT_WINDOW: TEST_CONTEXT_WINDOW,
             ModelOption.THINKING: False,
+            # Bound the worst case: without a cap an unexpected long
+            # generation runs until the client's 300 s request cap (run
+            # 33152524235: 2542-token runaway on an uncapped request).
+            ModelOption.MAX_NEW_TOKENS: 64,
         },
     )
-    ctx = SimpleContext()
+    ctx = ChatContext()
     ctx = ctx.add(Message(role="user", content="Say 'test' and nothing else"))
 
     mot, _ = await backend.generate_from_context(
@@ -434,9 +434,13 @@ async def test_context_propagation_parent_child(span_exporter):
         model_options={
             ModelOption.CONTEXT_WINDOW: TEST_CONTEXT_WINDOW,
             ModelOption.THINKING: False,
+            # Bound the worst case: without a cap an unexpected long
+            # generation runs until the client's 300 s request cap (run
+            # 33152524235: 2542-token runaway on an uncapped request).
+            ModelOption.MAX_NEW_TOKENS: 64,
         },
     )
-    ctx = SimpleContext()
+    ctx = ChatContext()
     ctx = ctx.add(Message(role="user", content="Say 'test' and nothing else"))
 
     # Create a parent span using the module's own tracer provider
@@ -490,9 +494,13 @@ async def test_token_usage_recorded_after_completion(span_exporter):
         model_options={
             ModelOption.CONTEXT_WINDOW: TEST_CONTEXT_WINDOW,
             ModelOption.THINKING: False,
+            # Bound the worst case: without a cap an unexpected long
+            # generation runs until the client's 300 s request cap (run
+            # 33152524235: 2542-token runaway on an uncapped request).
+            ModelOption.MAX_NEW_TOKENS: 64,
         },
     )
-    ctx = SimpleContext()
+    ctx = ChatContext()
     ctx = ctx.add(Message(role="user", content="Say 'test' and nothing else"))
 
     mot, _ = await backend.generate_from_context(
@@ -546,9 +554,13 @@ async def test_span_not_closed_prematurely(span_exporter):
         model_options={
             ModelOption.CONTEXT_WINDOW: TEST_CONTEXT_WINDOW,
             ModelOption.THINKING: False,
+            # Bound the worst case: without a cap an unexpected long
+            # generation runs until the client's 300 s request cap (run
+            # 33152524235: 2542-token runaway on an uncapped request).
+            ModelOption.MAX_NEW_TOKENS: 64,
         },
     )
-    ctx = SimpleContext()
+    ctx = ChatContext()
     ctx = ctx.add(Message(role="user", content="Count to 5"))
 
     mot, _ = await backend.generate_from_context(
@@ -589,9 +601,13 @@ async def test_multiple_generations_separate_spans(span_exporter):
         model_options={
             ModelOption.CONTEXT_WINDOW: TEST_CONTEXT_WINDOW,
             ModelOption.THINKING: False,
+            # Bound the worst case: without a cap an unexpected long
+            # generation runs until the client's 300 s request cap (run
+            # 33152524235: 2542-token runaway on an uncapped request).
+            ModelOption.MAX_NEW_TOKENS: 64,
         },
     )
-    ctx = SimpleContext()
+    ctx = ChatContext()
     ctx = ctx.add(Message(role="user", content="Say 'test'"))
 
     # Generate twice
@@ -639,9 +655,13 @@ async def test_stream_e2e(span_exporter):
         model_options={
             ModelOption.CONTEXT_WINDOW: TEST_CONTEXT_WINDOW,
             ModelOption.THINKING: False,
+            # Bound the worst case: without a cap an unexpected long
+            # generation runs until the client's 300 s request cap (run
+            # 33152524235: 2542-token runaway on an uncapped request).
+            ModelOption.MAX_NEW_TOKENS: 64,
         },
     )
-    ctx = SimpleContext().add(Message(role="user", content="Count to 3"))
+    ctx = ChatContext().add(Message(role="user", content="Count to 3"))
 
     async with await stream(
         Message(role="assistant", content=""), backend, ctx
