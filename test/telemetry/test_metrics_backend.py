@@ -183,16 +183,20 @@ async def test_ollama_token_metrics_integration(
         model_options={
             ModelOption.CONTEXT_WINDOW: TEST_CONTEXT_WINDOW,
             ModelOption.THINKING: False,
-            # Bound the worst case: this "say hello" prompt has produced
+            # Bound the worst case: open-ended prompts have produced
             # 1800+ token generations on CI, and at CI's ~9 t/s CPU decode
             # that is a 3-15 minute single request that can eat the test's
             # entire pytest-timeout budget. 64 tokens is far more than a
-            # "hello" answer needs.
+            # counting answer needs.
             ModelOption.MAX_NEW_TOKENS: 64,
         },
     )
     ctx = ChatContext()
-    ctx = ctx.add(Message(role="user", content="Say 'hello' and nothing else"))
+    # A counting prompt reliably spans many output tokens, so the streaming
+    # branch always sees >=2 chunks (the time_per_output_chunk histogram only
+    # records inter-chunk intervals; a single-chunk reply like "Hello!" leaves
+    # it empty — observed in run 33163851256).
+    ctx = ctx.add(Message(role="user", content="Count from 1 to 10 and nothing else"))
 
     model_options = {ModelOption.STREAM: True} if stream else {}
     mot, _ = await backend.generate_from_context(
