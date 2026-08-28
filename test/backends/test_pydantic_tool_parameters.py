@@ -1007,5 +1007,93 @@ class TestNestedModelsEdgeCases:
         assert validated_no_addr["person"]["address"] is None
 
 
+class TestLiteralFields:
+    """Schema generation and validation for plain Literal[...] tool parameters."""
+
+    def test_strict_rejects_value_outside_literal(self):
+        """validate_tool_arguments must reject values not in Literal[...] when strict=True."""
+        from typing import Literal
+
+        from pydantic import ValidationError
+
+        def file_op(path: str, mode: Literal["read", "write"]) -> str:
+            """Perform a file operation.
+
+            Args:
+                path: the file path
+                mode: the operation mode
+            """
+            return "ok"
+
+        mt = MelleaTool.from_callable(file_op)
+        with pytest.raises(ValidationError):
+            validate_tool_arguments(
+                mt, {"path": "/etc/passwd", "mode": "delete"}, strict=True
+            )
+
+    def test_strict_accepts_value_inside_literal(self):
+        """validate_tool_arguments must accept values that are in Literal[...]."""
+        from typing import Literal
+
+        def file_op(path: str, mode: Literal["read", "write"]) -> str:
+            """Perform a file operation.
+
+            Args:
+                path: the file path
+                mode: the operation mode
+            """
+            return "ok"
+
+        mt = MelleaTool.from_callable(file_op)
+        result = validate_tool_arguments(
+            mt, {"path": "/tmp/file.txt", "mode": "read"}, strict=True
+        )
+        assert result["mode"] == "read"
+
+    def test_strict_accepts_single_value_literal(self):
+        """A Literal with one allowed value must accept that value.
+
+        Pydantic emits single-value Literal as {"const": V} rather than
+        {"enum": [V]}, so this exercises the const handling path.
+        """
+        from typing import Literal
+
+        def readonly_op(path: str, mode: Literal["read"]) -> str:
+            """Perform a read-only operation.
+
+            Args:
+                path: the file path
+                mode: always 'read'
+            """
+            return "ok"
+
+        mt = MelleaTool.from_callable(readonly_op)
+        result = validate_tool_arguments(
+            mt, {"path": "/tmp/file.txt", "mode": "read"}, strict=True
+        )
+        assert result["mode"] == "read"
+
+    def test_strict_rejects_value_outside_single_value_literal(self):
+        """A Literal with one allowed value must reject any other value under strict=True."""
+        from typing import Literal
+
+        from pydantic import ValidationError
+
+        def readonly_op(path: str, mode: Literal["read"]) -> str:
+            """Perform a read-only operation.
+
+            Args:
+                path: the file path
+                mode: always 'read'
+            """
+            return "ok"
+
+        mt = MelleaTool.from_callable(readonly_op)
+        with pytest.raises(ValidationError):
+            validate_tool_arguments(
+                mt, {"path": "/tmp/file.txt", "mode": "write"}, strict=True
+            )
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
