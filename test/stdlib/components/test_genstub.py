@@ -2,12 +2,14 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import asyncio
+from collections.abc import Iterator
 from typing import Literal
 
 import pytest
 
-from mellea import MelleaSession, generative, start_session
-from mellea.backends.model_ids import IBM_GRANITE_4_1_3B
+from mellea import MelleaSession, generative
+from mellea.backends.model_ids import IBM_GRANITE_4_2_3B
+from mellea.backends.model_options import ModelOption
 from mellea.backends.ollama import OllamaModelBackend
 from mellea.core import Requirement
 from mellea.stdlib.components.genstub import (
@@ -20,19 +22,18 @@ from mellea.stdlib.context import ChatContext, Context
 from mellea.stdlib.requirements import simple_validate
 from mellea.stdlib.sampling import RejectionSamplingStrategy
 
-# Module-level markers: Uses granite4.1:3b (3B, lightweight) in local mode
+# Module-level markers: Uses granite-4.2-3b:latest (3B, lightweight) in local mode
 pytestmark = [pytest.mark.ollama, pytest.mark.e2e]
 
 
 @pytest.fixture(scope="module")
-def backend(gh_run: int):
+def backend():
     """Shared backend."""
-    if gh_run == 1:
-        return OllamaModelBackend(
-            model_id=IBM_GRANITE_4_1_3B.ollama_name  # type: ignore
-        )
-    else:
-        return OllamaModelBackend(model_id=IBM_GRANITE_4_1_3B.ollama_name)  # type: ignore
+    assert IBM_GRANITE_4_2_3B.ollama_name is not None
+    return OllamaModelBackend(
+        model_id=IBM_GRANITE_4_2_3B.ollama_name,
+        model_options={ModelOption.THINKING: False},
+    )
 
 
 @generative
@@ -48,9 +49,9 @@ async def async_write_short_sentence(topic: str) -> str: ...
 
 
 @pytest.fixture(scope="function")
-def session():
+def session(backend) -> Iterator[MelleaSession]:
     """Fresh session for each test."""
-    session = start_session()
+    session = MelleaSession(backend=backend)
     yield session
     session.reset()
 

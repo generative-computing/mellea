@@ -18,7 +18,7 @@
 #   SKIP_WARMUP=1 ./run_tests_with_ollama_and_vllm.sh                 # skip ollama model warmup
 #   WITH_EXAMPLES=1 ./run_tests_with_ollama_and_vllm.sh               # include docs/examples/
 #   WITH_TOOLING_TESTS=1 ./run_tests_with_ollama_and_vllm.sh          # include test/tooling/
-#   WITH_VLLM=1 VLLM_MODEL=ibm-granite/granite-3.3-8b-instruct \
+#   WITH_VLLM=1 VLLM_MODEL=ibm-granite/granite-4.2-3b \
 #     ./run_tests_with_ollama_and_vllm.sh --group-by-backend -v -s
 #
 # LSF example:
@@ -43,8 +43,8 @@ else
 fi
 OLLAMA_BIN="${OLLAMA_BIN:-$(command -v ollama 2>/dev/null || echo "$HOME/.local/bin/ollama")}"
 OLLAMA_MODEL_LIST=(
-    "granite4.1:3b"
-    "granite3.2-vision"
+    "granite-4.2-3b:latest"
+    "hf.co/ibm-granite/granite-vision-4.1-4b-GGUF:Q4_K_M"
     "llama3.2"
     "qwen2.5vl:7b"
 )
@@ -61,7 +61,7 @@ if [[ -z "${WITH_VLLM:-}" ]]; then
     fi
 fi
 VLLM_PORT="${VLLM_PORT:-8100}"
-VLLM_MODEL="${VLLM_MODEL:-ibm-granite/granite-4.1-3b}"
+VLLM_MODEL="${VLLM_MODEL:-ibm-granite/granite-4.2-3b}"
 VLLM_GPU_MEM="${VLLM_GPU_MEM:-0.4}"
 VLLM_MAX_MODEL_LEN="${VLLM_MAX_MODEL_LEN:-4096}"
 VLLM_MAX_NUM_SEQS="${VLLM_MAX_NUM_SEQS:-256}"

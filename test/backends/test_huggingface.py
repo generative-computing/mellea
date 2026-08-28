@@ -57,11 +57,8 @@ from test.conftest import hf_skip
 def backend():
     """Shared HuggingFace backend for all tests in this module.
 
-    Uses Granite 3.3-8b for aLoRA adapter compatibility.
-    Note: as of #1135, the "requirement-check" intrinsic catalogue entry points to
-    granitelib-core-r1.0 (granite-4.x adapters). Tests that exercise requirement-check
-    against this granite-3.3 backend will fail once revision pinning is wired through
-    in phase-2.2 (#1141). Other intrinsics are not affected.
+    Uses Granite 4.1 3B because the pinned adapter-function catalogues do not
+    provide Granite 4.2 weights yet.
     """
     with hf_skip():
         backend = LocalHFBackend(

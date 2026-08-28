@@ -34,7 +34,7 @@ def mock_ollama_backend():
     """
 
     def _make(
-        model_id: str = "granite4.1:3b",
+        model_id: str = "granite-4.2-3b:latest",
         model_options: dict | None = None,
         timeout: float | None = None,
     ) -> OllamaModelBackend:

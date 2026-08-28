@@ -10,7 +10,7 @@ import os
 
 import pytest
 
-from mellea.backends.model_ids import IBM_GRANITE_4_1_3B, IBM_GRANITE_4_HYBRID_SMALL
+from mellea.backends.model_ids import IBM_GRANITE_4_2_3B, IBM_GRANITE_4_HYBRID_SMALL
 from mellea.plugins.manager import (
     disable_background_collection,
     discard_background_tasks,
@@ -36,6 +36,8 @@ pytestmark = [
     pytest.mark.skipif(not OTEL_AVAILABLE, reason="OpenTelemetry not installed"),
     pytest.mark.e2e,
 ]
+
+TEST_CONTEXT_WINDOW = 2048
 
 
 @pytest.fixture
@@ -73,7 +75,7 @@ def hf_metrics_backend(gh_run):
 
     with hf_skip():
         backend = LocalHFBackend(
-            model_id=IBM_GRANITE_4_1_3B.hf_model_name,  # type: ignore
+            model_id=IBM_GRANITE_4_2_3B.hf_model_name,  # type: ignore
             cache=SimpleLRUCache(5),
         )
 
@@ -173,7 +175,13 @@ async def test_ollama_token_metrics_integration(
     monkeypatch.setenv("MELLEA_GENERATION_CHUNK_EVENTS", "true")
     provider = _setup_metrics_provider(metrics_module, metric_reader)
 
-    backend = OllamaModelBackend(model_id=IBM_GRANITE_4_1_3B.ollama_name)  # type: ignore
+    backend = OllamaModelBackend(  # type: ignore
+        model_id=IBM_GRANITE_4_2_3B.ollama_name,
+        model_options={
+            ModelOption.CONTEXT_WINDOW: TEST_CONTEXT_WINDOW,
+            ModelOption.THINKING: False,
+        },
+    )
     ctx = SimpleContext()
     ctx = ctx.add(Message(role="user", content="Say 'hello' and nothing else"))
 
@@ -248,9 +256,10 @@ async def test_openai_token_metrics_integration(enable_metrics, metric_reader, s
 
     # Use Ollama's OpenAI-compatible endpoint
     backend = OpenAIBackend(
-        model_id=IBM_GRANITE_4_1_3B.ollama_name,  # type: ignore
+        model_id=IBM_GRANITE_4_2_3B.ollama_name,  # type: ignore
         base_url=f"http://{os.environ.get('OLLAMA_HOST', 'localhost:11434')}/v1",
         api_key="ollama",
+        default_extra_body={"chat_template_kwargs": {"enable_thinking": False}},
     )
     ctx = SimpleContext()
     ctx = ctx.add(Message(role="user", content="Say 'hello' and nothing else"))
@@ -371,7 +380,10 @@ async def test_litellm_token_metrics_integration(
 
     # Use LiteLLM with openai/ prefix - it will use the OPENAI_BASE_URL env var
     # This tests LiteLLM with a provider that properly returns token usage
-    backend = LiteLLMBackend(model_id=f"openai/{IBM_GRANITE_4_1_3B.ollama_name}")  # type: ignore
+    backend = LiteLLMBackend(  # type: ignore
+        model_id=f"openai/{IBM_GRANITE_4_2_3B.ollama_name}",
+        model_options={ModelOption.THINKING: False},
+    )
     ctx = SimpleContext()
     ctx = ctx.add(Message(role="user", content="Say 'hello' and nothing else"))
 
@@ -514,6 +526,7 @@ async def test_error_metrics_on_backend_failure(enable_metrics, metric_reader):
 @pytest.mark.ollama
 async def test_ollama_sampling_metrics_integration(enable_metrics, metric_reader):
     """Test that sampling metrics are recorded through a full RejectionSamplingStrategy loop."""
+    from mellea.backends.model_options import ModelOption
     from mellea.backends.ollama import OllamaModelBackend
     from mellea.stdlib.components import Instruction
     from mellea.stdlib.context import SimpleContext
@@ -522,7 +535,10 @@ async def test_ollama_sampling_metrics_integration(enable_metrics, metric_reader
 
     provider = _setup_metrics_provider(metrics_module, metric_reader)
 
-    backend = OllamaModelBackend(model_id=IBM_GRANITE_4_1_3B.ollama_name)  # type: ignore
+    backend = OllamaModelBackend(  # type: ignore
+        model_id=IBM_GRANITE_4_2_3B.ollama_name,
+        model_options={ModelOption.THINKING: False},
+    )
     strategy = RejectionSamplingStrategy(loop_budget=1)
     ctx = SimpleContext()
 
@@ -558,6 +574,7 @@ async def test_ollama_generate_from_raw_metrics_integration(
     enable_metrics, metric_reader
 ):
     """Token and latency metrics are recorded for `generate_from_raw` calls."""
+    from mellea.backends.model_options import ModelOption
     from mellea.backends.ollama import OllamaModelBackend
     from mellea.core import CBlock
     from mellea.stdlib.context import SimpleContext
@@ -565,7 +582,10 @@ async def test_ollama_generate_from_raw_metrics_integration(
 
     provider = _setup_metrics_provider(metrics_module, metric_reader)
 
-    backend = OllamaModelBackend(model_id=IBM_GRANITE_4_1_3B.ollama_name)  # type: ignore
+    backend = OllamaModelBackend(  # type: ignore
+        model_id=IBM_GRANITE_4_2_3B.ollama_name,
+        model_options={ModelOption.THINKING: False},
+    )
     ctx = SimpleContext()
     actions = [CBlock("Say 'hi' and nothing else."), CBlock("Say 'hello'.")]
 

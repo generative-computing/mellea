@@ -76,7 +76,10 @@ class LiteLLMBackend(FormatterBackend):
             `ollama_chat/` → localhost:11434, `anthropic/` → Anthropic API).
             Use `None` for cloud providers; set explicitly for local servers
             such as vLLM or a non-default Ollama port.
-        model_options (dict | None): Default model options for generation requests.
+        model_options (dict | None): Default model options applied to every
+            generation request. Per-call options take precedence. Use
+            `{ModelOption.THINKING: False}` here to suppress the think block
+            on models that enable it by default.
 
     Attributes:
         to_mellea_model_opts_map (dict): Mapping from backend-specific option names to
@@ -87,7 +90,7 @@ class LiteLLMBackend(FormatterBackend):
 
     def __init__(
         self,
-        model_id: str = "ollama_chat/" + str(model_ids.IBM_GRANITE_4_1_3B.ollama_name),
+        model_id: str = "ollama_chat/" + str(model_ids.IBM_GRANITE_4_2_3B.ollama_name),
         formatter: ChatFormatter | None = None,
         base_url: str | None = None,
         model_options: dict | None = None,

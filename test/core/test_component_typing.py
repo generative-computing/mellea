@@ -10,7 +10,8 @@ import pytest
 
 import mellea.stdlib.functional as mfuncs
 from mellea import MelleaSession, start_session
-from mellea.backends.model_ids import IBM_GRANITE_4_1_3B
+from mellea.backends.model_ids import IBM_GRANITE_4_2_3B
+from mellea.backends.model_options import ModelOption
 from mellea.backends.ollama import OllamaModelBackend
 from mellea.core import (
     CBlock,
@@ -67,14 +68,13 @@ class ExceptionRaisingComp(Component[int]):
 
 
 @pytest.fixture(scope="module")
-def backend(gh_run: int):
+def backend():
     """Shared backend."""
-    if gh_run == 1:
-        return OllamaModelBackend(
-            model_id=IBM_GRANITE_4_1_3B.ollama_name  # type: ignore
-        )
-    else:
-        return OllamaModelBackend(model_id=IBM_GRANITE_4_1_3B.ollama_name)  # type: ignore
+    assert IBM_GRANITE_4_2_3B.ollama_name is not None
+    return OllamaModelBackend(
+        model_id=IBM_GRANITE_4_2_3B.ollama_name,
+        model_options={ModelOption.THINKING: False},
+    )
 
 
 @pytest.fixture(scope="module")
@@ -124,7 +124,7 @@ def test_incorrect_type_override():
 
 
 # Marking as qualitative for now since there's so much generation required for this.
-# Uses granite4.1:3b (3B hybrid, lightweight) in local mode
+# Uses granite-4.2-3b:latest (3B, lightweight) in local mode
 @pytest.mark.qualitative
 @pytest.mark.ollama
 @pytest.mark.e2e
@@ -187,7 +187,6 @@ def test_message_typing(session):
 @pytest.mark.e2e
 async def test_generating_with_sampling(session):
     m = session
-    m = start_session()
 
     class CustomSamplingStrat(BaseSamplingStrategy):
         @staticmethod

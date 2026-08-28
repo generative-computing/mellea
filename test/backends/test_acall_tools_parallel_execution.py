@@ -17,7 +17,6 @@ Coverage layers:
 
 import pytest
 
-from mellea.backends.ollama import OllamaModelBackend
 from mellea.backends.tools import MelleaTool
 from mellea.core.base import ModelOutputThunk, ModelToolCall
 from mellea.stdlib.functional import acall_tools
@@ -25,14 +24,14 @@ from mellea.stdlib.functional import acall_tools
 pytestmark = [pytest.mark.integration]
 
 
-@pytest.fixture(scope="module")
-def backend():
+@pytest.fixture
+def backend(mock_ollama_backend):
     """Create an OllamaModelBackend for formatter.print() only.
 
     Note: acall_tools() only uses backend.formatter, not inference.
     Tests use local Python functions as tool implementations, no model calls.
     """
-    return OllamaModelBackend()
+    return mock_ollama_backend()
 
 
 @pytest.mark.asyncio
