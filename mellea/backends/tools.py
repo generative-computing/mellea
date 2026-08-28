@@ -1433,7 +1433,14 @@ def convert_function_to_ollama_tool(
                         break
             else:
                 types = {v.get("type", "string")}
-                enum_values = list(v["enum"]) if "enum" in v else None
+                if "enum" in v:
+                    enum_values = list(v["enum"])
+                elif "const" in v:
+                    # Single-value Literal — normalise to a one-element enum so
+                    # both schema generation and the validator share one code path
+                    enum_values = [v["const"]]
+                else:
+                    enum_values = None
 
             if "null" in types:
                 if k in schema.get("required", []):
