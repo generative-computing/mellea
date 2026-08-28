@@ -124,7 +124,38 @@ jobs:
         # Capture the server log: live-model stalls (read timeouts, empty
         # responses) are server-side, and without these lines the job log
         # shows nothing but the test failures. Dumped on failure below.
-        run: nohup ollama serve > /tmp/ollama-serve.log 2>&1 &
+        # OLLAMA_DEBUG=1 (slog debug level, envconfig/config.go in v0.33.1)
+        # plus OLLAMA_DEBUG_LOG_REQUESTS=1 (per-request body + replay curl
+        # in a /tmp/ollama-request-logs-* dir,
+        # server/inference_request_log.go): the sustained 300 s stalls
+        # (PR #1587 / #1589) leave no trace at the default log level, so
+        # the next failed run needs engine-level detail plus the exact
+        # on-the-wire request to separate "server hung" from "request the
+        # server cannot process". Both are only inspected by the
+        # failure-gated dump step below, so green runs are unaffected
+        # apart from /tmp usage.
+        run: OLLAMA_DEBUG=1 OLLAMA_DEBUG_LOG_REQUESTS=1 nohup ollama serve > /tmp/ollama-serve.log 2>&1 &
+      - name: Start resource sampler (PR #1589 diagnostics)
+        # The granite4.2 stall windows (run 33122730668: every 4.2 request
+        # degrades to exactly 300 s -> 500 for ~1.6 h from mid-run, both
+        # /v1 and native, thinking verified off) are a degradation-over-time
+        # signature pointing at accumulation -- memory pressure / swapping
+        # with several models resident on the 16 GB runner, or engine
+        # state -- rather than a fixed misconfiguration. Sample memory,
+        # swap in/out (si/so) and CPU state every 30 s from server start
+        # through the tests; dumped on failure below. Negligible CPU cost.
+        run: |
+          if command -v vmstat >/dev/null; then
+            (vmstat 30 480) > /tmp/ci-resource-sampler.log 2>&1 &
+          else
+            (for i in $(seq 1 480); do
+               echo "sample $i $(date -u +%FT%TZ)"
+               free -m
+               cat /proc/loadavg
+               echo ---
+               sleep 30
+             done) > /tmp/ci-resource-sampler.log 2>&1 &
+          fi
       - name: Pull models
         # granite-vision-4.1 is not in the Ollama library, so it is pulled from
         # IBM's official GGUF repo on Hugging Face (that build ships the mmproj
@@ -192,6 +223,22 @@ jobs:
           grep -iE 'GIN|error|warn|panic|loading|unload' /tmp/ollama-serve.log | tail -n 500 || echo "(no matching lines)"
           echo "=== ollama serve log (last 50 raw lines) ==="
           tail -n 50 /tmp/ollama-serve.log || echo "(no ollama serve log found)"
+          echo "=== resource sampler (30 s: memory, swap si/so, CPU) ==="
+          cat /tmp/ci-resource-sampler.log || echo "(no sampler log found)"
+          echo "=== ollama request debug logs (request bodies + replay curls) ==="
+          reqdir=$(grep -oE '/tmp/ollama-request-logs-[0-9a-z]+' /tmp/ollama-serve.log | head -1)
+          if [ -n "$reqdir" ] && [ -d "$reqdir" ]; then
+            echo "file count: $(find "$reqdir" -maxdepth 1 -type f | wc -l)"
+            # Newest 20 files (mtime-descending, "%T@" epoch + path).
+            find "$reqdir" -maxdepth 1 -type f -printf '%T@ %p\n' \
+              | sort -rn | head -20 | while IFS= read -r line; do
+                f=${line#* }
+                echo "--- $f ---"
+                cat "$f"
+              done
+          else
+            echo "(no request debug dir found in serve log)"
+          fi
       - name: Write job summary
         if: always()
         run: |
