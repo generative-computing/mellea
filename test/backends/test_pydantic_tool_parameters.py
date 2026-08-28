@@ -1089,6 +1089,13 @@ class TestLiteralFields:
             return "ok"
 
         mt = MelleaTool.from_callable(readonly_op)
+        # The single allowed value must survive into the schema the backend sees.
+        # Pydantic emits single-value Literal as `const`, which
+        # convert_function_to_ollama_tool normalises to a one-element `enum`; this
+        # asserts that normalization directly (the validation path below would still
+        # pass if it regressed).
+        props = mt.as_json_tool["function"]["parameters"]["properties"]
+        assert props["mode"].get("enum") == ["read"]
         with pytest.raises(ValidationError):
             validate_tool_arguments(
                 mt, {"path": "/tmp/file.txt", "mode": "write"}, strict=True
