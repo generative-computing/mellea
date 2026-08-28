@@ -836,5 +836,51 @@ async def test_thinking_false_sends_reasoning_effort_none_and_disable():
     assert call_kwargs["extra_body"]["chat_template_kwargs"]["enable_thinking"] is False
 
 
+async def test_thinking_false_omits_reasoning_effort_against_real_openai():
+    """THINKING=False must NOT send reasoning_effort="none" to api.openai.com.
+
+    "none" is only accepted by newer OpenAI reasoning models; most current
+    ones reject it outright. reasoning_effort="none" is a workaround for
+    Ollama's /v1 endpoint specifically (see
+    test_thinking_false_sends_reasoning_effort_none_and_disable) and must not
+    reach a real OpenAI target, where it would turn previously-working
+    THINKING=False calls into a 400. chat_template_kwargs.enable_thinking is
+    still set for vLLM-style servers reached through this same code path.
+    """
+    from mellea.core.base import CBlock
+    from mellea.stdlib.context import ChatContext
+
+    backend = OpenAIBackend(
+        model_id="o3", base_url="https://api.openai.com/v1", api_key="test-key"
+    )
+
+    with patch.object(
+        backend._async_client.chat.completions, "create", new_callable=AsyncMock
+    ) as mock_create:
+        mock_create.return_value = ChatCompletion(
+            id="test",
+            choices=[
+                Choice(
+                    finish_reason="stop",
+                    index=0,
+                    message=ChatCompletionMessage(role="assistant", content="ok"),
+                )
+            ],
+            created=0,
+            model="o3",
+            object="chat.completion",
+        )
+        mot, _ = await backend.generate_from_chat_context(
+            CBlock(value="hello"),
+            ChatContext(),
+            model_options={ModelOption.THINKING: False},
+        )
+        await mot.avalue()
+
+    call_kwargs = mock_create.call_args.kwargs
+    assert "reasoning_effort" not in call_kwargs
+    assert call_kwargs["extra_body"]["chat_template_kwargs"]["enable_thinking"] is False
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

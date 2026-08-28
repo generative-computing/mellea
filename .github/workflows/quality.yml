@@ -195,9 +195,10 @@ jobs:
           printf 'FROM granite4.2:3b-128k\nPARAMETER num_ctx 8192\n' \
             > /tmp/MODELFILE-granite42-ci
           ollama create granite4.2:3b -f /tmp/MODELFILE-granite42-ci
-          # grep exits non-zero (failing the step) if the parameter did not
-          # land, so a silently-wrong build cannot pass CI.
-          ollama show granite4.2:3b --modelfile | grep '^PARAMETER'
+          # grep exits non-zero (failing the step) if num_ctx did not land at
+          # exactly 8192 — matching only '^PARAMETER' would still pass on the
+          # base tag's untouched 131072 value if `ollama create` silently no-oped.
+          ollama show granite4.2:3b --modelfile | grep -qx 'PARAMETER num_ctx 8192'
       - name: Run Tests
         id: tests
         env:

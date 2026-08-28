@@ -822,11 +822,13 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 extra_body["chat_template_kwargs"] = ctk
                 if thinking:
                     api_params["reasoning_effort"] = "medium"
-                else:
+                elif self._server_type != _ServerType.OPENAI:
                     # Ollama-served thinking models (e.g. granite4.2) default to
                     # thinking ON when reasoning_effort is absent, so "none" is
                     # required to actually disable the think block on their /v1
-                    # endpoint (Ollama >= 0.33.1 maps it to think=false).
+                    # endpoint (Ollama >= 0.33.1 maps it to think=false). Real
+                    # OpenAI rejects "none" for most reasoning models, so this is
+                    # scoped to non-OpenAI servers only.
                     api_params["reasoning_effort"] = "none"
             else:
                 api_params["reasoning_effort"] = thinking
@@ -1070,11 +1072,12 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 extra_params["extra_body"] = ctk_body
                 if thinking:
                     reasoning_params["reasoning_effort"] = "medium"
-                else:
+                elif self._server_type != _ServerType.OPENAI:
                     # Ollama-served thinking models (e.g. granite4.2) default to
                     # thinking ON when reasoning_effort is absent; "none" is the
                     # OpenAI enum value their /v1 endpoint maps to think=false
-                    # (Ollama >= 0.33.1).
+                    # (Ollama >= 0.33.1). Real OpenAI rejects "none" for most
+                    # reasoning models, so this is scoped to non-OpenAI servers.
                     reasoning_params["reasoning_effort"] = "none"
             else:
                 reasoning_params["reasoning_effort"] = thinking

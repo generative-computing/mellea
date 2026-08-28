@@ -297,20 +297,50 @@ async def test_thinking_true_sets_reasoning_effort_and_enable_thinking(
     ), "extra_body.chat_template_kwargs.enable_thinking should be True"
 
 
-async def test_thinking_false_sets_reasoning_effort_none_and_disable(
+async def test_thinking_false_omits_reasoning_effort_and_sets_disable(
     chat_backend: LiteLLMBackend,
 ) -> None:
-    """THINKING=False: reasoning_effort='none' AND extra_body.chat_template_kwargs.enable_thinking=False.
+    """THINKING=False on a non-Ollama target: reasoning_effort absent, chat_template_kwargs.enable_thinking=False.
 
-    Both mechanisms are sent so each server type picks up the one it
-    understands: vLLM honours chat_template_kwargs, Ollama's /v1 endpoint
-    (>= 0.33.1) honours reasoning_effort — where absence means the model
-    default (thinking ON for e.g. granite4.2), so "none" is required to
-    actually disable the think block.
+    `reasoning_effort="none"` is only accepted by newer OpenAI reasoning
+    models and is an Ollama-/v1-specific workaround (Ollama >= 0.33.1 maps
+    it to think=false; see test_thinking_false_sets_reasoning_effort_none_for_ollama
+    below). Sending it to a real OpenAI or vLLM target — like this
+    `hosted_vllm/qwen3` fixture — can turn a previously-working call into a
+    400. vLLM already honours chat_template_kwargs.enable_thinking, so that
+    mechanism alone is sufficient here.
     """
     from mellea.backends import ModelOption
 
     kwargs = await _call_and_capture(chat_backend, {ModelOption.THINKING: False})
+
+    assert "reasoning_effort" not in kwargs, (
+        "reasoning_effort must not be sent for THINKING=False on a non-Ollama target"
+    )
+    assert (
+        kwargs.get("extra_body", {})
+        .get("chat_template_kwargs", {})
+        .get("enable_thinking")
+        is False
+    ), "extra_body.chat_template_kwargs.enable_thinking should be False"
+
+
+async def test_thinking_false_sets_reasoning_effort_none_for_ollama() -> None:
+    """THINKING=False on an Ollama-routed target sets reasoning_effort='none'.
+
+    Ollama's /v1 endpoint (>= 0.33.1) honours reasoning_effort — where
+    absence means the model default (thinking ON for e.g. granite4.2), so
+    "none" is required to actually disable the think block. This is scoped
+    to Ollama-routed model IDs (see the "ollama" in self._model_id.split("/")[0]
+    check, which mirrors the streaming tool-call workaround elsewhere in
+    LiteLLMBackend) so it doesn't reach real OpenAI or vLLM targets.
+    """
+    from mellea.backends import ModelOption
+
+    backend = LiteLLMBackend(
+        model_id="ollama_chat/granite4.2:3b", base_url="http://localhost:11434"
+    )
+    kwargs = await _call_and_capture(backend, {ModelOption.THINKING: False})
 
     assert kwargs.get("reasoning_effort") == "none", (
         "reasoning_effort should be 'none' for THINKING=False "

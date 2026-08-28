@@ -95,19 +95,42 @@ def test_pytest_timeout_watchdog_kill_is_not_rerunnable():
     assert not _matches_any(OLLAMA_TIMEOUT_RERUN_PATTERNS, WATCHDOG_KILL)
 
 
-def test_live_openai_compat_tests_send_the_max_tokens_cap():
-    """The /v1 live tests must cap output with the raw `max_tokens` key.
+def _function_source(src: str, name: str) -> str:
+    """Extract one top-level function's source, up to the next top-level def."""
+    start = re.search(rf"^(async )?def {re.escape(name)}\(", src, re.MULTILINE)
+    assert start is not None, f"{name} not found in source"
+    rest = src[start.end() :]
+    end = re.search(r"^(async )?def ", rest, re.MULTILINE)
+    return rest[: end.start()] if end else rest
 
-    ModelOption.MAX_NEW_TOKENS maps to `max_completion_tokens` on the
-    OpenAI/LiteLLM paths, but the CI-pinned Ollama 0.32.2 /v1 handler only
-    maps `max_tokens` -> num_predict (openai/openai.go at v0.32.2) and
-    silently ignores max_completion_tokens. With the sentinel, the
-    generation ran uncapped on CI for 15 m (run 33048969379, 3.12 lane);
-    local Ollama 0.33.0 accepts both, which is why the sentinel looked
-    fine locally.
+
+def test_live_openai_compat_tests_bound_output_length():
+    """The /v1 live tests must cap output via `ModelOption.MAX_NEW_TOKENS`.
+
+    Without an output cap, a non-compliant generation (observed 1800+ tokens
+    on CI) can run for minutes on a slow CI runner and eat the test's entire
+    budget (run 33048969379, 3.12 lane). Both the OpenAI and LiteLLM `/v1`
+    backends remap `ModelOption.MAX_NEW_TOKENS` to `max_completion_tokens`
+    on the wire, which Ollama's `/v1` endpoint has honoured since 0.33.1
+    (the version now pinned in CI). Unlike the native OllamaModelBackend
+    tests elsewhere in the same file (which also use MAX_NEW_TOKENS but
+    never had this bug), these two hit the /v1 remap path.
     """
     src = METRICS_TEST_PATH.read_text()
-    assert src.count('"max_tokens": 64') == 2  # openai + litellm live tests
+    for name in (
+        "test_openai_token_metrics_integration",
+        "test_litellm_token_metrics_integration",
+    ):
+        body = _function_source(src, name)
+        assert "ModelOption.MAX_NEW_TOKENS: 64" in body, (
+            f"{name} should bound output via ModelOption.MAX_NEW_TOKENS"
+        )
+        assert '"max_tokens"' not in body, (
+            f"{name} should not use the raw max_tokens key — it is remapped "
+            "to max_completion_tokens on the wire regardless, so the raw "
+            "key adds no protection and misleads readers into thinking it "
+            "bypasses the remap"
+        )
 
 
 def test_live_tests_bound_the_avalue_consumption():

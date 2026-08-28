@@ -296,11 +296,7 @@ async def test_openai_token_metrics_integration(enable_metrics, metric_reader, s
         # Same output bound as the other live "say hello" tests: without it a
         # non-compliant generation (observed 1800+ tokens on CI) can run for
         # minutes on a ~9 t/s CPU runner and eat the test's entire budget.
-        # Sent as the raw "max_tokens" key for consistency with the litellm
-        # test (Ollama 0.33.1 /v1 accepts both max_tokens and
-        # max_completion_tokens; 0.32.2 accepted only max_tokens, which is
-        # why the raw key was introduced).
-        model_options={ModelOption.THINKING: False, "max_tokens": 64},
+        model_options={ModelOption.THINKING: False, ModelOption.MAX_NEW_TOKENS: 64},
         # Disable the OpenAI SDK's automatic retries and bound each request to
         # the 300 s the other live paths use. With the SDK defaults (2 retries,
         # 600 s read timeout) a stalled server multiplies into a
@@ -452,21 +448,17 @@ async def test_litellm_token_metrics_integration(
     # native ReadTimeout.
     backend = LiteLLMBackend(  # type: ignore
         model_id=f"openai/{IBM_GRANITE_4_2_3B.ollama_name}",
-        # "max_tokens": same output bound as the other live "say hello"
-        # tests (see test_ollama_token_metrics_integration). Sent as the raw
-        # key for consistency with the openai test (Ollama 0.33.1 /v1
-        # accepts both max_tokens and max_completion_tokens; 0.32.2
-        # accepted only max_tokens, which is why the raw key was
-        # introduced). THINKING: False is required: granite4.2 thinks by
-        # default and a 64-token generation is ~45 thinking tokens —
-        # minutes on a 4-vCPU CI runner, blowing the 300 s request cap
-        # (runs 33093698028, 33104419835); mellea maps it to
-        # reasoning_effort="none" for the /v1 endpoint.
+        # MAX_NEW_TOKENS: same output bound as the other live "say hello"
+        # tests (see test_ollama_token_metrics_integration). THINKING: False
+        # is required: granite4.2 thinks by default and a 64-token
+        # generation is ~45 thinking tokens — minutes on a 4-vCPU CI runner,
+        # blowing the 300 s request cap (runs 33093698028, 33104419835);
+        # mellea maps it to reasoning_effort="none" for the /v1 endpoint.
         model_options={
             ModelOption.THINKING: False,
             "timeout": 300.0,
             "num_retries": 0,
-            "max_tokens": 64,
+            ModelOption.MAX_NEW_TOKENS: 64,
         },
     )
     ctx = ChatContext()

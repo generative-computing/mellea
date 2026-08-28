@@ -402,11 +402,14 @@ class LiteLLMBackend(FormatterBackend):
                 extra_params["extra_body"] = ctk_body
                 if thinking:
                     reasoning_params["reasoning_effort"] = "medium"
-                else:
+                elif "ollama" in self._model_id.split("/")[0]:
                     # Ollama-served thinking models (e.g. granite4.2) default to
                     # thinking ON when reasoning_effort is absent; "none" is the
                     # OpenAI enum value their /v1 endpoint maps to think=false
-                    # (Ollama >= 0.33.1).
+                    # (Ollama >= 0.33.1). Real OpenAI/other reasoning providers
+                    # reject "none", so this is scoped to Ollama-routed models
+                    # (same provider-prefix check used for the streaming
+                    # tool-call workaround above).
                     reasoning_params["reasoning_effort"] = "none"
             else:
                 reasoning_params["reasoning_effort"] = thinking
