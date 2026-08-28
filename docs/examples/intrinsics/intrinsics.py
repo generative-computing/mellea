@@ -12,7 +12,7 @@ from mellea.stdlib.context import ChatContext
 
 backend = LocalHFBackend(model_id=model_ids.IBM_GRANITE_4_1_3B)
 # --- Alternative: local Granite Switch checkpoint ---
-# Requires: uv sync --extra hf --extra switch
+# Requires: uv sync --extra hf
 # See docs/examples/granite-switch/answerability_local_hf.py for a runnable example.
 # from mellea.backends.huggingface import LocalHFBackend
 # from mellea.backends.model_ids import IBM_GRANITE_SWITCH_4_1_3B_PREVIEW

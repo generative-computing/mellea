@@ -15,6 +15,7 @@ import datetime
 import functools
 import importlib
 import json
+import pathlib
 import threading
 import warnings
 from collections import OrderedDict
@@ -325,22 +326,25 @@ def _warn_if_granite_switch_transformers_override_is_active() -> None:
     except (metadata.PackageNotFoundError, InvalidVersion):
         return
 
-    for requirement_text in requirements:
-        requirement = PackagingRequirement(requirement_text)
-        if requirement.name != "transformers":
-            continue
-        if requirement.marker is not None and not requirement.marker.evaluate():
-            continue
-        if installed_version not in requirement.specifier:
-            warnings.warn(
-                "granite-switch declares a Transformers range that excludes "
-                f"{installed_version}; Mellea is using its explicit compatibility "
-                "override for local Granite Switch support. This warning will "
-                "disappear once Granite Switch publishes widened metadata.",
-                UserWarning,
-                stacklevel=3,
-            )
-            _SWITCH_TRANSFORMERS_WARNING_EMITTED = True
+    try:
+        for requirement_text in requirements:
+            requirement = PackagingRequirement(requirement_text)
+            if requirement.name != "transformers":
+                continue
+            if requirement.marker is not None and not requirement.marker.evaluate():
+                continue
+            if installed_version not in requirement.specifier:
+                warnings.warn(
+                    "granite-switch declares a Transformers range that excludes "
+                    f"{installed_version}; Mellea is using its explicit compatibility "
+                    "override for local Granite Switch support. This warning will "
+                    "disappear once Granite Switch publishes widened metadata.",
+                    UserWarning,
+                    stacklevel=3,
+                )
+                _SWITCH_TRANSFORMERS_WARNING_EMITTED = True
+            return
+    except Exception:
         return
 
 
@@ -391,14 +395,12 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             `SimpleLRUCache(0, on_evict=_cleanup_kv_cache)`.
         custom_config (TransformersTorchConfig | None): Override for
             tokenizer/model/device; if provided, `model_id` is not used for loading.
-            Callers providing a Granite Switch model this way are responsible
-            for importing `granite_switch.hf` before constructing the model.
         default_to_constraint_checking_alora (bool): If `False`, aLoRA constraint
             checking is deactivated; mainly for benchmarking and debugging.
         load_embedded_adapters (bool): If `True`, register adapter functions
             embedded in the Granite Switch checkpoint named by `adapter_source`
-            (or `model_id` when `adapter_source` is not set). Automatic model
-            loading requires `mellea[hf,switch]`.
+            (or `model_id` when `adapter_source` is not set). Requires the
+            `hf` extra.
         adapter_source (str | None): Local checkpoint directory or Hugging Face
             Hub repository used to discover embedded adapter functions.
         model_options (dict | None): Default model options for generation requests.
@@ -410,8 +412,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             HF-specific option names.
 
     Raises:
-        ImportError: If automatic Granite Switch model loading is requested
-            without the `switch` extra installed.
+        ImportError: If embedded adapter loading is requested without the `hf`
+            extra installed.
         OSError: If the model cannot be loaded from Hugging Face Hub (bad ID,
             missing access, or local filesystem/cache error).
     """
@@ -471,18 +473,18 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                     "model_id is None. This can also happen if the ModelIdentifier has no hf_model_id name set."
                 )
                 self._model_id = model_id.hf_model_name
+        if load_embedded_adapters:
+            try:
+                importlib.import_module("granite_switch.hf")
+            except ImportError as e:
+                raise ImportError(
+                    "Loading Granite Switch checkpoints with LocalHFBackend "
+                    'requires the Hugging Face extra. Install it with: pip install "mellea[hf]"'
+                ) from e
+            _warn_if_granite_switch_transformers_override_is_active()
+
         match custom_config:
             case None:
-                if load_embedded_adapters:
-                    try:
-                        importlib.import_module("granite_switch.hf")
-                    except ImportError as e:
-                        raise ImportError(
-                            "Loading Granite Switch checkpoints with LocalHFBackend "
-                            "requires the switch extra. Install it with: "
-                            'pip install "mellea[hf,switch]"'
-                        ) from e
-                    _warn_if_granite_switch_transformers_override_is_active()
                 # Choose a device.
                 self._device = torch.device(
                     "cuda"
@@ -2344,7 +2346,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
     @property
     def base_model_name(self):
         """Returns the base_model_id of the model used by the backend. For example, `granite-3.3-8b-instruct` for `ibm-granite/granite-3.3-8b-instruct`."""
-        return self._model_id.rsplit("/", maxsplit=1)[-1]
+        return pathlib.PurePath(self._model_id).name
 
     def add_adapter(self, adapter: AdapterInput) -> None:
         """Register an adapter function with this backend.
@@ -2425,6 +2427,13 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
         Returns:
             Names of the registered adapter functions.
+
+        Raises:
+            ImportError: If Hugging Face Hub support is not installed.
+            PermissionError: If the model repository is private or gated.
+            FileNotFoundError: If the source has no adapter index.
+            ValueError: If the source has no matching embedded adapter functions.
+            TypeError: If an adapter from the source has an unsupported binding.
         """
         adapters = EmbeddedIntrinsicAdapter.from_source(
             source, revision=revision, cache_dir=cache_dir

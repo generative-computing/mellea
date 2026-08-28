@@ -4,7 +4,7 @@
 
 Requires a GPU or Apple Silicon Mac and:
 
-    uv sync --extra hf --extra switch
+    uv sync --extra hf
 
 To run from the Mellea source tree:
 

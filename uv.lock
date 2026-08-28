@@ -3286,6 +3286,7 @@ backends = [
     { name = "accelerate" },
     { name = "boto3" },
     { name = "datasets" },
+    { name = "granite-switch", extra = ["hf"] },
     { name = "huggingface-hub", version = "1.16.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12' and python_full_version < '3.14'" },
     { name = "huggingface-hub", version = "1.18.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12' or python_full_version >= '3.14'" },
     { name = "ibm-watsonx-ai" },
@@ -3311,6 +3312,7 @@ granite-retriever = [
 hf = [
     { name = "accelerate" },
     { name = "datasets" },
+    { name = "granite-switch", extra = ["hf"] },
     { name = "huggingface-hub", version = "1.16.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12' and python_full_version < '3.14'" },
     { name = "huggingface-hub", version = "1.18.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12' or python_full_version >= '3.14'" },
     { name = "llguidance" },
@@ -3335,7 +3337,8 @@ server = [
     { name = "uvicorn" },
 ]
 switch = [
-    { name = "granite-switch", extra = ["hf"] },
+    { name = "huggingface-hub", version = "1.16.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12' and python_full_version < '3.14'" },
+    { name = "huggingface-hub", version = "1.18.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12' or python_full_version >= '3.14'" },
 ]
 telemetry = [
     { name = "cpex" },
@@ -3432,10 +3435,11 @@ requires-dist = [
     { name = "docling", marker = "extra == 'docling'", specifier = ">=2.45.0" },
     { name = "elasticsearch", marker = "extra == 'granite-retriever'", specifier = ">=8.0.0,<9.0.0" },
     { name = "fastapi", marker = "extra == 'server'" },
-    { name = "granite-switch", extras = ["hf"], marker = "extra == 'switch'", specifier = ">=0.1.0" },
+    { name = "granite-switch", extras = ["hf"], marker = "extra == 'hf'", specifier = ">=0.1.0" },
     { name = "grpcio", marker = "extra == 'hooks'", specifier = ">=1.78.0" },
     { name = "httpx", marker = "extra == 'tools'", specifier = ">=0.27" },
     { name = "huggingface-hub", marker = "extra == 'hf'", specifier = ">=0.33.4" },
+    { name = "huggingface-hub", marker = "extra == 'switch'", specifier = ">=0.33.4" },
     { name = "ibm-watsonx-ai", marker = "extra == 'watsonx'", specifier = ">=1.3.31" },
     { name = "jinja2" },
     { name = "langchain-core", marker = "extra == 'tools'", specifier = ">=1.2.28" },

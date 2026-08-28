@@ -42,6 +42,7 @@ m = "cli.m:cli"
 hf = [
     "accelerate>=1.9.0",
     "datasets>=4.0.0",
+    "granite-switch[hf]>=0.1.0",
     "llguidance",
     "peft>=0.18.1", # Native aLoRA support added in PEFT 0.18.0
     "transformers>5.5.0,<6.0.0", # 5.5.0 broke granite 4.0
@@ -104,7 +105,7 @@ sandbox = [
 ]
 
 switch = [
-    "granite-switch[hf]>=0.1.0",
+    "huggingface-hub>=0.33.4",
 ]
 
 backends = ["mellea[watsonx,hf,litellm]"]

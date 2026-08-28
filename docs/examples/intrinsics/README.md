@@ -43,7 +43,7 @@ backend = LocalHFBackend(
 )
 ```
 
-Install this path with `uv sync --extra hf --extra switch`.
+Install this path with `uv sync --extra hf`.
 
 The underlying adapter functions can also be utilized directly when generating:
 

@@ -5,11 +5,10 @@ description: "Adapter-accelerated RAG quality checks using LoRA/aLoRA adapters w
 ---
 
 **Prerequisites:** use `uv sync --extra hf` for runtime LoRA/aLoRA adapter
-functions, or `uv sync --extra hf --extra switch` for a local
-[Granite Switch](/reference/glossary#granite-switch) checkpoint. Both local
-paths require a GPU or Apple Silicon Mac. An OpenAIBackend using a Granite
-Switch model served via vLLM only needs the base package plus the `switch` extra
-when it downloads embedded adapter metadata.
+functions and local [Granite Switch](/reference/glossary#granite-switch)
+checkpoints. Both local paths require a GPU or Apple Silicon Mac. An
+OpenAIBackend using a Granite Switch model served via vLLM uses
+`uv sync --extra switch` when it downloads embedded adapter metadata.
 
 Adapter functions are adapter-accelerated operations for RAG quality checks. They use
 LoRA/aLoRA adapters loaded directly into the Hugging Face backend — faster and more
@@ -19,7 +18,7 @@ reliable than prompting a general-purpose model for these specialized micro-task
 >
 > - **LocalHFBackend** — loads LoRA/aLoRA adapters from the catalog at runtime.
 >   A local Granite Switch checkpoint can instead use
->   `load_embedded_adapters=True`; install `mellea[hf,switch]` first. Only
+>   `load_embedded_adapters=True`; install `mellea[hf]` first. Only
 >   adapter functions embedded in the checkpoint are then available. Requires a
 >   GPU or Apple Silicon Mac.
 > - **OpenAIBackend** — uses a Granite Switch model served via vLLM with
@@ -46,7 +45,7 @@ checkpoint to `LocalHFBackend` with `load_embedded_adapters=True`; existing
 helper functions such as `rag.check_answerability()` work unchanged.
 
 ```python
-# Requires: mellea[hf,switch]
+# Requires: mellea[hf]
 # Returns: LocalHFBackend
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.backends.model_ids import IBM_GRANITE_SWITCH_4_1_3B_PREVIEW

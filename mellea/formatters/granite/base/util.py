@@ -199,9 +199,11 @@ def chat_completion_request_to_transformers_inputs(
     Raises:
        ImportError: If `torch`, `transformers`, or `llguidance` packages
             are not installed (the latter only when constrained decoding is used).
-        TypeError: If `tokenizer.apply_chat_template()` returns an unexpected type.
-        ValueError: If padding or end-of-sequence token IDs cannot be determined
-            from the tokenizer.
+        TypeError: If `extra_body.chat_template_kwargs` is not a dict, or if
+            `tokenizer.apply_chat_template()` returns an unexpected type.
+        ValueError: If template kwargs override framework-owned inputs, or if
+            padding or end-of-sequence token IDs cannot be determined from the
+            tokenizer.
     """
     with import_optional("torch"):
         # Third Party

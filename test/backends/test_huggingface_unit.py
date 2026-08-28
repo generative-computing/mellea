@@ -337,7 +337,7 @@ def test_load_embedded_adapters_requires_granite_switch_package():
         "mellea.backends.huggingface.importlib.import_module",
         side_effect=ImportError("granite_switch is unavailable"),
     ):
-        with pytest.raises(ImportError, match=r'pip install "mellea\[hf,switch\]"'):
+        with pytest.raises(ImportError, match=r'pip install "mellea\[hf\]"'):
             LocalHFBackend(
                 model_id="ibm-granite/granite-switch-4.1-3b-preview",
                 load_embedded_adapters=True,
@@ -359,7 +359,24 @@ def test_granite_switch_transformers_override_warning_is_self_retiring(monkeypat
     with pytest.warns(UserWarning, match="explicit compatibility override"):
         huggingface._warn_if_granite_switch_transformers_override_is_active()
 
-    huggingface._warn_if_granite_switch_transformers_override_is_active()
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", UserWarning)
+        huggingface._warn_if_granite_switch_transformers_override_is_active()
+
+
+def test_granite_switch_transformers_override_warning_ignores_bad_metadata(monkeypatch):
+    """Malformed Granite Switch metadata must not prevent backend construction."""
+    import mellea.backends.huggingface as huggingface
+
+    monkeypatch.setattr(huggingface, "_SWITCH_TRANSFORMERS_WARNING_EMITTED", False)
+    monkeypatch.setattr(
+        huggingface.metadata, "requires", lambda distribution: ["transformers @@@"]
+    )
+    monkeypatch.setattr(huggingface.metadata, "version", lambda distribution: "5.10.2")
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", UserWarning)
+        huggingface._warn_if_granite_switch_transformers_override_is_active()
 
 
 def test_granite_switch_transformers_override_warning_clears_when_metadata_updates(
@@ -379,6 +396,14 @@ def test_granite_switch_transformers_override_warning_clears_when_metadata_updat
     with warnings.catch_warnings():
         warnings.simplefilter("error", UserWarning)
         huggingface._warn_if_granite_switch_transformers_override_is_active()
+
+
+def test_base_model_name_strips_trailing_path_separator():
+    """A local checkpoint path keeps its final directory name."""
+    backend = _make_backend()
+    backend._model_id = "/tmp/granite-switch-checkpoint/"
+
+    assert backend.base_model_name == "granite-switch-checkpoint"
 
 
 def test_chat_completion_request_forwards_template_kwargs_to_transformers():

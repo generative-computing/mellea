@@ -19,13 +19,17 @@ weights are transferred.
 Run the local example on a GPU or Apple Silicon Mac:
 
 ```bash
-uv sync --extra hf --extra switch
+uv sync --extra hf
 ```
 
 ### OpenAI-compatible inference
 
 1. Host a Granite Switch model with [vLLM](https://docs.vllm.ai/).
-2. Install the `switch` extra to download embedded adapter metadata.
+2. Install the `switch` extra to download embedded adapter metadata:
+
+```bash
+uv sync --extra switch
+```
 
 ## Available adapters
 
