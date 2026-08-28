@@ -11,7 +11,7 @@ Key features:
 1. Components live in session context with templates
 2. Backend auto-extracts tools when tool_calls=True (NO ModelOption.TOOLS needed)
 3. Component ID-based prefixing prevents name collisions
-4. Tool calls executed via _call_tools() to enable telemetry
+4. Tool calls executed via call_tools() to enable telemetry
 5. Multi-turn stability: same components always get same IDs
 
 To view tool calling telemetry metrics:
@@ -31,7 +31,7 @@ from mellea.core import CBlock, Component, ModelOutputThunk, TemplateRepresentat
 from mellea.core.base import AbstractMelleaTool
 from mellea.formatters import TemplateFormatter
 from mellea.stdlib.context import ChatContext
-from mellea.stdlib.functional import _call_tools
+from mellea.stdlib.functional import call_tools
 from mellea.stdlib.session import MelleaSession
 
 
@@ -210,7 +210,7 @@ def main() -> None:
     print("  - Auto-extract tools from context components")
     print("  - Prefix duplicate names with component IDs")
     print("  - Generate tool calls if LLM requests them")
-    print("  Then execute tools via _call_tools() to record telemetry")
+    print("  Then execute tools via call_tools() to record telemetry")
 
     # Use the public API: act() with tool_calls=True
     # NO ModelOption.TOOLS - backend auto-extracts from context!
@@ -233,7 +233,7 @@ def main() -> None:
         print(
             "\nExecuting tool calls via Mellea's pipeline (enables telemetry recording):"
         )
-        tool_messages = _call_tools(response, backend)
+        tool_messages = call_tools(response, backend)
         for msg in tool_messages:
             print(f"  {msg.name}() → {msg.content}")
         print()
@@ -243,7 +243,7 @@ def main() -> None:
     print("=" * 70)
     print("✓ Pattern 2 (components in context) successfully demonstrated")
     print("✓ Tools automatically extracted from context")
-    print("✓ Tool calls executed via _call_tools() for telemetry")
+    print("✓ Tool calls executed via call_tools() for telemetry")
     print("=" * 70)
 
     print("\nKey Concepts:")

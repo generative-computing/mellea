@@ -44,8 +44,8 @@ uv run python docs/examples/components/duplicate_tool_names.py
 - Two components with identical tool names handled via automatic prefixing
 - Public `MelleaSession.act()` API with `tool_calls=True`
 - Backend automatically extracts and prefixes tools (no manual extraction needed)
-- Tool execution and telemetry handled automatically
-- No private `_call_tools()` import required
+- Tool execution via public `call_tools()` API with telemetry support
+- All public APIs, no private imports
 
 **Important:** Uses `ChatContext` instead of `SimpleContext` (required for tool extraction from session context).
 
@@ -66,7 +66,7 @@ uv run python docs/examples/components/duplicate_tool_names_public_api.py
 - Uses public `act()` with `tool_calls=True` instead of `instruct()` + explicit tool passing
 - **Requires `ChatContext`** — `SimpleContext` returns empty history and tools won't be extracted
 - Backend auto-extracts tools from context components (no `ModelOption.TOOLS` needed)
-- **Important:** `act()` does NOT automatically execute tools; call `_call_tools()` explicitly to execute them and record telemetry
+- **Important:** `act()` does NOT automatically execute tools; call `call_tools()` explicitly to execute them and record telemetry
 - Cleaner, more declarative API for handling multiple components
 
 ---
@@ -106,9 +106,9 @@ uv run python docs/examples/components/pattern2_context_and_tools.py
 - Components with templates live in session context
 - Public `MelleaSession.act()` API with `tool_calls=True`
 - Backend automatically extracts tools from all context components
-- Tool execution and telemetry handled automatically
+- Tool execution via public `call_tools()` API with telemetry support
 - Multi-component composition with stable component IDs
-- No private API imports required
+- All public APIs, no private imports
 
 **Important:** Uses `ChatContext` instead of `SimpleContext` (required for tool extraction from session context).
 

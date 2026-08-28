@@ -135,5 +135,59 @@ def test_add_tools_from_context_actions():
             )
 
 
+def test_add_tools_from_context_actions_exceeds_length_limit(caplog):
+    """Verify warning when tool name exceeds 64-character provider limit."""
+    import logging
+
+    # Create a custom component with a very long tool name
+    # The tool name (key in tools dict) is what gets prefixed, so we need a 45+ char name
+    # to exceed the 64 char limit (20 char prefix + 45+ char name = 65+ chars)
+    class ComponentWithLongToolName(FakeToolComponent):
+        def format_for_llm(self) -> TemplateRepresentation:
+            long_tool_key = (
+                "x" * 45
+            )  # Will exceed 64 chars after prefixing (20 + 45 = 65)
+            long_tool = MelleaTool.from_callable(lambda: None, name="tool")
+            return TemplateRepresentation(
+                obj=self, args={"arg": None}, tools={long_tool_key: long_tool}
+            )
+
+    component = ComponentWithLongToolName()
+    tools = {}
+    with caplog.at_level(logging.WARNING, logger="mellea"):
+        add_tools_from_context_actions(tools, [component])
+
+    # Verify warning was logged for length constraint
+    assert any(
+        "exceeds 64-character limit" in record.message for record in caplog.records
+    ), f"Expected length warning in logs; got: {[r.message for r in caplog.records]}"
+
+
+def test_add_tools_from_context_actions_invalid_characters(caplog):
+    """Verify warning when tool name contains invalid characters."""
+    import logging
+
+    # Create a custom component with a tool name containing invalid characters
+    class ComponentWithInvalidToolName(FakeToolComponent):
+        def format_for_llm(self) -> TemplateRepresentation:
+            # Invalid character: @ (not in [a-zA-Z0-9_-])
+            # The key in tools dict is what gets prefixed, so use @ in the key
+            invalid_tool_key = "my@tool"
+            invalid_tool = MelleaTool.from_callable(lambda: None, name="tool")
+            return TemplateRepresentation(
+                obj=self, args={"arg": None}, tools={invalid_tool_key: invalid_tool}
+            )
+
+    component = ComponentWithInvalidToolName()
+    tools = {}
+    with caplog.at_level(logging.WARNING, logger="mellea"):
+        add_tools_from_context_actions(tools, [component])
+
+    # Verify warning was logged for invalid characters
+    assert any("invalid characters" in record.message for record in caplog.records), (
+        f"Expected invalid character warning in logs; got: {[r.message for r in caplog.records]}"
+    )
+
+
 if __name__ == "__main__":
     pytest.main([__file__])

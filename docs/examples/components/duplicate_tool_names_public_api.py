@@ -14,7 +14,7 @@ In this example:
 - SearchComponent also has a "query" tool for searching
 - Both tools are available to the LLM with prefixed names to avoid conflicts
 - The LLM is prompted to use both tools and demonstrate collision handling
-- Tool calls are executed via _call_tools() to enable telemetry recording
+- Tool calls are executed via call_tools() to enable telemetry recording
 
 To view tool calling telemetry metrics:
     export MELLEA_METRICS_ENABLED=true
@@ -33,7 +33,7 @@ from mellea.core import CBlock, Component, ModelOutputThunk, TemplateRepresentat
 from mellea.core.base import AbstractMelleaTool
 from mellea.formatters import TemplateFormatter
 from mellea.stdlib.context import ChatContext
-from mellea.stdlib.functional import _call_tools
+from mellea.stdlib.functional import call_tools
 from mellea.stdlib.session import MelleaSession
 
 
@@ -210,7 +210,7 @@ def main() -> None:
     print("    - Extracts tools from all components in context")
     print("    - Prefixes duplicate tool names with component IDs")
     print("    - Enables tool calling")
-    print("  Then execute tools via _call_tools() to record telemetry")
+    print("  Then execute tools via call_tools() to record telemetry")
 
     # Create a task component that will request tool use
     action = TaskComponent()
@@ -234,7 +234,7 @@ def main() -> None:
         print(
             "\nExecuting tool calls via Mellea's pipeline (enables telemetry recording):"
         )
-        tool_messages = _call_tools(response, backend)
+        tool_messages = call_tools(response, backend)
         for msg in tool_messages:
             print(f"  {msg.name}() → {msg.content}")
         print()
@@ -243,7 +243,7 @@ def main() -> None:
 
     print("\n" + "=" * 70)
     print("✓ Component ID-based tool prefixing successfully demonstrated")
-    print("✓ Tools extracted from context and executed via _call_tools()")
+    print("✓ Tools extracted from context and executed via call_tools()")
     print("=" * 70)
 
 

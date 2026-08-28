@@ -1970,12 +1970,6 @@ class TemplateRepresentation:
         tool_name (str | None): For a `role="tool"` component, the name of the tool
             whose result this message carries (e.g. Ollama's tool-result turn keys on
             it). Defaults to `None`.
-        component_id (str | None): Hex-encoded object identifier for the component (e.g., "a1b2c3d4").
-            Used for stable component identification and tool prefixing across turns. Defaults to `None`.
-        component_type (str | None): The class name of the component (e.g., "Table", "Message").
-            Useful for debugging and observability. Defaults to `None`.
-        component_description (str | None): Optional human-readable description of the component.
-            Defaults to `None`.
 
     """
 
@@ -1997,9 +1991,6 @@ class TemplateRepresentation:
     tool_calls: list[dict[str, Any]] | None = None
     tool_call_id: str | None = None
     tool_name: str | None = None
-    component_id: str | None = None
-    component_type: str | None = None
-    component_description: str | None = None
 
 
 @dataclass

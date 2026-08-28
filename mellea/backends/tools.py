@@ -369,15 +369,14 @@ def add_tools_from_context_actions(
 ):
     """Extract and merge tools from component actions, with auto-prefixing to avoid collisions.
 
-    Tools from each component are prefixed with "component_{ID}." to prevent naming collisions when
+    Tools from each component are prefixed with "component_{ID}__" to prevent naming collisions when
     multiple components define tools with identical names. The component ID is derived from the
     component object's identity for multi-turn stability. This allows safe composition of
     multiple agents or tool-bearing components.
 
     Args:
-        tools_dict: Mutable mapping of tool name to tool instance; modified in-place. Dict keys are unique,
-            so if multiple components define tools with the same name, the last one wins (earlier definitions
-            are silently overwritten).
+        tools_dict: Mutable mapping of tool name to tool instance; modified in-place. Prefixed names
+            ensure tools from different components coexist without overwriting each other.
         ctx_actions: List of `Component`, `CBlock`, or `ModelOutputThunk` objects whose template
             representations may declare tools, or `None` to skip.
     """
@@ -398,6 +397,22 @@ def add_tools_from_context_actions(
         for original_tool_name, tool_instance in tr.tools.items():
             # Auto-prefix tool name using component ID to avoid collisions
             prefixed_name = f"component_{component_id}__{original_tool_name}"
+
+            # Validate function name length (OpenAI and most providers enforce 64-char limit)
+            if len(prefixed_name) > 64:
+                MelleaLogger.get_logger().warning(
+                    f"Tool name exceeds 64-character limit (OpenAI/Ollama/HF constraint): "
+                    f"'{prefixed_name}' ({len(prefixed_name)} chars). "
+                    f"Original: '{original_tool_name}' ({len(original_tool_name)} chars). "
+                    f"Providers may reject this tool call. Consider using shorter tool names."
+                )
+
+            # Validate function name pattern (OpenAI constraint: ^[a-zA-Z0-9_-]{1,64}$)
+            if not re.match(r"^[a-zA-Z0-9_-]{1,64}$", prefixed_name):
+                MelleaLogger.get_logger().warning(
+                    f"Tool name contains invalid characters (allowed: [a-zA-Z0-9_-]): "
+                    f"'{prefixed_name}'. Providers may reject this tool call."
+                )
 
             # Detect collision and warn if it still occurs (defensive)
             if prefixed_name in tools_dict:
