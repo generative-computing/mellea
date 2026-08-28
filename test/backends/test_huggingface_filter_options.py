@@ -46,7 +46,14 @@ def _make_backend(template: object) -> LocalHFBackend:
     object.__setattr__(b, "_tokenizer", _FakeTokenizer())
     b._model_id = "test-org/test-model"
     b.model_options = {}
-    b.to_mellea_model_opts_map = {}
+    # Mirrors LocalHFBackend.__init__'s real to_mellea_model_opts_map (huggingface.py)
+    # rather than an empty stand-in — the thinking aliases are load-bearing for
+    # _simplify_and_merge's precedence behaviour, exercised by the tests below.
+    b.to_mellea_model_opts_map = {
+        "think": ModelOption.THINKING,
+        "thinking": ModelOption.THINKING,
+        "enable_thinking": ModelOption.THINKING,
+    }
     b.from_mellea_model_opts_map = {ModelOption.MAX_NEW_TOKENS: "max_new_tokens"}
     return b
 
@@ -338,14 +345,39 @@ def test_filter_for_chat_template_drops_thinking_effort_level() -> None:
     assert result == {}
 
 
-def test_filter_for_chat_template_preserves_native_thinking_value() -> None:
-    """A native template variable is not restricted to ModelOption boolean values."""
+def test_filter_for_chat_template_drops_thinking_effort_level_via_alias() -> None:
+    """A recognised alias (`thinking`) folds into THINKING and is bool-gated too.
+
+    `to_mellea_model_opts_map` maps `thinking` to `ModelOption.THINKING`, so a
+    non-boolean value supplied via the alias is subject to the same
+    boolean-only restriction as one supplied via the sentinel directly
+    (see `test_filter_for_chat_template_drops_thinking_effort_level`) — there
+    is no separate unconstrained "native" path once the alias is recognised.
+    """
     b = _make_backend("{{ thinking }}")
 
     model_options = b._simplify_and_merge({"thinking": "low"})
     result = b._filter_for_chat_template(model_options)
 
-    assert result == {"thinking": "low"}
+    assert result == {}
+
+
+def test_filter_for_chat_template_sentinel_overrides_conflicting_alias_key() -> None:
+    """ModelOption.THINKING wins over an already-resolved alias key in backend_opts.
+
+    Regression test for an ordering bug: if a caller-supplied model_options
+    dict already contains both the ModelOption.THINKING sentinel and a
+    backend-specific alias key with a conflicting value, the sentinel must
+    still take precedence, matching the other backends (e.g. Ollama reads
+    ModelOption.THINKING directly at the generate call site).
+    """
+    b = _make_backend("{{ thinking }}")
+
+    result = b._filter_for_chat_template(
+        {ModelOption.THINKING: True, "thinking": False}
+    )
+
+    assert result == {"thinking": True}
 
 
 def test_filter_for_chat_template_empty_input() -> None:

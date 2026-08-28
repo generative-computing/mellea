@@ -451,6 +451,9 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             "tools": ModelOption.TOOLS,
             "stream": ModelOption.STREAM,
             "stop_strings": ModelOption.STOP_SEQUENCES,
+            "think": ModelOption.THINKING,
+            "thinking": ModelOption.THINKING,
+            "enable_thinking": ModelOption.THINKING,
         }
 
         # A mapping of Mellea specific ModelOptions to the specific names for this backend.
@@ -2348,12 +2351,17 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             ),
             None,
         )
-        if (
-            thinking_template_var is not None
-            and type(model_options.get(ModelOption.THINKING)) is bool
-            and thinking_template_var not in backend_opts
-        ):
-            backend_opts[thinking_template_var] = model_options[ModelOption.THINKING]
+        # Deliberately read THINKING from model_options, not backend_opts:
+        # _make_backend_specific_and_remove already stripped the @@@thinking@@@
+        # sentinel (HF has no from_mellea_model_opts_map entry for it, so
+        # remove_special_keys discards it), but model_options still has it.
+        # The resolved sentinel must win outright over whatever alias name is
+        # already in backend_opts, to match the other backends' precedence
+        # (e.g. Ollama reads ModelOption.THINKING directly at the generate
+        # call site rather than deferring to a backend-specific key).
+        thinking_value = model_options.get(ModelOption.THINKING)
+        if thinking_template_var is not None and type(thinking_value) is bool:
+            backend_opts[thinking_template_var] = thinking_value
         return {
             k: v for k, v in backend_opts.items() if k in self._chat_template_allowlist
         }

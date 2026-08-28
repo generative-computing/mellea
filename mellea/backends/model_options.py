@@ -75,8 +75,9 @@ class ModelOption:
     * `"low"` / `"medium"` / `"high"` — passed directly as `reasoning_effort`
       (OpenAI-compatible backends only; no-op on vLLM).
 
-    HuggingFace supports boolean values only. If its chat template does not
-    expose a recognised thinking variable, the option is ignored.
+    HuggingFace supports boolean values only; a non-boolean value (e.g.
+    `"low"`) is silently ignored. If its chat template does not expose a
+    recognised thinking variable, the option is ignored regardless of value.
     """
     SEED = "@@@seed@@@"
     STREAM = "@@@stream@@@"
