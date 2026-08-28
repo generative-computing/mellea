@@ -11,9 +11,11 @@ from mellea.core import (
     AudioBlock,
     AudioUrlBlock,
     CBlock,
+    Component,
     ModelOutputThunk,
     ModelToolCall,
     RawProviderResponse,
+    Span,
     TemplateRepresentation,
 )
 from mellea.formatters.chat_formatter import ChatFormatter
@@ -28,6 +30,7 @@ from mellea.stdlib.components.chat import (
     ToolMessage,
     as_chat_history,
     as_generic_chat_history,
+    message_from_template_representation,
 )
 from mellea.stdlib.context import ChatContext
 
@@ -1018,6 +1021,181 @@ def test_parse_tool_calls_openai_streaming_normalized_shape():
     assert result.role == "assistant"
     assert result.content == ""
     assert result.tool_calls == tool_calls
+
+
+# --- Message/ToolMessage format_for_llm role & tool metadata ---
+
+
+def test_message_format_for_llm_declares_role_and_metadata():
+    """`Message.format_for_llm` carries role, thinking, tool_calls, and tool_call_id."""
+    tool_calls = [{"id": "c1", "function": {"name": "f", "arguments": "{}"}}]
+    msg = Message(
+        "assistant", "hi", tool_calls=tool_calls, tool_call_id="c1", thinking="because"
+    )
+
+    tr = msg.format_for_llm()
+
+    assert tr.role == "assistant"
+    assert tr.thinking == "because"
+    assert tr.tool_calls == tool_calls
+    assert tr.tool_call_id == "c1"
+
+
+def test_tool_message_sets_tool_call_id_from_tool():
+    """A `ToolMessage` derives its `tool_call_id` from its `ModelToolCall`."""
+    tool = ModelToolCall(
+        name="f", func=_make_tool_call("f").func, args={}, tool_call_id="call_9"
+    )
+    tm = ToolMessage(
+        role="tool", content="out", tool_output="out", name="f", args={}, tool=tool
+    )
+
+    assert tm.tool_call_id == "call_9"
+
+
+def test_tool_message_format_for_llm_declares_role_and_call_id():
+    """`ToolMessage.format_for_llm` carries the tool role and call id from its tool."""
+    tool = ModelToolCall(
+        name="f",
+        func=_make_tool_call("f").func,
+        args={"location": "LA"},
+        tool_call_id="call_9",
+    )
+    tm = ToolMessage(
+        role="tool",
+        content="out",
+        tool_output="out",
+        name="f",
+        args={"location": "LA"},
+        tool=tool,
+    )
+
+    tr = tm.format_for_llm()
+
+    assert tr.role == "tool"
+    assert tr.tool_call_id == "call_9"
+
+
+# --- as_generic_chat_history honors declared component role ---
+
+
+class _RoleComponent(Component[str]):
+    """Component whose serialized role and tool metadata are configurable."""
+
+    def __init__(self, role=None, *, tool_call_id=None):
+        self._role = role
+        self._tool_call_id = tool_call_id
+
+    def parts(self) -> list[Span]:
+        return []
+
+    def format_for_llm(self) -> TemplateRepresentation:
+        return TemplateRepresentation(
+            obj=self,
+            args={},
+            template="x",
+            role=self._role,
+            tool_call_id=self._tool_call_id,
+        )
+
+    def _parse(self, computed: ModelOutputThunk) -> str:
+        return ""
+
+
+def test_as_generic_chat_history_honors_component_role():
+    """A component declaring a role controls its message role, over the `user` default."""
+    ctx = ChatContext().add(_RoleComponent(role="system"))
+
+    history = as_generic_chat_history(ctx)
+
+    assert len(history) == 1
+    assert history[0].role == "system"
+
+
+def test_as_generic_chat_history_defaults_role_when_unset():
+    """A component declaring no role still defaults to `user`."""
+    ctx = ChatContext().add(_RoleComponent())
+
+    history = as_generic_chat_history(ctx)
+
+    assert len(history) == 1
+    assert history[0].role == "user"
+
+
+def test_as_generic_chat_history_carries_tool_call_id():
+    """A `role="tool"` component's `tool_call_id` round-trips onto the message."""
+    ctx = ChatContext().add(_RoleComponent(role="tool", tool_call_id="call_7"))
+
+    history = as_generic_chat_history(ctx)
+
+    assert len(history) == 1
+    assert history[0].role == "tool"
+    assert history[0].tool_call_id == "call_7"
+
+
+def test_as_generic_chat_history_component_format_for_llm_raises():
+    """A component whose `format_for_llm` raises (e.g. `Intrinsic`) degrades to a `user` message rather than crashing."""
+
+    class _UnrenderableComponent(Component[str]):
+        def parts(self) -> list[Span]:
+            return []
+
+        def format_for_llm(self) -> TemplateRepresentation:
+            raise NotImplementedError("only usable as the action, not in context")
+
+        def __str__(self) -> str:
+            return "unrenderable"
+
+        def _parse(self, computed: ModelOutputThunk) -> str:
+            return ""
+
+    ctx = ChatContext().add(_UnrenderableComponent())
+
+    history = as_generic_chat_history(ctx)
+
+    assert len(history) == 1
+    assert history[0].role == "user"
+    assert history[0].content == "unrenderable"
+
+
+# --- Serializer reads tool_call_id off a plain Message ---
+
+
+def test_openai_message_reads_tool_call_id_from_plain_message():
+    """A plain `role="tool"` Message with a `tool_call_id` serializes it into the payload."""
+    msg = Message("tool", "result", tool_call_id="call_5")
+
+    result = message_to_openai_message(msg)
+
+    assert result["tool_call_id"] == "call_5"
+
+
+# --- TemplateRepresentation -> Message carries tool_name ---
+
+
+def test_message_from_tr_carries_tool_name():
+    """A `tool_name` declared on a TemplateRepresentation reaches the built Message."""
+    tr = TemplateRepresentation(obj=object(), args={}, role="tool", tool_name="fn")
+
+    msg = message_from_template_representation(
+        tr, default_role="user", content="result"
+    )
+
+    assert msg.role == "tool"
+    assert msg.tool_name == "fn"
+
+
+def test_message_format_for_llm_round_trips_tool_name():
+    """`Message.tool_name` survives format_for_llm -> message_from_template_representation."""
+    original = Message("tool", "result", tool_name="fn")
+
+    tr = original.format_for_llm()
+    assert tr.tool_name == "fn"
+
+    rebuilt = message_from_template_representation(
+        tr, default_role="user", content="result"
+    )
+    assert rebuilt.tool_name == "fn"
 
 
 if __name__ == "__main__":

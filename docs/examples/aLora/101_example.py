@@ -1,46 +1,61 @@
-# pytest: skip, huggingface, e2e
-# SKIP REASON: broken stembolts adapter/example, pending rewrite to new intrinsics API (#385).
+# pytest: huggingface, e2e, slow
+"""How `ALoraRequirement` routes validation through a fast adapter.
+
+Uses the catalog-native `requirement-check` adapter (registered here via
+`IntrinsicAdapter`, still the only working way to drive `_generate_from_intrinsic` —
+see #1144) to compare aLoRA-backed validation against full LLM-as-judge generation
+for the same requirement. `LLMaJRequirement` is used for the comparison because
+`ALoraRequirement` always routes through the registered adapter regardless of
+`backend.default_to_constraint_checking_alora`.
+
+For loading a fully custom, non-catalog adapter with your own output schema
+(not the generic `{"requirement_check": {"score": ...}}` shape), see
+`stembolts_intrinsic.py` in this directory — it has no standalone entry point of
+its own; `102_example.py` drives it interactively (reads from stdin, so it isn't
+runnable as an automated example).
+"""
 
 import time
 
-from mellea import MelleaSession
-from mellea.backends.adapters.adapter import CustomIntrinsicAdapter
-from mellea.backends.cache import SimpleLRUCache
+from mellea import MelleaSession, model_ids
+from mellea.backends.adapters import AdapterType
+from mellea.backends.adapters.adapter import IntrinsicAdapter
 from mellea.backends.huggingface import LocalHFBackend
-from mellea.core import GenerateLog
+from mellea.core import GenerateLog, ValidationResult
 from mellea.stdlib.context import ChatContext
-from mellea.stdlib.requirements import ALoraRequirement, Requirement
+from mellea.stdlib.requirements import ALoraRequirement, LLMaJRequirement, Requirement
 
-backend = LocalHFBackend(
-    model_id="ibm-granite/granite-3.3-2b-instruct", cache=SimpleLRUCache(5)
-)
+# The example does not reuse generated KV caches, so avoid creating and retaining them.
+backend = LocalHFBackend(model_id=model_ids.IBM_GRANITE_4_1_3B, use_caches=False)
 
 m = MelleaSession(backend=backend, ctx=ChatContext())
 
+# Register the aLoRA variant of the catalog's requirement-check adapter. Without
+# this, ALoraRequirement logs a warning and falls back to regular generation,
+# whose prompt asks for a plain "yes"/"no" answer — but the result is still
+# parsed as JSON by requirement_check_to_bool: a plain yes/no reply raises
+# json.JSONDecodeError (it is not JSON), and a JSON reply that doesn't match
+# the schema raises AdapterSchemaMismatchError — either way validate() surfaces
+# the error on ValidationResult.error and fails the check closed rather than
+# returning an ordinary failed check or propagating the exception. The ALORA
+# type is also load-bearing here: routing only looks up ("alora",), so
+# registering the LORA variant instead would hit the same failure.
+backend.add_adapter(
+    IntrinsicAdapter(  # emits a DeprecationWarning — see module docstring, #1144
+        "requirement-check",
+        adapter_type=AdapterType.ALORA,
+        base_model_name=backend.base_model_name,
+    )
+)
 
-class StemboltAdapter(CustomIntrinsicAdapter):
-    def __init__(self):
-        super().__init__(
-            model_id="nfulton/stembolts",
-            intrinsic_name="stembolts",
-            base_model_name="granite-3.3-2b-instruct",
-        )
-
-
-granite_33_2b_stembolt_adapter = StemboltAdapter()
-
-backend.add_adapter(granite_33_2b_stembolt_adapter)
+description = "The summary must mention the suspected cause of failure."
 
 # define a requirement
-failure_check = ALoraRequirement(
-    "The diagnostic confidence should be in the unit interval and greater than 0.9.",
-    intrinsic_name=granite_33_2b_stembolt_adapter.intrinsic_name,
-)
-failure_check.check_only = True
+alora_check = ALoraRequirement(description)
 
 res = m.instruct(
-    "Oil seepage around piston rings suggests seal degradation",
-    requirements=[failure_check],
+    "Write a triage summary based on this technician note: Oil seepage around "
+    "piston rings suggests seal degradation.",
     strategy=None,
 )
 
@@ -51,17 +66,14 @@ print(
 )  # retrieve prompt information from session context
 
 
-def validate_reqs(reqs: list[Requirement]):
+def validate_reqs(
+    reqs: list[Requirement], label: str
+) -> tuple[float, list[ValidationResult]]:
     """Validate the requirements against the last output in the session."""
-    print("==== Validation =====")
-    print(
-        "using aLora"
-        if backend.default_to_constraint_checking_alora
-        else "using NO alora"
-    )
+    print(f"==== Validation ({label}) =====")
 
     # helper to collect validation prompts (because validation calls never get added to session contexts).
-    logs: list[GenerateLog] = []  # type: ignore
+    logs: list[GenerateLog] = []
 
     # Run the validation. No output needed, because the last output in "m" will be used. Timing added.
     start_time = time.time()
@@ -82,19 +94,33 @@ def validate_reqs(reqs: list[Requirement]):
         if isinstance(log, GenerateLog):
             print(f" - {{prompt: {log.prompt}\n   raw result: {log.result.value} }}")  # type: ignore
 
-    return end_time - start_time, val_res
+    return delta_t, val_res
 
 
-# NOTE: This is not meant for use in regular programming using mellea, but just as an illustration for the speedup you can get with aloras.
-# force to run without alora
-backend.default_to_constraint_checking_alora = False
-computetime_no_alora, no_alora_result = validate_reqs([failure_check])
+llmaj_check = LLMaJRequirement(description)
 
-# run with aLora -- which is the default if the constraint alora is added to a model
-backend.default_to_constraint_checking_alora = True
-computetime_alora, alora_result = validate_reqs([failure_check])
+# Warm up both paths before timing. The *first* call against a freshly-registered
+# aLoRA adapter pays a one-time PEFT weight-load cost that has nothing to do with
+# per-call latency; the LLM-as-judge call has no such cost, but gets a warm-up too
+# so both measurements below are on equal footing.
+m.validate([alora_check])
+m.validate([llmaj_check])
 
+# ALoraRequirement always routes through the registered aLoRA adapter.
+computetime_alora, _ = validate_reqs([alora_check], "aLoRA")
 
+# LLMaJRequirement always bypasses adapters, regardless of what's registered —
+# the only way to get a genuine no-adapter timing comparison for the same check.
+computetime_llmaj, _ = validate_reqs([llmaj_check], "LLM-as-judge")
+
+print(f"aLoRA validation:        {computetime_alora:.3f}s")
+print(f"LLM-as-judge validation: {computetime_llmaj:.3f}s")
 print(
-    f"Speed up time with using aloras is {((computetime_alora - computetime_no_alora) / computetime_no_alora * 100):.2f}% ({computetime_alora - computetime_no_alora} seconds). This speedup is absolute -- not normalized for token count."
+    "NOTE: whichever way these numbers land, they are not measuring aLoRA's "
+    "architectural advantage — reusing an already-computed KV cache instead of "
+    "recomputing the context under adapter-modified weights. `generate_from_context` "
+    "never routes through that KV-cache-reuse path (`_generate_from_context_with_kv_cache`; "
+    "reachable today only by calling it directly, see `docs/kv_smash/hf_example.py`), so "
+    "neither call above reuses anything. What actually separates them here is mostly the "
+    "token-count difference between a JSON+score output and a one-word yes/no answer."
 )

@@ -232,6 +232,51 @@ m = MelleaSession(
 Options set at construction time apply to all calls. Options passed to `instruct()`
 or `chat()` apply to that call only and take precedence.
 
+## NVIDIA NIM via OpenAI-compatible endpoint
+
+NVIDIA hosts the Nemotron models at `https://integrate.api.nvidia.com/v1`, which is
+OpenAI-compatible. The `NVIDIA_*` constants in `model_ids` carry their NVIDIA-hosted
+names in `openai_name`, so you can pass the `ModelIdentifier` directly — but you must
+also set `base_url`, since these models are not served by OpenAI:
+
+```python
+# Requires: mellea
+# Returns: MelleaSession
+from mellea import MelleaSession
+from mellea.backends import model_ids
+from mellea.backends.openai import OpenAIBackend
+
+m = MelleaSession(
+    OpenAIBackend(
+        model_id=model_ids.NVIDIA_NEMOTRON_3_NANO_4B,
+        api_key="your-nvidia-api-key",
+        base_url="https://integrate.api.nvidia.com/v1",
+    )
+)
+```
+
+Not every constant has a hosted endpoint: `NVIDIA_NEMOTRON_3_NANO_4B` and
+`NVIDIA_NEMOTRON_NANO_12B_V2` ship for local inference only, so their `openai_name` is
+`None` and passing them to `OpenAIBackend` raises an `AssertionError`. To self-host any
+of these with vLLM instead, pass `hf_model_name` as a string — vLLM serves a model under
+the name it was launched with, not under the NVIDIA-hosted name:
+
+```python
+# Requires: mellea
+# Returns: MelleaSession
+from mellea import MelleaSession
+from mellea.backends import model_ids
+from mellea.backends.openai import OpenAIBackend
+
+m = MelleaSession(
+    OpenAIBackend(
+        model_id=model_ids.NVIDIA_NEMOTRON_3_NANO_30B_A3B.hf_model_name,
+        api_key="EMPTY",
+        base_url="http://localhost:8000/v1",
+    )
+)
+```
+
 ## Anthropic via OpenAI-compatible endpoint
 
 Anthropic's API is not OpenAI-compatible natively, but if you access it through a
@@ -362,8 +407,10 @@ print(result.thinking)                       # populated reasoning content, if a
 
 This affects models that default to thinking mode, most commonly Qwen3 served
 via vLLM with `--reasoning-parser qwen3`. To disable thinking and get a normal
-text response, pass the runtime-specific switch through `model_options`. For
-vLLM:
+text response, pass the runtime-specific switch through `extra_body`.
+
+To set it once for every call the session makes (recommended — see below for
+why), pass `default_extra_body` when constructing the backend. For vLLM:
 
 ```python
 from mellea import MelleaSession
@@ -374,12 +421,30 @@ m = MelleaSession(
         model_id="Qwen/Qwen3-Coder-Next-FP8",
         base_url="http://localhost:8000/v1",
         api_key="unused",
-        model_options={
-            "extra_body": {"chat_template_kwargs": {"enable_thinking": False}},
-        },
+        default_extra_body={"chat_template_kwargs": {"enable_thinking": False}},
     )
 )
 ```
+
+`default_extra_body` fields are merged into every request this backend makes;
+a per-call override (passed via `model_options={"extra_body": ...}` on a
+single `instruct()`/`act()` call) takes precedence for that one call, and
+`chat_template_kwargs` is deep-merged across both, so a construction-time
+thinking setting is not silently dropped when a call also activates an
+intrinsic adapter (which writes its own `chat_template_kwargs.adapter_name`).
+
+Toggling thinking per call is also possible via `model_options={"extra_body":
+...}` on the call itself, but not via `model_options={"extra_body": ...}` at
+**construction** time — that older pattern is not deep-merged and can be
+silently overwritten by an unrelated per-call `extra_body` on some other
+call in the same session ([#1539](https://github.com/generative-computing/mellea/issues/1539)).
+Use `default_extra_body` for anything you want to persist across every call.
+
+Note also that switching `enable_thinking` mid-session changes the rendered
+chat-template prefix on servers like vLLM, which can invalidate that
+server's prefix/KV cache for the conversation from that point on — another
+reason to fix it once via `default_extra_body` rather than toggling it call
+by call.
 
 Other inference servers expose the same control under different names — check
 your runtime's documentation. If you intend to use thinking mode, read the

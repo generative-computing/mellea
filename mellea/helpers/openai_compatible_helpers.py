@@ -264,7 +264,12 @@ def message_to_openai_message(
         images or audio, `"content"` is a list of content-part dicts; otherwise
         is a plain string. For tool-only assistant turns, `"content"` is `None`
         and `"tool_calls"` carries the structured call list. When content is
-        present alongside tool calls, both keys are included. When
+        present alongside tool calls, both keys are included. For a tool-result
+        turn whose message carries a provider-supplied `tool_call_id` (a
+        `ToolMessage`, which forwards it from its `ModelToolCall`, or a plain
+        `Message` that declared it directly), the dict also carries
+        `"tool_call_id"` (matching the assistant tool call), as spec-strict
+        OpenAI-compatible providers require on `role: "tool"` messages. When
         `replay_reasoning` is `True` and reasoning is present, the dict also
         carries a `"reasoning_content"` field.
 
@@ -324,6 +329,20 @@ def message_to_openai_message(
         result["tool_calls"] = tool_calls
         if msg.images is None and not content:
             result["content"] = None
+
+    # Tool-result turns: spec-strict OpenAI-compatible providers require a
+    # `role: "tool"` message to reference the assistant's originating tool call
+    # via `tool_call_id` (issue #1389). Emit it when the message carries a
+    # provider-supplied id. Both a `ToolMessage` (which forwards its
+    # `ModelToolCall.tool_call_id` to the base `Message` at construction) and a
+    # plain `Message` built from a component that declared `role="tool"` +
+    # `tool_call_id` in its template representation expose it via `msg.tool_call_id`.
+    # The optional `name` field is deliberately omitted: it is a legacy carryover
+    # from `role: "function"`, not part of the OpenAI tool-message schema, and is
+    # not required to satisfy the result-turn contract. Gate on truthiness
+    # (matching `build_tool_calls` below) so an empty id is treated as absent.
+    if msg.tool_call_id:
+        result["tool_call_id"] = msg.tool_call_id
 
     if replay_reasoning and msg.thinking:
         result["reasoning_content"] = msg.thinking
@@ -415,8 +434,15 @@ def build_tool_calls(output: ModelOutputThunk) -> list[ToolCallDict] | None:
     assert output.tool_calls is not None
     tool_calls: list[ToolCallDict] = []
     for model_tool_call in output.tool_calls:
-        # Generate a unique ID for this tool call
-        tool_call_id = f"call_{uuid.uuid4().hex[:24]}"
+        # Reuse the provider-supplied call id when one exists so a downstream
+        # tool-result turn (which reads the same id via `_tool.tool_call_id`) can
+        # reference the same call — spec-strict providers reject a mismatch
+        # (issue #1389). The live case is `cli/serve` forwarding an upstream id
+        # back downstream; on the openai/litellm paths the assistant turn's tool
+        # calls come straight from the provider payload rather than through here.
+        # Fall back to a fabricated id only when no id was supplied (e.g.
+        # raw-string tool parsing).
+        tool_call_id = model_tool_call.tool_call_id or f"call_{uuid.uuid4().hex[:24]}"
 
         # Serialize arguments to JSON with str fallback for non-serializable types
         args_json = json.dumps(model_tool_call.args, default=str)

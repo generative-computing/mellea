@@ -12,7 +12,7 @@ completion endpoint.
 """
 
 from ..core import Component, Formatter, ModelOutputThunk, Span, TemplateRepresentation
-from ..stdlib.components.chat import Message
+from ..stdlib.components.chat import Message, message_from_template_representation
 
 
 class ChatFormatter(Formatter):
@@ -24,8 +24,12 @@ class ChatFormatter(Formatter):
         Iterates over each element in the context history and converts it to a
         `Message` with an appropriate role. `ModelOutputThunk` instances are
         treated as assistant responses, while all other `Component` and
-        `CBlock` objects default to the `user` role. Image attachments and
-        parsed structured outputs are handled transparently.
+        `CBlock` objects default to the `user` role. A `Component` may override
+        this positional guess by setting `role` on the `TemplateRepresentation`
+        returned from its `format_for_llm`, and a component with `role="tool"`
+        may additionally declare `tool_call_id`/`tool_name`, which are carried
+        onto the resulting `Message`. Image attachments and parsed structured
+        outputs are handled transparently.
 
         Args:
             cs (list[Span]): The linearized sequence of context
@@ -34,6 +38,11 @@ class ChatFormatter(Formatter):
         Returns:
             list[Message]: A list of `Message` objects ready for submission to
                 a chat completion endpoint.
+
+        Raises:
+            ValueError: If a component declares a `role` (via its
+                `TemplateRepresentation`) outside `Message.Role`; role
+                validation is deferred to `Message`/`ToolMessage`.
         """
 
         def _to_msg(c: Span) -> Message:
@@ -61,18 +70,21 @@ class ChatFormatter(Formatter):
 
             match c:
                 case Message():
+                    # A Message (or ToolMessage) is already a fully-formed chat
+                    # message; return it verbatim so subtype-specific state such as
+                    # `ToolMessage._tool.tool_call_id` survives to the backend payload.
                     return c
                 case Component():
-                    images = None
-                    audio = None
                     tr = c.format_for_llm()
                     if isinstance(tr, TemplateRepresentation):
-                        images = tr.images
-                        audio = tr.audio
-
-                    return Message(
-                        role=role, content=self.print(c), images=images, audio=audio
-                    )
+                        # A component may declare its own role and tool metadata via
+                        # its template representation; honor them over the positional
+                        # guess. Role validation is deferred to `Message`/`ToolMessage`,
+                        # which raise ValueError for anything outside `Message.Role`.
+                        return message_from_template_representation(
+                            tr, default_role=role, content=self.print(c)
+                        )
+                    return Message(role=role, content=self.print(c))
                 case _:
                     return Message(role=role, content=self.print(c))
 

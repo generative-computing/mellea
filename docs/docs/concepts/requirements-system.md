@@ -35,6 +35,10 @@ from mellea.core import Requirement
 r = Requirement("The email should have a salutation.")
 ```
 
+> **Reliability note:** A plain-string requirement is checked by LLM-as-a-judge,
+> and judge quality is highly model-dependent. For small local models it is recommended to use a Python validator when determinism is required, or — on Granite models — the aLoRA `requirement-check` adapter. See
+> [Choosing a validation approach](#choosing-a-validation-approach) below.
+
 Passing plain strings directly to `instruct()` is equivalent — they are
 converted to `Requirement` objects internally:
 
@@ -158,6 +162,7 @@ last output.
 | `score` | `float \| None` | Optional numeric score from your validator. |
 | `thunk` | `ModelOutputThunk \| None` | The model output used, if your validator ran a backend call. |
 | `context` | `Context \| None` | The context snapshot at validation time. |
+| `error` | `Exception \| None` | The exception raised while parsing validator output, if any. When set, `bool(result)` is `False` (fails closed) and `reason` is `None`; lets callers tell an unparsable response apart from an ordinary "requirement not met". |
 
 The `reason` field is the most useful in practice — a clear reason string helps the
 model make a targeted repair rather than regenerating blindly.
@@ -255,16 +260,34 @@ else:
 of `(Requirement, ValidationResult)` tuples. `SamplingResult.result_validations`
 gives you the same for the final selected output only.
 
-## LLM-as-a-judge vs custom validators
+## Choosing a validation approach
 
-| Approach | When to use |
-| -------- | ----------- |
-| Plain string requirement | Subjective or hard-to-code constraints ("be polite", "stay on topic"). |
-| `simple_validate(lambda ...)` | Simple deterministic checks (length, regex, JSON parse). |
-| Full `validation_fn` | Multi-step logic, external API calls, or access to session context. |
-| `ALoraRequirement` | Fine-tuned constraint LoRA — fastest at scale, requires adapter. |
+Mellea offers three ways to validate a requirement: a Python validator, an LLM-as-a-judge
+call, or the aLoRA `requirement-check` adapter. They differ not just in latency and coding
+effort, but also in **how much you can trust the verdict**.
 
-LLM-as-a-judge requirements call the backend for each validation, which adds latency.
+The single most important factor is often overlooked: **LLM-as-a-judge reliability is
+highly model-dependent.** In testing across judge sizes, larger models were stronger judges
+without a constraint-checking aLoRA loaded. Because a plain-string `req()` uses
+LLM-as-a-judge by default, and the quickstart and tutorials run on a small local model,
+the easiest path is less exact. Treat a small-model judge verdict as a signal, not a guarantee.
+
+Recommendation:
+
+- **Python validators (`simple_validate` or a full `validation_fn`)** — use for any deterministic constraint (length, regex, JSON/schema, an external lookup). They are exact, fast, and free of model dependence.
+
+- **aLoRA `requirement-check` (Granite), or LLM-as-a-judge on a capable model** — use for
+  genuinely subjective constraints that resist coding ("be polite", "stay on topic"). The
+  `requirement-check` adapter is purpose-trained for constraint checking; a general LLM can perform better with larger models.
+
+| Approach | When to use | Reliability |
+| -------- | ----------- | ----------- |
+| `simple_validate(lambda ...)` | Simple deterministic checks (length, regex, JSON parse). | Exact; model-independent. |
+| Full `validation_fn` | Multi-step logic, external API calls, or access to session context. | Exact; model-independent. |
+| `ALoraRequirement` (`requirement-check`) | Subjective constraints on Granite models; high throughput. | Purpose-trained; reliable on supported models. |
+| Plain string requirement (LLM-as-a-judge) | Subjective or hard-to-code constraints. | Model-dependent; stronger on larger models. |
+
+LLM-as-a-judge requirements also call the backend for each validation, which can add latency.
 For high-throughput workloads, prefer `simple_validate` for deterministic checks and
 reserve LLM-based requirements for subjective criteria that cannot be coded directly.
 
@@ -320,8 +343,8 @@ field:
 - `"fail"` — the stream is cancelled immediately; no further chunks reach the
   consumer; `validate()` is skipped for this requirement.
 
-State isolation is per-clone: `stream_with_chunking()` copies each requirement
-with `copy()` before starting the orchestrator, so the original objects are never
+State isolation is per-clone: `stream()` copies each requirement
+with `copy()` before generation starts, so the original objects are never
 mutated. Requirements that accumulate state across chunks (e.g. a running word
 count) should reassign mutable containers rather than mutate in place, since
 clones share the original's `__dict__` values at copy time.

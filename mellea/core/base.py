@@ -770,6 +770,9 @@ class _GenerationState:
         post_process: Backend coroutine run once after the value is complete.
         on_computed: Coroutine run when the thunk becomes computed.
         start: Wall-clock start time of generation, for latency metrics.
+        last_chunk_time: Wall-clock time the previous streamed chunk was
+            processed, for per-chunk inter-arrival timing. `None` until the
+            first chunk is processed.
     """
 
     queue: asyncio.Queue = field(default_factory=lambda: asyncio.Queue(maxsize=20))
@@ -784,6 +787,7 @@ class _GenerationState:
     post_process: Callable[[ModelOutputThunk], Coroutine] | None = None
     on_computed: Callable[[ModelOutputThunk], Coroutine] | None = None
     start: datetime.datetime | None = None
+    last_chunk_time: datetime.datetime | None = None
 
 
 class ModelOutputThunk(Generic[S]):
@@ -826,6 +830,8 @@ class ModelOutputThunk(Generic[S]):
         # Set computed to True if a value is passed in.
         self._computed: bool = True if value is not None else False
         self._cancelled: bool = False
+        # Guards `__aiter__` against a second consumer splitting the same stream.
+        self._aiter_started: bool = False
 
         # Additional fields that should be standardized across apis.
         self.tool_calls = tool_calls
@@ -847,6 +853,12 @@ class ModelOutputThunk(Generic[S]):
         # MOT instead of raising. Sibling to `_cancelled`.
         self._error: Exception | None = None
 
+    def _elapsed_ms(self) -> float:
+        """Milliseconds since generation start, or -1 if start was never set."""
+        if self._gen.start is None:
+            return -1
+        return (datetime.datetime.now() - self._gen.start).total_seconds() * 1000
+
     def _record_ttfb(self) -> None:
         """Record time-to-first-byte if streaming and not yet recorded."""
         if (
@@ -854,9 +866,7 @@ class ModelOutputThunk(Generic[S]):
             and not self._gen.first_chunk_received
             and self._gen.start is not None
         ):
-            self.generation.ttfb_ms = (
-                datetime.datetime.now() - self._gen.start
-            ).total_seconds() * 1000
+            self.generation.ttfb_ms = self._elapsed_ms()
             self._gen.first_chunk_received = True
 
     async def _emit_event(self, event_name: str, **data: Any) -> None:
@@ -865,7 +875,11 @@ class ModelOutputThunk(Generic[S]):
             from ..plugins.hooks.generation import GenerationEventPayload
 
             event_payload = GenerationEventPayload(
-                generation_id=self._call.generation_id, event_name=event_name, data=data
+                generation_id=self._call.generation_id,
+                event_name=event_name,
+                model=self.generation.model,
+                provider=self.generation.provider,
+                data=data,
             )
             await invoke_hook(HookType.GENERATION_EVENT, event_payload)
 
@@ -925,52 +939,54 @@ class ModelOutputThunk(Generic[S]):
         # Drain before awaiting — unblocks any put() the task is stuck on.
         _drain()
 
-        if self._gen.generate is not None:
-            try:
-                await self._gen.generate
-            except asyncio.CancelledError:
-                # Re-raise if the *outer* task is being cancelled (Python 3.11+
-                # task.cancelling() > 0) so we don't silently absorb external
-                # cancellation. For the inner task's own CancelledError (the
-                # expected result of .cancel() above), cancelling() is 0.
-                cur = asyncio.current_task()
-                if cur is not None and cur.cancelling() > 0:
-                    raise
-            except Exception:
-                pass
+        try:
+            if self._gen.generate is not None:
+                try:
+                    await self._gen.generate
+                except asyncio.CancelledError:
+                    # Re-raise if the *outer* task is being cancelled (Python 3.11+
+                    # task.cancelling() > 0) so we don't silently absorb external
+                    # cancellation. For the inner task's own CancelledError (the
+                    # expected result of .cancel() above), cancelling() is 0.
+                    cur = asyncio.current_task()
+                    if cur is not None and cur.cancelling() > 0:
+                        raise
+                except Exception:
+                    pass
 
-        if self._gen.generate_extra is not None:
-            try:
-                await self._gen.generate_extra
-            except asyncio.CancelledError:
-                cur = asyncio.current_task()
-                if cur is not None and cur.cancelling() > 0:
-                    raise
-            except Exception:
-                pass
+            if self._gen.generate_extra is not None:
+                try:
+                    await self._gen.generate_extra
+                except asyncio.CancelledError:
+                    cur = asyncio.current_task()
+                    if cur is not None and cur.cancelling() > 0:
+                        raise
+                except Exception:
+                    pass
+        finally:
+            # Drain again for any final item the task put before terminating.
+            _drain()
 
-        # Drain again for any final item the task put before terminating.
-        _drain()
+            if self._underlying_value is None:
+                self._underlying_value = ""
+            self._cancelled = True
+            self._computed = True
 
-        if has_plugins(HookType.GENERATION_ERROR):
-            from ..plugins.hooks.generation import GenerationErrorPayload
+            if has_plugins(HookType.GENERATION_ERROR):
+                from ..plugins.hooks.generation import GenerationErrorPayload
 
-            recorded: Exception = (
-                error if error is not None else RuntimeError("Generation cancelled")
-            )
-            await invoke_hook(
-                HookType.GENERATION_ERROR,
-                GenerationErrorPayload(
-                    exception=recorded,
-                    model_output=self,
-                    generation_id=self._call.generation_id,
-                ),
-            )
-
-        if self._underlying_value is None:
-            self._underlying_value = ""
-        self._cancelled = True
-        self._computed = True
+                recorded: Exception = (
+                    error if error is not None else RuntimeError("Generation cancelled")
+                )
+                await invoke_hook(
+                    HookType.GENERATION_ERROR,
+                    GenerationErrorPayload(
+                        exception=recorded,
+                        model_output=self,
+                        generation_id=self._call.generation_id,
+                        latency_ms=self._elapsed_ms(),
+                    ),
+                )
 
     @property
     def cancelled(self) -> bool:
@@ -1164,6 +1180,7 @@ class ModelOutputThunk(Generic[S]):
                     exception=chunks[-1],
                     model_output=self,
                     generation_id=self._call.generation_id,
+                    latency_ms=self._elapsed_ms(),
                 )
                 await invoke_hook(HookType.GENERATION_ERROR, err_payload)
 
@@ -1177,10 +1194,18 @@ class ModelOutputThunk(Generic[S]):
             prev_len = len(str(self._underlying_value or ""))
             await self._gen.process(self, chunk)
             if emit_chunk_events:
+                now = datetime.datetime.now()
+                time_since_last_chunk_ms = (
+                    (now - self._gen.last_chunk_time).total_seconds() * 1000
+                    if self._gen.last_chunk_time is not None
+                    else None
+                )
+                self._gen.last_chunk_time = now
                 await self._emit_event(
                     "chunk_processed",
                     chunk_index=self._gen.processed_chunk_index,
                     chunk_text_length=len(str(self._underlying_value or "")) - prev_len,
+                    time_since_last_chunk_ms=time_since_last_chunk_ms,
                 )
             self._gen.processed_chunk_index += 1
 
@@ -1191,23 +1216,7 @@ class ModelOutputThunk(Generic[S]):
             assert self._gen.post_process is not None
             await self._gen.post_process(self)
 
-            match self._call.action:
-                case Component():
-                    self.parsed_repr = self._call.action._parse(self)
-                case CBlock():
-                    assert self.value is not None, (
-                        "value must be non-None since this thunk is computed"
-                    )
-                    self.parsed_repr = self.value  # type: ignore
-                case ModelOutputThunk():
-                    assert self.value is not None, (
-                        "value must be non-None since this thunk is computed"
-                    )
-                    self.parsed_repr = self.value  # type: ignore
-                case _:
-                    raise ValueError(
-                        "attempted to astream from a model output thunk with no originating action set"
-                    )
+            self._set_parsed_repr()
             assert self.parsed_repr is not None, (
                 "enforce constraint that a computed ModelOutputThunk has a non-None parsed_repr"
             )
@@ -1218,15 +1227,10 @@ class ModelOutputThunk(Generic[S]):
 
                 glog = self._generate_log
                 prompt = glog.prompt if glog and glog.prompt else ""
-                latency_ms = (
-                    (datetime.datetime.now() - self._gen.start).total_seconds() * 1000
-                    if self._gen.start
-                    else -1
-                )
                 post_payload = GenerationPostCallPayload(
                     prompt=prompt,
                     model_output=self,
-                    latency_ms=latency_ms,
+                    latency_ms=self._elapsed_ms(),
                     generation_id=self._call.generation_id,
                 )
                 await invoke_hook(HookType.GENERATION_POST_CALL, post_payload)
@@ -1241,6 +1245,113 @@ class ModelOutputThunk(Generic[S]):
             if beginning_length == 0
             else self._underlying_value[beginning_length:]  # type: ignore
         )
+
+    def __aiter__(self) -> ModelOutputThunk[S]:
+        """Iterate the streamed deltas with `async for`.
+
+        Wraps `astream()` in the async-iterator protocol so callers can write
+        `async for delta in mot:` rather than the manual
+        `while not mot.is_computed(): await mot.astream()` loop. Each iteration
+        yields a delta (the new text since the previous one); iteration ends when
+        generation completes.
+
+        Single-consumer: the underlying stream has one cursor, so a second
+        iterator would split the same stream rather than start an independent
+        one. The first `__aiter__` marks the thunk consumed; a second call
+        raises. This mirrors the single-consumer constraint on `astream()`.
+
+        Returns:
+            ModelOutputThunk[S]: This thunk, acting as its own iterator.
+
+        Raises:
+            RuntimeError: If the thunk is already being iterated by another
+                consumer.
+        """
+        if self._aiter_started:
+            raise RuntimeError(
+                "ModelOutputThunk is already being iterated; async iteration is "
+                "single-consumer. A second `async for` would split the same stream "
+                "rather than start an independent one."
+            )
+        self._aiter_started = True
+        return self
+
+    async def __anext__(self) -> str:
+        """Return the next streamed delta, or stop when generation is complete.
+
+        Returns:
+            str: The new text received since the previous delta.
+
+        Raises:
+            StopAsyncIteration: When the thunk is already computed.
+        """
+        if self._computed:
+            raise StopAsyncIteration
+        return await self.astream()
+
+    async def aclose(self) -> None:
+        """Cancel an unfinished generation and release its resources.
+
+        Makes `async for delta in mot` safe to abandon: iterating and breaking
+        out early otherwise leaves the backend generation running, since the
+        async-iterator protocol has no reliable finalizer. Idempotent — a no-op
+        once the thunk is computed (including after natural completion), so it is
+        safe to call after full iteration or more than once.
+
+        Prefer `async with mot:` so this runs automatically on every exit path;
+        call `aclose()` directly only when not using the context manager.
+        """
+        if not self._computed:
+            await self.cancel_generation()
+
+    async def __aenter__(self) -> ModelOutputThunk[S]:
+        """Enter the async context manager, returning this thunk."""
+        return self
+
+    async def __aexit__(self, *exc_info: object) -> None:
+        """Exit the context manager, cancelling any in-flight generation."""
+        await self.aclose()
+
+    def _set_parsed_repr(self) -> None:
+        """Compute `parsed_repr` from the originating action once the thunk is computed.
+
+        Dispatches on the originating `action`: a `Component` action parses via its
+        own `_parse`; a `ModelOutputThunk` action (a computed thunk reused as the
+        next incoming turn) is re-parsed through `Message._parse` so its role,
+        tool calls, and reasoning survive the round-trip rather than degrading to a
+        raw string; a `CBlock` action keeps its raw string value.
+
+        Raises:
+            ValueError: If the thunk has no originating action set.
+        """
+        match self._call.action:
+            case Component():
+                self.parsed_repr = self._call.action._parse(self)
+            case CBlock():
+                assert self.value is not None, (
+                    "value must be non-None since this thunk is computed"
+                )
+                self.parsed_repr = self.value  # type: ignore[assignment]
+            case ModelOutputThunk():
+                assert self.value is not None, (
+                    "value must be non-None since this thunk is computed"
+                )
+                # A computed thunk reused as the incoming turn is re-parsed through
+                # `Message._parse` (the same provider-native recovery the `Component`
+                # /`Message` action path uses) so its role, tool calls, and reasoning
+                # survive rather than degrading to the raw string value.
+                # Deferred import: `chat` imports `mellea.core`, so a top-level import
+                # here would be circular. `Message._parse` reads only its `computed`
+                # argument, so a throwaway `Message` instance is a safe vehicle.
+                from ..stdlib.components.chat import Message
+
+                self.parsed_repr = Message(role="assistant", content=self.value)._parse(
+                    self
+                )  # type: ignore[assignment]
+            case _:
+                raise ValueError(
+                    "attempted to astream from a model output thunk with no originating action set"
+                )
 
     def __str__(self) -> str:
         """Stringifies the thunk value."""
@@ -1349,12 +1460,73 @@ class ComputedModelOutputThunk(ModelOutputThunk[S]):
     Uses zero-copy class reassignment: calling `ComputedModelOutputThunk(thunk)` reassigns
     the thunk's `__class__` to `ComputedModelOutputThunk` without creating a new object.
 
+    The *computed invariant* is enforced on every assignment: the thunk can never be
+    mutated into an inconsistent state. Setting `_computed` to anything other than
+    `True` (it can never become uncomputed) or setting `_underlying_value`/`value` to
+    `None` or a non-`str` (the `.value -> str` contract must hold) raises `AttributeError`.
+    Invariant-*preserving* writes are allowed — a caller may replace the value with a
+    different computed string (see `mellea/stdlib/frameworks/react.py`, which swaps in a
+    tool's final answer) and a sampling strategy may finalize `parsed_repr`. This
+    guarantees `is_computed()` stays `True` and `.value` stays a non-`None` `str` for
+    the lifetime of the object.
+
+    Constructing without a `thunk` raises `TypeError` — the argument is mandatory.
+
     Args:
         thunk: A fully-computed `ModelOutputThunk` whose class will be reassigned.
     """
 
-    def __new__(cls, thunk: ModelOutputThunk[S]) -> ComputedModelOutputThunk[S]:
-        """Convert the ModelOutputThunk into a ComputedModelOutputThunk."""
+    # Fields guarded by the computed invariant. Each maps to a predicate a *new* value
+    # must satisfy; a rejected write raises AttributeError. The rule is "never made
+    # uncomputed or given an invalid value" — not "read-only": replacing the value with
+    # another valid computed string is allowed (react.py does this). `parsed_repr` is
+    # unguarded (a derived field finalized post-wrap). The guard is purely value-based,
+    # so it needs no "is-sealed" flag: at wrap time the base thunk is already computed
+    # with a str value, and the wrap itself writes no guarded field.
+    _INVARIANT_GUARDS: dict[str, Callable[[Any], bool]] = {
+        "_computed": lambda v: v is True,
+        "_underlying_value": lambda v: isinstance(v, str),
+    }
+
+    def __new__(
+        cls, thunk: ModelOutputThunk[S] | None = None
+    ) -> ComputedModelOutputThunk[S]:
+        """Convert a `ModelOutputThunk` into a `ComputedModelOutputThunk` via zero-copy reassignment.
+
+        The whole computed invariant is validated here, *before* the class reassignment,
+        so a rejected `thunk` is left untouched as the plain `ModelOutputThunk` the caller
+        passed in.
+
+        `thunk is None` allocates a bare instance. Pickling a `ModelOutputThunk` or a
+        `ComputedModelOutputThunk` is not supported today — a generated thunk's `_gen`
+        holds asyncio tasks and backend-bound callbacks that cannot be pickled — but
+        pickle reconstructs via `cls.__new__(cls)`, so keeping this branch means adding
+        pickle support to the base class later needs no change here. A genuine no-arg call
+        is caught in `__init__` (which pickle skips).
+
+        Raises:
+            TypeError: If `thunk` is neither `None` nor a `ModelOutputThunk`.
+            ValueError: If `thunk` is not computed or has a `None` value.
+        """
+        if thunk is None:
+            return object.__new__(cls)  # type: ignore[return-value]
+        if not isinstance(thunk, ModelOutputThunk):
+            raise TypeError(
+                "ComputedModelOutputThunk requires a computed ModelOutputThunk; "
+                f"got {type(thunk).__name__}."
+            )
+
+        # Validate before reassigning __class__ below. Reassigning first would leave a
+        # rejected thunk mutated into a ComputedModelOutputThunk whose is_computed()
+        # returns True while .value is None, and __setattr__ then blocks resetting
+        # _computed to repair it.
+        if not thunk._computed:
+            raise ValueError(
+                "ComputedModelOutputThunk requires a computed ModelOutputThunk; but ._computed is False."
+            )
+        if thunk.value is None:
+            raise ValueError("ComputedModelOutputThunk requires a non-None value.")
+
         thunk.__class__ = cls
         return thunk  # type: ignore[return-value]
 
@@ -1363,14 +1535,59 @@ class ComputedModelOutputThunk(ModelOutputThunk[S]):
 
         Uses zero-copy class reassignment: calling `ComputedModelOutputThunk(thunk)` reassigns
         the thunk's `__class__` to `ComputedModelOutputThunk` without creating a new object.
+        The computed invariant is validated in `__new__`, which runs first.
+
+        Raises:
+            TypeError: If constructed with no `thunk` (the argument is mandatory).
         """
-        # Call the underlying value. It's already been cast as a ComputedModelOutputThunk, so it's .is_computed() value is always True.
-        if not self._computed:
-            raise ValueError(
-                "ComputedModelOutputThunk requires a computed ModelOutputThunk; but ._computed is False."
+        # `thunk` is mandatory, so a no-arg call raises TypeError before reaching here.
+        # An explicit `None` still arrives, having taken the bare-allocation branch in
+        # __new__ that exists for pickle's reconstruction path; reject it.
+        if thunk is None:
+            raise TypeError(
+                "ComputedModelOutputThunk() requires a computed ModelOutputThunk; "
+                "construct one as ComputedModelOutputThunk(thunk)."
             )
-        if self.value is None:
-            raise ValueError("ComputedModelOutputThunk requires a non-None value.")
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        """Enforce the computed invariant on every assignment.
+
+        A guarded field (see `_INVARIANT_GUARDS`) may be reassigned only to a value that
+        keeps the thunk computed and its `.value` a valid `str`; unguarded fields
+        (`parsed_repr`, `_cancelled`, ...) are unrestricted. The `value` property setter
+        also routes here.
+
+        Raises:
+            AttributeError: If the assignment would violate the computed invariant
+                (uncompute the thunk, or set the value to `None`/non-`str`).
+        """
+        guard = self._INVARIANT_GUARDS.get(name)
+        if guard is not None and not guard(value):
+            raise AttributeError(
+                "cannot assign to this ComputedModelOutputThunk: the assignment "
+                "would violate the computed invariant (it must stay computed with a "
+                f"non-None str value; got {value!r})."
+            )
+        super().__setattr__(name, value)
+
+    def __copy__(self) -> ComputedModelOutputThunk[S]:
+        """Shallow-copy, preserving the concrete computed subclass.
+
+        Delegates field copying to `ModelOutputThunk.__copy__`, then re-casts the
+        base-class result back to `type(self)` so the copy keeps its type and invariant
+        instead of silently demoting to the base class. Only the class is preserved: the
+        delegate builds a plain `ModelOutputThunk`, so a subclass that adds fields of its
+        own still needs to override this.
+        """
+        copied = super().__copy__()
+        copied.__class__ = type(self)
+        return copied  # type: ignore[return-value]
+
+    def __deepcopy__(self, memo: dict) -> ComputedModelOutputThunk[S]:
+        """Deep-copy, preserving the concrete computed subclass (see `__copy__`)."""
+        deepcopied = super().__deepcopy__(memo)
+        deepcopied.__class__ = type(self)
+        return deepcopied  # type: ignore[return-value]
 
     async def avalue(self) -> str:
         """Return the value of the thunk. Use .value instead.
@@ -1407,7 +1624,11 @@ class ComputedModelOutputThunk(ModelOutputThunk[S]):
 
     @value.setter
     def value(self, v: str):
-        """Sets the value of the block."""
+        """Set the underlying value, enforcing the computed invariant.
+
+        Raises:
+            AttributeError: If `v` is not a `str`.
+        """
         self._underlying_value = v
 
     def is_computed(self) -> Literal[True]:
@@ -1735,6 +1956,20 @@ class TemplateRepresentation:
         images (list[ImageBlock | ImageUrlBlock] | None): Optional list of image blocks associated with this representation.
         audio (list[AudioBlock | AudioUrlBlock] | None): Optional list of audio blocks associated
             with this representation.
+        role (str | None): Optional chat role (`"system"`, `"user"`, `"assistant"`,
+            or `"tool"`) the component should be serialized as. When `None` (the
+            default), the formatter falls back to its positional guess: `"assistant"`
+            for model-generated components, `"user"` otherwise.
+        thinking (str | None): Optional reasoning trace to carry onto the serialized
+            message, so a component's captured reasoning round-trips through the
+            formatter. Defaults to `None`.
+        tool_calls (list[dict[str, Any]] | None): Optional OpenAI-compatible assistant
+            tool calls to carry onto the serialized message. Defaults to `None`.
+        tool_call_id (str | None): For a `role="tool"` component, the provider-supplied
+            tool-call id, when available. Defaults to `None`.
+        tool_name (str | None): For a `role="tool"` component, the name of the tool
+            whose result this message carries (e.g. Ollama's tool-result turn keys on
+            it). Defaults to `None`.
 
     """
 
@@ -1751,6 +1986,11 @@ class TemplateRepresentation:
     template_order: list[str] | None = None
     images: list[ImageBlock | ImageUrlBlock] | None = None
     audio: list[AudioBlock | AudioUrlBlock] | None = None
+    role: str | None = None
+    thinking: str | None = None
+    tool_calls: list[dict[str, Any]] | None = None
+    tool_call_id: str | None = None
+    tool_name: str | None = None
 
 
 @dataclass

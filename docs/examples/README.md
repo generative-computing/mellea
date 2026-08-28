@@ -53,7 +53,6 @@ Specialized model capabilities through adapters.
 - Answer relevance checking
 - Hallucination detection
 - Citation validation
-- Context relevance assessment
 
 **[sofai/](sofai/)**
 Two-tier sampling with fast and slow models.
@@ -261,7 +260,6 @@ Utility functions used across examples.
 
 - **Main README**: [../../README.md](../../README.md)
 - **Agent Guidelines**: [../../AGENTS.md](../../AGENTS.md)
-- **Dev Docs**: [../dev/](../dev/)
 
 ## 🏃 Running Examples
 

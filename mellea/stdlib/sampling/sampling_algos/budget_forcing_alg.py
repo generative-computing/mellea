@@ -11,8 +11,11 @@ answer pass (bounded by `answer_max_tokens`), using the raw completions API of a
 `OllamaModelBackend`.
 """
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from ....backends import ModelOption
-from ....backends.ollama import OllamaModelBackend
 from ....core import (
     BaseModelSubclass,
     CBlock,
@@ -21,6 +24,11 @@ from ....core import (
     ModelOutputThunk,
     Span,
 )
+
+if TYPE_CHECKING:
+    # Annotation-only: importing the Ollama backend eagerly would pull the
+    # `ollama` client (and httpx) into every `import mellea`.
+    from ....backends.ollama import OllamaModelBackend
 
 
 async def think_budget_forcing(
@@ -49,7 +57,8 @@ async def think_budget_forcing(
     Args:
         backend: OllamaModelBackend instance to use for generation.
         action: The last item of the context, passed as an `action` instead of as part
-            of the `ctx`. See `docs/dev/generate_signature_decisions.md`.
+            of the `ctx`. See `Backend.generate_from_context` for the rationale
+            behind the action/context split.
         ctx: The current conversation context.
         format: Optional Pydantic model for constrained decoding of the response.
         tool_calls: If `True`, tool calling is enabled.

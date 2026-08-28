@@ -38,6 +38,11 @@ class ValidationResult:
         score (float | None): Optional numeric score returned by the validator.
         thunk (ModelOutputThunk | None): The `ModelOutputThunk` produced during LLM-as-a-Judge validation, if applicable.
         context (Context | None): The context associated with the validation backend call, if applicable.
+        error (Exception | None): Set when validation could not produce a verdict because the
+            output could not be parsed — for example an `AdapterSchemaMismatchError` from a
+            custom `output_to_bool`. When set, `bool(result)` fails closed to `False`
+            regardless of `result`, so callers that ignore errors do not silently pass.
+            Inspect `error` to distinguish "requirement not met" from "output unparsable".
 
     """
 
@@ -49,6 +54,7 @@ class ValidationResult:
         score: float | None = None,
         thunk: ModelOutputThunk | None = None,
         context: Context | None = None,
+        error: Exception | None = None,
     ):
         """Initialize ValidationResult with a pass/fail boolean and optional metadata."""
         self._result = result
@@ -56,6 +62,7 @@ class ValidationResult:
         self._score = score
         self._thunk = thunk
         self._context = context
+        self._error = error
 
     @property
     def reason(self) -> str | None:
@@ -77,12 +84,29 @@ class ValidationResult:
         """The context associated with validation if a backend was used to generate the final result."""
         return self._context
 
+    @property
+    def error(self) -> Exception | None:
+        """The exception raised while parsing the validation output, if any.
+
+        Set when `validate()` could not produce a verdict because the output was
+        unparsable (e.g. an `AdapterSchemaMismatchError` from a custom
+        `output_to_bool`). `None` for an ordinary pass or fail. When set,
+        `as_bool()` returns `False` regardless of the underlying result.
+        """
+        return self._error
+
     def as_bool(self) -> bool:
         """Return a boolean value based on the validation result.
 
+        Fails closed when an `error` is set: an unparsable output is never
+        treated as a pass, so callers that only check the boolean fail safely
+        rather than silently accepting a result that was never computed.
+
         Returns:
-            bool: `True` if the requirement passed, `False` otherwise.
+            bool: `True` if the requirement passed and no error is set, `False` otherwise.
         """
+        if self._error is not None:
+            return False
         return self._result
 
     def __bool__(self) -> bool:
@@ -91,7 +115,10 @@ class ValidationResult:
 
     def __repr__(self) -> str:
         """Return a developer-readable representation of the validation result."""
-        return f"ValidationResult({self._result!r}, reason={self._reason!r}, score={self._score!r})"
+        return (
+            f"ValidationResult({self._result!r}, reason={self._reason!r}, "
+            f"score={self._score!r}, error={self._error!r})"
+        )
 
 
 class PartialValidationResult:
@@ -266,15 +293,16 @@ class Requirement(Component[str]):
             model_options (dict | None): Optional model options to pass to the backend during the judgement call.
 
         Returns:
-            ValidationResult: The result of the validation, including a boolean pass/fail and optional metadata.
+            ValidationResult: The result of the validation, including a boolean pass/fail
+            and optional metadata. If `output_to_bool` raises while parsing the judgement
+            output (e.g. `AdapterSchemaMismatchError` on an unexpected adapter schema), the
+            exception is caught and stored on `result.error` rather than propagated: the
+            result fails closed (`bool(result)` is `False`), and callers can inspect
+            `result.error` to distinguish "requirement not met" from "output unparsable".
 
         Raises:
-            Exception: Any exception raised by `output_to_bool` propagates to the caller.
-                Custom `output_to_bool` functions (including adapter-backed ones such as
-                `requirement_check_to_bool`) may raise on malformed output — e.g.
-                `AdapterSchemaMismatchError` when the adapter returns an unexpected schema.
-                Callers that previously treated all non-`True` outcomes as "requirement not
-                met" must now catch these exceptions separately.
+            AssertionError: If the LLM-as-a-Judge strategy is selected but `output_to_bool`
+                is `None`, or if the context has no `ModelOutputThunk` as its last output.
         """
         if self.validation_fn is not None:
             # Python validation strategy
@@ -308,8 +336,31 @@ class Requirement(Component[str]):
                 if judge_output_str in ("yes", "no"):
                     reason = self.description
 
+            try:
+                result = self.output_to_bool(llm_as_a_judge_result)
+            except Exception as exc:
+                # A custom output_to_bool (e.g. the adapter-backed
+                # requirement_check_to_bool) can raise on unparsable output.
+                # Surface that as a third outcome rather than propagating: the
+                # result fails closed and carries the exception for callers that
+                # want to distinguish it from an ordinary failure.
+                #
+                # reason is deliberately None here. Repair strategies treat a
+                # truthy reason as literal prompt text; the judge output that
+                # triggered the parse error is malformed and would make useless
+                # repair guidance. None routes repair to the existing
+                # requirement-description fallback, while error and thunk retain
+                # the diagnostic for callers that inspect the result directly.
+                return ValidationResult(
+                    result=False,
+                    reason=None,
+                    thunk=llm_as_a_judge_result,
+                    context=val_ctx,
+                    error=exc,
+                )
+
             return ValidationResult(
-                result=self.output_to_bool(llm_as_a_judge_result),
+                result=result,
                 reason=reason,
                 thunk=llm_as_a_judge_result,
                 context=val_ctx,
@@ -332,22 +383,21 @@ class Requirement(Component[str]):
         are shared by reference under `copy()`. Reassign rather than mutate in
         place (`self._buffer = self._buffer + [chunk]`, not
         `self._buffer.append(chunk)`), or override `__copy__` for proper
-        isolation.  If an override raises, the enclosing
-        :func:`~mellea.stdlib.streaming.stream_with_chunking` call aborts before
-        any backend generation starts and the exception propagates unchanged.
+        isolation.  If an override raises, the enclosing `stream()` call aborts
+        before any backend generation starts and the exception propagates unchanged.
         Overrides with externally visible side effects (file writes, network
         calls) should perform them only after any logic that could raise, since
         the framework cannot roll them back.
 
         Implementations must not call `mot.astream()` or otherwise read the
-        underlying stream; the orchestrator is the single consumer of the MOT
+        underlying stream; the stream driver is the single consumer of the MOT
         stream (see `ModelOutputThunk.astream`). Requirements that need access
         to the text seen so far should accumulate it themselves from the
         `chunk` values they receive.
 
         Args:
             chunk: A single complete semantic chunk produced by the chunking
-                strategy (e.g. one sentence for `SentenceChunker`). This is
+                strategy (e.g. one sentence for `SentenceChunking`). This is
                 the delta since the previous `stream_validate` call for this
                 attempt, not the accumulated output. Requirements that need
                 earlier context should retain it on `self` across calls.

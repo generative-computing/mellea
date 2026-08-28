@@ -53,6 +53,7 @@ from ..stdlib.components import Intrinsic, Message
 from ..stdlib.requirements import LLMaJRequirement
 from ..telemetry.context import generate_request_id, with_context
 from ._options import resolve_model_options
+from .adapters import EmbeddedActivationRequest, EmbeddedBinding
 from .adapters.adapter import AdapterInput, AdapterMixin, EmbeddedIntrinsicAdapter
 from .backend import FormatterBackend
 from .model_options import ModelOption
@@ -90,6 +91,13 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             falls back to *model_id*. Use this when the vLLM served model name
             differs from the adapter config location.
         api_key (str | None): API key; falls back to `OPENAI_API_KEY` env var.
+        default_extra_body (dict | None): Construction-time `extra_body` fields
+            that are merged into every request this backend makes. Per-call
+            `extra_body` values (from `model_options`) take precedence.
+            `chat_template_kwargs` is deep-merged across all layers so that,
+            for example, a construction-time `enable_thinking` flag is not
+            silently dropped when the request also carries an `adapter_name`.
+            Defaults to `{}` (no extra fields).
         kwargs: Additional keyword arguments forwarded to the OpenAI client.
 
     Attributes:
@@ -101,6 +109,12 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             option names to Mellea `ModelOption` sentinel keys.
         from_mellea_model_opts_map_completions (dict): Mapping from Mellea sentinel keys
             to completions-endpoint option names.
+
+    Raises:
+        TypeError: If `model_id` is neither a `str` nor a `ModelIdentifier` — most often
+            `None`, from forwarding a `ModelIdentifier` field that this model does not set.
+        ValueError: If `model_id` is an empty string, if neither `api_key` nor
+            `OPENAI_API_KEY` is set, or if `model_id` is a `ModelIdentifier` with no `openai_name` set.
     """
 
     def __init__(
@@ -114,9 +128,42 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         load_embedded_adapters: bool = False,
         adapter_source: str | None = None,
         api_key: str | None = None,
+        default_extra_body: dict | None = None,
         **kwargs,
     ):
         """Initialize an OpenAI-compatible backend with the given model ID and API credentials."""
+        # Resolve the served model name first: an unusable model_id must fail here rather
+        # than as a missing `self._model_id` at generation time. `None` reaches this branch
+        # whenever a caller forwards a ModelIdentifier field that is unset for this model,
+        # e.g. `SOME_MODEL.hf_model_name`.
+        match model_id:
+            case str():
+                if not model_id.strip():
+                    raise ValueError(
+                        "model_id is an empty string. Pass the model name your endpoint "
+                        "serves it under, or a ModelIdentifier from "
+                        "`mellea.backends.model_ids`."
+                    )
+                self._model_id = model_id
+            case ModelIdentifier():
+                if model_id.openai_name is None:
+                    raise ValueError(
+                        "The ModelIdentifier passed as model_id has no `openai_name` set "
+                        f"(hf_model_name={model_id.hf_model_name!r}), so there is no model name "
+                        "to send to an OpenAI-compatible endpoint. Either use a ModelIdentifier "
+                        "whose provider hosts the model, or pass the name your server serves the "
+                        "model under as a string -- for self-hosted vLLM/SGLang that is usually "
+                        "`hf_model_name` -- along with a matching `base_url`."
+                    )
+                self._model_id = model_id.openai_name
+            case _:
+                raise TypeError(
+                    "model_id must be a str or ModelIdentifier, got "
+                    f"{type(model_id).__name__}. ModelIdentifier fields such as "
+                    "`hf_model_name` are `None` when the model has no name for that "
+                    "provider; check the constant in `mellea.backends.model_ids`."
+                )
+
         super().__init__(
             model_id=model_id,
             formatter=(
@@ -170,15 +217,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         }
 
         self.default_to_constraint_checking_alora = default_to_constraint_checking_alora
-
-        match model_id:
-            case str():
-                self._model_id = model_id
-            case ModelIdentifier():
-                assert model_id.openai_name is not None, (
-                    "model_id is None. This can also happen if the ModelIdentifier has no `openai_name` name set."
-                )
-                self._model_id = model_id.openai_name
+        self._default_extra_body: dict = default_extra_body or {}
 
         self._provider: str = "openai"
 
@@ -186,7 +225,9 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         # Use provided parameters or fall back to environment variables
         self._api_key = api_key
-        self._base_url = base_url
+        # Resolve env here (not only in the SDK) so _server_type / init logging
+        # see the same host the client will actually call.
+        self._base_url = base_url or os.getenv("OPENAI_BASE_URL")
 
         # Validate that we have the required configuration
         if self._api_key is None and os.getenv("OPENAI_API_KEY") is None:
@@ -196,7 +237,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 "  2. Pass it as a parameter: OpenAIBackend(api_key='your-key-here')"
             )
 
-        if self._base_url is None and os.getenv("OPENAI_BASE_URL") is None:
+        if self._base_url is None:
             MelleaLogger.get_logger().warning(
                 "OPENAI_BASE_URL or base_url is not set.\n"
                 "The openai SDK is going to assume that the base_url is `https://api.openai.com/v1`"
@@ -207,6 +248,16 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             if self._base_url is not None
             else _ServerType.OPENAI
         )  # type: ignore
+        if self._server_type != _ServerType.OPENAI:
+            MelleaLogger.get_logger().info(
+                "Mellea assumes you are NOT using the OpenAI platform, and that "
+                "other model providers have less strict requirements on supporting "
+                "JSON schemas passed into `format=`. If you encounter a server-side "
+                "error when using format=, then you found an exception to this "
+                "assumption. Please open an issue at "
+                "github.com/generative-computing/mellea with the stack trace and "
+                "your inference engine / model provider."
+            )
 
         self._openai_client_kwargs = self.filter_openai_client_kwargs(**kwargs)
 
@@ -258,7 +309,9 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         Accepts the full `AdapterInput` union to honour the mixin contract, but
         currently only `EmbeddedIntrinsicAdapter` (the Embedded/Granite Switch
-        reality) is supported; other realities are rejected at runtime.
+        reality) is supported; other realities are rejected at runtime. As a
+        side effect, an `EmbeddedBinding` weights handler is stamped with this
+        backend's `base_model_name` in its `source` field.
 
         Args:
             adapter (AdapterInput): The adapter to register. Must be an
@@ -273,22 +326,9 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 f"Got: {type(adapter).__name__}"
             )
         adapter.backend = self
+        if isinstance(adapter.weights, EmbeddedBinding):
+            adapter.weights.source = self.base_model_name
         self._added_adapters[adapter.qualified_name] = adapter
-
-    def render_controls(self, adapter_qualified_name: str, active: bool) -> None:
-        """No-op for embedded adapters — weights are baked into the model.
-
-        Args:
-            adapter_qualified_name (str): The `adapter.qualified_name` of the
-                adapter to activate or deactivate.
-            active (bool): `True` to activate the adapter, `False` to
-                deactivate it.
-        """
-        MelleaLogger.get_logger().debug(
-            "render_controls is a no-op for OpenAIBackends (adapter: %s, active: %s)",
-            adapter_qualified_name,
-            active,
-        )
 
     def list_adapters(self) -> list[str]:
         """Return qualified names of all registered adapters.
@@ -411,16 +451,27 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         Returns:
             a new dict
+
+        Raises:
+            ValueError: If `model_options` attempts to select a model. An
+                OpenAIBackend's model is fixed when the backend is constructed.
         """
         remap_dict = self.to_mellea_model_opts_map_chats
         if not is_chat_context:
             remap_dict = self.to_mellea_model_opts_map_completions
 
-        return resolve_model_options(
+        resolved_options = resolve_model_options(
             backend_defaults=self.model_options,
             remap=remap_dict,
             call_options=model_options,
         )
+        if "model" in resolved_options:
+            raise ValueError(
+                "model cannot be set via model_options on OpenAIBackend — model "
+                "selection happens at the backend/session level (construct a backend "
+                "per model, or start a session against the chosen model_id)."
+            )
+        return resolved_options
 
     def _make_backend_specific_and_remove(
         self, model_options: dict[str, Any], is_chat_context: bool
@@ -458,31 +509,56 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         return model_opts
 
-    @staticmethod
     def _merge_user_extra_body(
-        base: dict[str, Any], user: dict[str, Any] | None
+        self, base: dict[str, Any], user: dict[str, Any] | None
     ) -> dict[str, Any]:
-        """Merges a user-supplied `extra_body` into the one Mellea built.
+        """Merges default_extra_body, Mellea-assembled extra_body, and caller-supplied extra_body.
 
-        Both must end up in a single `extra_body` value; passing two spreads that
-        each contain one raises `TypeError` at call time.
+        Merge order (lowest → highest priority):
+          1. `self._default_extra_body` — set at construction time
+          2. `base` — assembled by Mellea for this request (documents, structured_outputs, …)
+          3. `user` — from the caller's per-call `model_options`
+
+        Both must end up in a single `extra_body` value; passing two spreads
+        that each contain one raises `TypeError` at call time.
+
+        `chat_template_kwargs` is the only nested dict Mellea writes into
+        `extra_body` and is deep-merged across all three layers so that, for
+        example, a construction-time `{"enable_thinking": True}` is not silently
+        dropped when a per-call `{"adapter_name": "foo"}` is also present.
 
         Args:
-            base: the `extra_body` Mellea assembled for this request
-            user: `extra_body` taken from the caller's model_options, or None
+            base: the `extra_body` Mellea assembled for this request.
+            user: `extra_body` taken from the caller's model_options, or None.
 
         Returns:
-            a new dict; `base` and `user` are left unmodified
+            a new dict; `base`, `user`, and `self._default_extra_body` are
+            left unmodified.
         """
-        if user is None:
-            return base
+        # Start from construction-time defaults, then overlay Mellea-built values.
+        # Work on copies throughout so no caller dict is mutated.
+        merged = dict(self._default_extra_body)
+        default_ctk = merged.pop("chat_template_kwargs", None)
 
-        # shallow copy so .pop() below doesn't mutate the caller's dict
+        base = dict(base) if base else {}
+        base_ctk = base.pop("chat_template_kwargs", None)
+        merged.update(base)
+
+        # Merge chat_template_kwargs from default and base layers.
+        merged_ctk: dict = {}
+        if default_ctk is not None:
+            merged_ctk.update(default_ctk)
+        if base_ctk is not None:
+            merged_ctk.update(base_ctk)
+        if merged_ctk:
+            merged["chat_template_kwargs"] = merged_ctk
+
+        if user is None:
+            return merged
+
+        # Overlay caller-supplied values last (highest priority).
         user = dict(user)
-        merged = dict(base)
         user_ctk = user.pop("chat_template_kwargs", None)
-        # shallow merge is safe: chat_template_kwargs is the only nested dict key
-        # Mellea writes into extra_body; it is deep-merged separately below
         merged.update(user)
         if user_ctk is not None:
             merged["chat_template_kwargs"] = {
@@ -616,9 +692,14 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             intrinsic output.
 
         Raises:
+            NotImplementedError: If the context isn't a chat context, or if
+                streaming is requested (intrinsic post-processing requires
+                the complete response).
             ValueError: If no embedded adapter is registered for the requested
                 intrinsic.
-            TypeError: If the adapter isn't an EmbeddedIntrinsicAdapter.
+            TypeError: If the adapter isn't an EmbeddedIntrinsicAdapter, or its
+                `weights` isn't an EmbeddedBinding (only reachable if a caller
+                reassigns `.weights` after construction).
         """
         if not ctx.is_chat_context:
             raise NotImplementedError("Intrinsics require a chat context.")
@@ -696,15 +777,6 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         if rewriter.parameters:
             api_params.update(rewriter.parameters)
 
-        # Embedded adapters activate via control tokens in the chat template.
-        if isinstance(adapter, EmbeddedIntrinsicAdapter):
-            chat_template_kwargs = extra_body.pop("chat_template_kwargs", {}) or {}
-            chat_template_kwargs["adapter_name"] = action.intrinsic_name
-            extra_body["chat_template_kwargs"] = chat_template_kwargs
-            # The rewriter config may set `model` to the adapter name, but
-            # for embedded adapters the actual model is self._model_id.
-            api_params.pop("model", None)
-
         # Collect tools if tool_calls is enabled.
         tools: dict[str, AbstractMelleaTool] = dict()
         if tool_calls:
@@ -721,6 +793,22 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             model_options, is_chat_context=True
         )
         user_extra_body = user_api_params.pop("extra_body", None)
+        if user_extra_body is not None:
+            protected_extra_body_keys = {
+                "messages",
+                "model",
+                "parallel_tool_calls",
+                "stream",
+                "stream_options",
+                "tool_choice",
+                "tools",
+            }
+            overridden_keys = protected_extra_body_keys.intersection(user_extra_body)
+            if overridden_keys:
+                raise ValueError(
+                    "extra_body cannot override intrinsic request fields: "
+                    + ", ".join(sorted(overridden_keys))
+                )
         api_params.update(user_api_params)
 
         # Map THINKING to the correct backend parameter(s). Two mechanisms:
@@ -741,6 +829,23 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 api_params["reasoning_effort"] = thinking
 
         extra_body = self._merge_user_extra_body(extra_body, user_extra_body)
+
+        # Embedded adapters activate via control tokens in the chat template;
+        # the binding owns the final request edit so callers cannot override
+        # the adapter selected for this intrinsic. `adapter.weights` is always
+        # an EmbeddedBinding here — EmbeddedIntrinsicAdapter.__init__
+        # constructs one unconditionally — but the shim permits attribute
+        # mutation, so a caller reassigning `.weights` must fail loudly here
+        # rather than silently skip activation and send an unactivated request.
+        if not isinstance(adapter.weights, EmbeddedBinding):
+            raise TypeError(
+                f"EmbeddedIntrinsicAdapter.weights must be an EmbeddedBinding; "
+                f"got {type(adapter.weights).__name__}. Activation cannot proceed."
+            )
+        activation_request = EmbeddedActivationRequest(
+            extra_body=extra_body, api_params=api_params
+        )
+        await adapter.weights.apply_activation(activation_request, adapter.identity)
 
         # --- call the OpenAI-compatible API --------------------------------
         # The rewriter may add instruction messages where 'role' is a default
@@ -934,9 +1039,6 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                     },
                 }
             else:
-                MelleaLogger.get_logger().info(
-                    "Mellea assumes you are NOT using the OpenAI platform, and that other model providers have less strict requirements on supporting JSON schemas passed into `format=`. If you encounter a server-side error following this message, then you found an exception to this assumption. Please open an issue at github.com/generative_computing/mellea with this stack trace and your inference engine / model provider."
-                )
                 extra_params["response_format"] = {
                     "type": "json_schema",
                     "json_schema": {
@@ -996,10 +1098,9 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             model_opts, is_chat_context=ctx.is_chat_context
         )
         user_extra_body = backend_specific.pop("extra_body", None)
-        if user_extra_body is not None:
-            extra_params["extra_body"] = self._merge_user_extra_body(
-                extra_params.get("extra_body") or {}, user_extra_body
-            )
+        extra_params["extra_body"] = self._merge_user_extra_body(
+            extra_params.get("extra_body") or {}, user_extra_body
+        )
 
         chat_response: Coroutine[
             Any, Any, ChatCompletion | openai.AsyncStream[ChatCompletionChunk]

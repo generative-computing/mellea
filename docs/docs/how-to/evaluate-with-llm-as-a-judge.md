@@ -12,6 +12,10 @@ output meets a criterion expressed in natural language. In Mellea this is the
 default validation strategy for [`req()`](../reference/glossary#requirement) — you describe what good output looks
 like, and Mellea asks the model whether the output satisfies that description.
 
+> **Reliability note:** LLM-as-a-judge quality is highly model-dependent. Larger models tend to be stronger
+> judges. For deterministic constraints, prefer a Python validator; for subjective
+> constraints, use the aLoRA `requirement-check` adapter (on Granite models) or use LLM-as-a-judge. See [Choosing a validation approach](../concepts/requirements-system#choosing-a-validation-approach).
+
 ## How it works
 
 When a [`Requirement`](../reference/glossary#requirement) has no `validation_fn`, Mellea runs a separate LLM call
@@ -41,7 +45,7 @@ If the output fails the requirement, Mellea retries (up to the `loop_budget`
 limit) and feeds the failure reason back into the next attempt.
 
 > **Observability:** If tracing is enabled, judge calls appear as
-> child spans with `mellea.action_type = "Requirement"`, separate from the main
+> child spans with `mellea.component.type = "Requirement"`, separate from the main
 > generation span. See [Tracing](../observability/tracing).
 
 ## Standalone validation with m.validate()

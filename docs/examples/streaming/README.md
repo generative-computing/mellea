@@ -15,15 +15,15 @@ ollama serve
 ### Basic Streaming with Chunking
 
 ```bash
-uv run streaming_chunking.py
+uv run validated_streaming.py
 ```
 
 Demonstrates:
 - Streaming token-by-token generation
-- Sentence-level chunking via `stream_with_chunking()`
+- Sentence-level chunking via `stream()`
 - Per-chunk validation with custom `stream_validate()` methods
+- Accessing stream events via the STREAMING_EVENT hook
 - Early exit on validation failure
-- Accessing stream events (`ChunkEvent`, `QuickCheckEvent`, `FullValidationEvent`)
 
 ### Word-Level Chunking
 
@@ -58,6 +58,16 @@ Demonstrates:
 - Defining custom stream validators
 - Advanced streaming patterns
 
+### Events Across Multiple Concurrent Streams
+
+```bash
+uv run multi_stream_events.py
+```
+
+Demonstrates:
+- Consuming `STREAMING_EVENT` hook events with a small plugin
+- Correlating events across multiple concurrent streams by `streaming_id`
+
 ## Key Concepts
 
 **Streaming**: Receive LLM output token-by-token in real-time instead of waiting for complete generation.
@@ -66,11 +76,13 @@ Demonstrates:
 
 **Stream Validation**: Apply requirements at chunk level for early exit—stop generation when a constraint is violated.
 
-**Stream Events**: Process stream events to monitor generation progress:
+**Stream Events**: Process stream events through the `STREAMING_EVENT` hook to monitor generation progress:
 - `ChunkEvent` — A new chunk of text
 - `QuickCheckEvent` — Initial validation result
 - `FullValidationEvent` — Complete validation after full generation
 - `StreamingDoneEvent` — Generation complete
+- `CompletedEvent` — Stream exited (success or not)
+- `ErrorEvent` — An exception occurred mid-stream
 
 ## See Also
 

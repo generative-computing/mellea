@@ -72,9 +72,7 @@ class IntrinsicsCatalogEntry(pydantic.BaseModel):
         revision (str): Hugging Face revision — branch name, tag, or commit SHA.
             Catalogue entries pin to commit SHAs by convention so loads are
             reproducible; the validator itself only requires a non-empty string.
-            Note: this field is stored in the catalogue but not yet forwarded to
-            the Hugging Face download call; wiring it through is deferred to a
-            subsequent phase of the adapter-lifecycle epic (#929).
+            The revision is forwarded to Hugging Face download calls.
         adapter_types (tuple[AdapterType, ...]): Adapter types known to be
             available for this adapter function; defaults to
             `(AdapterType.LORA, AdapterType.ALORA)`.
@@ -184,11 +182,6 @@ _INTRINSICS_CATALOG_ENTRIES = [
     ############################################
     IntrinsicsCatalogEntry(name="answerability", repo_id=_RAG_REPO, revision=_RAG_SHA),
     IntrinsicsCatalogEntry(name="citations", repo_id=_RAG_REPO, revision=_RAG_SHA),
-    # Deprecated: Granite 4.0 only; no Granite 4.1 adapter planned.
-    # Removal tracked alongside check_context_relevance() in rag.py.
-    IntrinsicsCatalogEntry(
-        name="context_relevance", repo_id=_RAG_REPO, revision=_RAG_SHA
-    ),
     IntrinsicsCatalogEntry(
         name="hallucination_detection", repo_id=_RAG_REPO, revision=_RAG_SHA
     ),

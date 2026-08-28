@@ -23,11 +23,16 @@ Configuration via environment variables:
 - `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`: Trace-specific OTLP endpoint (optional).
 - `OTEL_EXPORTER_OTLP_ENDPOINT`: General OTLP endpoint (fallback).
 - `OTEL_SERVICE_NAME`: Service name for traces (default: `mellea`).
+
+Consumption boundary:
+    This is a public API for external consumers. Code outside
+    `mellea/telemetry/` opens spans via hook plugins (`tracing_plugins.py`), not
+    by calling these functions. Exceptions are limited to spans opened from sync
+    code, and are documented at their call site.
 """
 
 from __future__ import annotations
 
-import asyncio
 import os
 import warnings
 from importlib.metadata import version
@@ -58,6 +63,7 @@ from mellea.telemetry._tracing_helpers import (
     content_capture_enabled,
     get_capture_content_value,
     get_tool_call_attrs,
+    normalize_provider_name,
     set_attribute_safe,
     set_conversation_id,
     set_mellea_attrs,
@@ -71,6 +77,8 @@ _application_tracer: Any = None
 _backend_tracer: Any = None
 _tracing_enabled: bool = False
 _plugins_registered: bool = False  # Plugin registry is process-global; register once.
+
+_REMOTE_PROVIDERS = frozenset({"openai", "ollama", "watsonx", "litellm"})
 
 
 def _setup_tracer_provider() -> Any:
@@ -233,13 +241,7 @@ def get_backend_tracer() -> Any:
     return _backend_tracer
 
 
-_in_flight_spans: dict[
-    str, tuple[Span, Token[Context] | None, asyncio.Task[Any] | None]
-] = {}
-
-# reattach_span() entries, keyed by correlation key: the OTel context token plus
-# the task that attached it. Released by release_reattached_span() on that task.
-_reattached_tokens: dict[str, tuple[Token[Context], asyncio.Task[Any] | None]] = {}
+_in_flight_spans: dict[str, tuple[Span, Token[Context] | None]] = {}
 
 
 def _attach_span_context(span: Span, *, attach: bool) -> Token[Context] | None:
@@ -261,72 +263,15 @@ def _attach_span_context(span: Span, *, attach: bool) -> Token[Context] | None:
     return otel_context.attach(trace.set_span_in_context(span))
 
 
-def _current_task() -> asyncio.Task[Any] | None:
-    """Return the running asyncio task, or None when no loop is running."""
-    try:
-        return asyncio.current_task()
-    except RuntimeError:
-        return None
-
-
-def _safe_detach(
-    token: Token[Context] | None, attach_task: asyncio.Task[Any] | None
-) -> None:
-    """Detach `token`, suppressing only the cross-task detach we expect and understand.
-
-    OTel context tokens are bound to the `contextvars.Context` of the task that
-    created them, so detaching from a different task fails — OTel catches the
-    `ValueError` and logs it at ERROR as "Failed to detach context". Most spans
-    attach and finish on one task and never hit this.
-
-    A cross-task detach is suppressed (skipped, since it would only fail) and
-    logged at debug only when the detaching task holds an open `reattach_span`
-    scope — the marker that this task knowingly opened a span elsewhere and
-    expects the mismatch. Any other cross-task detach is left to run so OTel
-    surfaces its ERROR with a traceback to the real origin; a warning is added
-    first to name the task mismatch OTel's message omits.
-
-    Example:
-        Under `stream_with_chunking` the backend `chat` span attaches in the
-        caller task but finishes in the orchestration task that drains the MOT.
-        To keep that span's `chat` children nesting correctly, the orchestration
-        task re-attaches the streaming span for the duration of the drain
-        (`reattach_span` / `release_reattached_span`). The cross-task `chat`
-        detach that then happens within that scope is the expected, suppressed
-        case.
-
-    Note:
-        The reattach scope is an *incomplete* proxy for "expected". It holds for
-        streaming because that case both needs sibling-nesting protection (so it
-        reattaches) and has an expected cross-task detach. A future case with the
-        same open-in-parent / close-in-child shape but no siblings to protect
-        would not reattach, so its equally-expected cross-task detach falls
-        through to the warn-and-detach path. That is harmless (the detach only
-        fails, and the task ends right after, so nothing leaks); the warning is
-        the signal that the new use needs its own way to mark the detach expected.
+def _detach_token(token: Token[Context] | None) -> None:
+    """Detach an OTel context token, or no-op when `token` is `None`.
 
     Args:
-        token: The OTel context token returned by the matching `attach`, or
-            `None` when attach was skipped — a no-op.
-        attach_task: The task that performed the `attach`, or None if it was
-            attached outside any running task.
+        token: The token returned by the matching `attach`, or `None` when
+            attach was skipped.
     """
     if token is None:
         return
-    current = _current_task()
-    if attach_task is not None and current is not attach_task:
-        from mellea.core.utils import MelleaLogger
-
-        if any(task is current for _, task in _reattached_tokens.values()):
-            MelleaLogger.get_logger().debug(
-                "Skipped expected cross-task OTel context detach within a "
-                "reattached-span scope."
-            )
-            return
-        MelleaLogger.get_logger().warning(
-            "Detaching an OTel context token across asyncio tasks; the span's "
-            "attach and detach ran on different tasks. OTel will log the failure."
-        )
     otel_context.detach(token)
 
 
@@ -341,6 +286,7 @@ def start_backend_span(
     has_format: bool | None = None,
     format_type: str | None = None,
     tool_calls_enabled: bool | None = None,
+    streaming: bool | None = None,
     attach_context: bool = True,
 ) -> Span | None:
     """Open a backend span, activate it as the current OTel context, and stash both under `generation_id`.
@@ -356,13 +302,14 @@ def start_backend_span(
         model: Model identifier, or `None` if not yet known (chat path
             populates this in post_processing).
         provider: Provider name, or `None` if not yet known.
-        action_class_name: Optional `mellea.action_type` attribute (chat).
-        num_actions: Optional `mellea.num_actions` attribute (batch).
-        has_format: Optional `mellea.has_format` attribute (whether structured
-            output was requested).
-        format_type: Optional `mellea.format_type` attribute (the structured
-            output class name, when `has_format` is True).
-        tool_calls_enabled: Optional `mellea.tool_calls_enabled` attribute.
+        action_class_name: Component class name being generated from (chat).
+        num_actions: Number of actions in the batch call (batch).
+        has_format: Whether structured output was requested; emits
+            `gen_ai.output.type="json"` when True.
+        format_type: Structured-output class name, when `has_format` is True.
+        tool_calls_enabled: Whether tool calling is enabled for the call.
+        streaming: Whether streaming was requested; emits `gen_ai.request.stream`
+            when True (unset/False is left off, which semconv reads as non-streaming).
         attach_context: Whether to attach the span as the ambient OTel context.
 
     Returns:
@@ -374,26 +321,33 @@ def start_backend_span(
     if tracer is None:
         return None
 
-    span = tracer.start_span(operation)
+    # Span name is "{operation} {model}" per Gen-AI semconv; operation alone when model unknown.
+    span_name = f"{operation} {model}" if model else operation
+    kind = (
+        trace.SpanKind.CLIENT
+        if provider in _REMOTE_PROVIDERS
+        else trace.SpanKind.INTERNAL
+    )
+    span = tracer.start_span(span_name, kind=kind)
 
     gen = GenerationMetadata(model=model, provider=provider)
     set_request_attrs(span, gen, operation)
     if action_class_name is not None:
-        span.set_attribute("mellea.action_type", action_class_name)
+        span.set_attribute("mellea.component.type", action_class_name)
     if num_actions is not None:
-        span.set_attribute("mellea.num_actions", num_actions)
-    if has_format is not None:
-        span.set_attribute("mellea.has_format", has_format)
-        if has_format:
-            span.set_attribute("gen_ai.output.type", "json_schema")
+        span.set_attribute("mellea.request.num_actions", num_actions)
+    if has_format:
+        span.set_attribute("gen_ai.output.type", "json")
     if format_type is not None:
-        span.set_attribute("mellea.format_type", format_type)
+        span.set_attribute("mellea.request.format_type", format_type)
+    if streaming:
+        span.set_attribute("gen_ai.request.stream", True)
     if tool_calls_enabled is not None:
-        span.set_attribute("mellea.tool_calls_enabled", tool_calls_enabled)
+        span.set_attribute("mellea.action.tool_calls", tool_calls_enabled)
     set_conversation_id(span)
 
     token = _attach_span_context(span, attach=attach_context)
-    _in_flight_spans[generation_id] = (span, token, _current_task())
+    _in_flight_spans[generation_id] = (span, token)
     return span
 
 
@@ -421,16 +375,16 @@ def finish_backend_span_success(
     entry = _in_flight_spans.pop(generation_id, None)
     if entry is None:
         return
-    span, token, attach_task = entry
+    span, token = entry
     try:
         if gen is not None:
             set_request_attrs(span, gen, operation)
             set_response_attrs(span, gen)
         set_usage_attrs(span, usage)
-        if mot is not None and gen is not None:
-            set_mellea_attrs(span, mot, gen)
+        if mot is not None:
+            set_mellea_attrs(span, mot)
     finally:
-        _safe_detach(token, attach_task)
+        _detach_token(token)
         span.end()
 
 
@@ -453,7 +407,7 @@ def finish_backend_span_error(
     entry = _in_flight_spans.pop(generation_id, None)
     if entry is None:
         return
-    span, token, attach_task = entry
+    span, token = entry
     try:
         if gen is not None:
             set_request_attrs(span, gen, operation)
@@ -461,7 +415,7 @@ def finish_backend_span_error(
         span.set_status(trace.Status(trace.StatusCode.ERROR, str(exception)))
         span.set_attribute("error.type", type(exception).__name__)
     finally:
-        _safe_detach(token, attach_task)
+        _detach_token(token)
         span.end()
 
 
@@ -489,7 +443,7 @@ def _start_application_span(
             set_attribute_safe(span, k, v)
 
     token = _attach_span_context(span, attach=attach_context)
-    _in_flight_spans[key] = (span, token, _current_task())
+    _in_flight_spans[key] = (span, token)
     return span
 
 
@@ -509,13 +463,13 @@ def _finish_application_span_success(
     entry = _in_flight_spans.pop(key, None)
     if entry is None:
         return
-    span, token, attach_task = entry
+    span, token = entry
     try:
         if extra_attributes:
             for k, v in extra_attributes.items():
                 set_attribute_safe(span, k, v)
     finally:
-        _safe_detach(token, attach_task)
+        _detach_token(token)
         span.end()
 
 
@@ -541,7 +495,7 @@ def _finish_application_span_error(
     entry = _in_flight_spans.pop(key, None)
     if entry is None:
         return
-    span, token, attach_task = entry
+    span, token = entry
     try:
         if extra_attributes:
             for k, v in extra_attributes.items():
@@ -553,7 +507,7 @@ def _finish_application_span_error(
         else:
             span.set_status(trace.Status(trace.StatusCode.ERROR, description or ""))
     finally:
-        _safe_detach(token, attach_task)
+        _detach_token(token)
         span.end()
 
 
@@ -569,14 +523,13 @@ def start_session_startup_span(
 ) -> Span | None:
     """Open the `start_session` span around backend construction.
 
-    Carries construction-time attributes (`mellea.session_id`,
-    `mellea.backend`, `mellea.model_id`, `mellea.context_type`). Stashed
-    under a derived key so it doesn't collide with the long-lived
+    Stashed under a derived key so it doesn't collide with the long-lived
     `session` span when both share a `session_id`.
 
     Args:
         session_id: Session UUID. The in-flight key is derived from this.
-        backend: Backend identifier (e.g. `"ollama"`); stamped as `mellea.backend`.
+        backend: Requested backend name (e.g. `"ollama"`, `"hf"`), before
+            resolution to a provider id.
         model_id: Resolved model id string.
         context_type: Context class name (e.g. `"SimpleContext"`).
 
@@ -587,10 +540,10 @@ def start_session_startup_span(
         "start_session",
         session_id + _SESSION_STARTUP_KEY_SUFFIX,
         {
-            "mellea.session_id": session_id,
-            "mellea.backend": backend,
-            "mellea.model_id": model_id,
-            "mellea.context_type": context_type,
+            "mellea.session.id": session_id,
+            "mellea.session.backend_name": backend,
+            "gen_ai.request.model": model_id,
+            "mellea.session.context_type": context_type,
         },
     )
 
@@ -624,11 +577,10 @@ def start_session_span(
     """Open the long-lived `session` span over a session's lifetime.
 
     Args:
-        session_id: Session UUID, used as the correlation key and stamped
-            as `mellea.session_id`.
+        session_id: Session UUID, used as the correlation key.
         context_type: Context class name.
-        backend: Backend identifier (e.g. `"ollama"`); stamped as
-            `mellea.backend` when provided.
+        backend: Resolved provider id (e.g. `"ollama"`), normalized to its
+            `gen_ai.provider.name` value when provided.
 
     Returns:
         The span, or `None` if tracing is disabled.
@@ -637,9 +589,9 @@ def start_session_span(
         "session",
         session_id,
         {
-            "mellea.session_id": session_id,
-            "mellea.context_type": context_type,
-            "mellea.backend": backend,
+            "mellea.session.id": session_id,
+            "mellea.session.context_type": context_type,
+            "gen_ai.provider.name": normalize_provider_name(backend),
         },
     )
 
@@ -689,12 +641,12 @@ def start_action_span(
         "action",
         action_id,
         {
-            "mellea.action_type": action_class_name,
-            "mellea.has_requirements": has_requirements,
-            "mellea.has_strategy": has_strategy,
-            "mellea.strategy_type": strategy_type,
-            "mellea.has_format": has_format,
-            "mellea.tool_calls": tool_calls,
+            "mellea.component.type": action_class_name,
+            "mellea.action.has_requirements": has_requirements,
+            "mellea.action.has_strategy": has_strategy,
+            "mellea.sampling.strategy_type": strategy_type,
+            "mellea.action.has_format": has_format,
+            "mellea.action.tool_calls": tool_calls,
         },
         attach_context=attach_context,
     )
@@ -710,24 +662,24 @@ def finish_action_span_success(
 ) -> None:
     """End the action span with response-side attributes.
 
-    `mellea.response` is recorded (truncated) only when content capture is enabled;
-    `mellea.response_length` is always recorded (a non-content metric).
+    The response text is recorded (truncated) only when content capture is
+    enabled; its length is always recorded (a non-content metric).
 
     Args:
         action_id: Correlation key from the matching open call.
-        num_generate_logs: `mellea.num_generate_logs`.
-        sampling_success: `mellea.sampling_success` (set when a strategy ran).
-        response_text: Raw response text. Recorded as `mellea.response` only
-            when content tracing is enabled.
-        response_length: `mellea.response_length` (always safe; ungated).
+        num_generate_logs: Number of generate logs the run accumulated.
+        sampling_success: Sampling outcome, set when a strategy ran.
+        response_text: Raw response text. Recorded only when content tracing
+            is enabled.
+        response_length: Response length; always safe to record (ungated).
     """
     _finish_application_span_success(
         action_id,
         extra_attributes={
-            "mellea.num_generate_logs": num_generate_logs,
-            "mellea.sampling_success": sampling_success,
-            "mellea.response": get_capture_content_value(response_text),
-            "mellea.response_length": response_length,
+            "mellea.action.num_generate_logs": num_generate_logs,
+            "mellea.sampling.success": sampling_success,
+            "mellea.action.response": get_capture_content_value(response_text),
+            "mellea.action.response_length": response_length,
         },
     )
 
@@ -826,7 +778,7 @@ def start_streaming_span(
     chunking_strategy: str | None,
     attach_context: bool = True,
 ) -> Span | None:
-    """Open the `stream_with_chunking` span for one orchestration run.
+    """Open the `stream` span for one streaming run.
 
     Args:
         streaming_id: UUID correlating this streaming run across hooks.
@@ -839,12 +791,12 @@ def start_streaming_span(
         The span, or `None` if tracing is disabled.
     """
     return _start_application_span(
-        "stream_with_chunking",
+        "stream",
         streaming_id,
         {
-            "mellea.has_requirements": has_requirements,
-            "mellea.requirement_count": requirement_count,
-            "mellea.chunking_strategy": chunking_strategy,
+            "mellea.streaming.has_requirements": has_requirements,
+            "mellea.streaming.requirement_count": requirement_count,
+            "mellea.streaming.chunking_strategy": chunking_strategy,
         },
         attach_context=attach_context,
     )
@@ -868,40 +820,6 @@ def add_span_event(key: str, *, event_name: str, attributes: dict[str, Any]) -> 
     span.add_event(event_name, filtered)
 
 
-def reattach_span(key: str) -> None:
-    """Make the in-flight span `key` the current task's ambient context.
-
-    Spans opened by later work on this task then parent under it. Paired with
-    `release_reattached_span()`, which must run on the same task. No-op when the
-    span is not in flight. See `_safe_detach` for how this scope is used to
-    classify the cross-task detach it enables.
-
-    Args:
-        key: Correlation key of an in-flight span (the key it was stashed under).
-    """
-    entry = _in_flight_spans.get(key)
-    if entry is None:
-        return
-    span = entry[0]
-    token = otel_context.attach(trace.set_span_in_context(span))
-    _reattached_tokens[key] = (token, _current_task())
-
-
-def release_reattached_span(key: str) -> None:
-    """Release a reattached span from a matching `reattach_span()` call.
-
-    Must run on the same task that called `reattach_span()`. No-op when no token
-    is stored.
-
-    Args:
-        key: Correlation key from the matching `reattach_span()` call.
-    """
-    entry = _reattached_tokens.pop(key, None)
-    if entry is not None:
-        token, _ = entry
-        otel_context.detach(token)
-
-
 def finish_streaming_span(
     streaming_id: str,
     *,
@@ -912,7 +830,7 @@ def finish_streaming_span(
     provider: str | None = None,
     full_text_length: int | None = None,
 ) -> None:
-    """End the `stream_with_chunking` span, recording its outcome.
+    """End the `stream` span, recording its outcome.
 
     Sets OK status on success. On failure, marks the span ERROR: with the
     exception recorded when one is given, otherwise with `failure_reason` and
@@ -926,12 +844,12 @@ def finish_streaming_span(
         exception: The exception raised by the orchestrator, when one was.
         model: Model identifier, when known.
         provider: Provider name, when known.
-        full_text_length: Accumulated text length at orchestrator exit.
+        full_text_length: Length of the validated-and-emitted text at stream exit.
     """
     extra_attributes = {
-        "mellea.full_text_length": full_text_length,
+        "mellea.streaming.full_text_length": full_text_length,
         "gen_ai.request.model": model,
-        "gen_ai.provider.name": provider,
+        "gen_ai.provider.name": normalize_provider_name(provider),
     }
 
     if success:
@@ -974,9 +892,9 @@ def start_sampling_span(
         "sampling",
         sampling_id,
         {
-            "mellea.strategy_type": strategy_type,
-            "mellea.loop_budget": loop_budget,
-            "mellea.requirement_count": requirement_count,
+            "mellea.sampling.strategy_type": strategy_type,
+            "mellea.sampling.loop_budget": loop_budget,
+            "mellea.sampling.requirement_count": requirement_count,
         },
         attach_context=attach_context,
     )
@@ -999,17 +917,16 @@ def finish_sampling_span(
         sampling_id: Correlation key from the matching open call.
         success: `True` if at least one attempt passed all requirements.
         iterations_used: Total iterations that completed across subsamples.
-        failure_reason: Reason recorded as `mellea.failure_reason` when
-            `success` is `False`.
+        failure_reason: Reason recorded when `success` is `False`.
         exception: The exception that ended the loop, when one was raised.
     """
     if exception is None:
         _finish_application_span_success(
             sampling_id,
             extra_attributes={
-                "mellea.sampling_success": success,
-                "mellea.iterations_used": iterations_used,
-                "mellea.failure_reason": failure_reason,
+                "mellea.sampling.success": success,
+                "mellea.sampling.iterations_used": iterations_used,
+                "mellea.sampling.failure_reason": failure_reason,
             },
         )
     else:
@@ -1032,7 +949,7 @@ def start_validation_span(
     return _start_application_span(
         "validation",
         validation_id,
-        {"mellea.requirement_count": requirement_count},
+        {"mellea.validation.requirement_count": requirement_count},
         attach_context=attach_context,
     )
 
@@ -1049,16 +966,16 @@ def finish_validation_span(
     """End the `validation` span.
 
     Records the outcome attributes, or ERROR status with the exception when the
-    check raised. `mellea.failure_reasons` is recorded only when content capture
-    is enabled, since a requirement's reason can echo model output.
+    check raised. Failure reasons are recorded only when content capture is
+    enabled, since a requirement's reason can echo model output.
 
     Args:
         validation_id: Correlation key from the matching open call.
-        all_validations_passed: `mellea.validation_passed`.
-        passed_count: `mellea.passed_count`.
-        failed_count: `mellea.failed_count`.
-        failure_reasons: One reason per failing requirement. Recorded as
-            `mellea.failure_reasons` only when content tracing is enabled.
+        all_validations_passed: Whether every requirement passed.
+        passed_count: Number of requirements that passed.
+        failed_count: Number of requirements that failed.
+        failure_reasons: One reason per failing requirement. Recorded only when
+            content tracing is enabled.
         exception: The exception that ended validation, when one was raised.
     """
     if exception is None:
@@ -1070,10 +987,10 @@ def finish_validation_span(
         _finish_application_span_success(
             validation_id,
             extra_attributes={
-                "mellea.validation_passed": all_validations_passed,
-                "mellea.passed_count": passed_count,
-                "mellea.failed_count": failed_count,
-                "mellea.failure_reasons": reasons,
+                "mellea.validation.passed": all_validations_passed,
+                "mellea.validation.passed_count": passed_count,
+                "mellea.validation.failed_count": failed_count,
+                "mellea.validation.failure_reasons": reasons,
             },
         )
     else:

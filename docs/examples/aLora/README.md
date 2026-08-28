@@ -84,7 +84,7 @@ m alora add-readme \
     stembolt_failure_dataset.jsonl
 ```
 
-The generator will display the README and ask for confirmation before uploading it to your Hugging Face repo. You can also call the generator programmatically from Python -- see `test_readme_generator.py` for an example.
+The generator will display the README and ask for confirmation before uploading it to your Hugging Face repo. You can also call the generator programmatically from Python — see `example_readme_generator.py` for an example.
 
 ## Using Adapter Functions
 
@@ -105,6 +105,7 @@ class StemboltAdapter(CustomIntrinsicAdapter):
 Using this adapter requires adding it to a backend:
 
 ```python
+from mellea.backends.cache import SimpleLRUCache
 from mellea.backends.huggingface import LocalHFBackend
 
 backend = LocalHFBackend(
@@ -117,20 +118,25 @@ backend.add_adapter(StemboltAdapter(base_model_name="granite-4.1-3b"))
 ## Example Files
 
 ### 101_example.py
-Basic example of using a trained aLoRA adapter as a requirement.
+Comparing aLoRA-backed requirement validation against LLM-as-a-judge, using the
+catalog-native `requirement-check` adapter (not a custom one — see
+`stembolts_intrinsic.py` for loading your own).
 
 Demonstrates:
-- Loading a custom adapter
-- Using adapter with requirements
-- Validating adapter output
+- Registering a catalog adapter as an aLoRA
+- `ALoraRequirement` vs `LLMaJRequirement` routing
+- Timing both validation paths
 
 ### 102_example.py
-Advanced example with multiple adapters and composition.
+Interactive loop that exercises the custom `stembolts` adapter — skip-marked
+because it blocks on stdin in an infinite loop.
+
+The example uses Granite 3.3 2B because that is the available `stembolts`
+adapter variant; Granite 4.0 and 4.1 variants are not currently available.
 
 Demonstrates:
-- Combining multiple adapters
-- Adapter composition patterns
-- Complex validation scenarios
+- Loading a fully custom, non-catalog adapter via `stembolts_intrinsic.py`
+- Running the adapter-backed intrinsic repeatedly with a fresh `ChatContext`
 
 ### make_training_data.py
 Utility for preparing training datasets for adapter training.
@@ -141,12 +147,13 @@ Demonstrates:
 - Preprocessing for training
 
 ### stembolts_intrinsic.py
-Example custom adapter function implementation.
+Helper module for loading and calling the fully custom `stembolts` adapter
+(no standalone entry point — `102_example.py` consumes it).
 
 Demonstrates:
-- Custom adapter class definition
-- Integration with backend
-- Production usage patterns
+- Custom adapter class definition (`StemboltAdapter`)
+- Registering the adapter on a backend, guarded by qualified name
+- Calling the intrinsic directly via `mfuncs.act`
 
 ### example_readme_generator.py
 Programmatic README generation for adapters.
@@ -155,4 +162,3 @@ Demonstrates:
 - Auto-generating adapter documentation
 - Using the `m alora add-readme` command programmatically
 - Documenting custom adapters
-

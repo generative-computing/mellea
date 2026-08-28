@@ -119,14 +119,25 @@ def test_weights_binding_abc_enforcement():
         PartialBinding()  # type: ignore[abstract]
 
 
-@pytest.mark.parametrize(
-    "cls", [LocalFileBinding, EmbeddedBinding, ServerMediatedBinding]
-)
 @pytest.mark.parametrize("verb", ["prepare", "activate", "deactivate", "release"])
-def test_stub_binding_subclasses_raise_not_implemented(cls, verb):
-    binding = cls()
+def test_server_mediated_binding_raises_not_implemented(verb):
+    binding = ServerMediatedBinding()
     with pytest.raises(NotImplementedError, match="Phase 0 stub"):
         getattr(binding, verb)()
+
+
+def test_local_file_binding_not_a_phase_0_stub():
+    # LocalFileBinding graduated out of the stub set in Epic #929 Phase 2
+    # (issue #1141) — see test_local_file_binding.py for its real behavior.
+    assert LocalFileBinding.prepare is not ServerMediatedBinding.prepare
+
+
+def test_embedded_binding_is_not_a_weights_binding():
+    # EmbeddedBinding graduated out of the WeightsBinding stub set in Epic #929
+    # Phase 2 (issue #1142) — it has no weights lifecycle at all, so it is not
+    # even a WeightsBinding subclass. See test_embedded_binding.py for its real
+    # behavior (`apply_activation`).
+    assert not isinstance(EmbeddedBinding(), WeightsBinding)
 
 
 def test_adapter_schema_mismatch_error_format():
@@ -139,6 +150,7 @@ def test_adapter_schema_mismatch_error_format():
     assert err.name == "answerability"
     assert err.observed_keys == observed
     assert err.expected_keys == expected
+    assert err.reason is None
     msg = str(err)
     assert "answerability" in msg
     assert "Observed keys:" in msg
@@ -149,7 +161,10 @@ def test_adapter_schema_mismatch_error_pickles():
     observed = frozenset({"key_a"})
     expected = frozenset({"key_b"})
     err = AdapterSchemaMismatchError(
-        name="answerability", observed_keys=observed, expected_keys=expected
+        name="answerability",
+        observed_keys=observed,
+        expected_keys=expected,
+        reason="schema changed",
     )
 
     restored = pickle.loads(pickle.dumps(err))
@@ -158,6 +173,8 @@ def test_adapter_schema_mismatch_error_pickles():
     assert restored.name == "answerability"
     assert restored.observed_keys == observed
     assert restored.expected_keys == expected
+    assert restored.reason == "schema changed"
+    assert restored.args == ("answerability", observed, expected)
     assert str(restored) == str(err)
 
 
@@ -277,5 +294,5 @@ def test_dict_contract_reports_all_missing_multi_key():
 
 def test_dict_contract_build_prompt_not_implemented():
     contract = _DictContract("answerability", frozenset({"answerability"}))
-    with pytest.raises(NotImplementedError, match="Phase 1"):
+    with pytest.raises(NotImplementedError, match="build_prompt is not implemented"):
         contract.build_prompt()

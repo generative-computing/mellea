@@ -10,7 +10,6 @@ import ollama
 import pytest
 
 from mellea.backends.model_ids import IBM_GRANITE_4_1_3B
-from mellea.backends.model_options import ModelOption
 from mellea.backends.ollama import OllamaModelBackend
 from mellea.plugins.manager import (
     disable_background_collection,
@@ -115,19 +114,22 @@ def mocked_tracing_backend():
 @pytest.mark.integration
 @pytest.mark.asyncio
 @pytest.mark.parametrize("emit", [True, False], ids=["emit_on", "emit_off_default"])
-async def test_streaming_span_creates_and_closes_span(span_exporter, monkeypatch, emit):
-    """Streaming backend call creates a chat span that closes after the stream completes.
+async def test_stream_mocked(span_exporter, monkeypatch, emit):
+    """Mocked streaming run: the `stream` span roots the backend `chat` span.
 
-    Uses a mocked Ollama client so no server is needed.  Verifies the core
-    TracingPlugin invariant: the span must remain open for the full duration of
-    streaming and close only once all chunks are consumed. `chunk_processed`
-    events are emitted only when `MELLEA_GENERATION_CHUNK_EVENTS` is on; with the env
-    unset (the default) the span carries no such events.
+    Uses a mocked Ollama client so no server is needed; the `stream` span is the
+    root, the `chat` span nests under it, and stays open for the full stream.
+    `chunk_processed` events are emitted on `chat` only when
+    `MELLEA_GENERATION_CHUNK_EVENTS` is on; with the env unset (the default) the span
+    carries no such events.
     """
     if emit:
         monkeypatch.setenv("MELLEA_GENERATION_CHUNK_EVENTS", "true")
     else:
         monkeypatch.delenv("MELLEA_GENERATION_CHUNK_EVENTS", raising=False)
+
+    from mellea.stdlib.streaming import stream
+    from mellea.telemetry.tracing_plugins import _CONTEXT_ATTACH_SUPPORTED
 
     async def fake_chat_stream(*args, **kwargs):
         for content in ["1", " 2", " 3"]:
@@ -160,31 +162,33 @@ async def test_streaming_span_creates_and_closes_span(span_exporter, monkeypatch
         backend = OllamaModelBackend(model_id="test-model")
         ctx = SimpleContext().add(Message(role="user", content="Count to 3"))
 
-        mot, _ = await backend.generate_from_context(
-            Message(role="assistant", content=""),
-            ctx,
-            model_options={ModelOption.STREAM: True},
-        )
-
-        await mot.astream()
-        await mot.avalue()
+        async with await stream(
+            Message(role="assistant", content=""), backend, ctx
+        ) as streamer:
+            async for _ in streamer:
+                pass
         await drain_background_tasks()
 
     trace.get_tracer_provider().force_flush()
 
     spans = span_exporter.get_finished_spans()
-    backend_span = next((s for s in spans if s.name == "chat"), None)
+    streaming_span = next(s for s in spans if s.name == "stream")
+    chat_span = next(s for s in spans if s.name == "chat test-model")
 
-    assert backend_span is not None, "Backend span not found"
-    assert backend_span.end_time > backend_span.start_time, (
-        "Span must have nonzero duration"
-    )
+    assert streaming_span.parent is None, "streaming span should be a root"
+    if _CONTEXT_ATTACH_SUPPORTED:
+        assert chat_span.parent is not None
+        assert chat_span.parent.span_id == streaming_span.context.span_id, (
+            "chat span should nest under stream"
+        )
+    else:
+        assert chat_span.parent is None, "chat span should be flat on Python <=3.11"
 
-    span_duration_s = (backend_span.end_time - backend_span.start_time) / 1e9
     # fake stream is 3 chunks x 50 ms ~= 150 ms; >= 0.1 confirms span survived past first chunk
-    assert span_duration_s >= 0.1, (
-        f"Span closed too early — duration {span_duration_s:.3f}s is shorter than "
-        "the streaming delay, suggesting the span did not stay open for the full stream"
+    chat_duration_s = (chat_span.end_time - chat_span.start_time) / 1e9
+    assert chat_duration_s >= 0.1, (
+        f"chat span closed too early — duration {chat_duration_s:.3f}s is shorter "
+        "than the streaming delay, suggesting it did not stay open for the full stream"
     )
 
     chunk_events = [
@@ -192,7 +196,7 @@ async def test_streaming_span_creates_and_closes_span(span_exporter, monkeypatch
             e.attributes.get("mellea.generation.chunk_index"),
             e.attributes.get("mellea.generation.chunk_text_length"),
         )
-        for e in backend_span.events
+        for e in chat_span.events
         if e.name == "chunk_processed"
     ]
     if emit:
@@ -223,7 +227,11 @@ async def test_span_duration_captures_async_operation_mocked(
     trace.get_tracer_provider().force_flush()  # type: ignore
 
     backend_span = next(
-        (span for span in span_exporter.get_finished_spans() if span.name == "chat"),
+        (
+            span
+            for span in span_exporter.get_finished_spans()
+            if span.name == "chat test-model"
+        ),
         None,
     )
     assert backend_span is not None, "Backend span not found"
@@ -258,7 +266,9 @@ async def test_context_propagation_parent_child_mocked(
     parent_recorded = next(
         (span for span in spans if span.name == "parent_operation"), None
     )
-    child_recorded = next((span for span in spans if span.name == "chat"), None)
+    child_recorded = next(
+        (span for span in spans if span.name == "chat test-model"), None
+    )
 
     assert parent_recorded is not None, "Parent span not found"
     assert child_recorded is not None, "Child span not found"
@@ -288,7 +298,11 @@ async def test_token_usage_recorded_after_completion_mocked(
     await drain_background_tasks()
 
     backend_span = next(
-        (span for span in span_exporter.get_finished_spans() if span.name == "chat"),
+        (
+            span
+            for span in span_exporter.get_finished_spans()
+            if span.name == "chat test-model"
+        ),
         None,
     )
     assert backend_span is not None, "Backend span not found"
@@ -313,13 +327,17 @@ async def test_span_not_closed_prematurely_mocked(
     )
 
     spans_before = span_exporter.get_finished_spans()
-    backend_spans_before = [span for span in spans_before if span.name == "chat"]
+    backend_spans_before = [
+        span for span in spans_before if span.name == "chat test-model"
+    ]
 
     await mot.avalue()
     await drain_background_tasks()
 
     spans_after = span_exporter.get_finished_spans()
-    backend_spans_after = [span for span in spans_after if span.name == "chat"]
+    backend_spans_after = [
+        span for span in spans_after if span.name == "chat test-model"
+    ]
     assert len(backend_spans_after) > len(backend_spans_before), (
         "Span was closed before async completion"
     )
@@ -345,7 +363,9 @@ async def test_multiple_generations_separate_spans_mocked(
     await drain_background_tasks()
 
     backend_spans = [
-        span for span in span_exporter.get_finished_spans() if span.name == "chat"
+        span
+        for span in span_exporter.get_finished_spans()
+        if span.name == "chat test-model"
     ]
     assert len(backend_spans) >= 2, (
         f"Expected at least 2 spans, got {len(backend_spans)}"
@@ -380,7 +400,7 @@ async def test_span_duration_captures_async_operation(span_exporter):
 
     backend_span = None
     for span in spans:
-        if span.name == "chat":
+        if span.name == f"chat {IBM_GRANITE_4_1_3B.ollama_name}":
             backend_span = span
             break
 
@@ -428,7 +448,7 @@ async def test_context_propagation_parent_child(span_exporter):
     for span in spans:
         if span.name == "parent_operation":
             parent_recorded = span
-        elif span.name == "chat":  # Gen-AI convention
+        elif span.name == f"chat {IBM_GRANITE_4_1_3B.ollama_name}":  # Gen-AI convention
             child_recorded = span
 
     assert parent_recorded is not None, "Parent span not found"
@@ -466,7 +486,9 @@ async def test_token_usage_recorded_after_completion(span_exporter):
 
     backend_span = None
     for span in spans:
-        if span.name == "chat":  # Gen-AI convention uses 'chat' for chat completions
+        if (
+            span.name == f"chat {IBM_GRANITE_4_1_3B.ollama_name}"
+        ):  # Gen-AI convention uses 'chat {model}' for chat completions
             backend_span = span
             break
 
@@ -512,7 +534,7 @@ async def test_span_not_closed_prematurely(span_exporter):
     # because we haven't awaited the ModelOutputThunk
     spans_before = span_exporter.get_finished_spans()
     backend_spans_before = [
-        s for s in spans_before if s.name == "chat"
+        s for s in spans_before if s.name == f"chat {IBM_GRANITE_4_1_3B.ollama_name}"
     ]  # Gen-AI convention
 
     # Now complete the async operation
@@ -522,7 +544,7 @@ async def test_span_not_closed_prematurely(span_exporter):
     # Now the span should be closed
     spans_after = span_exporter.get_finished_spans()
     backend_spans_after = [
-        s for s in spans_after if s.name == "chat"
+        s for s in spans_after if s.name == f"chat {IBM_GRANITE_4_1_3B.ollama_name}"
     ]  # Gen-AI convention
 
     # The span should only appear after completion
@@ -555,7 +577,9 @@ async def test_multiple_generations_separate_spans(span_exporter):
 
     # Get the recorded spans
     spans = span_exporter.get_finished_spans()
-    backend_spans = [s for s in spans if s.name == "chat"]  # Gen-AI convention
+    backend_spans = [
+        s for s in spans if s.name == f"chat {IBM_GRANITE_4_1_3B.ollama_name}"
+    ]  # Gen-AI convention
 
     assert len(backend_spans) >= 2, (
         f"Expected at least 2 spans, got {len(backend_spans)}"
@@ -570,40 +594,41 @@ async def test_multiple_generations_separate_spans(span_exporter):
 @pytest.mark.ollama
 @pytest.mark.slow
 @pytest.mark.asyncio
-async def test_stream_with_chunking_e2e(span_exporter):
-    """A real `stream_with_chunking` run wraps the backend `chat` span and times it.
+async def test_stream_e2e(span_exporter):
+    """A real `stream` run wraps the backend `chat` span and times it.
 
-    Covers the streaming path end to end against a live model: the
-    `stream_with_chunking` span is the root, the backend `chat` span nests under
-    it, and that `chat` span stays open across the full stream.
+    Covers the streaming path end to end against a live model: the `stream` span
+    is the root, the backend `chat` span nests under it, and that `chat` span
+    stays open across the full stream.
     """
-    from mellea.stdlib.streaming import stream_with_chunking
+    from mellea.stdlib.streaming import stream
 
     backend = OllamaModelBackend(model_id=IBM_GRANITE_4_1_3B.ollama_name)  # type: ignore
     ctx = SimpleContext().add(Message(role="user", content="Count to 3"))
 
-    result = await stream_with_chunking(
+    async with await stream(
         Message(role="assistant", content=""), backend, ctx
-    )
-    async for _ in result.astream():
-        pass
-    await result.acomplete()
+    ) as streamer:
+        async for _ in streamer:
+            pass
     await drain_background_tasks()
 
     from mellea.telemetry.tracing_plugins import _CONTEXT_ATTACH_SUPPORTED
 
     spans = span_exporter.get_finished_spans()
-    streaming_span = next(s for s in spans if s.name == "stream_with_chunking")
-    chat_span = next(s for s in spans if s.name == "chat")
+    streaming_span = next(s for s in spans if s.name == "stream")
+    chat_span = next(
+        s for s in spans if s.name == f"chat {IBM_GRANITE_4_1_3B.ollama_name}"
+    )
 
     assert streaming_span.parent is None, "streaming span should be a root"
-    if not _CONTEXT_ATTACH_SUPPORTED:
+    if _CONTEXT_ATTACH_SUPPORTED:
+        assert chat_span.parent is not None
+        assert chat_span.parent.span_id == streaming_span.context.span_id, (
+            "chat span should nest under stream"
+        )
+    else:
         assert chat_span.parent is None, "chat span should be flat on Python <=3.11"
-        return
-    assert chat_span.parent is not None
-    assert chat_span.parent.span_id == streaming_span.context.span_id, (
-        "chat span should nest under stream_with_chunking"
-    )
 
     chat_duration_s = (chat_span.end_time - chat_span.start_time) / 1e9
     assert chat_duration_s >= 0.1, (

@@ -66,7 +66,6 @@ see [`../granite-switch/`](../granite-switch/).
 - **answerability**: Determine if question is answerable
 - **citations**: Extract and validate citations
 - **context-attribution**: Identify context sentences that most influenced response
-- **context_relevance**: Assess context-query relevance
 - **factuality_correction**: Correct factually incorrect responses
 - **factuality_detection**: Detect factually incorrect responses
 - **guardian-core**: Safety risk detection (harm, bias, groundedness, custom criteria)
@@ -95,11 +94,6 @@ Demonstrates extracting and validating citations from responses.
 uv run context_attribution.py
 ```
 Demonstrates identifying which context sentences influenced the response.
-
-```bash
-uv run context_relevance.py
-```
-Demonstrates assessing the relevance of documents to a query.
 
 ```bash
 uv run hallucination_detection.py
@@ -164,5 +158,4 @@ Full example showing multiple adapter functions working together in a RAG pipeli
 
 - See `mellea/stdlib/components/intrinsic/` for adapter function implementations
 - See `mellea/backends/adapters/` for adapter system
-- See `docs/dev/intrinsics_and_adapters.md` for architecture details
 - See `docs/docs/examples/granite-switch/README.md` for more about granite-switch

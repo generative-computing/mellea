@@ -11,7 +11,7 @@ schemes not well-represented in general training data. Mellea lets you train a
 [aLoRA](https://github.com/IBM/activated-lora) adapter on your own labeled dataset
 and use it as a requirement validator in any Mellea program.
 
-**Prerequisites:** `pip install "mellea[cli]"`. Training requires a GPU or
+**Prerequisites:** `pip install "mellea[cli,hf]"`. Training requires a GPU or
 Apple Silicon Mac with sufficient VRAM for the chosen base model. Uploading requires a
 Hugging Face account.
 
@@ -116,26 +116,35 @@ m alora upload ./checkpoints/my_adapter \
 
 ## Use the adapter in Mellea
 
-Load the trained adapter into a `LocalHFBackend` using `CustomIntrinsicAdapter`:
+Load the trained adapter into a `LocalHFBackend` using `CustomIntrinsicAdapter`.
+
+> **Note:** `CustomIntrinsicAdapter` is deprecated in favor of the `Adapter` /
+> `WeightsBinding` model, but is still the only working way to load a
+> locally-trained custom adapter — `Adapter`'s weight-loading is not yet
+> implemented. This example will move to `Adapter` once that lands; see #1144.
 
 ```python
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.backends.adapters.adapter import CustomIntrinsicAdapter
 from mellea.stdlib.context import ChatContext
 from mellea import MelleaSession
-from mellea.stdlib.requirements import req
+from mellea.stdlib.requirements import ALoraRequirement
 
 backend = LocalHFBackend(model_id="ibm-granite/granite-3.2-8b-instruct")
 
 adapter = CustomIntrinsicAdapter(
-    model_id="your-org/my-adapter",       # HF repo ID or local checkpoint path
+    model_id="your-org/my-adapter",  # HF repo ID or local checkpoint path
     base_model_name="granite-3.2-8b-instruct",
+    intrinsic_name="custom-failure-check",
 )
 backend.add_adapter(adapter)
 
 m = MelleaSession(backend, ctx=ChatContext())
 
-failure_check = req("The failure mode must not be 'no_failure'.")
+failure_check = ALoraRequirement(
+    "The failure mode must not be 'no_failure'.",
+    intrinsic_name="custom-failure-check",
+)
 result = m.instruct(
     "Write a triage summary based on this technician note: {{note}}",
     user_variables={"note": "High vibration at 3100 RPM, connecting rod suspected."},
@@ -145,9 +154,41 @@ print(str(result))
 # Output will vary — LLM responses depend on model and temperature.
 ```
 
-When `backend.add_adapter()` is called, Mellea automatically routes requirement
-validation through the adapter for any `req()` calls on that session. The adapter
-runs at the `check_requirement` prompt position — fast, with minimal context overhead.
+> **Note:** `CustomIntrinsicAdapter` emits an advisory `UserWarning` because
+> custom capability names are not part of Mellea's built-in capability registry.
+> The adapter is still registered for routing.
+
+`ALoraRequirement` routes validation through the adapter with the matching
+`intrinsic_name`. Create `CustomIntrinsicAdapter` before the requirement: its
+compatibility shim registers the custom name, which lets `ALoraRequirement`
+resolve it. The adapter runs at the `check_requirement` prompt position. Its
+`io.yaml` must transform the output into the
+`{"requirement_check": {"score": <float>}}` response schema; label-only
+adapter output is not compatible with `ALoraRequirement`.
+
+## How automatic routing works
+
+When an adapter is loaded via `backend.add_adapter()`, Mellea automatically routes
+`req()` validation calls through it rather than falling back to LLM-as-a-judge. The
+rule is: use the most specific available method. In practice this means the aLoRA
+adapter is preferred whenever one is loaded, with three exceptions:
+
+1. `backend.default_to_constraint_checking_alora` is set to `False` — the adapter
+   is loaded but routing is suppressed for the entire backend instance.
+2. The requirement uses the `LLMaJRequirement` subtype explicitly — the caller is
+   asking for LLM-as-a-judge regardless of what adapters are loaded.
+3. The adapter is unavailable (e.g. cannot be loaded) — Mellea falls back to
+   LLM-as-a-judge automatically. This is the *only* fallback case: if the
+   adapter runs but its output fails schema validation, `validate()` does not
+   fall back. Instead it surfaces the schema error on `ValidationResult.error`
+   and fails the check closed (`bool(result)` is `False`), so callers can tell
+   an unparsable adapter response apart from an ordinary "requirement not met".
+
+If you want to force the adapter path even when using `generate_from_context`
+directly (bypassing the normal `validate()` call), use `ALoraRequirement` from
+`mellea.stdlib.requirements` — this bypasses `default_to_constraint_checking_alora`,
+but still requires a matching adapter to actually be registered. If none is found,
+Mellea logs a warning and falls back to regular generation rather than erroring.
 
 ## Disable adapter validation
 

@@ -127,7 +127,7 @@ def test_token_metrics_format(clean_metrics_env):
     provider = MeterProvider(metric_readers=[reader])
     record_token_usage_metrics(input_tokens=10, output_tokens=5, ...)
     metrics_data = reader.get_metrics_data()
-    assert metrics_data.resource_metrics[0]...name == "mellea.llm.tokens.input"
+    assert metrics_data.resource_metrics[0]...name == "gen_ai.client.token.usage"
 
 @pytest.mark.integration
 def test_session_chains_components(mock_backend):

@@ -16,17 +16,33 @@ support runtime adapter loading and unloading.
 
 import abc
 import contextlib
+import hashlib
 import pathlib
 import re
+import shutil
+import tempfile
+import time
 import warnings
+from collections.abc import Callable
 from typing import Literal, TypeAlias, TypeVar, cast
 
 import yaml
 
-from ...core import Backend
+from ...core import Backend, MelleaLogger
 from ...formatters.granite import intrinsics as intrinsics
-from ._core import Adapter as _AdapterCore, Identity, IOContract, WeightsBinding
-from .catalog import AdapterType, fetch_intrinsic_metadata
+from ...helpers.event_loop_helper import _run_async_in_thread
+from ...plugins.manager import has_plugins, invoke_hook
+from ...plugins.types import HookType
+from ._core import (
+    Adapter as _AdapterCore,
+    AdapterSchemaMismatchError,
+    EmbeddedBinding,
+    Identity,
+    LocalFileBinding,
+    WeightsBinding,
+)
+from .catalog import AdapterType, fetch_intrinsic_metadata, known_intrinsic_names
+from .io_contracts import get_io_contract
 
 
 class Adapter(abc.ABC):
@@ -84,48 +100,30 @@ class LocalHFAdapter(Adapter):
         ...
 
 
-class _ShimIOContract(IOContract):
-    """Phase 1 placeholder; Phase 2 (issue #1137) implements real I/O."""
-
-    def build_prompt(self, **kwargs: object):  # type: ignore[override]
-        raise NotImplementedError(
-            "Phase 2 (issue #1137) — IOContract not yet implemented"
-        )
-
-    def parse(self, raw: str) -> dict[str, object]:
-        raise NotImplementedError(
-            "Phase 2 (issue #1137) — IOContract not yet implemented"
-        )
-
-
 class _ShimWeightsBinding(WeightsBinding):
-    """Phase 1 placeholder; Phase 2 (see epic #929) wires in real lifecycle."""
+    """Placeholder weights binding for the deprecated IntrinsicAdapter shims.
+
+    All lifecycle verbs raise NotImplementedError; it exists only so the
+    shims can satisfy the Adapter protocol.
+    """
 
     def prepare(self) -> None:
-        raise NotImplementedError(
-            "Phase 2 (see epic #929) — WeightsBinding not yet implemented"
-        )
+        raise NotImplementedError("WeightsBinding not yet implemented")
 
     def activate(self) -> None:
-        raise NotImplementedError(
-            "Phase 2 (see epic #929) — WeightsBinding not yet implemented"
-        )
+        raise NotImplementedError("WeightsBinding not yet implemented")
 
     def deactivate(self) -> None:
-        raise NotImplementedError(
-            "Phase 2 (see epic #929) — WeightsBinding not yet implemented"
-        )
+        raise NotImplementedError("WeightsBinding not yet implemented")
 
     def release(self) -> None:
-        raise NotImplementedError(
-            "Phase 2 (see epic #929) — WeightsBinding not yet implemented"
-        )
+        raise NotImplementedError("WeightsBinding not yet implemented")
 
 
 class IntrinsicAdapter(LocalHFAdapter, _AdapterCore):
     """Deprecated shim for adapters that implement adapter functions.
 
-    .. deprecated::
+    Deprecated:
         Use :class:`~mellea.backends.adapters.Adapter` directly.
         `IntrinsicAdapter` will be removed in a future release (Epic #929,
         issue #1144).
@@ -159,12 +157,13 @@ class IntrinsicAdapter(LocalHFAdapter, _AdapterCore):
         adapter_type (AdapterType): The adapter type (`LORA` or `ALORA`).
         config (dict): Parsed I/O transformation configuration for the adapter function.
 
-    .. note::
-        `identity`, `io_contract`, and `weights` are Phase 1 internal scaffolding
-        populated in `__init__` to satisfy the new :class:`~mellea.backends.adapters.Adapter`
-        protocol.  They are not meaningful consumer-facing attributes; `io_contract` and
-        `weights` raise :exc:`NotImplementedError` and will be replaced in Phase 2
-        (issues #1137, #1141).
+    Note:
+        `identity`, `io_contract`, and `weights` are internal scaffolding populated
+        in `__init__` to satisfy the :class:`~mellea.backends.adapters.Adapter`
+        protocol; they are not meaningful consumer-facing attributes. `io_contract`
+        is the real, declared contract for `intrinsic_name` (issue #1516); `weights`
+        remains the Phase 1 `_ShimWeightsBinding` placeholder and raises
+        `NotImplementedError` until Phase 2 (issue #1141) replaces it.
     """
 
     def __setattr__(self, name: str, value: object) -> None:
@@ -225,12 +224,11 @@ class IntrinsicAdapter(LocalHFAdapter, _AdapterCore):
                 f"{adapter_type} not supported"
             )
             is_alora = self.adapter_type == AdapterType.ALORA
-            # TODO(phase-2.2): pass revision=self.intrinsic_metadata.revision
-            # once revision-aware prepare() is merged (issue #1141 / epic #929).
             config_file = intrinsics.obtain_io_yaml(
                 self.intrinsic_name,
                 self.base_model_name,
                 self.intrinsic_metadata.repo_id,
+                revision=self.intrinsic_metadata.revision,
                 alora=is_alora,
             )
         if config_file:
@@ -245,6 +243,9 @@ class IntrinsicAdapter(LocalHFAdapter, _AdapterCore):
         self.config: dict = config_dict
 
         # Populate the new Adapter triple so isinstance(self, _AdapterCore) holds.
+        # io_contract comes from the same registry resolve_adapter() consults
+        # (see issue #1516), not a placeholder. weights stays the Phase 2
+        # _ShimWeightsBinding placeholder; that axis is #1141/#1142.
         _AdapterCore.__init__(
             self,
             identity=Identity(
@@ -252,9 +253,9 @@ class IntrinsicAdapter(LocalHFAdapter, _AdapterCore):
                 adapter_type="alora"
                 if self.adapter_type == AdapterType.ALORA
                 else "lora",
-                capability=intrinsic_name,
+                capability=self.intrinsic_metadata.effective_capability,
             ),
-            io_contract=_ShimIOContract(),
+            io_contract=get_io_contract(intrinsic_name),
             weights=_ShimWeightsBinding(),
         )
 
@@ -283,13 +284,12 @@ class IntrinsicAdapter(LocalHFAdapter, _AdapterCore):
             a path to the files
         """
         is_alora = self.adapter_type == AdapterType.ALORA
-        # TODO(phase-2.2): pass revision=self.intrinsic_metadata.revision once
-        # revision-aware prepare() is merged (issue #1141 / epic #929).
         return str(
             intrinsics.obtain_lora(
                 self.intrinsic_name,
                 base_model_name,
                 self.intrinsic_metadata.repo_id,
+                revision=self.intrinsic_metadata.revision,
                 alora=is_alora,
             )
         )
@@ -326,6 +326,102 @@ def get_adapter_for_intrinsic(
     return adapter
 
 
+def _fire_phase_complete_hook(name: str, phase: str, duration_ms: float) -> None:
+    """Fire the `adapter_function_phase_complete` metric hook for a phase that already ran.
+
+    Split out of `_run_adapter_phase` so a caller that must guarantee cleanup
+    after a phase's side effect — e.g. `adapter_scope` guaranteeing
+    `deactivate()` runs once `activate()` has succeeded — can run the side
+    effect and this hook fire under separate exception handling. A hook-dispatch
+    failure is logged and ignored: observability must not turn a completed
+    lifecycle phase into an operation failure.
+
+    Args:
+        name: Adapter function name, used as the metric's `name` field.
+        phase: Lifecycle phase name; must be a valid
+            `AdapterFunctionPhaseCompletePayload.phase` value.
+        duration_ms: Wall-clock duration of the phase, in milliseconds.
+    """
+    if not has_plugins(HookType.ADAPTER_FUNCTION_PHASE_COMPLETE):
+        return
+    from ...plugins.hooks.adapter_function import AdapterFunctionPhaseCompletePayload
+
+    payload = AdapterFunctionPhaseCompletePayload(
+        name=name, phase=phase, duration_ms=duration_ms
+    )
+    try:
+        hook_coro = invoke_hook(HookType.ADAPTER_FUNCTION_PHASE_COMPLETE, payload)
+        _run_async_in_thread(hook_coro)
+    except Exception:
+        MelleaLogger.get_logger().warning(
+            f"adapter_function_phase_complete hook dispatch failed for {name!r} "
+            f"during {phase!r}; ignoring so it does not turn a completed phase "
+            "into an operation failure.",
+            exc_info=True,
+        )
+
+
+def _run_adapter_phase(name: str, phase: str, phase_fn: Callable[[], None]) -> None:
+    """Run one lifecycle phase and fire its phase-complete metric hook.
+
+    Fires the hook only; it does not open a span. Span production belongs to a
+    plugin (#1464, #1466), not to code under `mellea/backends/`.
+
+    The hook fires **only when the phase succeeds**, matching the name of
+    `ADAPTER_FUNCTION_PHASE_COMPLETE`: a phase that raised did not complete. If
+    `phase_fn` raises, the exception propagates and no phase event is emitted, so
+    a consumer reconciling phase counts against invocation counts will see the
+    failure only at invocation level, where `outcome` and `error` carry it.
+
+    Args:
+        name: Adapter function name, used as the metric's `name` field.
+        phase: Lifecycle phase name; must be a valid
+            `AdapterFunctionPhaseCompletePayload.phase` value.
+        phase_fn: The zero-argument callable implementing the phase (e.g.
+            `adapter.weights.activate`).
+    """
+    started_at = time.monotonic()
+    phase_fn()
+    _fire_phase_complete_hook(name, phase, (time.monotonic() - started_at) * 1000.0)
+
+
+def _fire_invocation_complete(
+    *,
+    name: str,
+    revision: str | None,
+    binding_type: str,
+    adapter_type: str,
+    outcome: Literal["success", "schema_error", "error"],
+    error: BaseException | None,
+) -> None:
+    """Fire the `adapter_function_invocation_complete` metric hook.
+
+    Args:
+        name: Adapter function name.
+        revision: Catalog revision of the adapter, or `None` if unpinned.
+        binding_type: Weight-binding reality the adapter ran under.
+        adapter_type: Adapter mechanism (e.g. `"lora"`, `"alora"`).
+        outcome: Invocation outcome.
+        error: The exception raised during invocation, or `None` on success.
+    """
+    if not has_plugins(HookType.ADAPTER_FUNCTION_INVOCATION_COMPLETE):
+        return
+    from ...plugins.hooks.adapter_function import (
+        AdapterFunctionInvocationCompletePayload,
+    )
+
+    payload = AdapterFunctionInvocationCompletePayload(
+        name=name,
+        revision=revision,
+        binding_type=binding_type,
+        adapter_type=adapter_type,
+        outcome=outcome,
+        error=error,
+    )
+    hook_coro = invoke_hook(HookType.ADAPTER_FUNCTION_INVOCATION_COMPLETE, payload)
+    _run_async_in_thread(hook_coro)
+
+
 # The full adapter-input surface `add_adapter` advertises. The legacy abc
 # `Adapter` (LocalFile/PEFT) and the core dataclass adapter (`_AdapterCore`,
 # Embedded/ServerMediated) are disjoint hierarchies, so the accepted type is
@@ -333,7 +429,7 @@ def get_adapter_for_intrinsic(
 # adapter realities they do not implement — the same "reject unsupported reality"
 # contract the reality-specific verbs use. See the module note on the mixin-vs-
 # generic trade-off for why this is a runtime, not a type-parameter, guarantee.
-AdapterInput: TypeAlias = Adapter | _AdapterCore
+AdapterInput: TypeAlias = Adapter | _AdapterCore | LocalFileBinding
 
 
 class AdapterMixin(Backend, abc.ABC):
@@ -341,7 +437,7 @@ class AdapterMixin(Backend, abc.ABC):
 
     Three verbs are universal across every adapter reality (LocalFile/PEFT,
     Embedded/Granite Switch, ServerMediated): `base_model_name`,
-    `add_adapter`, and `list_adapters`. The remaining four verbs are
+    `add_adapter`, and `list_adapters`. The remaining five verbs are
     reality-specific — a concrete backend overrides only the verb(s) matching
     its own reality; the others keep raising `NotImplementedError`.
 
@@ -429,48 +525,78 @@ class AdapterMixin(Backend, abc.ABC):
             f"Backend type {type(self)} does not support unload_peft_adapter()."
         )
 
-    def render_controls(self, adapter_qualified_name: str, active: bool) -> None:
-        """Render or clear the control tokens for a baked-in embedded adapter.
+    def remove_adapter(self, adapter_qualified_name: str) -> None:
+        """Deregister a previously added adapter, freeing its qualified name for reuse.
 
-        Embedded/Granite Switch reality only. Weights are already baked into
-        the model; this only toggles the control-token rendering that
-        activates or deactivates the adapter's behaviour for subsequent
-        requests.
+        The inverse of `add_adapter()`. LocalFile/PEFT reality only today
+        (#1528) — `LocalFileBinding.release()` calls this after
+        `unload_peft_adapter()` so a released `qualified_name` becomes
+        claimable by a fresh binding rather than staying claimed for the
+        backend's lifetime.
 
         Args:
             adapter_qualified_name (str): The `adapter.qualified_name` of the
-                adapter to activate or deactivate.
-            active (bool): `True` to render the adapter's control tokens,
-                `False` to clear them.
+                adapter to deregister.
+
+        Raises:
+            NotImplementedError: If this backend's adapter reality does not
+                support deregistration.
+        """
+        raise NotImplementedError(
+            f"Backend type {type(self)} does not support remove_adapter()."
+        )
+
+    def activate_peft_adapter(self, adapter_qualified_name: str) -> None:
+        """Switch a previously loaded PEFT adapter on for subsequent generation.
+
+        LocalFile/PEFT reality only (e.g. a locally hosted Hugging Face
+        model). The adapter must have been loaded via `load_peft_adapter`
+        before calling this method.
+
+        Args:
+            adapter_qualified_name (str): The `adapter.qualified_name` of the
+                adapter to activate.
 
         Raises:
             NotImplementedError: If this backend's adapter reality is not
-                Embedded/Granite Switch.
+                LocalFile/PEFT.
         """
         raise NotImplementedError(
-            f"Backend type {type(self)} does not support render_controls()."
+            f"Backend type {type(self)} does not support activate_peft_adapter()."
         )
 
-    def set_request_adapter(self, adapter_qualified_name: str) -> None:
-        """Select the adapter to use for the next request.
+    def deactivate_peft_adapter(self, adapter_qualified_name: str) -> None:
+        """Switch off any active PEFT adapter so generation uses the base model.
 
-        ServerMediated reality only — for servers that accept an adapter
-        selection per request rather than loading/unloading weights or
-        toggling control tokens locally. No backend implements this reality
-        yet.
+        LocalFile/PEFT reality only (e.g. a locally hosted Hugging Face
+        model).
 
         Args:
             adapter_qualified_name (str): The `adapter.qualified_name` of the
-                adapter to select.
+                adapter to deactivate. Accepted for symmetry with
+                `activate_peft_adapter`; the underlying primitive clears all
+                active PEFT adapters regardless of name.
 
         Raises:
-            NotImplementedError: Always — the ServerMediated adapter reality
-                has no implementation yet.
+            NotImplementedError: If this backend's adapter reality is not
+                LocalFile/PEFT.
         """
         raise NotImplementedError(
-            f"Backend type {type(self)} does not support set_request_adapter(); "
-            "the ServerMediated adapter reality is not implemented yet."
+            f"Backend type {type(self)} does not support deactivate_peft_adapter()."
         )
+
+    def _adapter_activation_lock(
+        self,
+    ) -> contextlib.AbstractContextManager[bool | None]:
+        """Exclusivity lock to hold while calling activate/deactivate verbs.
+
+        Default is a no-op (`contextlib.nullcontext()`). Backends whose
+        activation verbs mutate shared, non-thread-safe state (e.g.
+        `LocalHFBackend`'s underlying PEFT model) override this to return
+        their own lock, so callers like `LocalFileBinding.activate()` get
+        the same exclusivity `_generate_with_adapter_lock` relies on.
+        """
+        return contextlib.nullcontext()
 
     def resolve_adapter(self, name: str) -> _AdapterCore:
         """Find or lazily register an adapter by capability name.
@@ -537,19 +663,212 @@ class AdapterMixin(Backend, abc.ABC):
         if found is not None:
             return found
 
+        # `_find_adapter` only matches `_AdapterCore` entries. If registration
+        # above silently failed because a `LocalFileBinding` already claims a
+        # colliding qualified name (they share `f"{name}_{type}"` with
+        # `IntrinsicAdapter`), say so — the alternative is an opaque KeyError
+        # that gives no hint the two registration paths collided.
+        # list(...): same concurrent-mutation hazard as `_find_adapter` — snapshot
+        # before iterating rather than holding a live view over `_added_adapters`.
+        added = list(getattr(self, "_added_adapters", {}).items())
+        blocking = next(
+            (
+                v
+                for k, v in added
+                if k.startswith(f"{name}_") and not isinstance(v, _AdapterCore)
+            ),
+            None,
+        )
+        if blocking is not None:
+            blocking_name = getattr(blocking, "qualified_name", None)
+            raise KeyError(
+                f"Adapter {name!r} not found after registration: a "
+                f"{type(blocking).__name__} is already registered under "
+                f"{blocking_name!r}, which collides with {name!r}'s auto-registration "
+                "path. LocalFileBinding and resolve_adapter()/intrinsic-helper "
+                "registrations share the same qualified-name key space on this "
+                "backend and cannot both claim it."
+            )
+
         raise KeyError(f"Adapter {name!r} not found after registration")
 
     @contextlib.contextmanager
     def adapter_scope(self, adapter: "_AdapterCore | None"):  # type: ignore[type-arg]
         """Context manager wrapping adapter activation and deactivation.
 
-        Phase 1 stub — yields immediately (no-op). Phase 2 (see epic #929) wires
-        in `adapter.weights.activate()` and `adapter.weights.deactivate()`.
+        A no-op when `adapter` is `None`. Otherwise: activates
+        `adapter.weights`, yields, then always deactivates — even if the `with`
+        body raises. Each phase fires `ADAPTER_FUNCTION_PHASE_COMPLETE`, and
+        `ADAPTER_FUNCTION_INVOCATION_COMPLETE` fires on the way out, carrying the
+        overall outcome.
+
+        This method fires hooks only; it does not open spans. Span production is a
+        plugin's job (see #1464 for the rule and #1466 for the adapter-function
+        spans), and the `ADAPTER_FUNCTION_*` family currently has no start hook for
+        a plugin to open a span on. Hook dispatch goes through
+        `_run_async_in_thread` (no timeout): the dispatching call blocks the
+        calling thread, but the hook coroutine itself runs on the shared
+        `_EventLoopHandler` event-loop thread. A subscriber that blocks on
+        something the dispatching thread is holding deadlocks rather than
+        merely stalls — e.g. on `LocalHFBackend`, an intrinsic caller holds
+        `_generation_lock` across the whole scope, so a subscriber that
+        re-enters any `_generation_lock` path blocks the event-loop thread
+        while its owner waits on that same event loop, and reentrance cannot
+        bridge the gap. Even without such re-entry, a slow or blocking-mode
+        `ADAPTER_FUNCTION_*` subscriber delays whatever holds this scope open.
+
+        `deactivate()` is guarded on `activate()`'s own side effect having
+        completed, not on the activate phase's hook dispatch also succeeding.
+        If a plugin subscribed to `ADAPTER_FUNCTION_PHASE_COMPLETE` raises after
+        `activate()` already flipped the adapter on, `deactivate()` still runs —
+        telemetry must not be able to strand the adapter active.
+
+        Not atomic across the whole scope **by itself**: `_adapter_activation_lock()`
+        is held only inside each of `activate()`/`deactivate()`'s own verb calls
+        (see `LocalFileBinding.activate`), not for the `with` body in between.
+        Two concurrent `adapter_scope()` calls on one backend can therefore
+        interleave — one thread's body can run while a different adapter is
+        active, activated by another thread's call — unless the caller closes
+        that gap itself. Widening *this method's own* lock to span the whole
+        scope was tried and reverted: it deadlocks the moment the body does
+        real async generation from the thread that opened the scope, because
+        that work runs on the shared event-loop thread while this thread holds
+        the lock — a same-thread `RLock` doesn't help across threads.
+
+        `LocalHFBackend._generate_intrinsic_with_adapter_scope` is the reference
+        example of a caller that *does* close the gap for its own call site: it
+        holds `_generation_lock` around the entire scope, which is safe there
+        only because the scope *body* is fully synchronous end to end and
+        does no async generation work on the event loop (its only loop
+        traffic during the scope is the hook dispatches described above —
+        one-way submissions, not re-entry into this backend) — concurrent
+        invocations simply land on different threads and serialise on the
+        lock, rather than one thread holding it while another does async work
+        on the loop. A caller whose
+        body awaits work that re-enters generation on another thread must not
+        widen a lock this way — that reproduces the deadlock above.
+
+        A caller composing `adapter_scope()` with `LocalHFBackend`'s *standard*
+        (non-intrinsic) generation path still silently ignores it: that path
+        (`_generate_with_adapter_lock`) always deactivates any adapter before
+        generating, so wrapping `generate_from_context()` in `adapter_scope()`
+        activates the adapter, generates against the base model anyway, then
+        deactivates. Pre-existing, not specific to the intrinsic path this
+        method now supports.
+
+        `AdapterFunctionMetricsPlugin` in
+        `mellea/telemetry/metrics_plugins.py` emits the adapter-function
+        metrics; their instruments and attributes are defined in
+        `mellea/telemetry/metrics.py`.
 
         Args:
-            adapter: The adapter to activate, or `None` (no-op in Phase 1).
+            adapter: The adapter to activate, or `None` (no-op).
+
+        Raises:
+            TypeError: `adapter.weights` is not a `WeightsBinding` (e.g. an
+                `EmbeddedBinding`, which has no activate()/deactivate() to
+                scope — call its `apply_activation()` directly instead).
+            BaseException: An error raised by activation, the `with` body, or
+                deactivation. If both the body and deactivation fail, the body
+                error remains primary and the deactivation error is chained.
         """
-        yield
+        if adapter is None:
+            yield
+            return
+
+        name = adapter.identity.name
+        # Prefer `resolved_revision()` over the raw `.revision` attribute: a
+        # lazily-resolved binding (`revision=None`) still downloads and runs
+        # against the catalogue's pinned SHA, so reporting the unresolved
+        # `None` would mislabel an effectively-pinned invocation as unpinned.
+        # `resolved_revision()` only exists on `LocalFileBinding`, not the
+        # `WeightsBinding` base, so both the lookup and the call are guarded.
+        revision: str | None
+        if isinstance(adapter.weights, LocalFileBinding):
+            try:
+                revision = adapter.weights.resolved_revision()
+            except Exception:
+                revision = adapter.weights.revision
+        else:
+            revision = cast(str | None, getattr(adapter.weights, "revision", None))
+        binding_type = adapter.weights.binding_type
+        adapter_type = adapter.identity.adapter_type
+
+        # adapter_scope drives the WeightsBinding lifecycle (activate/deactivate);
+        # a binding with no lifecycle (e.g. EmbeddedBinding) activates through its
+        # own apply_activation() instead (issue #1142) and never reaches this scope.
+        if not isinstance(adapter.weights, WeightsBinding):
+            raise TypeError(
+                f"adapter_scope() requires a WeightsBinding-backed adapter; "
+                f"{binding_type!r} bindings have no activate()/deactivate() to "
+                "scope. Call apply_activation() directly instead."
+            )
+
+        outcome: Literal["success", "schema_error", "error"] = "success"
+        exception: BaseException | None = None
+        activated = False
+        body_exception: BaseException | None = None
+        try:
+            started_at = time.monotonic()
+            try:
+                adapter.weights.activate()
+                activated = True
+                _fire_phase_complete_hook(
+                    name, "activate", (time.monotonic() - started_at) * 1000.0
+                )
+                try:
+                    yield
+                except BaseException as exc:
+                    body_exception = exc
+                    raise
+            finally:
+                if activated:
+                    try:
+                        _run_adapter_phase(
+                            name, "deactivate", adapter.weights.deactivate
+                        )
+                    except BaseException as deactivate_exc:
+                        if body_exception is None:
+                            raise
+                        body_exception.add_note(
+                            "Adapter deactivation also failed: "
+                            f"{type(deactivate_exc).__name__}: {deactivate_exc}"
+                        )
+        except AdapterSchemaMismatchError as exc:
+            # Distinct from a generic error: this is the schema-drift signal the
+            # `parse_failures` counter exists to detect, so collapsing it into
+            # "error" would leave that counter permanently at zero. Reachable
+            # today — `adapter_scope` is public, so a caller can parse inside the
+            # scope — and it becomes the common case once #1465 moves generation
+            # and parsing in here.
+            outcome = "schema_error"
+            exception = exc
+            raise
+        except BaseException as exc:
+            outcome = "error"
+            exception = exc
+            raise
+        finally:
+            # A hook-dispatch failure here must not replace or mask the real
+            # outcome computed above — that would turn a clean `with` block
+            # into a thrown error, or swap a genuine body exception for a
+            # telemetry-plumbing one. Log and swallow instead.
+            try:
+                _fire_invocation_complete(
+                    name=name,
+                    revision=revision,
+                    binding_type=binding_type,
+                    adapter_type=adapter_type,
+                    outcome=outcome,
+                    error=exception,
+                )
+            except Exception:
+                MelleaLogger.get_logger().warning(
+                    f"adapter_function_invocation_complete hook dispatch failed for "
+                    f"{name!r}; ignoring so it doesn't mask the real outcome "
+                    f"({outcome!r}).",
+                    exc_info=True,
+                )
 
     def _find_adapter(
         self, capability: str, adapter_types: tuple[str, ...] | None = None
@@ -566,17 +885,35 @@ class AdapterMixin(Backend, abc.ABC):
         Returns:
             _AdapterCore | None: Matching adapter, or `None` if not found.
         """
-        adapters = getattr(self, "_added_adapters", {})
+        # Snapshot into a list: `_added_adapters` is no longer insert-only since
+        # `remove_adapter()` (#1528) can delete from it. A concurrent `release()`
+        # mutating the dict while this loop holds a live `.values()` view would
+        # raise "dictionary changed size during iteration"; iterating a list
+        # copy instead is immune to a mutation of the underlying dict.
+        #
+        # The snapshot also means this lookup can still see an entry that
+        # `remove_adapter()` just popped — harmless today because a qualified
+        # name is held by either a `LocalFileBinding` or an `IntrinsicAdapter`
+        # shim (never both) and the generation path consumes only shims.
+        # `remove_adapter()` is public, though, so any registered entry — shim
+        # or binding — can be popped: re-check that invariant when #1465 moves
+        # generation inside `adapter_scope`.
+        adapters = list(getattr(self, "_added_adapters", {}).values())
         if adapter_types is None:
-            for a in adapters.values():
-                if isinstance(a, _AdapterCore) and a.identity.capability == capability:
+            for a in adapters:
+                if isinstance(a, _AdapterCore) and (
+                    a.identity.name == capability or a.identity.capability == capability
+                ):
                     return a
             return None
         for preferred_type in adapter_types:
-            for a in adapters.values():
+            for a in adapters:
                 if (
                     isinstance(a, _AdapterCore)
-                    and a.identity.capability == capability
+                    and (
+                        a.identity.name == capability
+                        or a.identity.capability == capability
+                    )
                     and a.identity.adapter_type == preferred_type
                 ):
                     return a
@@ -586,7 +923,7 @@ class AdapterMixin(Backend, abc.ABC):
 class EmbeddedIntrinsicAdapter(_AdapterCore):
     """Deprecated shim for adapter functions embedded in a Granite Switch model.
 
-    .. deprecated::
+    Deprecated:
         Use :class:`~mellea.backends.adapters.Adapter` directly.
         `EmbeddedIntrinsicAdapter` will be removed in a future release
         (Epic #929, issue #1144).
@@ -610,12 +947,17 @@ class EmbeddedIntrinsicAdapter(_AdapterCore):
         config (dict): Parsed I/O transformation configuration.
         technology (str): `"lora"` or `"alora"`.
 
-    .. note::
-        `identity`, `io_contract`, and `weights` are Phase 1 internal scaffolding
-        populated in `__init__` to satisfy the new :class:`~mellea.backends.adapters.Adapter`
-        protocol.  They are not meaningful consumer-facing attributes; `io_contract` and
-        `weights` raise :exc:`NotImplementedError` and will be replaced in Phase 2
-        (issues #1137, #1142).
+    Note:
+        `identity`, `io_contract`, and `weights` are internal scaffolding
+        populated in `__init__` to satisfy the `Adapter` protocol; they are
+        not meaningful consumer-facing attributes.
+
+        - `identity`: always a real value.
+
+        - `io_contract`: the real, declared contract for `intrinsic_name`
+          (issue #1516); no longer a placeholder.
+
+        - `weights`: a real `EmbeddedBinding`; activation runs through it.
     """
 
     def __setattr__(self, name: str, value: object) -> None:
@@ -650,18 +992,24 @@ class EmbeddedIntrinsicAdapter(_AdapterCore):
         self.intrinsic_name = intrinsic_name
         self.config = config
         self.technology = technology
+        capability = intrinsic_name
+        if intrinsic_name in known_intrinsic_names():
+            capability = fetch_intrinsic_metadata(intrinsic_name).effective_capability
 
         # Populate the new Adapter triple so isinstance(self, _AdapterCore) holds.
         # technology is validated above; cast to the Literal type mypy expects.
+        identity = Identity(
+            name=intrinsic_name,
+            adapter_type=cast(Literal["lora", "alora"], technology),
+            capability=capability,
+        )
+
+        io_contract = get_io_contract(intrinsic_name)
+
+        weights = EmbeddedBinding()
+
         _AdapterCore.__init__(
-            self,
-            identity=Identity(
-                name=intrinsic_name,
-                adapter_type=cast(Literal["lora", "alora"], technology),
-                capability=intrinsic_name,
-            ),
-            io_contract=_ShimIOContract(),
-            weights=_ShimWeightsBinding(),
+            self, identity=identity, io_contract=io_contract, weights=weights
         )
 
     @staticmethod
@@ -751,8 +1099,20 @@ class EmbeddedIntrinsicAdapter(_AdapterCore):
     ) -> list["EmbeddedIntrinsicAdapter"]:
         """Load embedded adapters from a Granite Switch model on Hugging Face Hub.
 
-        Downloads `adapter_index.json` and the `io_configs/` directory, then
-        delegates to :meth:`from_model_directory`.
+        Downloads `adapter_index.json` and the `io_configs/` directory into a
+        persistent self-contained local directory, then delegates to
+        `from_model_directory`.
+
+        `huggingface_hub.snapshot_download`'s default cache-backed snapshot
+        directory populates `io_configs/` with symlinks that resolve into a
+        sibling `blobs/` directory *outside* the snapshot root. That breaks the
+        contract `from_model_directory` expects (a self-contained model
+        directory) and trips its path-escape check. To satisfy that contract,
+        the downloaded snapshot is materialised under the Hugging Face cache
+        into a self-contained directory keyed by its immutable revision, so
+        `io_configs/` contains real files rather than symlinks escaping the
+        directory. This preserves standard Hugging Face Hub cache reuse and
+        offline loading while preventing stale files from a mutable revision.
 
         Args:
             repo_id (str): Hugging Face Hub repository ID
@@ -773,10 +1133,11 @@ class EmbeddedIntrinsicAdapter(_AdapterCore):
                 `adapter_index.json` (wrong repo/revision, not a Granite Switch
                 model, or a stale cache).
             ValueError: If no adapters are found (delegated from
-                :meth:`from_model_directory`).
+                `from_model_directory`).
         """
         try:
             import huggingface_hub
+            from huggingface_hub.constants import HF_HUB_CACHE
             from huggingface_hub.errors import GatedRepoError, RepositoryNotFoundError
         except ImportError as e:
             raise ImportError(
@@ -785,11 +1146,13 @@ class EmbeddedIntrinsicAdapter(_AdapterCore):
             ) from e
 
         try:
-            local_root = huggingface_hub.snapshot_download(
-                repo_id=repo_id,
-                allow_patterns=["adapter_index.json", "io_configs/**"],
-                cache_dir=cache_dir,
-                revision=revision,
+            snapshot_root = pathlib.Path(
+                huggingface_hub.snapshot_download(
+                    repo_id=repo_id,
+                    allow_patterns=["adapter_index.json", "io_configs/**"],
+                    cache_dir=cache_dir,
+                    revision=revision,
+                )
             )
         except (GatedRepoError, RepositoryNotFoundError) as e:
             auth_hint = (
@@ -801,7 +1164,57 @@ class EmbeddedIntrinsicAdapter(_AdapterCore):
             )
             raise PermissionError(auth_hint) from e
 
+        cache_root = pathlib.Path(cache_dir or HF_HUB_CACHE)
+        cache_key = hashlib.sha256(
+            f"{repo_id}\0{snapshot_root.name}".encode()
+        ).hexdigest()
+        local_root = cache_root / "mellea" / "embedded-adapter-configs" / cache_key
+
         try:
+            if not local_root.is_dir():
+                local_root.parent.mkdir(parents=True, exist_ok=True)
+                temporary_dir = pathlib.Path(
+                    tempfile.mkdtemp(dir=local_root.parent, prefix=f"{cache_key}-")
+                )
+                try:
+                    import json as _json
+
+                    index_path = snapshot_root / "adapter_index.json"
+                    with open(index_path, encoding="utf-8") as f:
+                        index = _json.load(f)
+                    shutil.copyfile(index_path, temporary_dir / "adapter_index.json")
+
+                    snapshot_cache_root = snapshot_root.parent.parent.resolve()
+                    for entry in index.get("adapters", []):
+                        io_config_rel = entry.get("io_config")
+                        if io_config_rel is None:
+                            continue
+                        io_config_path = (snapshot_root / io_config_rel).resolve(
+                            strict=True
+                        )
+                        if not io_config_path.is_relative_to(snapshot_cache_root):
+                            raise ValueError(
+                                f"io_config path '{io_config_rel}' escapes "
+                                "the downloaded Hugging Face snapshot"
+                            )
+                        destination = temporary_dir / io_config_rel
+                        destination.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copyfile(io_config_path, destination)
+
+                    adapters = EmbeddedIntrinsicAdapter.from_model_directory(
+                        temporary_dir, intrinsic_name=intrinsic_name
+                    )
+                    try:
+                        temporary_dir.replace(local_root)
+                    except OSError:
+                        if not local_root.is_dir():
+                            raise
+                    else:
+                        return adapters
+                finally:
+                    if temporary_dir.exists():
+                        shutil.rmtree(temporary_dir)
+
             return EmbeddedIntrinsicAdapter.from_model_directory(
                 local_root, intrinsic_name=intrinsic_name
             )

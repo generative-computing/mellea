@@ -53,6 +53,16 @@ class Message(Component["Message"]):
             the message.
         tool_calls (list[dict[str, Any]] | None): Optional OpenAI-compatible
             assistant tool calls associated with the message.
+        tool_call_id (str | None): Optional provider-supplied tool-call id that a
+            `role="tool"` message references, so a tool-result turn can be linked
+            back to the assistant tool call that produced it (issue #1389).
+            `ToolMessage` sources this from its `ModelToolCall` instead; set it
+            directly only when constructing a bare `role="tool"` `Message`.
+        tool_name (str | None): Optional name of the tool whose result a
+            `role="tool"` message carries. Some backends (e.g. Ollama) key their
+            tool-result turn on the tool name rather than a call id. A component
+            declaring `role="tool"` can supply it directly; `ToolMessage` instead
+            carries it as `.name`.
         thinking (str | None): Optional reasoning trace produced by a thinking
             model on the turn that generated this message. Populated by `_parse`
             from `ModelOutputThunk.thinking`; carried through `as_chat_history`
@@ -77,9 +87,11 @@ class Message(Component["Message"]):
         audio: None | list[AudioBlock | AudioUrlBlock] = None,
         documents: None | Iterable[str | Document] = None,
         tool_calls: list[dict[str, Any]] | None = None,
+        tool_call_id: str | None = None,
+        tool_name: str | None = None,
         thinking: str | None = None,
     ):
-        """Initialize a Message with a role, text content, optional images, audio, documents, tool calls, and an optional reasoning trace."""
+        """Initialize a Message with a role, text content, optional images, audio, documents, tool calls, an optional tool-call id, an optional tool name, and an optional reasoning trace."""
         if role not in get_args(Message.Role):
             raise ValueError(
                 f"Invalid role {role!r}. Must be one of: {list(get_args(Message.Role))}"
@@ -92,6 +104,8 @@ class Message(Component["Message"]):
         self._audio = audio
         self._docs = _coerce_to_documents(documents)
         self._tool_calls = tool_calls
+        self._tool_call_id = tool_call_id
+        self._tool_name = tool_name
 
     @property
     def images(self) -> None | list[ImageBlock | ImageUrlBlock]:
@@ -107,6 +121,16 @@ class Message(Component["Message"]):
     def tool_calls(self) -> list[dict[str, Any]] | None:
         """Returns the OpenAI-compatible tool calls associated with this message."""
         return self._tool_calls
+
+    @property
+    def tool_call_id(self) -> str | None:
+        """Returns the tool-call id this `role="tool"` message references, if any."""
+        return self._tool_call_id
+
+    @property
+    def tool_name(self) -> str | None:
+        """Returns the name of the tool whose result this `role="tool"` message carries, if any."""
+        return self._tool_name
 
     def parts(self) -> list[Span]:
         """Return the constituent parts of this message, including content, documents, images, and audio.
@@ -127,6 +151,10 @@ class Message(Component["Message"]):
     def format_for_llm(self) -> TemplateRepresentation:
         """Formats the content for a Language Model.
 
+        Declares this message's `role` and carries its `thinking`, `tool_calls`,
+        and `tool_call_id` so the representation is a faithful, self-describing
+        view of the message (see `message_from_template_representation`).
+
         Returns:
             The formatted output suitable for language models.
         """
@@ -136,6 +164,11 @@ class Message(Component["Message"]):
             template_order=["*", "Message"],
             images=self._images,
             audio=self._audio,
+            role=self.role,
+            thinking=self.thinking,
+            tool_calls=self._tool_calls,
+            tool_call_id=self._tool_call_id,
+            tool_name=self._tool_name,
         )
 
     def __repr__(self) -> str:
@@ -265,7 +298,7 @@ class ToolMessage(Message):
         tool: ModelToolCall,
     ):
         """Initialize a ToolMessage with role, content, tool output, name, args, and tool call."""
-        super().__init__(role, content)
+        super().__init__(role, content, tool_call_id=tool.tool_call_id)
         self.name = name
         self.arguments = args
         self._tool_output = tool_output
@@ -274,6 +307,39 @@ class ToolMessage(Message):
     def __repr__(self) -> str:
         """Pretty representation of messages, because they are a special case."""
         return f'mellea.ToolMessage(role="{self.role}", content="{self.content}", name="{self.name}")'
+
+
+def message_from_template_representation(
+    tr: TemplateRepresentation, *, default_role: "Message.Role", content: str
+) -> Message:
+    """Build a `Message` from a component's `TemplateRepresentation`.
+
+    Shared by `ChatFormatter.to_chat_messages` and `as_generic_chat_history` so a
+    component's declared role and tool metadata are honored consistently across both
+    conversion paths. The representation's `role` overrides `default_role` when set;
+    role validation is deferred to `Message`, which raises `ValueError` for anything
+    outside `Message.Role`. `thinking`, `tool_calls`, and (for `role="tool"`)
+    `tool_call_id`/`tool_name` are carried onto the resulting message.
+
+    Args:
+        tr: The template representation returned by the component's `format_for_llm`.
+        default_role: The positional role guess to use when `tr.role` is `None`.
+        content: The already-rendered text content for the message.
+
+    Returns:
+        A `Message` with the resolved role, content, attachments, and tool metadata.
+    """
+    role = tr.role if tr.role is not None else default_role
+    return Message(
+        role=role,  # type: ignore[arg-type]  # validated by Message.__init__
+        content=content,
+        images=tr.images,
+        audio=tr.audio,
+        tool_calls=tr.tool_calls,
+        tool_call_id=tr.tool_call_id,
+        tool_name=tr.tool_name,
+        thinking=tr.thinking,
+    )
 
 
 def as_chat_history(ctx: Context) -> list[Message]:
@@ -389,6 +455,24 @@ def as_generic_chat_history(
                     content = formatter(c)
                 else:
                     content = str(c)
+                return Message(role="user", content=content)
+            case Component():
+                # A component may declare its own role (and tool metadata) via its
+                # template representation; honor it over the `user` default, keeping
+                # this path consistent with `ChatFormatter.to_chat_messages`. Stay
+                # permissive: some components (e.g. `Intrinsic`) intentionally raise
+                # from `format_for_llm` because they are only ever the action, never
+                # part of the rendered context. Fall back to stringifying them via
+                # the formatter — the pre-existing behavior for arbitrary components.
+                content = formatter(c)
+                try:
+                    tr = c.format_for_llm()
+                except NotImplementedError:
+                    tr = None
+                if isinstance(tr, TemplateRepresentation):
+                    return message_from_template_representation(
+                        tr, default_role="user", content=content
+                    )
                 return Message(role="user", content=content)
             case _:
                 content = formatter(c)

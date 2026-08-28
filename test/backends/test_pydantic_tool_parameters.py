@@ -262,10 +262,8 @@ class TestPydanticParameterValidation:
 
         validated = validate_tool_arguments(tool, args, coerce_types=True)
         assert validated["person"]["name"] == "Jane Doe"
-        assert (
-            "address" not in validated["person"]
-            or validated["person"].get("address") is None
-        )
+        # The unset optional nested field must not be padded back in as None.
+        assert "address" not in validated["person"]
 
     def test_nested_object_with_all_fields(self):
         """Test validation with all fields including optional nested object."""

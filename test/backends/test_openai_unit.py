@@ -7,6 +7,7 @@ Covers filter_openai_client_kwargs, filter_chat_completions_kwargs,
 _simplify_and_merge, and _make_backend_specific_and_remove.
 """
 
+import os
 from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
 import pytest
@@ -15,7 +16,7 @@ from openai.types.chat import ChatCompletion, ChatCompletionChunk, ChatCompletio
 from openai.types.chat.chat_completion import Choice
 from openai.types.completion_choice import CompletionChoice
 
-from mellea.backends import ModelOption
+from mellea.backends import ModelOption, model_ids
 from mellea.backends.openai import OpenAIBackend
 from mellea.core.base import ModelOutputThunk
 
@@ -61,6 +62,47 @@ def test_str_masks_api_key():
     backend = _make_backend()
     assert "fake-key" not in str(backend)
     assert "***" in str(backend)
+
+
+# --- model_id resolution ---
+
+
+def test_model_identifier_resolves_to_openai_name():
+    backend = OpenAIBackend(
+        model_id=model_ids.NVIDIA_NEMOTRON_3_SUPER_120B_A12B,
+        api_key="fake-key",
+        base_url="http://localhost:9999/v1",
+    )
+    assert backend._model_id == model_ids.NVIDIA_NEMOTRON_3_SUPER_120B_A12B.openai_name
+
+
+def test_model_identifier_without_openai_name_raises():
+    # Local-inference-only constants have no name for a hosted endpoint.
+    assert model_ids.NVIDIA_NEMOTRON_NANO_12B_V2.openai_name is None
+    with pytest.raises(ValueError, match="openai_name"):
+        OpenAIBackend(
+            model_id=model_ids.NVIDIA_NEMOTRON_NANO_12B_V2,
+            api_key="fake-key",
+            base_url="http://localhost:9999/v1",
+        )
+
+
+def test_model_id_none_raises_type_error():
+    # Forwarding an unset ModelIdentifier field (e.g. `.hf_model_name`) yields None;
+    # it must fail here rather than as a missing _model_id at generation time.
+    with pytest.raises(TypeError, match="must be a str or ModelIdentifier"):
+        OpenAIBackend(
+            model_id=None,  # type: ignore[arg-type]
+            api_key="fake-key",
+            base_url="http://localhost:9999/v1",
+        )
+
+
+def test_model_id_empty_string_raises_value_error():
+    with pytest.raises(ValueError, match="empty string"):
+        OpenAIBackend(
+            model_id="  ", api_key="fake-key", base_url="http://localhost:9999/v1"
+        )
 
 
 # --- filter_openai_client_kwargs ---
@@ -168,6 +210,38 @@ def test_simplify_and_merge_per_call_overrides_backend():
     b = _make_backend(model_options={"max_completion_tokens": 128})
     result = b._simplify_and_merge({"max_completion_tokens": 512}, is_chat_context=True)
     assert result[ModelOption.MAX_NEW_TOKENS] == 512
+
+
+@pytest.mark.parametrize("is_chat_context", [True, False])
+def test_simplify_and_merge_rejects_model_option(
+    backend: OpenAIBackend, is_chat_context: bool
+) -> None:
+    """Regression (#1575): model selection is rejected for both OpenAI APIs.
+
+    Without this check, the raw `model` option reaches the API call alongside
+    OpenAIBackend's fixed model argument and raises a duplicate-keyword error.
+    """
+    with pytest.raises(ValueError, match="model cannot be set via model_options"):
+        backend._simplify_and_merge(
+            {"model": "other-model"}, is_chat_context=is_chat_context
+        )
+
+
+async def test_openai_backend_rejects_model_option_on_standard_chat_path():
+    """Regression (#1575): standard chat rejects per-call model selection.
+
+    Without this check, the user-supplied `model` collides with the backend's
+    fixed `model` keyword argument at the OpenAI client call site.
+    """
+    from mellea.core.base import CBlock
+    from mellea.stdlib.context import ChatContext
+
+    backend = _make_backend()
+
+    with pytest.raises(ValueError, match="model cannot be set via model_options"):
+        await backend.generate_from_chat_context(
+            CBlock(value="hello"), ChatContext(), model_options={"model": "other-model"}
+        )
 
 
 # --- _make_backend_specific_and_remove ---
@@ -353,9 +427,13 @@ async def test_processing_reasoning_content_takes_precedence_over_reasoning(back
 
 
 def test_merge_user_extra_body_none_returns_base(backend):
-    """A missing user extra_body leaves the base untouched."""
+    """A missing user extra_body returns a dict equal to base (a copy, not same object)."""
     base = {"documents": ["d"]}
-    assert backend._merge_user_extra_body(base, None) is base
+    result = backend._merge_user_extra_body(base, None)
+    assert result == {"documents": ["d"]}
+    assert (
+        result is not base
+    )  # always returns a new dict so default_extra_body can be layered
 
 
 def test_merge_user_extra_body_user_keys_win(backend):
@@ -427,6 +505,249 @@ async def test_generate_from_raw_merges_user_extra_body(backend):
     extra_body = call_kwargs["extra_body"]
     assert extra_body["caller_key"] == "caller-value"
     assert "guided_json" in extra_body or "structured_outputs" in extra_body
+
+
+# --- #1502: non-OpenAI format= warning only at init ---
+
+_FORMAT_ASSUMPTION = "NOT using the OpenAI platform"
+
+
+def _info_msgs(mock_logger) -> list[str]:
+    return [str(c.args[0]) for c in mock_logger.info.call_args_list if c.args]
+
+
+def test_non_openai_format_assumption_logged_once_at_init():
+    mock_logger = MagicMock()
+    with (
+        patch(
+            "mellea.backends.openai.MelleaLogger.get_logger", return_value=mock_logger
+        ),
+        patch(
+            "mellea.backends.openai.is_vllm_server_with_structured_output",
+            return_value=False,
+        ),
+    ):
+        OpenAIBackend(
+            model_id="gpt-4o", api_key="fake-key", base_url="http://localhost:9999/v1"
+        )
+        OpenAIBackend(
+            model_id="gpt-4o", api_key="fake-key", base_url="http://localhost:9999/v1"
+        )
+
+    matches = [m for m in _info_msgs(mock_logger) if _FORMAT_ASSUMPTION in m]
+    assert len(matches) == 2  # once per backend instance
+
+
+def test_openai_platform_skips_format_assumption_log():
+    mock_logger = MagicMock()
+    # Unset OPENAI_BASE_URL for this test: after resolving env into _base_url,
+    # a leftover non-OpenAI env would make the no-base_url construction log.
+    # These backends point at api.openai.com, so mock the vLLM version probe:
+    # __init__ calls is_vllm_server_with_structured_output unconditionally,
+    # which would otherwise make a real GET to api.openai.com/version.
+    with (
+        patch(
+            "mellea.backends.openai.MelleaLogger.get_logger", return_value=mock_logger
+        ),
+        patch(
+            "mellea.backends.openai.is_vllm_server_with_structured_output",
+            return_value=False,
+        ),
+        patch.dict(os.environ),
+    ):
+        os.environ.pop("OPENAI_BASE_URL", None)
+        OpenAIBackend(
+            model_id="gpt-4o", api_key="fake-key", base_url="https://api.openai.com/v1"
+        )
+        OpenAIBackend(model_id="gpt-4o", api_key="fake-key")
+
+    matches = [m for m in _info_msgs(mock_logger) if _FORMAT_ASSUMPTION in m]
+    assert matches == []
+
+
+def test_format_assumption_log_honors_openai_base_url_env():
+    """Env-only non-OpenAI base_url must still classify as non-OpenAI at init."""
+    mock_logger = MagicMock()
+    with (
+        patch(
+            "mellea.backends.openai.MelleaLogger.get_logger", return_value=mock_logger
+        ),
+        patch(
+            "mellea.backends.openai.is_vllm_server_with_structured_output",
+            return_value=False,
+        ),
+        patch.dict(
+            os.environ, {"OPENAI_BASE_URL": "http://localhost:9999/v1"}, clear=False
+        ),
+    ):
+        OpenAIBackend(model_id="gpt-4o", api_key="fake-key")
+
+    matches = [m for m in _info_msgs(mock_logger) if _FORMAT_ASSUMPTION in m]
+    assert len(matches) == 1
+
+
+async def test_format_assumption_not_relogged_per_generation():
+    """#1502: the notice must not repeat on every format= generation."""
+    import pydantic
+
+    from mellea.core.base import CBlock
+    from mellea.stdlib.context import ChatContext
+
+    class Answer(pydantic.BaseModel):
+        value: int
+
+    backend = OpenAIBackend(
+        model_id="gpt-4o", api_key="fake-key", base_url="http://localhost:9999/v1"
+    )
+    ctx = ChatContext().add(CBlock(value="q"))
+    resp = MagicMock()
+    resp.choices = [MagicMock()]
+    resp.choices[0].message.content = "{}"
+    resp.choices[0].message.role = "assistant"
+
+    mock_logger = MagicMock()
+    with (
+        patch(
+            "mellea.backends.openai.MelleaLogger.get_logger", return_value=mock_logger
+        ),
+        patch.object(
+            backend._async_client.chat.completions, "create", new_callable=AsyncMock
+        ) as create,
+    ):
+        create.return_value = resp
+        for _ in range(3):
+            await backend.generate_from_chat_context(
+                CBlock(value="q"), ctx, _format=Answer, model_options={}
+            )
+
+    msgs = [str(c.args[0]) for c in mock_logger.info.call_args_list if c.args]
+    assert [m for m in msgs if _FORMAT_ASSUMPTION in m] == []
+
+
+def test_default_extra_body_applied_when_no_per_call_override():
+    """Construction-time default_extra_body is present in every merged result."""
+    backend = OpenAIBackend(
+        model_id="gpt-4o",
+        base_url="http://localhost:9999/v1",
+        api_key="test-key",
+        default_extra_body={"enable_thinking": False},
+    )
+    merged = backend._merge_user_extra_body({}, None)
+    assert merged["enable_thinking"] is False
+
+
+def test_default_extra_body_overridden_by_per_call():
+    """Per-call model_options take priority over construction-time defaults."""
+    backend = OpenAIBackend(
+        model_id="gpt-4o",
+        base_url="http://localhost:9999/v1",
+        api_key="test-key",
+        default_extra_body={"enable_thinking": False},
+    )
+    merged = backend._merge_user_extra_body({}, {"enable_thinking": True})
+    assert merged["enable_thinking"] is True
+
+
+def test_default_extra_body_chat_template_kwargs_deep_merged():
+    """chat_template_kwargs from default and per-call are merged key-by-key."""
+    backend = OpenAIBackend(
+        model_id="gpt-4o",
+        base_url="http://localhost:9999/v1",
+        api_key="test-key",
+        default_extra_body={"chat_template_kwargs": {"enable_thinking": True}},
+    )
+    merged = backend._merge_user_extra_body(
+        {"chat_template_kwargs": {"adapter_name": "foo"}}, None
+    )
+    assert merged["chat_template_kwargs"] == {
+        "enable_thinking": True,
+        "adapter_name": "foo",
+    }
+
+
+def test_default_extra_body_does_not_mutate_constructor_arg():
+    """The dict passed as default_extra_body is not mutated by merge operations."""
+    defaults = {"chat_template_kwargs": {"enable_thinking": True}}
+    backend = OpenAIBackend(
+        model_id="gpt-4o",
+        base_url="http://localhost:9999/v1",
+        api_key="test-key",
+        default_extra_body=defaults,
+    )
+    backend._merge_user_extra_body({"other_key": "val"}, {"another": "val2"})
+    assert defaults == {"chat_template_kwargs": {"enable_thinking": True}}
+
+
+def test_default_extra_body_chat_template_kwargs_three_way_merge():
+    """default_extra_body, base, and per-call user all contribute simultaneously.
+
+    Each layer sets a distinct chat_template_kwargs key (mirroring a real call:
+    a construction-time thinking default, Mellea's own adapter-activation write,
+    and a per-call override for something else) — all three must survive.
+    """
+    backend = OpenAIBackend(
+        model_id="gpt-4o",
+        base_url="http://localhost:9999/v1",
+        api_key="test-key",
+        default_extra_body={"chat_template_kwargs": {"enable_thinking": True}},
+    )
+    merged = backend._merge_user_extra_body(
+        {"chat_template_kwargs": {"adapter_name": "answerability"}},
+        {"chat_template_kwargs": {"thinking_budget": 5000}},
+    )
+    assert merged["chat_template_kwargs"] == {
+        "enable_thinking": True,
+        "adapter_name": "answerability",
+        "thinking_budget": 5000,
+    }
+
+
+async def test_standard_chat_path_applies_default_extra_body_without_per_call_override():
+    """Regression test for #1453: the standard chat path must not silently
+    drop `default_extra_body` when the caller passes no per-call `extra_body`.
+
+    `_generate_from_chat_context_standard` used to call `_merge_user_extra_body`
+    only when `model_options` carried a per-call `extra_body` override, so a
+    construction-time `default_extra_body` never reached the wire on an
+    ordinary call — defeating the "set once at construction" point of the
+    feature.
+    """
+    from mellea.core.base import CBlock
+    from mellea.stdlib.context import ChatContext
+
+    backend = OpenAIBackend(
+        model_id="gpt-4o",
+        base_url="http://localhost:9999/v1",
+        api_key="test-key",
+        default_extra_body={"chat_template_kwargs": {"enable_thinking": True}},
+    )
+
+    with patch.object(
+        backend._async_client.chat.completions, "create", new_callable=AsyncMock
+    ) as mock_create:
+        mock_create.return_value = ChatCompletion(
+            id="test",
+            choices=[
+                Choice(
+                    finish_reason="stop",
+                    index=0,
+                    message=ChatCompletionMessage(role="assistant", content="ok"),
+                )
+            ],
+            created=0,
+            model="gpt-4o",
+            object="chat.completion",
+        )
+        mot, _ = await backend.generate_from_chat_context(
+            CBlock(value="hello"),
+            ChatContext(),
+            model_options={ModelOption.STREAM: False},
+        )
+        await mot.avalue()
+
+    call_kwargs = mock_create.call_args.kwargs
+    assert call_kwargs["model"] == "gpt-4o"
+    assert call_kwargs["extra_body"]["chat_template_kwargs"]["enable_thinking"] is True
 
 
 if __name__ == "__main__":

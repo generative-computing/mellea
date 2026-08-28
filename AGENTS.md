@@ -97,6 +97,17 @@ mkdir -p .bob && ln -s ../.agents/skills .bob/skills
 
 Pre-commit runs: ruff, mypy, uv-lock, codespell, license-headers
 
+**Pull request template**: opening a PR fills the body from [`.github/pull_request_template.md`](.github/pull_request_template.md), which ends with four type checkboxes - `Component`, `Requirement`, `Sampling Strategy`, `Tool`. If your PR adds or modifies one of those, check the matching box; the `PR Bot` workflow ([`.github/workflows/pr-update.yml`](.github/workflows/pr-update.yml)) then posts a comment with the type-specific review checklist from `.github/PULL_REQUEST_TEMPLATE/`:
+
+| Checked box | Checklist template |
+|-------------|--------------------|
+| `Component` | `.github/PULL_REQUEST_TEMPLATE/component.md` |
+| `Requirement` | `.github/PULL_REQUEST_TEMPLATE/requirement.md` |
+| `Sampling Strategy` | `.github/PULL_REQUEST_TEMPLATE/sampling.md` |
+| `Tool` | `.github/PULL_REQUEST_TEMPLATE/tool.md` |
+
+This matters when a PR is opened outside the GitHub UI (`gh pr create --body`, from a fork, or by an agent): the template isn't applied automatically. When you open such a PR and it adds or modifies one of the four types, build the body from `.github/pull_request_template.md` with the matching box checked (if relevant) so the bot posts the checklist.
+
 **Review states**: when reviewing a PR, see [CONTRIBUTING.md → Review States](CONTRIBUTING.md#review-states) for when to use `APPROVE` vs `REQUEST CHANGES` vs `COMMENT`.
 
 For AI attribution trailers, see [Section 7 (AI Attribution)](#7-ai-attribution).
@@ -194,7 +205,6 @@ Adapter functions are specialized LoRA/aLoRA adapters that add task-specific cap
 | `rag` | `rewrite_question(question, context, backend)` | Rewrite question into a retrieval query |
 | `rag` | `clarify_query(question, documents, context, backend)` | Generate clarification or return "CLEAR" |
 | `rag` | `find_citations(response, documents, context, backend)` | Document sentences supporting the response |
-| `rag` | `check_context_relevance(question, document, context, backend)` | **Deprecated.** Granite 4.0 only; no Granite 4.1 adapter and none planned. Will be removed in a future release. Use a prompted relevance check instead. |
 | `rag` | `flag_hallucinated_content(response, documents, context, backend)` | Flag potentially hallucinated sentences |
 
 ```python
@@ -214,6 +224,18 @@ score = core.check_certainty(context, backend)
 
 For lower-level control (custom adapters, model options), use `mfuncs.act()` with `Intrinsic` directly — see examples in `docs/examples/intrinsics/`.
 
+### Weights binding shapes
+
+`Adapter.weights` normalizes each deployment's activation mechanism behind one of
+two shapes — a `WeightsBinding` lifecycle for weights you stage yourself, or
+`EmbeddedBinding.apply_activation` for weights already in the served model. The
+post-activation shape each produces:
+
+| Binding | Reality | Lifecycle verbs | Caller invokes | Normalized post-activation state |
+|---------|---------|------------------|-----------------|-----------------------------------|
+| `LocalFileBinding` | LocalFile/PEFT | `prepare` / `activate` / `deactivate` / `release` | `activate()` / `deactivate()`, via `adapter_scope` | Backend-internal PEFT adapter state toggled; the outgoing request is untouched |
+| `EmbeddedBinding` | Embedded/Granite Switch | none — weights are already in the served model | `apply_activation(request, identity)` | `request.extra_body["chat_template_kwargs"]["adapter_name"]` set; `request.api_params["model"]` removed if present |
+
 ### Project Resources
 
 - **Canonical catalog**: `mellea/backends/adapters/catalog.py` — source of truth for adapter function names, HF repo IDs, and adapter types
@@ -228,7 +250,7 @@ When adding support for a new adapter function (not just using an existing one),
 
 | Repo | Purpose | Adapter functions |
 |------|---------|------------|
-| [`ibm-granite/granitelib-rag-r1.0`](https://huggingface.co/ibm-granite/granitelib-rag-r1.0) | RAG pipeline | answerability, citations, context_relevance, hallucination_detection, query_rewrite, query_clarification |
+| [`ibm-granite/granitelib-rag-r1.0`](https://huggingface.co/ibm-granite/granitelib-rag-r1.0) | RAG pipeline | answerability, citations, hallucination_detection, query_rewrite, query_clarification |
 | [`ibm-granite/granitelib-core-r1.0`](https://huggingface.co/ibm-granite/granitelib-core-r1.0) | Core capabilities | context-attribution, requirement-check, uncertainty |
 | [`ibm-granite/granitelib-guardian-r1.0`](https://huggingface.co/ibm-granite/granitelib-guardian-r1.0) | Safety & compliance | guardian-core, policy-guardrails, factuality-detection, factuality-correction |
 

@@ -43,6 +43,11 @@ def test_fetch_unknown_name_raises_value_error():
         fetch_intrinsic_metadata("bogus")
 
 
+def test_fetch_removed_context_relevance_raises_value_error():
+    with pytest.raises(ValueError, match="Unknown intrinsic name 'context_relevance'"):
+        fetch_intrinsic_metadata("context_relevance")
+
+
 def test_fetch_returns_defensive_copy():
     entry_a = fetch_intrinsic_metadata("answerability")
     entry_b = fetch_intrinsic_metadata("answerability")
@@ -111,7 +116,6 @@ def test_hyphenated_entries_have_underscore_capabilities(name, expected_capabili
     [
         "answerability",
         "citations",
-        "context_relevance",
         "hallucination_detection",
         "query_clarification",
         "query_rewrite",

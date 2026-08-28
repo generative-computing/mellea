@@ -2,7 +2,10 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import contextvars
+import gc
 import multiprocessing
+import warnings
+from unittest import mock
 
 import pytest
 
@@ -80,6 +83,75 @@ def test_event_loop_handler_init_and_del():
 
     # Make sure this didn't delete the actual singleton.
     assert elh.__event_loop_handler is not None
+
+
+def test_run_async_in_thread_closes_coroutine_on_scheduling_failure():
+    """A failure before the coroutine is scheduled must close it, not leak it."""
+    closed = False
+
+    async def never_scheduled() -> None:
+        nonlocal closed
+        closed = True
+
+    co = never_scheduled()
+
+    with pytest.raises(RuntimeError, match="boom"):
+        with mock.patch.object(
+            elh, "get_current_event_loop", side_effect=RuntimeError("boom")
+        ):
+            elh._run_async_in_thread(co)
+
+    # A closed-but-never-started coroutine raises StopIteration internally,
+    # which close() swallows; the body (setting `closed`) never runs.
+    assert closed is False
+    with pytest.raises(RuntimeError):
+        co.send(None)
+
+
+def test_run_async_in_thread_closes_wrapped_coroutine_on_scheduling_failure():
+    """A scheduling failure must also close the internal `_wrapped()` coroutine.
+
+    Regression guard: closing `co` alone isn't enough — `_wrapped()`'s own
+    coroutine object is created before `run_coroutine_threadsafe` is called, so
+    if scheduling itself raises, `_wrapped()` never starts and never gets to
+    `await co`, leaking a second "coroutine was never awaited" warning distinct
+    from `co`'s.
+    """
+
+    async def caller_coroutine() -> None:
+        return None
+
+    co = caller_coroutine()
+
+    with mock.patch.object(
+        elh.asyncio,
+        "run_coroutine_threadsafe",
+        side_effect=RuntimeError("scheduling failed"),
+    ):
+        with pytest.raises(RuntimeError, match="scheduling failed"):
+            elh._run_async_in_thread(co)
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        del co
+        gc.collect()
+
+    unawaited = [
+        w
+        for w in caught
+        if issubclass(w.category, RuntimeWarning) and "never awaited" in str(w.message)
+    ]
+    assert unawaited == [], f"leaked unawaited coroutine(s): {unawaited}"
+
+
+def test_run_async_in_thread_reraises_coroutine_exception():
+    """Exceptions raised by the coroutine itself still propagate normally."""
+
+    async def boom() -> None:
+        raise ValueError("from inside the coroutine")
+
+    with pytest.raises(ValueError, match="from inside the coroutine"):
+        elh._run_async_in_thread(boom())
 
 
 def test_event_loop_handler_with_forking():

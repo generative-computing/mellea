@@ -88,10 +88,24 @@ ollama pull mistral:7b
 | `IBM_GRANITE_4_1_8B` | `granite4.1:8b` | Higher quality, ~5 GB. |
 | `IBM_GRANITE_3_3_8B` | `granite3.3:8b` | Higher quality, ~5 GB. |
 | `IBM_GRANITE_3_3_VISION_2B` | `ibm/granite3.3-vision:2b` | Vision model for image inputs. |
+| `IBM_GRANITE_VISION_4_1_4B` | `hf.co/ibm-granite/granite-vision-4.1-4b-GGUF:Q4_K_M` | Current-generation vision model, pulled from Hugging Face. |
 | `META_LLAMA_3_2_3B` | `llama3.2:3b` | Compact Llama model. |
 | `MISTRALAI_MISTRAL_0_3_7B` | `mistral:7b` | Mistral 7B. |
 | `QWEN3_8B` | `qwen3:8b` | Qwen3 8B. |
+| `NVIDIA_NEMOTRON_3_NANO_4B` | `nemotron-3-nano:4b` | Compact NVIDIA Nemotron 3 model, ~3 GB. |
+| `NVIDIA_NEMOTRON_3_NANO_30B_A3B` | `nemotron-3-nano:30b` | Nemotron 3 sparse MoE, ~24 GB. |
+| `NVIDIA_NEMOTRON_3_NANO_OMNI_30B_A3B` | `nemotron3:33b` | Multimodal Nemotron 3; Ollama serves text and image inputs, ~28 GB. |
+| `NVIDIA_NEMOTRON_3_SUPER_120B_A12B` | `nemotron-3-super:120b` | Nemotron 3 sparse MoE, ~87 GB. |
+| `NVIDIA_NEMOTRON_3_ULTRA_550B_A55B` | `nemotron-3-ultra:cloud` | Ollama hosts this size in the cloud only; no local weights. |
+| `NVIDIA_LLAMA_3_1_NEMOTRON_70B` | `nemotron:70b` | Llama 3.1 70B tuned by NVIDIA, ~43 GB. |
+| `NVIDIA_NEMOTRON_MINI_4B` | `nemotron-mini:4b` | Small NVIDIA model for roleplay, RAG QA, and function calling, ~3 GB. |
 | `DEEPSEEK_R1_8B` | `deepseek-r1:8b` | Reasoning-capable model. |
+
+Sizes are for the default tag, which is a 4-bit quantization for most models.
+
+This table is a curated subset. Every constant in `mellea/backends/model_ids.py` with an
+`ollama_name` set can be passed to `start_session`; those without one need a plain Ollama
+tag string instead.
 
 Run `ollama list` to see which models are already downloaded locally.
 
@@ -167,7 +181,14 @@ or `chat()` apply to that call only and take precedence.
 ## Vision models
 
 Ollama hosts vision-capable models. Use `IBM_GRANITE_3_3_VISION_2B` or any Ollama
-vision model via the OpenAI-compatible endpoint:
+vision model via the OpenAI-compatible endpoint.
+
+For the current-generation Granite vision model, use `IBM_GRANITE_VISION_4_1_4B`. It is
+not in the Ollama library, so pull IBM's official GGUF build from Hugging Face first —
+`ollama pull hf.co/ibm-granite/granite-vision-4.1-4b-GGUF:Q4_K_M` — and cap
+`ModelOption.CONTEXT_WINDOW` (its full 131072-token window allocates close to 9 GB).
+See [Use Images and Vision Models](../how-to/use-images-and-vision.md) for a worked
+example.
 
 ```python
 # Requires: mellea, pillow

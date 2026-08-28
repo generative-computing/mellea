@@ -1,5 +1,5 @@
 # pytest: skip, huggingface, e2e
-# SKIP REASON: documentation only.import argparse
+# SKIP REASON: documentation only.
 import argparse
 import json
 import sys
