@@ -725,7 +725,8 @@ class EmbeddedBinding:
         source (str): Base model identifier this binding activates adapters
             against — the backend's `base_model_name` (e.g. `granite-4.1-3b`
             for a backend built against `ibm-granite/granite-4.1-3b`).
-            Stamped by `OpenAIBackend.add_adapter` at registration; not
+            Stamped by `OpenAIBackend.add_adapter` or
+            `LocalHFBackend.add_adapter` at registration; not
             otherwise used by `apply_activation`.
     """
 
@@ -776,14 +777,13 @@ class EmbeddedBinding:
         invocation-complete event here would have to guess an `outcome` that
         this method cannot know, which is worse than not firing it: it would
         report `outcome="success"` for calls that go on to fail. Wiring a
-        real invocation-complete signal in requires the caller (currently
-        `OpenAIBackend._generate_from_intrinsic`) to fire it once generation
-        and parsing resolve — tracked as a follow-up, not part of this method.
+        real invocation-complete signal requires the caller to fire it once
+        generation and parsing resolve — tracked as a follow-up, not part of
+        this method.
 
         This method is `async` (unlike the rest of `EmbeddedBinding`'s
         surface) purely because hook dispatch (`invoke_hook`) is async; its
-        own work is synchronous. Its one caller,
-        `OpenAIBackend._generate_from_intrinsic`, is already a coroutine, so
+        own work is synchronous. Its callers already run in coroutines, so
         `await`ing here — rather than bridging through
         `_run_async_in_thread`, which is for calling async code from sync
         code — avoids spawning a throwaway event loop and thread per call.

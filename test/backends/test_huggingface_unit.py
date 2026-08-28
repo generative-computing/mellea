@@ -38,6 +38,7 @@ from mellea.backends.adapters import (
     AdapterType,
     EmbeddedBinding,
     IntrinsicAdapter,
+    ServerMediatedBinding,
 )
 from mellea.backends.adapters._core import Identity
 from mellea.backends.adapters.adapter import EmbeddedIntrinsicAdapter
@@ -177,7 +178,12 @@ class _FakeRewrittenRequest:
         return copied
 
     def model_dump(self):
-        return {"messages": [], "extra_body": {}, "temperature": self.temperature}
+        return {
+            "messages": [],
+            "extra_body": {},
+            "model": "adapter-model",
+            "temperature": self.temperature,
+        }
 
 
 class _FakeRewriter:
@@ -358,7 +364,8 @@ def test_chat_completion_request_forwards_template_kwargs_to_transformers():
 
 
 @pytest.mark.parametrize(
-    "reserved_name", ["conversation", "tools", "documents", "add_generation_prompt"]
+    "reserved_name",
+    ["conversation", "tools", "documents", "add_generation_prompt", "return_tensors"],
 )
 def test_chat_completion_request_rejects_reserved_template_kwargs(reserved_name):
     """Template kwargs must not overwrite framework-owned chat-template inputs."""
@@ -376,6 +383,19 @@ def test_chat_completion_request_rejects_reserved_template_kwargs(reserved_name)
         )
 
     tokenizer.apply_chat_template.assert_not_called()
+
+
+def test_chat_completion_request_rejects_non_dict_template_kwargs():
+    """Template kwargs must be a mapping before they reach the tokenizer."""
+    with pytest.raises(TypeError, match="must be a dict"):
+        chat_completion_request_to_transformers_inputs(
+            {
+                "messages": [{"role": "user", "content": "hello"}],
+                "extra_body": {"chat_template_kwargs": ["not", "a", "dict"]},
+            },
+            MagicMock(),
+            MagicMock(),
+        )
 
 
 @pytest.mark.asyncio
@@ -427,7 +447,47 @@ async def test_embedded_intrinsic_activates_template_without_peft(stub_backend):
     assert request["extra_body"]["chat_template_kwargs"]["adapter_name"] == (
         "answerability"
     )
+    assert "model" not in request
     peft_scope.assert_not_called()
+
+
+def test_generate_embedded_with_generation_lock_deactivates_peft_state():
+    """Embedded generation clears stale PEFT state before running the checkpoint."""
+    backend = _make_backend()
+    backend._model.active_adapters.return_value = []  # type: ignore[union-attr]
+
+    with patch.object(backend, "deactivate_peft_adapter") as mock_deactivate:
+        assert (
+            backend._generate_embedded_with_generation_lock(lambda: "output")
+            == "output"
+        )
+
+    mock_deactivate.assert_called_once_with("")
+
+
+def test_add_embedded_adapter_rejects_mutated_weights_without_binding_backend():
+    """A malformed shim must not retain this backend after registration fails."""
+    backend = _make_backend()
+    adapter = _make_embedded_adapter_stub()
+    adapter.weights = ServerMediatedBinding()
+
+    with pytest.raises(TypeError, match="must be an EmbeddedBinding"):
+        backend.add_adapter(adapter)
+
+    assert adapter.backend is None
+    assert adapter.qualified_name not in backend._added_adapters
+
+
+def test_load_peft_adapter_rejects_embedded_adapter():
+    """Embedded adapters are selected by the chat template, not loaded by PEFT."""
+    backend = _make_backend()
+    adapter = _make_embedded_adapter_stub()
+    backend.add_adapter(adapter)
+
+    with pytest.raises(TypeError, match="through PEFT"):
+        backend.load_peft_adapter(adapter.qualified_name)
+
+    backend._model.load_adapter.assert_not_called()
 
 
 def test_generate_with_adapter_lock_deactivates_and_calls_generate_func():

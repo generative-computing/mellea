@@ -299,7 +299,7 @@ implementations, not whether a composed `Adapter` can be registered directly:
 
 | Backend | `LocalFileBinding` (LocalFile/PEFT) | `EmbeddedBinding` (Embedded/Granite Switch) | `ServerMediatedBinding` |
 | --- | --- | --- | --- |
-| `LocalHFBackend` | ✅ shipping — `add_adapter` accepts a `LocalFileBinding` directly | ✅ shipping — `load_embedded_adapters=True` registers embedded adapter functions | — |
+| `LocalHFBackend` | ✅ shipping — `add_adapter` accepts a `LocalFileBinding` directly | ✅ shipping — `load_embedded_adapters=True`, via the deprecated `EmbeddedIntrinsicAdapter` shim | — |
 | `OpenAIBackend` | — | ✅ shipping, via the deprecated `EmbeddedIntrinsicAdapter` shim above, which builds an `EmbeddedBinding` internally | — |
 
 `ServerMediatedBinding` has no backend implementation yet — see discussion #1486.

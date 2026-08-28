@@ -246,6 +246,7 @@ def chat_completion_request_to_transformers_inputs(
                 "tools",
                 "documents",
                 "add_generation_prompt",
+                "return_tensors",
             }
             overridden_keys = reserved_template_kwargs.intersection(
                 chat_template_kwargs

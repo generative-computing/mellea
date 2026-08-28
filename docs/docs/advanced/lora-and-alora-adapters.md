@@ -19,7 +19,8 @@ Hugging Face account.
 > They do not work with Ollama, OpenAI, or other remote backends.
 >
 > Granite Switch models ship with pre-trained adapter functions embedded in the
-> model weights, which can be used via `OpenAIBackend` with
+> model weights. Use them through `OpenAIBackend` with a served checkpoint, or
+> through `LocalHFBackend` with a local checkpoint and
 > `load_embedded_adapters=True`. See [Adapter functions](./intrinsics.md) for details.
 
 ## LoRA vs aLoRA

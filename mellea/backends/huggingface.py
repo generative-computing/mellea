@@ -607,12 +607,10 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         Standard (non-intrinsic) generation runs without adapters: any active
         adapter is deactivated before the model call, and the model's active
         state is asserted before and after. Adapter-active generation goes
-        elsewhere — `_generate_intrinsic_with_adapter_scope` for intrinsics
-        (routed through `adapter_scope`, with its lifecycle hooks). Granite
-        Switch's `EmbeddedBinding.apply_activation()` is implemented for the
-        OpenAI backend; local Hugging Face integration remains pending (#1018).
-        No current path activates through this method, which is why it takes no
-        adapter name.
+        elsewhere — `_generate_intrinsic_with_adapter_scope` for runtime PEFT
+        adapters (routed through `adapter_scope`, with its lifecycle hooks) and
+        `_generate_embedded_with_generation_lock` for Granite Switch adapters,
+        which are activated while rendering the chat template.
 
         Args:
             generate_func: The synchronous generation callable to invoke.
@@ -649,6 +647,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             Whatever `generate_func` returns.
         """
         with self._generation_lock:
+            self.deactivate_peft_adapter("")
+            _assert_correct_adapters("", self._model)
             return generate_func(*args, **kwargs)
 
     def _generate_intrinsic_with_adapter_scope(
@@ -876,7 +876,9 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                     "Embedded adapter generation requires extra_body to be a dict."
                 )
             await adapter.weights.apply_activation(
-                EmbeddedActivationRequest(extra_body=extra_body, api_params={}),
+                EmbeddedActivationRequest(
+                    extra_body=extra_body, api_params=rewritten_request
+                ),
                 adapter.identity,
             )
 
@@ -2339,12 +2341,12 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             return None
 
         if isinstance(adapter, EmbeddedIntrinsicAdapter):
-            adapter.backend = self
             if not isinstance(adapter.weights, EmbeddedBinding):
                 raise TypeError(
                     "EmbeddedIntrinsicAdapter.weights must be an EmbeddedBinding; "
                     f"got {type(adapter.weights).__name__}."
                 )
+            adapter.backend = self
             adapter.weights.source = self.base_model_name
             self._added_adapters[adapter.qualified_name] = adapter
             return
@@ -2386,6 +2388,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         Raises:
             ValueError: If no adapter with the given qualified name has been added to
                 this backend.
+            TypeError: If the named adapter is embedded in the model and therefore
+                activated through the chat template rather than loaded through PEFT.
         """
         adapter = self._added_adapters.get(adapter_qualified_name, None)
         if adapter is None:
