@@ -49,11 +49,26 @@ def backend() -> Iterator[LocalHFBackend]:
 
 
 def test_embedded_answerability_runs_on_local_hf(backend: LocalHFBackend) -> None:
-    """The local HF path renders the embedded adapter control token and parses output."""
+    """The local template renders an embedded control token and parses output."""
+    messages = [{"role": "user", "content": "Can these documents answer my question?"}]
+    base_prompt = backend._tokenizer.apply_chat_template(
+        messages, add_generation_prompt=True, tokenize=False
+    )
+    adapter_prompt = backend._tokenizer.apply_chat_template(
+        messages,
+        add_generation_prompt=True,
+        adapter_name="answerability",
+        tokenize=False,
+    )
+    assert adapter_prompt != base_prompt, (
+        "Granite Switch ignored adapter_name; the embedded adapter control token "
+        "was not rendered."
+    )
+
     result = rag.check_answerability(
         "What is the square root of 4?",
         ["The square root of 4 is 2."],
-        ChatContext().add(Message("user", "Can these documents answer my question?")),
+        ChatContext().add(Message("user", messages[0]["content"])),
         backend,
     )
 
