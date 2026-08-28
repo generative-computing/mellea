@@ -16,8 +16,11 @@ support runtime adapter loading and unloading.
 
 import abc
 import contextlib
+import hashlib
 import pathlib
 import re
+import shutil
+import tempfile
 import time
 import warnings
 from collections.abc import Callable
@@ -1096,8 +1099,20 @@ class EmbeddedIntrinsicAdapter(_AdapterCore):
     ) -> list["EmbeddedIntrinsicAdapter"]:
         """Load embedded adapters from a Granite Switch model on Hugging Face Hub.
 
-        Downloads `adapter_index.json` and the `io_configs/` directory, then
-        delegates to :meth:`from_model_directory`.
+        Downloads `adapter_index.json` and the `io_configs/` directory into a
+        persistent self-contained local directory, then delegates to
+        `from_model_directory`.
+
+        `huggingface_hub.snapshot_download`'s default cache-backed snapshot
+        directory populates `io_configs/` with symlinks that resolve into a
+        sibling `blobs/` directory *outside* the snapshot root. That breaks the
+        contract `from_model_directory` expects (a self-contained model
+        directory) and trips its path-escape check. To satisfy that contract,
+        the downloaded snapshot is materialised under the Hugging Face cache
+        into a self-contained directory keyed by its immutable revision, so
+        `io_configs/` contains real files rather than symlinks escaping the
+        directory. This preserves standard Hugging Face Hub cache reuse and
+        offline loading while preventing stale files from a mutable revision.
 
         Args:
             repo_id (str): Hugging Face Hub repository ID
@@ -1118,10 +1133,11 @@ class EmbeddedIntrinsicAdapter(_AdapterCore):
                 `adapter_index.json` (wrong repo/revision, not a Granite Switch
                 model, or a stale cache).
             ValueError: If no adapters are found (delegated from
-                :meth:`from_model_directory`).
+                `from_model_directory`).
         """
         try:
             import huggingface_hub
+            from huggingface_hub.constants import HF_HUB_CACHE
             from huggingface_hub.errors import GatedRepoError, RepositoryNotFoundError
         except ImportError as e:
             raise ImportError(
@@ -1130,11 +1146,13 @@ class EmbeddedIntrinsicAdapter(_AdapterCore):
             ) from e
 
         try:
-            local_root = huggingface_hub.snapshot_download(
-                repo_id=repo_id,
-                allow_patterns=["adapter_index.json", "io_configs/**"],
-                cache_dir=cache_dir,
-                revision=revision,
+            snapshot_root = pathlib.Path(
+                huggingface_hub.snapshot_download(
+                    repo_id=repo_id,
+                    allow_patterns=["adapter_index.json", "io_configs/**"],
+                    cache_dir=cache_dir,
+                    revision=revision,
+                )
             )
         except (GatedRepoError, RepositoryNotFoundError) as e:
             auth_hint = (
@@ -1146,7 +1164,57 @@ class EmbeddedIntrinsicAdapter(_AdapterCore):
             )
             raise PermissionError(auth_hint) from e
 
+        cache_root = pathlib.Path(cache_dir or HF_HUB_CACHE)
+        cache_key = hashlib.sha256(
+            f"{repo_id}\0{snapshot_root.name}".encode()
+        ).hexdigest()
+        local_root = cache_root / "mellea" / "embedded-adapter-configs" / cache_key
+
         try:
+            if not local_root.is_dir():
+                local_root.parent.mkdir(parents=True, exist_ok=True)
+                temporary_dir = pathlib.Path(
+                    tempfile.mkdtemp(dir=local_root.parent, prefix=f"{cache_key}-")
+                )
+                try:
+                    import json as _json
+
+                    index_path = snapshot_root / "adapter_index.json"
+                    with open(index_path, encoding="utf-8") as f:
+                        index = _json.load(f)
+                    shutil.copyfile(index_path, temporary_dir / "adapter_index.json")
+
+                    snapshot_cache_root = snapshot_root.parent.parent.resolve()
+                    for entry in index.get("adapters", []):
+                        io_config_rel = entry.get("io_config")
+                        if io_config_rel is None:
+                            continue
+                        io_config_path = (snapshot_root / io_config_rel).resolve(
+                            strict=True
+                        )
+                        if not io_config_path.is_relative_to(snapshot_cache_root):
+                            raise ValueError(
+                                f"io_config path '{io_config_rel}' escapes "
+                                "the downloaded Hugging Face snapshot"
+                            )
+                        destination = temporary_dir / io_config_rel
+                        destination.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copyfile(io_config_path, destination)
+
+                    adapters = EmbeddedIntrinsicAdapter.from_model_directory(
+                        temporary_dir, intrinsic_name=intrinsic_name
+                    )
+                    try:
+                        temporary_dir.replace(local_root)
+                    except OSError:
+                        if not local_root.is_dir():
+                            raise
+                    else:
+                        return adapters
+                finally:
+                    if temporary_dir.exists():
+                        shutil.rmtree(temporary_dir)
+
             return EmbeddedIntrinsicAdapter.from_model_directory(
                 local_root, intrinsic_name=intrinsic_name
             )
