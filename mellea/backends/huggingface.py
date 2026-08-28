@@ -391,11 +391,14 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             `SimpleLRUCache(0, on_evict=_cleanup_kv_cache)`.
         custom_config (TransformersTorchConfig | None): Override for
             tokenizer/model/device; if provided, `model_id` is not used for loading.
+            Callers providing a Granite Switch model this way are responsible
+            for importing `granite_switch.hf` before constructing the model.
         default_to_constraint_checking_alora (bool): If `False`, aLoRA constraint
             checking is deactivated; mainly for benchmarking and debugging.
         load_embedded_adapters (bool): If `True`, register adapter functions
             embedded in the Granite Switch checkpoint named by `adapter_source`
-            (or `model_id` when `adapter_source` is not set).
+            (or `model_id` when `adapter_source` is not set). Automatic model
+            loading requires `mellea[hf,switch]`.
         adapter_source (str | None): Local checkpoint directory or Hugging Face
             Hub repository used to discover embedded adapter functions.
         model_options (dict | None): Default model options for generation requests.
@@ -407,6 +410,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             HF-specific option names.
 
     Raises:
+        ImportError: If automatic Granite Switch model loading is requested
+            without the `switch` extra installed.
         OSError: If the model cannot be loaded from Hugging Face Hub (bad ID,
             missing access, or local filesystem/cache error).
     """

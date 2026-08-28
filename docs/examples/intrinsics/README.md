@@ -8,7 +8,9 @@ This directory contains examples for using Mellea's adapter functions - speciali
 - **Adapter System**: Using LoRA/aLoRA adapters for specific tasks
 - **RAG Evaluation**: Assessing retrieval-augmented generation quality
 - **Quality Metrics**: Measuring relevance, groundedness, and accuracy
-- **Backend Integration**: Adding adapters to different backend types (LocalHFBackend with runtime adapters, OpenAIBackend with Granite Switch embedded adapters)
+- **Backend Integration**: Running adapter functions through LocalHFBackend
+  (runtime adapters or local Granite Switch checkpoints) and OpenAIBackend
+  (Granite Switch deployments)
 
 ## Basic Usage
 
@@ -29,16 +31,22 @@ result = core.check_certainty(ctx, backend)
 print(f"Certainty score: {result}")
 ```
 
-OpenAIBackends also support a type of embedded adapter for Granite Switch models:
+Granite Switch models can run locally with `LocalHFBackend`:
+
 ```python
-backend = OpenAIBackend(
-        model_id=IBM_GRANITE_SWITCH_4_1_3B_PREVIEW.hf_model_name,
-        load_embedded_adapters=True,  # Auto-loads adapters from Hugging Face repo.
-        ...
+from mellea.backends.huggingface import LocalHFBackend
+from mellea.backends.model_ids import IBM_GRANITE_SWITCH_4_1_3B_PREVIEW
+
+backend = LocalHFBackend(
+    model_id=IBM_GRANITE_SWITCH_4_1_3B_PREVIEW,
+    load_embedded_adapters=True,
 )
 ```
 
+Install this path with `uv sync --extra hf --extra switch`.
+
 The underlying adapter functions can also be utilized directly when generating:
+
 ```python
 from mellea.stdlib.components import Intrinsic
 import mellea.stdlib.functional as mfuncs
@@ -54,8 +62,8 @@ out, new_ctx = mfuncs.act(
 )
 ```
 
-For complete runnable examples using the OpenAI backend with Granite Switch,
-see [`../granite-switch/`](../granite-switch/).
+For complete runnable Granite Switch examples, see
+[`../granite-switch/`](../granite-switch/).
 
 > **Note:** Not all adapter functions are embedded in every Granite Switch model. You should check
 > the model's `adapter_index.json` file for a definitive list. For granite switch models
