@@ -16,8 +16,9 @@ reliable than prompting a general-purpose model for these specialized micro-task
 >
 > - **LocalHFBackend** — loads LoRA/aLoRA adapters from the catalog at runtime.
 >   A local Granite Switch checkpoint can instead use
->   `load_embedded_adapters=True`; then only adapter functions embedded in the
->   checkpoint are available. Requires a GPU or Apple Silicon Mac.
+>   `load_embedded_adapters=True`; install `mellea[hf,switch]` first. Only
+>   adapter functions embedded in the checkpoint are then available. Requires a
+>   GPU or Apple Silicon Mac.
 > - **OpenAIBackend** — uses a Granite Switch model served via vLLM with
 >   `load_embedded_adapters=True`. Only adapter functions embedded in the model are
 >   available — check the model's `adapter_index.json` for the list.

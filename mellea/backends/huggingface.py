@@ -13,14 +13,19 @@ import contextlib
 import dataclasses
 import datetime
 import functools
+import importlib
 import json
 import threading
+import warnings
 from collections import OrderedDict
 from collections.abc import Callable, Coroutine, Sequence
+from importlib import metadata
 from typing import Any, ClassVar, TypeVar, cast
 
 import jinja2
 import jinja2.meta
+from packaging.requirements import Requirement as PackagingRequirement
+from packaging.version import InvalidVersion, Version
 
 try:
     import llguidance
@@ -299,6 +304,44 @@ def _compute_generate_kwargs_allowlist() -> frozenset[str]:
 
 
 _GENERATE_KWARGS_ALLOWLIST: frozenset[str] = _compute_generate_kwargs_allowlist()
+_SWITCH_TRANSFORMERS_WARNING_EMITTED = False
+
+
+def _warn_if_granite_switch_transformers_override_is_active() -> None:
+    """Warn once when Granite Switch metadata excludes the installed Transformers.
+
+    Mellea intentionally overrides Granite Switch's restrictive Transformers
+    metadata for the local embedded-adapter path. The warning is self-retiring:
+    an upstream package release that widens its declared range makes the
+    installed version satisfy the requirement and prevents the warning.
+    """
+    global _SWITCH_TRANSFORMERS_WARNING_EMITTED
+    if _SWITCH_TRANSFORMERS_WARNING_EMITTED:
+        return
+
+    try:
+        installed_version = Version(metadata.version("transformers"))
+        requirements = metadata.requires("granite-switch") or []
+    except (metadata.PackageNotFoundError, InvalidVersion):
+        return
+
+    for requirement_text in requirements:
+        requirement = PackagingRequirement(requirement_text)
+        if requirement.name != "transformers":
+            continue
+        if requirement.marker is not None and not requirement.marker.evaluate():
+            continue
+        if installed_version not in requirement.specifier:
+            warnings.warn(
+                "granite-switch declares a Transformers range that excludes "
+                f"{installed_version}; Mellea is using its explicit compatibility "
+                "override for local Granite Switch support. This warning will "
+                "disappear once Granite Switch publishes widened metadata.",
+                UserWarning,
+                stacklevel=3,
+            )
+            _SWITCH_TRANSFORMERS_WARNING_EMITTED = True
+        return
 
 
 def _check_no_multimodal_blocks(action: Span | None, ctx: Context | None) -> None:
@@ -425,6 +468,16 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 self._model_id = model_id.hf_model_name
         match custom_config:
             case None:
+                if load_embedded_adapters:
+                    try:
+                        importlib.import_module("granite_switch.hf")
+                    except ImportError as e:
+                        raise ImportError(
+                            "Loading Granite Switch checkpoints with LocalHFBackend "
+                            "requires the switch extra. Install it with: "
+                            'pip install "mellea[hf,switch]"'
+                        ) from e
+                    _warn_if_granite_switch_transformers_override_is_active()
                 # Choose a device.
                 self._device = torch.device(
                     "cuda"

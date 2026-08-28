@@ -104,7 +104,7 @@ sandbox = [
 ]
 
 switch = [
-    "huggingface-hub>=0.33.4",
+    "granite-switch[hf]>=0.1.0",
 ]
 
 backends = ["mellea[watsonx,hf,litellm]"]
@@ -427,6 +427,10 @@ directory = "htmlcov"
 
 [tool.uv]
 constraint-dependencies = ["click>=8.3.3"]
+# granite-switch 0.1.0 declares transformers<5.10.0. Mellea's local Granite
+# Switch e2e passes on 5.10.2; retain Mellea's tested HF range until upstream
+# publishes widened Granite Switch metadata.
+override-dependencies = ["transformers>5.5.0,<6.0.0"]
 
 [tool.uv.sources]
 mellea = { workspace = true }

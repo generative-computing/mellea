@@ -3,9 +3,8 @@
 
 """E2E coverage for embedded adapter functions on LocalHFBackend.
 
-Set `GRANITE_SWITCH_MODEL_ID` to a local-HF-compatible Granite Switch
-checkpoint before running this module. It is skipped by default because the
-checkpoint requires a GPU and is not part of normal CI.
+Uses the project's standard 3B Granite Switch checkpoint. It runs in normal
+local pytest on supported GPU hardware and is skipped in CI.
 """
 
 import os
@@ -24,15 +23,15 @@ from test.predicates import require_gpu
 pytestmark = [
     pytest.mark.e2e,
     pytest.mark.huggingface,
-    pytest.mark.slow,
     require_gpu(min_vram_gb=12),
     pytest.mark.skipif(
-        not os.environ.get("GRANITE_SWITCH_MODEL_ID"),
-        reason="Set GRANITE_SWITCH_MODEL_ID to run LocalHF embedded-adapter tests",
+        int(os.environ.get("CICD", 0)) == 1,
+        reason="Skipping local Granite Switch e2e test in CI",
     ),
 ]
 
 from mellea.backends.huggingface import LocalHFBackend
+from mellea.backends.model_ids import IBM_GRANITE_SWITCH_4_1_3B_PREVIEW
 from mellea.stdlib.components import Message
 from mellea.stdlib.components.intrinsic import rag
 from mellea.stdlib.context import ChatContext
@@ -43,7 +42,7 @@ def backend() -> Iterator[LocalHFBackend]:
     """Load a Granite Switch checkpoint with embedded adapters registered."""
     with hf_skip():
         backend = LocalHFBackend(
-            model_id=os.environ["GRANITE_SWITCH_MODEL_ID"], load_embedded_adapters=True
+            model_id=IBM_GRANITE_SWITCH_4_1_3B_PREVIEW, load_embedded_adapters=True
         )
     yield backend
     cleanup_gpu_backend(backend, "huggingface")
