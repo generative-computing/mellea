@@ -823,12 +823,9 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 if thinking:
                     api_params["reasoning_effort"] = "medium"
                 elif self._server_type != _ServerType.OPENAI:
-                    # Ollama-served thinking models (e.g. granite4.2) default to
-                    # thinking ON when reasoning_effort is absent, so "none" is
-                    # required to actually disable the think block on their /v1
-                    # endpoint (Ollama >= 0.33.1 maps it to think=false). Real
-                    # OpenAI rejects "none" for most reasoning models, so this is
-                    # scoped to non-OpenAI servers only.
+                    # Ollama-served models (e.g. granite4.2) think by default
+                    # unless reasoning_effort="none" is sent (Ollama >= 0.33.1).
+                    # Real OpenAI rejects "none", so scoped to non-OpenAI servers.
                     api_params["reasoning_effort"] = "none"
             else:
                 api_params["reasoning_effort"] = thinking
@@ -1073,11 +1070,9 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 if thinking:
                     reasoning_params["reasoning_effort"] = "medium"
                 elif self._server_type != _ServerType.OPENAI:
-                    # Ollama-served thinking models (e.g. granite4.2) default to
-                    # thinking ON when reasoning_effort is absent; "none" is the
-                    # OpenAI enum value their /v1 endpoint maps to think=false
-                    # (Ollama >= 0.33.1). Real OpenAI rejects "none" for most
-                    # reasoning models, so this is scoped to non-OpenAI servers.
+                    # Ollama-served models (e.g. granite4.2) think by default
+                    # unless reasoning_effort="none" is sent (Ollama >= 0.33.1).
+                    # Real OpenAI rejects "none", so scoped to non-OpenAI servers.
                     reasoning_params["reasoning_effort"] = "none"
             else:
                 reasoning_params["reasoning_effort"] = thinking

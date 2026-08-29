@@ -105,45 +105,19 @@ jobs:
       - name: Download NLTK data
         run: uv run python -m nltk.downloader punkt_tab
       - name: Install Ollama
-        # Pinned to a GCC-13 build to fix a segfault loading Granite models on
-        # AMX-capable ubuntu-latest runners (#1388). Ollama's Linux builds through
-        # 0.32.1 were compiled with GCC 11, which miscompiles the AMX CPU kernels in
-        # libggml-cpu-sapphirerapids.so -- so ~1/3 of runs (the AMX-capable runner
-        # draws) crashed during model warmup, independent of ollama version and
-        # unreachable by any env var (the code path is correct; the machine code was
-        # not). Ollama PR #17244 ("bump Linux toolchain to GCC 13", Fixes ollama#17006
-        # / #17205) first shipped in the 0.32.2 line; 0.33.1 (2026-08-26) is the
-        # current stable release and carries that fix. Bumped from 0.32.2 to
-        # investigate sustained Ollama stalls on the granite4.2:3b model (PR #1587
-        # / #1589: 15-30 minute wedge windows on 4.2 runs only; the num_ctx and
-        # thinking-mode hypotheses were refuted by run 33093698028). NB:
-        # OLLAMA_VERSION must omit the leading "v" -- install.sh prepends it (a
-        # "v" yields a broken .../download/vv0.33.1/... path).
+        # GCC-13 build: fixes a segfault loading Granite models on AMX-capable
+        # runners (Ollama miscompiled AMX kernels through 0.32.1, #1388).
+        # Pinned to 0.33.1 (current stable with the fix); also required for
+        # the reasoning_effort="none" thinking-off support used below.
+        # NB: OLLAMA_VERSION must omit the leading "v" (install.sh prepends it).
         run: curl -fsSL https://ollama.com/install.sh | OLLAMA_VERSION=0.33.1 sh
       - name: Start serving ollama
-        # Capture the server log: live-model stalls (read timeouts, empty
-        # responses) are server-side, and without these lines the job log
-        # shows nothing but the test failures. Dumped on failure below.
-        # OLLAMA_DEBUG=1 (slog debug level, envconfig/config.go in v0.33.1)
-        # plus OLLAMA_DEBUG_LOG_REQUESTS=1 (per-request body + replay curl
-        # in a /tmp/ollama-request-logs-* dir,
-        # server/inference_request_log.go): the sustained 300 s stalls
-        # (PR #1587 / #1589) leave no trace at the default log level, so
-        # the next failed run needs engine-level detail plus the exact
-        # on-the-wire request to separate "server hung" from "request the
-        # server cannot process". Both are only inspected by the
-        # failure-gated dump step below, so green runs are unaffected
-        # apart from /tmp usage.
+        # Debug + per-request logging, dumped on failure below: needed to tell
+        # "server hung" from "bad request" when a live-model test stalls.
         run: OLLAMA_DEBUG=1 OLLAMA_DEBUG_LOG_REQUESTS=1 nohup ollama serve > /tmp/ollama-serve.log 2>&1 &
-      - name: Start resource sampler (PR #1589 diagnostics)
-        # The granite4.2 stall windows (run 33122730668: every 4.2 request
-        # degrades to exactly 300 s -> 500 for ~1.6 h from mid-run, both
-        # /v1 and native, thinking verified off) are a degradation-over-time
-        # signature pointing at accumulation -- memory pressure / swapping
-        # with several models resident on the 16 GB runner, or engine
-        # state -- rather than a fixed misconfiguration. Sample memory,
-        # swap in/out (si/so) and CPU state every 30 s from server start
-        # through the tests; dumped on failure below. Negligible CPU cost.
+      - name: Start resource sampler
+        # Memory/swap/CPU every 30s, dumped on failure below — rules out
+        # memory pressure as a cause of live-model stalls.
         run: |
           if command -v vmstat >/dev/null; then
             (vmstat 30 480) > /tmp/ci-resource-sampler.log 2>&1 &
@@ -180,16 +154,10 @@ jobs:
           # tag-name mismatch is diagnosable from the log alone.
           ollama list
       - name: Constrain the granite4.2:3b context for the CI runner
-        # The published granite4.2:3b tag ships `num_ctx 131072` in its
-        # Modelfile (granite4.1:3b carries no num_ctx, so CI always ran the
-        # Ollama 4096 default). On the 4-vCPU/16 GB CPU-only runner the 131K
-        # context allocates a ~6 GB KV cache at load time; the memory
-        # pressure wedges inference for 15-30 minute windows, with requests
-        # hanging at the client timeout and decodes crawling to ~0.3 tok/s
-        # (runs 33048969379 and 33067783570; tracked in #1589). Re-point the
-        # local tag at an 8192-context build of the same weights: tests
-        # request the same tag name, so no test code changes. 8192 is 2x the
-        # context every Ollama test on main uses.
+        # The published tag ships num_ctx=131072, a ~6 GB KV cache at load —
+        # too much for the 16 GB runner and a cause of the CI stalls. Re-point
+        # the local tag at an 8192-context build of the same weights (same tag
+        # name, so no test code changes; 2x what other Ollama tests use).
         run: |
           ollama cp granite4.2:3b granite4.2:3b-128k
           printf 'FROM granite4.2:3b-128k\nPARAMETER num_ctx 8192\n' \
@@ -213,12 +181,8 @@ jobs:
         run: echo "Tests failed. Please verify that tests are working locally."
       - name: Dump Ollama server log on failure
         if: failure() # Only the test step can produce a useful server log here.
-        # The raw log is far too verbose to dump whole (slot print_timing lines
-        # every ~25 tokens: a plain tail of 100 lines only covers ~30 s of the
-        # run and misses multi-minute stall windows), so dump the request-level
-        # story instead: one GIN line per HTTP request (with its duration), any
-        # error/warning lines, and model load/unload events -- then a short raw
-        # tail for the final moment.
+        # Raw log is too verbose to dump whole; extract requests/errors/model
+        # events plus a short raw tail.
         run: |
           echo "=== ollama serve log: requests (GIN), errors, model events ==="
           grep -iE 'GIN|error|warn|panic|loading|unload' /tmp/ollama-serve.log | tail -n 500 || echo "(no matching lines)"
