@@ -519,6 +519,47 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         return model_opts
 
+    def _map_thinking_option(
+        self, thinking: Any, extra_body: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Maps `ModelOption.THINKING` to the correct backend parameter(s).
+
+        Two mechanisms, both set (when applicable) so the right server picks
+        up whichever it understands:
+          - `extra_body["chat_template_kwargs"]["enable_thinking"]`: vLLM/Qwen3
+          - `reasoning_effort`: OpenAI/DeepSeek/Ollama (string level; True →
+            "medium", False → "none")
+
+        Ollama-served models (e.g. granite4.2) think by default unless
+        `reasoning_effort="none"` is sent (Ollama >= 0.33.1); real OpenAI
+        rejects `"none"`, so that value is scoped to non-OpenAI servers.
+
+        Args:
+            thinking: the raw `ModelOption.THINKING` value (bool, string
+                reasoning-effort level, or None).
+            extra_body: the in-progress `extra_body` dict for this request;
+                mutated in place to add `chat_template_kwargs` if `thinking`
+                is a bool.
+
+        Returns:
+            dict[str, Any]: `reasoning_effort` params to merge into the
+            request's top-level kwargs, or `{}` if `thinking` is None.
+        """
+        reasoning_params: dict[str, Any] = {}
+        if thinking is None:  # False is a valid value — cannot use `if thinking`
+            return reasoning_params
+        if type(thinking) is bool:
+            ctk = extra_body.get("chat_template_kwargs", {}) or {}
+            ctk["enable_thinking"] = thinking
+            extra_body["chat_template_kwargs"] = ctk
+            if thinking:
+                reasoning_params["reasoning_effort"] = "medium"
+            elif self._server_type != _ServerType.OPENAI:
+                reasoning_params["reasoning_effort"] = "none"
+        else:
+            reasoning_params["reasoning_effort"] = thinking
+        return reasoning_params
+
     def _merge_user_extra_body(
         self, base: dict[str, Any], user: dict[str, Any] | None
     ) -> dict[str, Any]:
@@ -809,26 +850,8 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         user_extra_body = user_api_params.pop("extra_body", None)
         api_params.update(user_api_params)
 
-        # Map THINKING to the correct backend parameter(s). Two mechanisms:
-        # - chat_template_kwargs.enable_thinking: vLLM/Qwen3 (bool toggle)
-        # - reasoning_effort: OpenAI/DeepSeek/Ollama (string level; True → "medium",
-        #   False → "none")
-        # Both are set so the right server picks up whichever it understands.
         thinking = model_options.get(ModelOption.THINKING)
-        if thinking is not None:  # False is a valid value — cannot use `if thinking`
-            if type(thinking) is bool:
-                ctk = extra_body.get("chat_template_kwargs", {}) or {}
-                ctk["enable_thinking"] = thinking
-                extra_body["chat_template_kwargs"] = ctk
-                if thinking:
-                    api_params["reasoning_effort"] = "medium"
-                elif self._server_type != _ServerType.OPENAI:
-                    # Ollama-served models (e.g. granite4.2) think by default
-                    # unless reasoning_effort="none" is sent (Ollama >= 0.33.1).
-                    # Real OpenAI rejects "none", so scoped to non-OpenAI servers.
-                    api_params["reasoning_effort"] = "none"
-            else:
-                api_params["reasoning_effort"] = thinking
+        api_params.update(self._map_thinking_option(thinking, extra_body))
 
         extra_body = self._merge_user_extra_body(extra_body, user_extra_body)
 
@@ -1052,30 +1075,11 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         formatted_tools = convert_tools_to_json(tools)
         use_tools = len(formatted_tools) > 0
 
-        # Map THINKING to the correct backend parameter(s). Two mechanisms:
-        # - chat_template_kwargs.enable_thinking: vLLM/Qwen3 (bool toggle)
-        # - reasoning_effort: OpenAI/DeepSeek/Ollama (string level; True → "medium",
-        #   False → "none")
-        # Both are set so the right server picks up whichever it understands.
         # NOTE: don't pass THINKING to non-reasoning models (e.g. gpt-4o).
         thinking = model_opts.get(ModelOption.THINKING)
-        reasoning_params: dict[str, Any] = {}
-        if thinking is not None:  # False is a valid value — cannot use `if thinking`
-            if type(thinking) is bool:
-                ctk_body: dict[str, Any] = extra_params.get("extra_body", {}) or {}
-                ctk = ctk_body.get("chat_template_kwargs", {}) or {}
-                ctk["enable_thinking"] = thinking
-                ctk_body["chat_template_kwargs"] = ctk
-                extra_params["extra_body"] = ctk_body
-                if thinking:
-                    reasoning_params["reasoning_effort"] = "medium"
-                elif self._server_type != _ServerType.OPENAI:
-                    # Ollama-served models (e.g. granite4.2) think by default
-                    # unless reasoning_effort="none" is sent (Ollama >= 0.33.1).
-                    # Real OpenAI rejects "none", so scoped to non-OpenAI servers.
-                    reasoning_params["reasoning_effort"] = "none"
-            else:
-                reasoning_params["reasoning_effort"] = thinking
+        ctk_body: dict[str, Any] = extra_params.get("extra_body", {}) or {}
+        reasoning_params = self._map_thinking_option(thinking, ctk_body)
+        extra_params["extra_body"] = ctk_body
 
         # Request usage information in streaming responses
         if model_opts.get(ModelOption.STREAM, False):
