@@ -473,26 +473,13 @@ def cleanup_gpu_backend(backend, backend_name="unknown"):
 # Test Collection Filtering
 # ============================================================================
 
-# Transient Ollama-timeout shapes that the flaky retry net covers.
-# Ollama stalls a request past its read timeout on loaded runners; only those
-# stalls are retried, never real failures. The match target is
-# `f"{excinfo.type.__name__}: {excinfo.value}"` (pytest-rerunfailures), so:
-#   - "ReadTimeout"     native OllamaModelBackend httpx.ReadTimeout
-#   - "APITimeoutError" LiteLLM OpenAI-compatible path: litellm.exceptions.
-#                       Timeout whose message embeds APITimeoutError (verified
-#                       against litellm 1.95.0: "Timeout: litellm.Timeout:
-#                       APITimeoutError - Request timed out. ...")
-#   - "TimeoutError"    streaming stream-guard abort: a stalled stream quiet
-#                       for DEFAULT_CHUNK_TIMEOUT (120 s) is aborted by
-#                       send_to_queue and the builtin TimeoutError is raised
-#                       verbatim at the consumer (mellea/core/base.py). This
-#                       is the bounded form of the same stall on the
-#                       streaming path; without it, a stalled stream re-arms
-#                       the 120 s per-chunk guard until the 900 s pytest
-#                       watchdog kills the job (observed: run 32991484037).
-# Deliberately NOT matched: pytest-timeout's watchdog kill
-# ("Failed: Timeout (>900.0s) from pytest-timeout.") -- it already consumed
-# the whole per-attempt budget, so retrying it only burns the next one.
+# Transient Ollama-timeout shapes that the flaky retry net covers (matched
+# against `f"{excinfo.type.__name__}: {excinfo.value}"`):
+#   - "ReadTimeout"     native OllamaModelBackend (httpx.ReadTimeout)
+#   - "APITimeoutError" LiteLLM /v1 path (litellm.Timeout message)
+#   - "TimeoutError"    streaming stream-guard abort (stalled-chunk timeout)
+# Deliberately NOT matched: pytest-timeout's watchdog kill — it already spent
+# the attempt's whole time budget, so retrying it just burns the next one.
 # See test/test_flaky_ollama_rerun.py for the pinned match behaviour.
 OLLAMA_TIMEOUT_RERUN_PATTERNS = ["ReadTimeout", "APITimeoutError", "TimeoutError"]
 
@@ -618,13 +605,9 @@ def pytest_runtest_setup(item):
             logger.info(
                 "Warming up ollama models before ollama group (keep_alive=-1)..."
             )
-            # Warm each model with the num_ctx its live tests actually use.
-            # Ollama loads a per-model runner sized to the *first* request's
-            # num_ctx, and a later request needing a larger context forces a
-            # full runner reload (Ollama 0.33.1 on x86 has a bug where such a
-            # reloaded runner ignores num_predict — see PR #1587 update
-            # 2026-08-28 and runs 33122730668 / 33152524235). Pining the
-            # right size from the first request avoids the reload entirely.
+            # Warm each model at the num_ctx its live tests actually use: a
+            # later request needing a bigger context forces a runner reload,
+            # and Ollama 0.33.1 (x86) can ignore num_predict after one.
             warmup_models = {
                 "granite4.2:3b": 8192,
                 "granite4:micro-h": 2048,
