@@ -1158,9 +1158,15 @@ async def test_requirement_metrics_ignores_non_quick_check_events(requirement_pl
 # ToolMetricsPlugin tests
 
 
-class _MockToolCall:
+class _MockToolFunc:
     def __init__(self, name: str) -> None:
         self.name = name
+
+
+class _MockToolCall:
+    def __init__(self, prefixed_name: str, original_name: str) -> None:
+        self.name = prefixed_name
+        self.func = _MockToolFunc(original_name)
 
 
 @pytest.fixture
@@ -1170,9 +1176,9 @@ def tool_plugin():
 
 @pytest.mark.asyncio
 async def test_tool_plugin_records_success(tool_plugin):
-    """Successful tool calls are recorded with status='success'."""
+    """Successful tool calls are recorded with status='success' using original tool name."""
     payload = ToolPostInvokePayload(
-        model_tool_call=_MockToolCall("search"), success=True
+        model_tool_call=_MockToolCall("component_abc123__search", "search"), success=True
     )
 
     with patch("mellea.telemetry.metrics.record_tool_call") as mock_record:
@@ -1183,9 +1189,9 @@ async def test_tool_plugin_records_success(tool_plugin):
 
 @pytest.mark.asyncio
 async def test_tool_plugin_records_failure(tool_plugin):
-    """Failed tool calls are recorded with status='failure'."""
+    """Failed tool calls are recorded with status='failure' using original tool name."""
     payload = ToolPostInvokePayload(
-        model_tool_call=_MockToolCall("calculator"), success=False
+        model_tool_call=_MockToolCall("component_def456__calculator", "calculator"), success=False
     )
 
     with patch("mellea.telemetry.metrics.record_tool_call") as mock_record:

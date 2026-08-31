@@ -407,8 +407,9 @@ def add_tools_from_context_actions(
                     f"Providers may reject this tool call. Consider using shorter tool names."
                 )
 
-            # Validate function name pattern (OpenAI constraint: ^[a-zA-Z0-9_-]{1,64}$)
-            if not re.match(r"^[a-zA-Z0-9_-]{1,64}$", prefixed_name):
+            # Validate function name pattern (OpenAI constraint: characters must be [a-zA-Z0-9_-])
+            # Length is checked separately above; this regex only validates character set
+            if not re.match(r"^[a-zA-Z0-9_-]+$", prefixed_name):
                 MelleaLogger.get_logger().warning(
                     f"Tool name contains invalid characters (allowed: [a-zA-Z0-9_-]): "
                     f"'{prefixed_name}'. Providers may reject this tool call."
