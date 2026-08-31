@@ -94,7 +94,7 @@ See: [Generative Functions](/how-to/generative-functions)
 ## Backend
 
 A backend is an inference engine that Mellea uses to run LLM calls. Examples:
-`OllamaModelBackend`, `OpenAIBackend`, `LocalHFBackend`, `WatsonxAIBackend`. Backends are configured via `MelleaSession` or
+`OllamaModelBackend`, `OpenAIBackend`, `OrcaRouterBackend`, `LocalHFBackend`, `WatsonxAIBackend`. Backends are configured via `MelleaSession` or
 `start_session()`.
 
 See: [Backends and Configuration](/how-to/backends-and-configuration)

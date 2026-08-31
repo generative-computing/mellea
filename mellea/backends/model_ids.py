@@ -433,6 +433,17 @@ OPENAI_GPT_5_1 = ModelIdentifier(
     openai_name="gpt-5.1"  # OpenAI GPT-5.1
 )
 
+###########################
+#### OrcaRouter models ####
+###########################
+
+# `orcarouter/auto` is OrcaRouter's adaptive-routing model: it grades each prompt
+# and routes to the best frontier or open-weights model, with automatic failover.
+# Served from `https://api.orcarouter.ai/v1` via `OrcaRouterBackend`.
+ORCAROUTER_AUTO = ModelIdentifier(
+    openai_name="orcarouter/auto"  # OrcaRouter adaptive routing
+)
+
 #####################
 #### Misc models ####
 #####################

@@ -93,7 +93,9 @@ def get_session() -> MelleaSession:
 
 
 def start_session(
-    backend_name: Literal["ollama", "hf", "openai", "watsonx", "litellm"] = "ollama",
+    backend_name: Literal[
+        "ollama", "hf", "openai", "watsonx", "litellm", "orcarouter"
+    ] = "ollama",
     model_id: str | ModelIdentifier = IBM_GRANITE_4_1_3B,
     ctx: Context | None = None,
     *,
@@ -115,6 +117,7 @@ def start_session(
             - "ollama": Use Ollama backend for local models
             - "hf" or "huggingface": Use Hugging Face transformers backend
             - "openai": Use OpenAI API backend
+            - "orcarouter": Use the OrcaRouter gateway backend
             - "watsonx": Use IBM WatsonX backend, WARNING: this defaults to the IBM_GRANITE_4_HYBRID_SMALL model for now.
             - "litellm": Use the LiteLLM backend
         model_id: Model identifier or name. Can be a `ModelIdentifier` from
@@ -182,7 +185,7 @@ def start_session(
     if backend_class is None:
         raise Exception(
             f"Backend name {backend_name} unknown. Valid options are: "
-            "`ollama`, `hf`, `openai`, `watsonx`, `litellm`."
+            "`ollama`, `hf`, `openai`, `watsonx`, `litellm`, `orcarouter`."
         )
 
     # Pre-generate so the startup span and session_pre_init payload share an id.

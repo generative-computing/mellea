@@ -14,6 +14,7 @@ import pytest
 from mellea import start_backend
 from mellea.backends.ollama import OllamaModelBackend
 from mellea.backends.openai import OpenAIBackend
+from mellea.backends.orcarouter import OrcaRouterBackend
 from mellea.stdlib.context import ChatContext, SimpleContext
 from mellea.stdlib.session import (
     _resolve_context,
@@ -33,6 +34,11 @@ def test_ollama_resolves_to_ollama_backend():
 def test_openai_resolves_to_openai_backend():
     cls = backend_name_to_class("openai")
     assert cls is OpenAIBackend
+
+
+def test_orcarouter_resolves_to_orcarouter_backend():
+    cls = backend_name_to_class("orcarouter")
+    assert cls is OrcaRouterBackend
 
 
 def test_unknown_name_returns_none():

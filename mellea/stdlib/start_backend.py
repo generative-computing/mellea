@@ -18,6 +18,7 @@ if TYPE_CHECKING:
     from ..backends.litellm import LiteLLMBackend
     from ..backends.ollama import OllamaModelBackend
     from ..backends.openai import OpenAIBackend
+    from ..backends.orcarouter import OrcaRouterBackend
     from ..backends.watsonx import WatsonxAIBackend
 
 CtxT = typing_extensions.TypeVar("CtxT", bound=Context, default=SimpleContext)
@@ -28,7 +29,7 @@ def backend_name_to_class(name: str) -> Any:
 
     Args:
         name: Short backend name, e.g. `"ollama"`, `"hf"`, `"openai"`,
-            `"watsonx"`, or `"litellm"`.
+            `"watsonx"`, `"litellm"`, or `"orcarouter"`.
 
     Returns:
         The corresponding `Backend` class, or `None` if the name is unrecognised.
@@ -42,6 +43,10 @@ def backend_name_to_class(name: str) -> Any:
         from ..backends.ollama import OllamaModelBackend
 
         return OllamaModelBackend
+    elif name == "orcarouter":
+        from ..backends.orcarouter import OrcaRouterBackend
+
+        return OrcaRouterBackend
     elif name == "hf" or name == "huggingface":
         try:
             from mellea.backends.huggingface import LocalHFBackend
@@ -107,6 +112,7 @@ def _resolve_model_id_str(model_id: str | ModelIdentifier, backend_name: str) ->
             "hf": "hf_model_name",
             "huggingface": "hf_model_name",
             "openai": "openai_name",
+            "orcarouter": "openai_name",
             "watsonx": "watsonx_name",
             "litellm": "hf_model_name",
         }
@@ -233,6 +239,45 @@ def start_backend(
 
 
 # ---------------------------------------------------------------------------
+# Overloads: orcarouter
+# ---------------------------------------------------------------------------
+@overload
+def start_backend(
+    backend_name: Literal["orcarouter"],
+    model_id: str | ModelIdentifier = ...,
+    ctx: CtxT = ...,
+    *,
+    context_type: Literal["chat"],
+    model_options: dict | None = ...,
+    **backend_kwargs: Any,
+) -> tuple[ChatContext, OrcaRouterBackend]: ...
+
+
+@overload
+def start_backend(
+    backend_name: Literal["orcarouter"],
+    model_id: str | ModelIdentifier = ...,
+    ctx: CtxT = ...,
+    *,
+    context_type: Literal["simple"],
+    model_options: dict | None = ...,
+    **backend_kwargs: Any,
+) -> tuple[SimpleContext, OrcaRouterBackend]: ...
+
+
+@overload
+def start_backend(
+    backend_name: Literal["orcarouter"],
+    model_id: str | ModelIdentifier = ...,
+    ctx: CtxT = ...,
+    *,
+    context_type: None = ...,
+    model_options: dict | None = ...,
+    **backend_kwargs: Any,
+) -> tuple[CtxT, OrcaRouterBackend]: ...
+
+
+# ---------------------------------------------------------------------------
 # Overloads: watsonx
 # ---------------------------------------------------------------------------
 @overload
@@ -314,7 +359,9 @@ def start_backend(
 # Implementation
 # ---------------------------------------------------------------------------
 def start_backend(
-    backend_name: Literal["ollama", "hf", "openai", "watsonx", "litellm"] = "ollama",
+    backend_name: Literal[
+        "ollama", "hf", "openai", "watsonx", "litellm", "orcarouter"
+    ] = "ollama",
     model_id: str | ModelIdentifier = IBM_GRANITE_4_MICRO_3B,
     ctx: Context | None = None,
     *,
@@ -330,7 +377,7 @@ def start_backend(
 
     Args:
         backend_name: The backend to use (`"ollama"`, `"hf"`, `"openai"`,
-            `"watsonx"`, or `"litellm"`).
+            `"watsonx"`, `"litellm"`, or `"orcarouter"`).
         model_id: Model identifier or name.
         ctx: An explicit `Context` instance. Mutually exclusive with
             `context_type`.
@@ -355,7 +402,7 @@ def start_backend(
     if backend_class is None:
         raise Exception(
             f"Backend name {backend_name} unknown. Valid options are: "
-            "`ollama`, `hf`, `openai`, `watsonx`, `litellm`."
+            "`ollama`, `hf`, `openai`, `watsonx`, `litellm`, `orcarouter`."
         )
     backend = backend_class(model_id, model_options=model_options, **backend_kwargs)
     return resolved_ctx, backend

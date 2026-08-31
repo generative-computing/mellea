@@ -79,6 +79,7 @@ const sidebars: SidebarsConfig = {
         'integrations/ollama',
         'integrations/huggingface',
         'integrations/openai',
+        'integrations/orcarouter',
         'integrations/litellm',
         'integrations/vertex-ai',
         'integrations/bedrock',

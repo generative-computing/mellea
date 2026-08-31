@@ -9,6 +9,7 @@ from mellea.backends.huggingface import LocalHFBackend
 from mellea.backends.litellm import LiteLLMBackend
 from mellea.backends.ollama import OllamaModelBackend
 from mellea.backends.openai import OpenAIBackend
+from mellea.backends.orcarouter import OrcaRouterBackend
 from mellea.backends.watsonx import WatsonxAIBackend
 from mellea.stdlib.context import ChatContext, SimpleContext
 from mellea.stdlib.start_backend import start_backend
@@ -95,6 +96,21 @@ def check_openai_default() -> None:
     ctx, backend = start_backend("openai")
     assert_type(ctx, SimpleContext)
     assert_type(backend, OpenAIBackend)
+
+
+# ---------------------------------------------------------------------------
+# orcarouter
+# ---------------------------------------------------------------------------
+def check_orcarouter_chat() -> None:
+    ctx, backend = start_backend("orcarouter", context_type="chat")
+    assert_type(ctx, ChatContext)
+    assert_type(backend, OrcaRouterBackend)
+
+
+def check_orcarouter_default() -> None:
+    ctx, backend = start_backend("orcarouter")
+    assert_type(ctx, SimpleContext)
+    assert_type(backend, OrcaRouterBackend)
 
 
 # ---------------------------------------------------------------------------

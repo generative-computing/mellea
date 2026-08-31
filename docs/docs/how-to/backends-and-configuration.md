@@ -32,6 +32,7 @@ The following table shows all available backends, their class names, import path
 | ------- | ----- | ------ | --------------- | ----------------- |
 | [Ollama](../integrations/ollama.md) | `OllamaModelBackend` | `mellea.backends.ollama` | base | `backend_name="ollama"` |
 | [OpenAI](../integrations/openai.md) | `OpenAIBackend` | `mellea.backends.openai` | base | `backend_name="openai"` |
+| [OrcaRouter](../integrations/orcarouter.md) | `OrcaRouterBackend` | `mellea.backends.orcarouter` | base | `backend_name="orcarouter"` |
 | [LiteLLM](../integrations/litellm.md) | `LiteLLMBackend` | `mellea.backends.litellm` | `mellea[litellm]` | `backend_name="litellm"` |
 | [Hugging Face](../integrations/huggingface.md) | `LocalHFBackend` | `mellea.backends.huggingface` | `mellea[hf]` | `backend_name="hf"` |
 | [WatsonX](../integrations/watsonx.md) | `WatsonxAIBackend` | `mellea.backends.watsonx` | `mellea[watsonx]` | `backend_name="watsonx"` (deprecated) |
@@ -253,7 +254,7 @@ m = mellea.start_session(
 )
 ```
 
-Valid `backend_name` values: `"ollama"`, `"openai"`, `"hf"`, `"litellm"`, `"watsonx"`.
+Valid `backend_name` values: `"ollama"`, `"openai"`, `"orcarouter"`, `"hf"`, `"litellm"`, `"watsonx"`.
 
 ---
 
