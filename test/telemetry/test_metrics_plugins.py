@@ -1178,7 +1178,8 @@ def tool_plugin():
 async def test_tool_plugin_records_success(tool_plugin):
     """Successful tool calls are recorded with status='success' using original tool name."""
     payload = ToolPostInvokePayload(
-        model_tool_call=_MockToolCall("component_abc123__search", "search"), success=True
+        model_tool_call=_MockToolCall("component_abc123__search", "search"),
+        success=True,
     )
 
     with patch("mellea.telemetry.metrics.record_tool_call") as mock_record:
@@ -1191,7 +1192,8 @@ async def test_tool_plugin_records_success(tool_plugin):
 async def test_tool_plugin_records_failure(tool_plugin):
     """Failed tool calls are recorded with status='failure' using original tool name."""
     payload = ToolPostInvokePayload(
-        model_tool_call=_MockToolCall("component_def456__calculator", "calculator"), success=False
+        model_tool_call=_MockToolCall("component_def456__calculator", "calculator"),
+        success=False,
     )
 
     with patch("mellea.telemetry.metrics.record_tool_call") as mock_record:
