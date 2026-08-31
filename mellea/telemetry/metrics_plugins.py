@@ -533,10 +533,6 @@ class ToolMetricsPlugin(Plugin, name="tool_metrics", priority=1056):
         Args:
             payload: Contains model_tool_call (with func.name) and success flag.
             context: Plugin context (unused).
-
-        Uses func.name (original tool name) not model_tool_call.name (prefixed name)
-        to keep metric label cardinality bounded. Prefixing is for LLM context only,
-        not for observability labels.
         """
         from mellea.telemetry.metrics import record_tool_call
 
