@@ -1970,6 +1970,13 @@ class TemplateRepresentation:
         tool_name (str | None): For a `role="tool"` component, the name of the tool
             whose result this message carries (e.g. Ollama's tool-result turn keys on
             it). Defaults to `None`.
+        provider_fields (dict[str, dict[str, Any]] | None): Optional author-declared
+            extra wire fields, keyed by provider target. Each outer key is a provider
+            (matched against the backend's provider string, with the `"openai"`
+            wire-family alias and a `"*"` wildcard); each inner dict holds fields
+            merged into the wire message for that target. Mellea's known fields always
+            win on a key collision. A named target that the request does not hit (and
+            no `"*"`) is a hard error at serialization. Defaults to `None`.
 
     """
 
@@ -1991,6 +1998,7 @@ class TemplateRepresentation:
     tool_calls: list[dict[str, Any]] | None = None
     tool_call_id: str | None = None
     tool_name: str | None = None
+    provider_fields: dict[str, dict[str, Any]] | None = None
 
 
 @dataclass
