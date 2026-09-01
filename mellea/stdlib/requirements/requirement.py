@@ -71,9 +71,12 @@ class ALoraRequirement(Requirement, Intrinsic):
 
     If the adapter generates output but the output **fails schema validation**
     (`requirement_check_to_bool` raises `AdapterSchemaMismatchError`), the
-    exception propagates to the caller — it is not caught and does not trigger
-    the LLMaJ fallback.  This is intentional: schema drift should surface
-    loudly rather than silently return a wrong result.
+    error is surfaced on the returned `ValidationResult.error` by
+    `Requirement.validate` — it is not caught here and does not trigger the
+    LLMaJ fallback, which covers only generation errors.  The result fails
+    closed (`bool(result)` is `False`), so schema drift is neither silently
+    treated as a pass nor raised as an unexpected exception; callers can inspect
+    `result.error` to tell it apart from an ordinary "requirement not met".
 
     Args:
         description (str): Human-readable requirement description.

@@ -756,7 +756,9 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         # conversation, not multi-turn generation, so reasoning is never replayed
         # here (no `replay_reasoning=`) — unlike the chat path in
         # `_generate_from_context`, which applies `should_replay_reasoning`.
-        conversation.extend([message_to_openai_message(m) for m in messages])
+        conversation.extend(
+            [message_to_openai_message(m, provider=self._provider) for m in messages]
+        )
 
         docs = messages_to_docs(messages)
 
@@ -1016,7 +1018,9 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         replay_flags = should_replay_reasoning(messages, self._provider)
         conversation.extend(
             [
-                message_to_openai_message(m, self.formatter, replay_reasoning=replay)
+                message_to_openai_message(
+                    m, self.formatter, replay_reasoning=replay, provider=self._provider
+                )
                 for m, replay in zip(messages, replay_flags)
             ]
         )

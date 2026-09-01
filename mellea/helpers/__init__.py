@@ -21,8 +21,10 @@ from .async_helpers import (
 )
 from .event_loop_helper import _run_async_in_thread
 from .openai_compatible_helpers import (
+    OPENAI_COMPATIBLE_WIRE_PROVIDERS,
     chat_completion_delta_merge,
     extract_model_tool_requests,
+    merge_provider_fields,
     message_to_openai_message,
     messages_to_docs,
     prefetch_audio_urls,
@@ -36,6 +38,7 @@ from .server_type import (
 
 __all__ = [
     "DEFAULT_CHUNK_TIMEOUT",
+    "OPENAI_COMPATIBLE_WIRE_PROVIDERS",
     "ClientCache",
     "_ServerType",
     "_run_async_in_thread",
@@ -44,6 +47,7 @@ __all__ = [
     "extract_model_tool_requests",
     "get_current_event_loop",
     "is_vllm_server_with_structured_output",
+    "merge_provider_fields",
     "message_to_openai_message",
     "messages_to_docs",
     "prefetch_audio_urls",

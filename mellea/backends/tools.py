@@ -696,6 +696,15 @@ def validate_tool_arguments(
 
             return (result | None) if has_null else result
 
+        # Handle enum constraint (e.g. Literal["read", "write"] on a plain field)
+        if "enum" in schema:
+            enum_vals = tuple(schema["enum"])
+            return Literal[enum_vals]  # type: ignore
+
+        # Handle const constraint (e.g. a bare {"type": "string", "const": "cat"})
+        if "const" in schema:
+            return Literal[schema["const"]]  # type: ignore
+
         # Simple type mapping
         return JSON_TYPE_TO_PYTHON.get(json_type, Any)
 
@@ -1442,8 +1451,25 @@ def convert_function_to_ollama_tool(
             # This now handles Optional[primitive] types correctly
             if "anyOf" in v:
                 types = {t.get("type", "string") for t in v.get("anyOf")}
+                # Collect enum values from each non-null anyOf branch
+                # (handles Optional[Literal[...]] which Pydantic emits as anyOf)
+                enum_values: list | None = None
+                for sub in v.get("anyOf", []):
+                    if sub.get("type") == "null":
+                        continue
+                    if "enum" in sub:
+                        enum_values = list(sub["enum"])
+                        break
             else:
                 types = {v.get("type", "string")}
+                if "enum" in v:
+                    enum_values = list(v["enum"])
+                elif "const" in v:
+                    # Single-value Literal — normalise to a one-element enum so
+                    # both schema generation and the validator share one code path
+                    enum_values = [v["const"]]
+                else:
+                    enum_values = None
 
             if "null" in types:
                 if k in schema.get("required", []):
@@ -1461,6 +1487,8 @@ def convert_function_to_ollama_tool(
                 "description": parsed_docstring.get(k, ""),
                 "type": type_value,
             }
+            if enum_values is not None:
+                simple_prop["enum"] = enum_values
             # Preserve the parameter's default value; rebuilding the property
             # from scratch would otherwise drop it.
             if "default" in v:

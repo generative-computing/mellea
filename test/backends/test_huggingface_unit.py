@@ -7,6 +7,7 @@ import asyncio
 import threading
 import time
 from types import SimpleNamespace
+from typing import Any, cast
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -20,9 +21,15 @@ pytest.importorskip(
 )
 
 import base64
+import gc
 import struct
+import weakref
 
-from transformers.generation.utils import GenerateDecoderOnlyOutput
+from transformers.cache_utils import CacheLayerMixin, DynamicCache
+from transformers.generation.utils import (
+    GenerateBeamDecoderOnlyOutput,
+    GenerateDecoderOnlyOutput,
+)
 
 from mellea.backends import ModelOption
 from mellea.backends.adapters import AdapterMixin, AdapterType, IntrinsicAdapter
@@ -1342,6 +1349,178 @@ async def test_intrinsic_logits_populated_when_option_set(stub_backend):
     assert all(t.shape == (vocab_size,) for t in output.generation.logits)
 
 
+@pytest.mark.asyncio
+async def test_intrinsic_closure_cell_and_kv_cache_released_after_post_processing(
+    stub_backend,
+):
+    """Holding only the MOT after post_processing must not pin intrinsic HF output.
+
+    Two related retention paths are exercised:
+
+    1. `raw_hf_output_cell` — the closure captured by `_gen.process` (a
+       `functools.partial` that outlives the call). The cell must be cleared
+       after its value is transferred to `mot.raw.response`, otherwise the
+       held MOT retains the full GenerateDecoderOnlyOutput.
+
+    2. `past_key_values` — the KV cache inside the HF output. On the no-cache
+       path, post_processing must remove it from the GenerateDecoderOnlyOutput
+       before clearing `mot.raw.response`.
+
+    The test deliberately retains the MOT while dropping all independent test
+    references to the HF output, DynamicCache, and KV tensors.
+    """
+    backend = _make_intrinsic_backend_stub(stub_backend)
+    backend.processing = lambda *args, **kwargs: LocalHFBackend.processing(
+        backend, *args, **kwargs
+    )
+    backend.post_processing = lambda *args, **kwargs: LocalHFBackend.post_processing(
+        backend, *args, **kwargs
+    )
+    backend._surface_logits = lambda mot, hf_out: LocalHFBackend._surface_logits(
+        backend, mot, hf_out
+    )
+    backend._use_caches = False
+    backend.cache_put = MagicMock()
+    backend._tokenizer = MagicMock(eos_token_id=0)
+    backend.model_id = "stub-model"
+
+    # Build a small KV cache with real tensors so weakrefs can verify that the
+    # cache and its allocations are released.
+    kv_cache = DynamicCache()
+    kv_cache.update(
+        key_states=torch.zeros(1, 1, 1, 4),
+        value_states=torch.zeros(1, 1, 1, 4),
+        layer_idx=0,
+    )
+
+    fake_scores = (torch.zeros(1, 32000),)
+    fake_hf_output = GenerateDecoderOnlyOutput(
+        sequences=torch.tensor([[1, 2]]),
+        scores=fake_scores,
+        logits=None,
+        attentions=None,
+        hidden_states=None,
+        past_key_values=kv_cache,
+    )
+
+    # Take weakrefs before dropping all direct strong references.
+    ref_container = weakref.ref(fake_hf_output)
+    ref_kv_cache = weakref.ref(kv_cache)
+    ref_kv_tensors = [
+        weakref.ref(t)
+        for layer in kv_cache.layers
+        if isinstance(layer, CacheLayerMixin)
+        for t in (layer.keys, layer.values)
+        if t is not None
+    ]
+
+    adapter = _make_intrinsic_adapter_stub()
+    backend._added_adapters = {adapter.qualified_name: adapter}
+
+    class _FakeChatCompletionResponse:
+        class _Choice:
+            class _Message:
+                content = "0.9"
+
+            message = _Message()
+
+        choices = [_Choice()]
+
+    class _FakeResultProcessorPassthrough:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            pass
+
+        def transform(self, chunk: Any, rewritten: Any) -> Any:
+            return chunk
+
+    def fake_transformers_inputs(
+        rewritten: Any, tokenizer: Any, model: Any, ll_tokenizer: Any = None
+    ) -> tuple[dict, dict]:
+        return {"input_tokens": torch.tensor([[1]])}, {}
+
+    def fake_generate_with_transformers(
+        tokenizer: Any, model: Any, generate_input: Any, other_input: Any
+    ) -> Any:
+        model.generate(inputs=generate_input["input_tokens"])
+        return _FakeChatCompletionResponse()
+
+    mock_model = MagicMock()
+    mock_model.generate = MagicMock(return_value=fake_hf_output)
+    backend._model = mock_model
+
+    with (
+        patch(
+            "mellea.backends.huggingface.granite_formatters.IntrinsicsRewriter",
+            _FakeRewriter,
+        ),
+        patch(
+            "mellea.backends.huggingface.granite_formatters.IntrinsicsResultProcessor",
+            _FakeResultProcessorPassthrough,
+        ),
+        patch(
+            "mellea.formatters.granite.base.util.chat_completion_request_to_transformers_inputs",
+            side_effect=fake_transformers_inputs,
+        ),
+        patch(
+            "mellea.formatters.granite.base.util.generate_with_transformers",
+            side_effect=fake_generate_with_transformers,
+        ),
+    ):
+        output = await LocalHFBackend._generate_from_intrinsic(
+            backend,
+            Intrinsic("answerability"),
+            ChatContext().add(Message("user", "Is the sky blue?")),
+            model_options={ModelOption.LOGITS: True},
+        )
+
+        assert output._gen.generate is not None
+        await output._gen.generate
+
+        while not output._gen.queue.empty():
+            item = output._gen.queue.get_nowait()
+            if item is not None:
+                await output._gen.process(output, item)
+
+        output._computed = True
+
+    # MagicMock artificially retains its return_value. A real HF model does not
+    # retain the result of generate(), so remove this test-only retention path.
+    mock_model.generate.return_value = None
+
+    # Drop the test's direct strong references. From here onward, the retained
+    # MOT should be the only object graph capable of keeping the HF output alive.
+    del fake_hf_output
+    del kv_cache
+    del fake_scores
+
+    await backend.post_processing(
+        output, [], None, False, {}, None, torch.tensor([[1]])
+    )
+
+    gc.collect()
+    gc.collect()
+
+    assert output.raw.response is None, (
+        "raw.response should be None on the no-caching path"
+    )
+
+    assert ref_container() is None, (
+        "GenerateDecoderOnlyOutput is still alive while the MOT is held; "
+        "the _gen.process closure or another MOT-owned path is pinning it"
+    )
+
+    assert ref_kv_cache() is None, (
+        "DynamicCache is still alive while the MOT is held; "
+        "past_key_values was not fully released on the no-cache path"
+    )
+
+    for i, ref in enumerate(ref_kv_tensors):
+        assert ref() is None, (
+            f"KV-cache tensor {i} is still alive while the MOT is held; "
+            "past_key_values or another reference path is retaining it"
+        )
+
+
 @pytest.mark.parametrize("images,audio", _MULTIMODAL_CASES)
 @pytest.mark.asyncio
 async def test_multimodal_blocks_raise_error(images, audio):
@@ -1849,4 +2028,287 @@ async def test_whitespace_pattern_cannot_be_defeated_by_schema():
         )
         assert captured[0].get("whitespace_pattern") == r"[\x20\x0A\x0D\x09]{0,20}", (
             f"Expected bounded whitespace_pattern to override False in {path_name}"
+        )
+
+
+def _make_raw_fake_setup(
+    batch_size: int, vocab_size: int, n_tokens: int, prompt_len: int
+):
+    """Return (backend, fake_encoding, fake_input_ids) for generate_from_raw tests."""
+    backend = _make_backend()
+    fake_input_ids = torch.zeros(batch_size, prompt_len, dtype=torch.long)
+    fake_encoding = MagicMock()
+    fake_encoding.__getitem__ = lambda self, k: (
+        fake_input_ids
+        if k == "input_ids"
+        else torch.ones(batch_size, prompt_len, dtype=torch.long)
+    )
+    fake_encoding.to = MagicMock(return_value=fake_encoding)
+    backend._tokenizer = MagicMock(eos_token_id=0, vocab_size=vocab_size)
+    backend._tokenizer.__len__ = MagicMock(return_value=vocab_size)
+    backend._tokenizer.return_value = fake_encoding
+    decode_values = [f"result_{chr(ord('a') + i)}" for i in range(batch_size)]
+    backend._tokenizer.batch_decode = MagicMock(return_value=decode_values)
+    return backend, fake_encoding, fake_input_ids
+
+
+@pytest.mark.asyncio
+async def test_generate_from_raw_raw_response_set_per_mot():
+    """Every MOT from generate_from_raw has raw.response set to a GenerateDecoderOnlyOutput.
+
+    Asserts:
+    - raw.response is not None for each MOT.
+    - raw.response.sequences.shape == (1, full_seq_len).
+    - raw.response.sequences must be a clone with distinct storage
+    - raw.response.past_key_values is None.
+    - raw.response.attentions is None.
+    - raw.response.hidden_states is None.
+    """
+    batch_size = 2
+    vocab_size = 32000
+    n_tokens = 3
+    prompt_len = 1
+    full_seq_len = prompt_len + n_tokens
+
+    backend, _fake_encoding, _fake_input_ids = _make_raw_fake_setup(
+        batch_size, vocab_size, n_tokens, prompt_len
+    )
+    sequences = torch.zeros(batch_size, full_seq_len, dtype=torch.long)
+    fake_outputs = GenerateDecoderOnlyOutput(
+        sequences=sequences,
+        scores=None,
+        logits=None,
+        attentions=None,
+        hidden_states=None,
+        past_key_values=None,
+    )
+    actions = [Message("user", "hello"), Message("user", "world")]
+
+    with (
+        patch(
+            "mellea.backends.huggingface.asyncio.to_thread", return_value=fake_outputs
+        ),
+        patch.object(backend, "do_generate_walks"),
+        patch.object(backend, "formatter") as mock_fmt,
+    ):
+        mock_fmt.print = MagicMock(return_value="prompt")
+        results = await backend.generate_from_raw(
+            actions, MagicMock(), model_options={}
+        )
+
+    assert len(results) == batch_size
+    for item_idx, result in enumerate(results):
+        assert result.raw.response is not None, (
+            f"item {item_idx}: raw.response must be set"
+        )
+        assert isinstance(result.raw.response, GenerateDecoderOnlyOutput), (
+            f"item {item_idx}: raw.response must be GenerateDecoderOnlyOutput"
+        )
+        assert result.raw.response.sequences.shape == (1, full_seq_len), (
+            f"item {item_idx}: sequences shape must be (1, {full_seq_len})"
+        )
+        # Clone - must NOT share storage with the original batch tensor.
+        assert (
+            result.raw.response.sequences.untyped_storage().data_ptr()
+            != sequences.untyped_storage().data_ptr()
+        ), f"item {item_idx}: sequences must be a clone, not a view"
+        assert result.raw.response.past_key_values is None, (
+            f"item {item_idx}: past_key_values must be None"
+        )
+        assert result.raw.response.attentions is None, (
+            f"item {item_idx}: attentions must be None"
+        )
+        assert result.raw.response.hidden_states is None, (
+            f"item {item_idx}: hidden_states must be None"
+        )
+
+
+@pytest.mark.asyncio
+async def test_generate_from_raw_raw_response_scores_are_clones_when_logits_requested():
+    """raw.response.scores is a tuple of clones when ModelOption.LOGITS is set.
+
+    Each tensor in raw.response.scores must own compact per-row storage and must
+    not share storage with the corresponding batch step tensor — consistent with
+    generation.logits which also holds clones.
+    """
+    batch_size = 2
+    vocab_size = 32000
+    n_tokens = 3
+    prompt_len = 1
+    full_seq_len = prompt_len + n_tokens
+
+    backend, _fake_encoding, _fake_input_ids = _make_raw_fake_setup(
+        batch_size, vocab_size, n_tokens, prompt_len
+    )
+    sequences = torch.zeros(batch_size, full_seq_len, dtype=torch.long)
+    fake_scores = tuple(torch.randn(batch_size, vocab_size) for _ in range(n_tokens))
+    fake_outputs = GenerateDecoderOnlyOutput(
+        sequences=sequences,
+        scores=fake_scores,
+        logits=None,
+        attentions=None,
+        hidden_states=None,
+        past_key_values=None,
+    )
+    actions = [Message("user", "hello"), Message("user", "world")]
+
+    with (
+        patch(
+            "mellea.backends.huggingface.asyncio.to_thread", return_value=fake_outputs
+        ),
+        patch.object(backend, "do_generate_walks"),
+        patch.object(backend, "formatter") as mock_fmt,
+    ):
+        mock_fmt.print = MagicMock(return_value="prompt")
+        results = await backend.generate_from_raw(
+            actions, MagicMock(), model_options={ModelOption.LOGITS: True}
+        )
+
+    for item_idx, result in enumerate(results):
+        assert result.raw.response.scores is not None, (
+            f"item {item_idx}: raw.response.scores must be set when LOGITS=True"
+        )
+        assert len(result.raw.response.scores) == n_tokens, (
+            f"item {item_idx}: one scores tensor per generation step"
+        )
+        for tok_idx, t in enumerate(result.raw.response.scores):
+            assert t.shape == (1, vocab_size), (
+                f"item {item_idx} token {tok_idx}: shape must be (1, vocab_size)"
+            )
+            # Clone - must NOT share storage with the original batch step tensor.
+            assert (
+                t.untyped_storage().data_ptr()
+                != fake_scores[tok_idx].untyped_storage().data_ptr()
+            ), f"item {item_idx} token {tok_idx}: raw.response.scores must be a clone"
+
+
+@pytest.mark.asyncio
+async def test_generate_from_raw_raw_response_scores_none_when_logits_not_requested():
+    """raw.response.scores is None when ModelOption.LOGITS is not set."""
+    batch_size = 1
+    vocab_size = 32000
+    n_tokens = 2
+    prompt_len = 1
+    full_seq_len = prompt_len + n_tokens
+
+    backend, _fake_encoding, _fake_input_ids = _make_raw_fake_setup(
+        batch_size, vocab_size, n_tokens, prompt_len
+    )
+    # When LOGITS is not set, model.generate() is called without output_scores=True,
+    # so outputs.scores will be None — simulate that here.
+    sequences = torch.zeros(batch_size, full_seq_len, dtype=torch.long)
+    fake_outputs = GenerateDecoderOnlyOutput(
+        sequences=sequences,
+        scores=None,
+        logits=None,
+        attentions=None,
+        hidden_states=None,
+        past_key_values=None,
+    )
+
+    with (
+        patch(
+            "mellea.backends.huggingface.asyncio.to_thread", return_value=fake_outputs
+        ),
+        patch.object(backend, "do_generate_walks"),
+        patch.object(backend, "formatter") as mock_fmt,
+    ):
+        mock_fmt.print = MagicMock(return_value="prompt")
+        results = await backend.generate_from_raw(
+            [Message("user", "hi")], MagicMock(), model_options={}
+        )
+
+    assert results[0].raw.response.scores is None, (
+        "raw.response.scores must be None when model.generate() returns no scores"
+    )
+
+
+@pytest.mark.asyncio
+async def test_generate_from_raw_raw_response_none_for_non_tensor_sequences():
+    """raw.response stays None when cached raw output sequences are not a tensor."""
+    batch_size = 2
+    vocab_size = 32000
+    n_tokens = 3
+    prompt_len = 1
+    full_seq_len = prompt_len + n_tokens
+
+    backend, _fake_encoding, _fake_input_ids = _make_raw_fake_setup(
+        batch_size, vocab_size, n_tokens, prompt_len
+    )
+    backend._use_caches = True
+    fake_outputs = cast(
+        Any,
+        SimpleNamespace(
+            sequences=[[0] * full_seq_len for _ in range(batch_size)],
+            scores=None,
+            logits=None,
+            attentions=None,
+            hidden_states=None,
+            past_key_values=None,
+        ),
+    )
+    actions = [Message("user", "hello"), Message("user", "world")]
+
+    with (
+        patch(
+            "mellea.backends.huggingface.asyncio.to_thread", return_value=fake_outputs
+        ),
+        patch.object(backend, "do_generate_walks"),
+        patch.object(backend, "formatter") as mock_fmt,
+    ):
+        mock_fmt.print = MagicMock(return_value="prompt")
+        results = await backend.generate_from_raw(
+            cast(Any, actions), MagicMock(), model_options={}
+        )
+
+    assert len(results) == batch_size
+    assert "raw_batch_non_tensor_sequences_unsupported" in backend._warned_about
+    for item_idx, result in enumerate(results):
+        assert result.raw.response is None, (
+            f"item {item_idx}: raw.response must stay None for non-tensor sequences"
+        )
+
+
+@pytest.mark.asyncio
+async def test_generate_from_raw_raw_response_none_for_beam_outputs():
+    """raw.response stays None for cached beam-search outputs."""
+    batch_size = 2
+    vocab_size = 32000
+    n_tokens = 3
+    prompt_len = 1
+    full_seq_len = prompt_len + n_tokens
+
+    backend, _fake_encoding, _fake_input_ids = _make_raw_fake_setup(
+        batch_size, vocab_size, n_tokens, prompt_len
+    )
+    backend._use_caches = True
+    fake_outputs = GenerateBeamDecoderOnlyOutput(
+        sequences=torch.zeros(batch_size, full_seq_len, dtype=torch.long),
+        sequences_scores=None,
+        scores=None,
+        logits=None,
+        beam_indices=torch.zeros(batch_size, full_seq_len, dtype=torch.long),
+        attentions=None,
+        hidden_states=None,
+        past_key_values=None,
+    )
+    actions = [Message("user", "hello"), Message("user", "world")]
+
+    with (
+        patch(
+            "mellea.backends.huggingface.asyncio.to_thread", return_value=fake_outputs
+        ),
+        patch.object(backend, "do_generate_walks"),
+        patch.object(backend, "formatter") as mock_fmt,
+    ):
+        mock_fmt.print = MagicMock(return_value="prompt")
+        results = await backend.generate_from_raw(
+            cast(Any, actions), MagicMock(), model_options={}
+        )
+
+    assert len(results) == batch_size
+    assert "raw_batch_beam_search_unsupported" in backend._warned_about
+    for item_idx, result in enumerate(results):
+        assert result.raw.response is None, (
+            f"item {item_idx}: raw.response must stay None for beam-search outputs"
         )
