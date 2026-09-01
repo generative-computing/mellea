@@ -452,8 +452,11 @@ async def test_litellm_token_metrics_integration(
         # tests (see test_ollama_token_metrics_integration). THINKING: False
         # is required: granite4.2 thinks by default and a 64-token
         # generation is ~45 thinking tokens — minutes on a 4-vCPU CI runner,
-        # blowing the 300 s request cap (runs 33093698028, 33104419835);
-        # mellea maps it to reasoning_effort="none" for the /v1 endpoint.
+        # blowing the 300 s request cap (runs 33093698028, 33104419835).
+        # With the "openai/" prefix used here, litellm.py's ollama-prefix
+        # check (`"ollama" in self._model_id.split("/")[0]`) does not match,
+        # so reasoning_effort="none" is NOT sent on this path — MAX_NEW_TOKENS
+        # is what actually bounds the request.
         model_options={
             ModelOption.THINKING: False,
             "timeout": 300.0,
