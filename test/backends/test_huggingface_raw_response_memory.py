@@ -41,6 +41,8 @@ if TYPE_CHECKING:
 
 import pytest
 
+pytestmark = pytest.mark.integration
+
 torch = pytest.importorskip("torch", reason="torch not installed — install mellea[hf]")
 pytest.importorskip(
     "transformers", reason="transformers not installed — install mellea[hf]"
