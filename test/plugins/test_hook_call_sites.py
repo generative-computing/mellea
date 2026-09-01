@@ -1826,7 +1826,7 @@ class TestMajorityVotingHookCallSites:
     and all hooks share the same sampling_id.
 
     This is the key regression for the change from super().sample() to
-    super()._sample_impl() in BaseMBRDSampling: the inner fan-out must reuse
+    super()._sample() in BaseMBRDSampling: the inner fan-out must reuse
     the outer sampling_id rather than minting N independent loops.
     """
 
@@ -1873,7 +1873,7 @@ class TestMajorityVotingHookCallSites:
 
         This is the core invariant broken when the inner fan-out called
         super().sample() (which minted a fresh UUID per inner call) and fixed by
-        calling super()._sample_impl() with the outer sampling_id instead.
+        calling super()._sample() with the outer sampling_id instead.
         """
         from mellea.stdlib.sampling.majority_voting import MBRDRougeLStrategy
 
@@ -2013,9 +2013,134 @@ class TestMajorityVotingHookCallSites:
             f"All events must share one sampling_id; got {sampling_ids}"
         )
 
+    async def test_majority_vote_iteration_sample_index_is_unique(self) -> None:
+        """(sampling_id, sample_index, iteration) is unique across all majority-vote branches.
+
+        With number_of_samples=3 and loop_budget=2, three branches each fire two
+        SAMPLING_ITERATION events.  Before the fix all three branches emitted
+        iteration=1 and iteration=2 under the same sampling_id, making the tuple
+        non-unique.  After the fix each branch carries its own sample_index (0, 1, 2),
+        so the triple is unique across all six events.
+        """
+        from mellea.stdlib.sampling.majority_voting import BaseMBRDSampling
+
+        class _TrivialMBRD(BaseMBRDSampling):
+            def compare_strings(self, ref: str, pred: str) -> float:
+                return 1.0
+
+        iteration_payloads: list[Any] = []
+
+        @hook("sampling_iteration")
+        async def record_iteration(payload: Any, ctx: Any) -> Any:
+            iteration_payloads.append(payload)
+            return None
+
+        register(record_iteration)
+
+        always_fail = Requirement(
+            description="always fails",
+            validation_fn=lambda _ctx: ValidationResult(
+                result=False, reason="forced failure"
+            ),
+        )
+        number_of_samples = 3
+        loop_budget = 2
+        strategy = _TrivialMBRD(
+            number_of_samples=number_of_samples, loop_budget=loop_budget
+        )
+
+        await strategy.sample(
+            Instruction("majority vote sample_index uniqueness test"),
+            context=SimpleContext(),
+            backend=_MockBackend(),
+            requirements=[always_fail],
+            show_progress=False,
+        )
+
+        keys = [
+            (p.sampling_id, p.sample_index, p.iteration) for p in iteration_payloads
+        ]
+        assert len(set(keys)) == len(keys), (
+            f"(sampling_id, sample_index, iteration) must be unique; duplicates found in {keys}"
+        )
+        # Sanity: each branch (0-based) should appear exactly loop_budget times.
+        sample_indices = sorted({p.sample_index for p in iteration_payloads})
+        assert sample_indices == list(range(number_of_samples)), (
+            f"Expected sample_index values 0..{number_of_samples - 1}, got {sample_indices}"
+        )
+
+    async def test_majority_vote_repair_sample_index_matches_branch(self) -> None:
+        """Repair events carry the same sample_index as the iteration that triggered them.
+
+        For each SAMPLING_REPAIR event the repair_iteration value points to a
+        SAMPLING_ITERATION event in the same branch.  That iteration event must
+        (a) have the same sample_index and (b) have all_validations_passed=False.
+        """
+        from mellea.stdlib.sampling.majority_voting import BaseMBRDSampling
+
+        class _TrivialMBRD(BaseMBRDSampling):
+            def compare_strings(self, ref: str, pred: str) -> float:
+                return 1.0
+
+        iteration_payloads: list[Any] = []
+        repair_payloads: list[Any] = []
+
+        @hook("sampling_iteration")
+        async def record_iteration(payload: Any, ctx: Any) -> Any:
+            iteration_payloads.append(payload)
+            return None
+
+        @hook("sampling_repair")
+        async def record_repair(payload: Any, ctx: Any) -> Any:
+            repair_payloads.append(payload)
+            return None
+
+        register(record_iteration)
+        register(record_repair)
+
+        always_fail = Requirement(
+            description="always fails",
+            validation_fn=lambda _ctx: ValidationResult(
+                result=False, reason="forced failure"
+            ),
+        )
+        number_of_samples = 2
+        loop_budget = 2
+        strategy = _TrivialMBRD(
+            number_of_samples=number_of_samples, loop_budget=loop_budget
+        )
+
+        await strategy.sample(
+            Instruction("majority vote repair sample_index test"),
+            context=SimpleContext(),
+            backend=_MockBackend(),
+            requirements=[always_fail],
+            show_progress=False,
+        )
+
+        assert len(repair_payloads) > 0, "Expected at least one repair event"
+
+        for repair in repair_payloads:
+            # Find the iteration event that triggered this repair.
+            matching = [
+                p
+                for p in iteration_payloads
+                if p.sample_index == repair.sample_index
+                and p.iteration == repair.repair_iteration
+            ]
+            assert len(matching) == 1, (
+                f"Expected exactly one iteration event with sample_index={repair.sample_index} "
+                f"and iteration={repair.repair_iteration}; found {len(matching)}"
+            )
+            triggering_iter = matching[0]
+            assert triggering_iter.all_validations_passed is False, (
+                f"The iteration that triggered a repair must have all_validations_passed=False; "
+                f"got {triggering_iter.all_validations_passed}"
+            )
+
 
 # ---------------------------------------------------------------------------
-# Sampling wrapper contract (mock strategy overriding only _sample_impl)
+# Sampling wrapper contract (mock strategy overriding only _sample)
 # ---------------------------------------------------------------------------
 
 
@@ -2046,16 +2171,16 @@ def _make_minimal_sampling_result(
 class _MinimalStrategy(RejectionSamplingStrategy):
     """A strategy that delegates all work to a user-supplied coroutine.
 
-    Overrides only `_sample_impl` so the `SamplingStrategy.sample` wrapper is
+    Overrides only `_sample` so the `SamplingStrategy.sample` wrapper is
     the sole source of sampling lifecycle hooks.
     """
 
     def __init__(self, impl_fn, loop_budget: int = 1) -> None:
-        """Initialize _MinimalStrategy with a custom _sample_impl coroutine and loop budget."""
+        """Initialize _MinimalStrategy with a custom _sample coroutine and loop budget."""
         super().__init__(loop_budget=loop_budget)
         self._impl_fn = impl_fn
 
-    async def _sample_impl(self, action, context, backend, requirements, **kwargs):  # type: ignore[override]
+    async def _sample(self, action, context, backend, requirements, **kwargs):  # type: ignore[override]
         """Delegate to user-supplied impl_fn."""
         return await self._impl_fn(action, context, backend, requirements, **kwargs)
 
@@ -2064,7 +2189,7 @@ class TestSamplingWrapperContract:
     """The `SamplingStrategy.sample` wrapper fires lifecycle hooks regardless of subclass implementation."""
 
     async def test_loop_start_fires_from_wrapper_not_subclass(self) -> None:
-        """sampling_loop_start fires even when only _sample_impl is overridden."""
+        """sampling_loop_start fires even when only _sample is overridden."""
         observed: list[Any] = []
 
         @hook("sampling_loop_start")
@@ -2116,7 +2241,7 @@ class TestSamplingWrapperContract:
         assert observed[0].success is True
 
     async def test_loop_end_fires_on_exception_path(self) -> None:
-        """sampling_loop_end fires from the wrapper even when _sample_impl raises."""
+        """sampling_loop_end fires from the wrapper even when _sample raises."""
         observed: list[Any] = []
 
         @hook("sampling_loop_end")
@@ -2166,7 +2291,7 @@ class TestSamplingWrapperContract:
         register(end_recorder)
 
         async def _unreachable_impl(action, context, backend, requirements, **kwargs):
-            raise AssertionError("should not reach _sample_impl")
+            raise AssertionError("should not reach _sample")
 
         strategy = _MinimalStrategy(_unreachable_impl, loop_budget=1)
 
@@ -2230,7 +2355,7 @@ class TestSamplingWrapperContract:
         register(end_recorder)
 
         async def _unreachable_impl(action, context, backend, requirements, **kwargs):
-            raise AssertionError("should not reach _sample_impl")
+            raise AssertionError("should not reach _sample")
 
         strategy = _MinimalStrategy(_unreachable_impl, loop_budget=1)
 
@@ -2282,15 +2407,15 @@ class TestSamplingWrapperContract:
         assert len(end_ids) == 1
         assert start_ids[0] == end_ids[0]
 
-    async def test_start_hook_modified_budget_reaches_sample_impl(self) -> None:
-        """A start hook that raises loop_budget is reflected in _sample_impl's effective_loop_budget.
+    async def test_start_hook_modified_budget_reaches_sample(self) -> None:
+        """A start hook that raises loop_budget is reflected in _sample's effective_loop_budget.
 
         The wrapper reads `start_payload.loop_budget` after the hook returns and
-        forwards it as `effective_loop_budget` to `_sample_impl`.  This test
+        forwards it as `effective_loop_budget` to `_sample`.  This test
         directly verifies that contract by inspecting the kwargs received by the
         impl rather than inferring it through a full strategy run.
 
-        Also checks that the `sampling_id` seen by `_sample_impl` matches the one
+        Also checks that the `sampling_id` seen by `_sample` matches the one
         emitted on the `sampling_loop_start` payload.
         """
         captured_start_id: list[str] = []
@@ -2322,18 +2447,18 @@ class TestSamplingWrapperContract:
         assert len(captured_start_id) == 1
         assert len(captured_impl_kwargs) == 1
 
-        # The hook raised the budget from 1 to 3; _sample_impl must see 3.
+        # The hook raised the budget from 1 to 3; _sample must see 3.
         assert captured_impl_kwargs[0]["effective_loop_budget"] == 3
 
-        # The sampling_id forwarded to _sample_impl must match what the start hook saw.
+        # The sampling_id forwarded to _sample must match what the start hook saw.
         assert captured_impl_kwargs[0]["sampling_id"] == captured_start_id[0]
 
     async def test_zero_budget_from_start_hook_closes_lifecycle(self) -> None:
-        """A start hook returning loop_budget=0 causes ValueError before _sample_impl.
+        """A start hook returning loop_budget=0 causes ValueError before _sample.
 
         The wrapper validates the hook-modified budget and raises ValueError for
         any value < 1.  This test asserts that in that failure path:
-          - _sample_impl is never invoked,
+          - _sample is never invoked,
           - sample() raises ValueError,
           - sampling_loop_end still fires (lifecycle is closed),
           - the end payload carries success=False,
@@ -2375,7 +2500,7 @@ class TestSamplingWrapperContract:
                 show_progress=False,
             )
 
-        # _sample_impl must never have been reached.
+        # _sample must never have been reached.
         assert impl_called == []
 
         # sampling_loop_end must still have fired once.

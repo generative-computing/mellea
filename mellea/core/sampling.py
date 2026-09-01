@@ -14,7 +14,7 @@ process.
 import abc
 import uuid
 from collections.abc import Sequence
-from typing import Generic
+from typing import Generic, final
 
 from .backend import Backend, BaseModelSubclass
 from .base import (
@@ -125,8 +125,17 @@ class SamplingStrategy(abc.ABC):
 
     This class provides a template for creating concrete sampling strategies that can be used to generate model outputs based on given instructions.
     It allows setting custom validation and generation functions through properties.
+
+    Attributes:
+        loop_budget: Maximum number of generate/validate cycles. Defaults to `1`.
+        requirements: Global requirements evaluated on every sample. When set,
+            overrides per-call requirements. Defaults to `None`.
     """
 
+    loop_budget: int = 1
+    requirements: list[Requirement] | None = None
+
+    @final
     async def sample(
         self,
         action: Component[S] | CBlock | ModelOutputThunk,
@@ -143,7 +152,7 @@ class SamplingStrategy(abc.ABC):
         """Concrete wrapper: owns the sampling lifecycle and fires loop start/end hooks.
 
         Mints a `sampling_id`, dispatches `sampling_loop_start` (which may modify
-        `loop_budget`), delegates to `_sample_impl`, and dispatches
+        `loop_budget`), delegates to `_sample`, and dispatches
         `sampling_loop_end` on every exit path — success, budget exhaustion, and
         raised exceptions.
 
@@ -156,7 +165,7 @@ class SamplingStrategy(abc.ABC):
             format: output format for structured outputs.
             model_options: model options to pass to the backend during generation / validation.
             tool_calls: True if tool calls should be used during this sampling strategy.
-            **kwargs: Additional keyword arguments forwarded to `_sample_impl`.
+            **kwargs: Additional keyword arguments forwarded to `_sample`.
 
         Returns:
             SamplingResult[S]: A result object indicating the success or failure of the sampling process.
@@ -174,8 +183,7 @@ class SamplingStrategy(abc.ABC):
 
         try:
             reqs = self._merge_requirements(requirements)
-            loop_budget = self._get_loop_budget()
-            effective_loop_budget = loop_budget
+            effective_loop_budget = self.loop_budget
 
             # --- sampling_loop_start hook ---
             if has_plugins(HookType.SAMPLING_LOOP_START):
@@ -187,7 +195,7 @@ class SamplingStrategy(abc.ABC):
                     action=action,
                     context=context,
                     requirements=reqs,
-                    loop_budget=loop_budget,
+                    loop_budget=self.loop_budget,
                 )
                 _, start_payload = await invoke_hook(
                     HookType.SAMPLING_LOOP_START, start_payload, backend=backend
@@ -202,7 +210,7 @@ class SamplingStrategy(abc.ABC):
                     f"{effective_loop_budget}; must be >= 1."
                 )
 
-            s_result = await self._sample_impl(
+            s_result = await self._sample(
                 action=action,
                 context=context,
                 backend=backend,
@@ -255,7 +263,7 @@ class SamplingStrategy(abc.ABC):
                 )
 
     @abc.abstractmethod
-    async def _sample_impl(
+    async def _sample(
         self,
         action: Component[S] | CBlock | ModelOutputThunk,
         context: Context,
@@ -301,6 +309,8 @@ class SamplingStrategy(abc.ABC):
         result: ModelOutputThunk,
         validation_results: list[tuple[Requirement, ValidationResult]],
         backend: Backend,
+        *,
+        sample_index: int | None = None,
     ) -> None:
         """Emit the sampling-iteration hook payload if any plugin is registered."""
         from ..plugins.manager import has_plugins, invoke_hook
@@ -316,6 +326,7 @@ class SamplingStrategy(abc.ABC):
             sampling_id=sampling_id,
             strategy_name=type(self).__name__,
             iteration=iteration,
+            sample_index=sample_index,
             action=action,
             result=result,
             validation_results=validation_results,
@@ -335,6 +346,8 @@ class SamplingStrategy(abc.ABC):
         repair_action: SampleActionType,
         repair_context: Context,
         backend: Backend,
+        *,
+        sample_index: int | None = None,
     ) -> None:
         """Emit the sampling-repair hook payload if any plugin is registered."""
         from ..plugins.manager import has_plugins, invoke_hook
@@ -354,6 +367,7 @@ class SamplingStrategy(abc.ABC):
             repair_action=repair_action,
             repair_context=repair_context,
             repair_iteration=repair_iteration,
+            sample_index=sample_index,
         )
         await invoke_hook(HookType.SAMPLING_REPAIR, repair_payload, backend=backend)
 
@@ -370,18 +384,9 @@ class SamplingStrategy(abc.ABC):
         Returns:
             Deduplicated list of requirements to use for this sampling call.
         """
-        strategy_reqs: list[Requirement] | None = getattr(self, "requirements", None)
         reqs: list[Requirement] = []
-        if strategy_reqs is not None:
-            reqs += strategy_reqs
+        if self.requirements is not None:
+            reqs += self.requirements
         elif call_requirements is not None:
             reqs += call_requirements
         return list(set(reqs))
-
-    def _get_loop_budget(self) -> int:
-        """Return the strategy's configured loop budget (default 1).
-
-        Returns:
-            The loop budget from `self.loop_budget` if set, otherwise `1`.
-        """
-        return getattr(self, "loop_budget", 1)

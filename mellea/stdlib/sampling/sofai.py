@@ -579,7 +579,7 @@ class SOFAISamplingStrategy(SamplingStrategy):
     # Main Sample Method
     # =========================================================================
 
-    async def _sample_impl(
+    async def _sample(
         self,
         action: Component[S] | CBlock | ModelOutputThunk,
         context: Context,

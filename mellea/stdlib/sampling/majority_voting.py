@@ -134,7 +134,7 @@ class BaseMBRDSampling(RejectionSamplingStrategy):
 
         return scr
 
-    async def _sample_impl(
+    async def _sample(
         self,
         action: Component[S] | CBlock | ModelOutputThunk,
         context: Context,
@@ -152,7 +152,7 @@ class BaseMBRDSampling(RejectionSamplingStrategy):
     ) -> SamplingResult[S]:
         """Samples using majority voting.
 
-        Fan-out calls `_sample_impl` on the parent class directly so that each
+        Fan-out calls `_sample` on the parent class directly so that each
         inner sample does not emit its own enclosing `sampling` span — there is
         exactly one `sampling` span for the top-level call, emitted by the
         `SamplingStrategy.sample` wrapper.
@@ -174,12 +174,12 @@ class BaseMBRDSampling(RejectionSamplingStrategy):
         Returns:
             SamplingResult[S]: A result object indicating the success or failure of the sampling process.
         """
-        # execute sampling concurrently — call _sample_impl directly on the
+        # execute sampling concurrently — call _sample directly on the
         # parent so each inner sample does not fire its own lifecycle hooks.
         tasks: list[asyncio.Task[SamplingResult]] = []
         for i in range(self.number_of_samples):
             task = asyncio.create_task(
-                super()._sample_impl(
+                super()._sample(
                     action,
                     context,
                     backend,
@@ -190,6 +190,7 @@ class BaseMBRDSampling(RejectionSamplingStrategy):
                     tool_calls=tool_calls,
                     sampling_id=sampling_id,
                     show_progress=show_progress,
+                    sample_index=i,
                 )
             )
             tasks.append(task)

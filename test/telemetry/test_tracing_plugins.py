@@ -1493,6 +1493,134 @@ async def test_sampling_repair_records_span_event(sampling_plugin, enabled_traci
 
 
 @pytest.mark.asyncio
+async def test_sampling_iteration_includes_sample_index_when_set(
+    sampling_plugin, enabled_tracing
+):
+    from mellea.plugins.hooks.sampling import (
+        SamplingIterationPayload,
+        SamplingLoopStartPayload,
+    )
+
+    fake_span = MagicMock()
+    fake_tracer = MagicMock()
+    fake_tracer.start_span.return_value = fake_span
+
+    start = SamplingLoopStartPayload(sampling_id="sid-mv-1", loop_budget=2)
+    iteration = SamplingIterationPayload(
+        sampling_id="sid-mv-1",
+        iteration=1,
+        sample_index=2,
+        all_validations_passed=False,
+        valid_count=0,
+        total_count=1,
+    )
+    with patch(
+        "mellea.telemetry.tracing.get_application_tracer", return_value=fake_tracer
+    ):
+        await sampling_plugin.on_loop_start(start, {})
+        await sampling_plugin.on_iteration(iteration, {})
+
+    name, attrs = fake_span.add_event.call_args.args
+    assert name == "iteration"
+    assert attrs["mellea.sampling.sample_index"] == 2
+
+
+@pytest.mark.asyncio
+async def test_sampling_iteration_omits_sample_index_when_none(
+    sampling_plugin, enabled_tracing
+):
+    from mellea.plugins.hooks.sampling import (
+        SamplingIterationPayload,
+        SamplingLoopStartPayload,
+    )
+
+    fake_span = MagicMock()
+    fake_tracer = MagicMock()
+    fake_tracer.start_span.return_value = fake_span
+
+    start = SamplingLoopStartPayload(sampling_id="sid-mv-2", loop_budget=1)
+    iteration = SamplingIterationPayload(
+        sampling_id="sid-mv-2",
+        iteration=1,
+        all_validations_passed=True,
+        valid_count=1,
+        total_count=1,
+    )
+    with patch(
+        "mellea.telemetry.tracing.get_application_tracer", return_value=fake_tracer
+    ):
+        await sampling_plugin.on_loop_start(start, {})
+        await sampling_plugin.on_iteration(iteration, {})
+
+    name, attrs = fake_span.add_event.call_args.args
+    assert name == "iteration"
+    assert "mellea.sampling.sample_index" not in attrs
+
+
+@pytest.mark.asyncio
+async def test_sampling_repair_includes_sample_index_when_set(
+    sampling_plugin, enabled_tracing
+):
+    from mellea.plugins.hooks.sampling import (
+        SamplingLoopStartPayload,
+        SamplingRepairPayload,
+    )
+
+    fake_span = MagicMock()
+    fake_tracer = MagicMock()
+    fake_tracer.start_span.return_value = fake_span
+
+    start = SamplingLoopStartPayload(sampling_id="sid-mv-3", loop_budget=2)
+    repair = SamplingRepairPayload(
+        sampling_id="sid-mv-3",
+        repair_type="rejection",
+        repair_iteration=1,
+        sample_index=1,
+        failed_validations=[(object(), object())],
+    )
+    with patch(
+        "mellea.telemetry.tracing.get_application_tracer", return_value=fake_tracer
+    ):
+        await sampling_plugin.on_loop_start(start, {})
+        await sampling_plugin.on_repair(repair, {})
+
+    name, attrs = fake_span.add_event.call_args.args
+    assert name == "repair"
+    assert attrs["mellea.sampling.sample_index"] == 1
+
+
+@pytest.mark.asyncio
+async def test_sampling_repair_omits_sample_index_when_none(
+    sampling_plugin, enabled_tracing
+):
+    from mellea.plugins.hooks.sampling import (
+        SamplingLoopStartPayload,
+        SamplingRepairPayload,
+    )
+
+    fake_span = MagicMock()
+    fake_tracer = MagicMock()
+    fake_tracer.start_span.return_value = fake_span
+
+    start = SamplingLoopStartPayload(sampling_id="sid-mv-4", loop_budget=2)
+    repair = SamplingRepairPayload(
+        sampling_id="sid-mv-4",
+        repair_type="rejection",
+        repair_iteration=1,
+        failed_validations=[(object(), object())],
+    )
+    with patch(
+        "mellea.telemetry.tracing.get_application_tracer", return_value=fake_tracer
+    ):
+        await sampling_plugin.on_loop_start(start, {})
+        await sampling_plugin.on_repair(repair, {})
+
+    name, attrs = fake_span.add_event.call_args.args
+    assert name == "repair"
+    assert "mellea.sampling.sample_index" not in attrs
+
+
+@pytest.mark.asyncio
 async def test_sampling_loop_end_finishes_span(sampling_plugin, enabled_tracing):
     from mellea.plugins.hooks.sampling import (
         SamplingLoopEndPayload,

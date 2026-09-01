@@ -199,7 +199,7 @@ class BaseSamplingStrategy(SamplingStrategy):
         """
         ...
 
-    async def _sample_impl(
+    async def _sample(
         self,
         action: Component[S] | CBlock | ModelOutputThunk,
         context: Context,
@@ -213,6 +213,7 @@ class BaseSamplingStrategy(SamplingStrategy):
         tool_calls: bool = False,
         sampling_id: str,
         show_progress: bool = True,
+        sample_index: int | None = None,
         **kwargs,
     ) -> SamplingResult[S]:
         """Execute the rejection-sampling loop.
@@ -229,6 +230,7 @@ class BaseSamplingStrategy(SamplingStrategy):
             tool_calls: True if tool calls should be used during this sampling strategy.
             sampling_id: UUID correlating iteration/repair/end hooks for this loop.
             show_progress: if true, a tqdm progress bar is used. Otherwise, messages will still be sent to flog.
+            sample_index: Optional 0-based index of this branch within a fan-out strategy (e.g. majority voting). `None` for strategies without an outer fan-out.
             **kwargs: Additional keyword arguments forwarded by `SamplingStrategy.sample()`.
 
         Returns:
@@ -279,6 +281,7 @@ class BaseSamplingStrategy(SamplingStrategy):
                     model_options=model_options,
                     tool_calls=tool_calls,
                     sampling_id=sampling_id,
+                    sample_index=sample_index,
                 )
                 for idx in range(self.concurrency_budget)
             ]
@@ -406,6 +409,7 @@ class BaseSamplingStrategy(SamplingStrategy):
         model_options: dict | None = None,
         tool_calls: bool = False,
         sampling_id: str,
+        sample_index: int | None = None,
     ) -> AsyncGenerator[_SamplingResultSlice[S], Any]:
         """Run one concurrent subsample: up to `iterations` generate/validate/repair attempts.
 
@@ -476,6 +480,7 @@ class BaseSamplingStrategy(SamplingStrategy):
                     result=result,
                     validation_results=constraint_scores,
                     backend=backend,
+                    sample_index=sample_index,
                 )
 
                 if not all_validations_passed:
@@ -530,6 +535,7 @@ class BaseSamplingStrategy(SamplingStrategy):
                     repair_action=next_action,
                     repair_context=next_context,
                     backend=backend,
+                    sample_index=sample_index,
                 )
 
 

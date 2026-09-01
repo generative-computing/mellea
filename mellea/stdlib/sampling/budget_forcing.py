@@ -102,7 +102,7 @@ class BudgetForcingSamplingStrategy(RejectionSamplingStrategy):
         """Return the repair-type label for telemetry hooks."""
         return "budget_forcing"
 
-    async def _sample_impl(
+    async def _sample(
         self,
         action: Component[S] | CBlock | ModelOutputThunk,
         context: Context,
