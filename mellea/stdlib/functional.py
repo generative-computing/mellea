@@ -13,7 +13,6 @@ from __future__ import annotations
 import asyncio
 import time
 import uuid
-import warnings
 from collections.abc import Coroutine, Iterable
 from typing import Any, Literal, overload
 
@@ -365,10 +364,9 @@ def validate(
         format: Optional Pydantic model for constrained decoding.
         model_options: Additional model options to merge with backend defaults.
         generate_logs: Optional list to append generation logs to.
-        input: Deprecated. Optional input to prepend to the validation context. Pass a
-            context that already contains the input instead. Passing it raises a
-            `DeprecationWarning` from `avalidate`, so the reported source location is this
-            wrapper rather than the caller.
+        input: Optional input to prepend to the validation context, for judging an output
+            against a specific input rather than the whole conversation. See `avalidate`
+            for the visibility caveat on contexts that render no history.
 
     Returns:
         List of `ValidationResult` objects, one per requirement.
@@ -1053,8 +1051,11 @@ async def avalidate(
         format: Optional Pydantic model for constrained decoding.
         model_options: Additional model options to merge with backend defaults.
         generate_logs: Optional list to append generation logs to.
-        input: Deprecated. Optional input to prepend to the validation context. Pass a
-            context that already contains the input instead.
+        input: Optional input to prepend to the validation context, for judging an output
+            against a specific input rather than the whole conversation. It is added ahead
+            of `output`, so the judge sees the pair in order. It only reaches the model if
+            the context renders history: on a context whose `view_for_generation()` is empty
+            (`SimpleContext`), nothing added here is visible to the judge.
 
     Returns:
         List of `ValidationResult` objects, one per requirement.
@@ -1068,13 +1069,6 @@ async def avalidate(
     validation_target_ctx = context
 
     if input is not None:
-        warnings.warn(
-            "The `input` parameter of validate/avalidate is deprecated and will be removed "
-            "in a future release. Pass a validation context that already contains the input "
-            "instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
         validation_target_ctx = validation_target_ctx.add(input)
 
     # `output` designates the validation target rather than replacing the context. Adding it
@@ -1082,6 +1076,21 @@ async def avalidate(
     # so the thunk passed here *is* the one already in the context.
     if output is not None and validation_target_ctx.last_output() is not output:
         validation_target_ctx = validation_target_ctx.add(output)
+
+    # A context that renders no history hands the judge nothing but the requirement and the
+    # inlined output, so anything conversational -- `input`, earlier turns, and the whole
+    # premise of adapter-backed requirement checking -- is silently dropped. Say so rather
+    # than letting the caller infer working validation from a plausible-looking verdict.
+    if (
+        not validation_target_ctx.view_for_generation()
+        and validation_target_ctx.as_list()
+    ):
+        MelleaLogger.get_logger().warning(
+            f"validating over a {type(validation_target_ctx).__name__} whose"
+            " view_for_generation() is empty: the judge sees only the requirement and the"
+            " inlined output, not the conversation that produced it. Pass a context that"
+            " renders history (e.g. ChatContext) to validate against the input."
+        )
 
     # --- validation_pre_check hook ---
     if has_plugins(HookType.VALIDATION_PRE_CHECK):

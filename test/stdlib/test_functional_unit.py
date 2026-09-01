@@ -8,6 +8,7 @@ Covers image preprocessing plus chat()/instruct() forwarding of multimodal input
 
 import base64
 import io
+import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -15,6 +16,7 @@ from PIL import Image as PILImage
 
 from mellea.core import (
     AudioBlock,
+    CBlock,
     Context,
     ImageBlock,
     ModelOutputThunk,
@@ -567,21 +569,46 @@ async def test_avalidate_does_not_double_add_the_context_last_output():
     assert len(seen[0].as_list()) == 2, "the target must not be appended twice"
 
 
-async def test_avalidate_input_is_deprecated():
+async def test_avalidate_input_reaches_the_judges_view():
+    """`input` is supported: it lands in the context the judge actually sees."""
     req, seen = _ctx_capturing_requirement()
     caller_ctx = ChatContext().add(ModelOutputThunk("hi"))
 
-    with pytest.warns(DeprecationWarning, match="`input` parameter"):
+    await avalidate(
+        reqs=[req],
+        context=caller_ctx,
+        backend=MagicMock(),
+        input=CBlock("the specific input"),
+    )
+
+    view = seen[0].view_for_generation()
+    assert view is not None and any(
+        "the specific input" in str(node) for node in view
+    ), (
+        "`input` must reach view_for_generation(), not merely as_list() -- only the"
+        " generation view is sent to the model"
+    )
+
+
+async def test_avalidate_warns_when_the_context_renders_nothing(caplog):
+    """A context with an empty generation view must not fail silently."""
+    req, _seen = _ctx_capturing_requirement()
+    # SimpleContext retains as_list()/last_output() but renders no history.
+    caller_ctx = SimpleContext().add(ModelOutputThunk("hi"))
+
+    with caplog.at_level(logging.WARNING):
         await avalidate(
             reqs=[req],
             context=caller_ctx,
             backend=MagicMock(),
-            input=Message("user", "the deprecated input"),
+            input=CBlock("invisible to the judge"),
         )
 
-    assert any("the deprecated input" in str(node) for node in seen[0].as_list()), (
-        "the deprecated `input` should still be honoured for one more release"
+    assert "view_for_generation() is empty" in caplog.text, (
+        "validating over a context that renders nothing should warn, since `input` and the"
+        " conversation are dropped without any other signal"
     )
+    assert "SimpleContext" in caplog.text, "the warning should name the context type"
 
 
 if __name__ == "__main__":
