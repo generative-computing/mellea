@@ -1757,7 +1757,7 @@ async def test_event_streamer_abandoned_faulted_pump_retrieved_on_close() -> Non
 async def test_event_streamer_baseexception_in_setup_does_not_hang(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A bare BaseException during pump setup unblocks stream() instead of hanging."""
+    """A bare BaseException during pump setup surfaces to the caller instead of hanging."""
 
     class _SetupBoom(BaseException):
         pass
@@ -1766,7 +1766,7 @@ async def test_event_streamer_baseexception_in_setup_does_not_hang(
         raise _SetupBoom("setup boom")
 
     monkeypatch.setattr("mellea.stdlib.streaming._stream", _boom)
-    with pytest.raises(asyncio.CancelledError):
+    with pytest.raises(_SetupBoom, match="setup boom"):
         await asyncio.wait_for(
             stream(
                 _action(),

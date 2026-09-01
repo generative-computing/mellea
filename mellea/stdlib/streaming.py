@@ -384,13 +384,12 @@ class EventStreamer:
             )
         except BaseException as exc:
             # Resolve _ready on every setup exit so `await _ready` can't hang.
-            if isinstance(exc, Exception):
-                self._ready.set_exception(exc)
-            else:
+            if isinstance(exc, asyncio.CancelledError):
                 self._ready.cancel()
-            self._queue.put_nowait(None)
-            if not isinstance(exc, Exception):
+                self._queue.put_nowait(None)
                 raise
+            self._ready.set_exception(exc)
+            self._queue.put_nowait(None)
             return
         self._ready.set_result(None)
         try:

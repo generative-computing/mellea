@@ -317,6 +317,14 @@ instead, pass `as_events=True` to `stream()`: it returns an `EventStreamer` you
 iterate the same way, each step yielding an event rather than a chunk:
 
 ```python
+from mellea.stdlib.streaming import (
+    ChunkEvent,
+    CompletedEvent,
+    FullValidationEvent,
+    QuickCheckEvent,
+    StreamingDoneEvent,
+)
+
 async with await stream(
     action, m.backend, m.ctx, requirements=[req], chunking="sentence", as_events=True
 ) as streamer:
