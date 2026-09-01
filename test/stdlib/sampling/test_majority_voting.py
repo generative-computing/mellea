@@ -18,7 +18,9 @@ pytestmark = [pytest.mark.ollama, pytest.mark.e2e, pytest.mark.qualitative]
 
 @pytest.fixture(scope="module")
 def m_session(gh_run):
-    m = start_session(model_options={ModelOption.MAX_NEW_TOKENS: 5})
+    m = start_session(
+        model_options={ModelOption.MAX_NEW_TOKENS: 5, ModelOption.THINKING: False}
+    )
     yield m
     del m
 

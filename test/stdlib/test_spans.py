@@ -28,7 +28,11 @@ def m_session(gh_run):
         m = start_session(
             "hf",
             model_id=IBM_GRANITE_4_2_3B,
-            model_options={ModelOption.MAX_NEW_TOKENS: 64, ModelOption.THINKING: False},
+            model_options={
+                ModelOption.MAX_NEW_TOKENS: 256,
+                ModelOption.THINKING: False,
+                "enable_thinking": False,
+            },
         )
     yield m
 
