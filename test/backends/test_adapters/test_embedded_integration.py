@@ -271,6 +271,44 @@ async def test_invocation_complete_fires_error_on_generation_failure():
     assert isinstance(payloads[0].error, RuntimeError)
 
 
+async def test_invocation_complete_fires_error_on_empty_choices():
+    # Regression guard: self.processing(mot, chunk) ran outside the
+    # classification try, so a response with an empty choices list (content
+    # filter rejection, some proxy errors) raised IndexError from
+    # OpenAIBackend.processing() before any fire site — the call silently
+    # dropped out of both invocations and parse_failures.
+    pytest.importorskip("cpex", reason="cpex not installed — install mellea[hooks]")
+    backend = _backend_with_adapter("alora")
+    empty_choices_response = _chat_completion().model_copy(update={"choices": []})
+    mock_create = AsyncMock(return_value=empty_choices_response)
+    mock_client = MagicMock()
+    mock_client.chat.completions.create = mock_create
+
+    with (
+        patch.object(
+            OpenAIBackend,
+            "_async_client",
+            new_callable=PropertyMock,
+            return_value=mock_client,
+        ),
+        patch("mellea.backends.adapters._core.has_plugins", return_value=True),
+        patch(
+            "mellea.backends.adapters._core.invoke_hook", new_callable=AsyncMock
+        ) as mock_invoke,
+    ):
+        ctx = ChatContext().add(Message("user", "What is the square root of 4?"))
+        mot, _ = await mfuncs.aact(
+            Intrinsic("answerability"), ctx, backend, strategy=None
+        )
+        with pytest.raises(IndexError):
+            await mot.avalue()
+
+    payloads = _invocation_complete_payloads(mock_invoke)
+    assert len(payloads) == 1
+    assert payloads[0].outcome == "error"
+    assert isinstance(payloads[0].error, IndexError)
+
+
 async def test_reassigned_weights_fail_loudly():
     """Reassigning `.weights` off the EmbeddedBinding must fail at generation.
 

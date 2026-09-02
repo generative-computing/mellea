@@ -919,15 +919,16 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             """Accumulate content and apply intrinsic result processing."""
             import json as _json
 
-            # Delegate standard metadata storage to the shared processing method.
-            await self.processing(mot, chunk)
-
-            # Apply intrinsic-specific result transformation and fire
-            # adapter_function_invocation_complete with the resolved outcome
-            # (a generation failure is reported separately, by
-            # _await_embedded_generation above).
-            response_dict = chunk.model_dump()
+            # Kept in one try, including the self.processing() call: a
+            # response with an empty choices list raises IndexError there
+            # (openai.py's processing() indexes chunk.choices[0].message
+            # unguarded), and that must still fire outcome="error" rather
+            # than skip the fire site entirely.
             try:
+                # Delegate standard metadata storage to the shared processing method.
+                await self.processing(mot, chunk)
+
+                response_dict = chunk.model_dump()
                 res = result_processor.transform(response_dict, rewritten)
                 # Kept inside the try: a malformed `res` (e.g. an empty
                 # choices list) must still fire outcome="error", not success
