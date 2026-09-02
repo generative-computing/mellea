@@ -93,7 +93,7 @@ def process_text(text: str, max_length: int = 100) -> str:
 
 ### Docstrings
 
-Docstrings serve as prompts — the LLM reads them, so be specific. Use [Google-style docstrings](https://google.github.io/styleguide/pyguide.html#381-docstrings):
+Docstrings are published in the public API reference — be specific and accurate. Use [Google-style docstrings](https://google.github.io/styleguide/pyguide.html#381-docstrings):
 
 ```python
 def extract_entities(text: str, entity_types: list[str]) -> dict[str, list[str]]:
