@@ -922,22 +922,16 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             # Delegate standard metadata storage to the shared processing method.
             await self.processing(mot, chunk)
 
-            # Apply intrinsic-specific result transformation on top. This is
-            # the point where a malformed response is distinguishable from
-            # any other failure or from success, so it also fires
-            # adapter_function_invocation_complete (apply_activation could
-            # not have known the outcome earlier; a failure in generation
-            # itself, before a response exists, is instead reported by
-            # _await_embedded_generation around the API call above).
+            # Apply intrinsic-specific result transformation and fire
+            # adapter_function_invocation_complete with the resolved outcome
+            # (a generation failure is reported separately, by
+            # _await_embedded_generation above).
             response_dict = chunk.model_dump()
             try:
                 res = result_processor.transform(response_dict, rewritten)
-                # Overwrite the value accumulated by processing() with the
-                # post-processed intrinsic output. Kept inside this try so a
-                # malformed `res` (e.g. an empty choices list) still fires
-                # outcome="error" rather than reporting success and then
-                # raising — the exact "success for a call that goes on to
-                # fail" shape #1559 reverted.
+                # Kept inside the try: a malformed `res` (e.g. an empty
+                # choices list) must still fire outcome="error", not success
+                # then raise — the exact bug #1559 reverted.
                 mot._underlying_value = res.choices[0].message.content
             except _json.JSONDecodeError as e:
                 await _fire_embedded_invocation_complete(

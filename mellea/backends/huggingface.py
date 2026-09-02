@@ -1052,21 +1052,11 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             input_ids,
             embedded_identity: Identity | None,
         ):
-            # embedded_identity is set only for EmbeddedIntrinsicAdapter calls.
-            # This is the point where a malformed response is distinguishable
-            # from any other failure or from success, so it also fires
-            # adapter_function_invocation_complete for that case
-            # (apply_activation could not have known the outcome earlier; a
-            # failure in generation itself, before a response exists, is
-            # instead reported by _await_embedded_generation around the
-            # asyncio.to_thread call above). The legacy PEFT path
-            # (embedded_identity=None) already gets this signal from
-            # adapter_scope, so it must not be fired again here.
-            # Kept in one try so any failure here — including from the tail
-            # logits-stash/processing work below, not just the transform
-            # itself — fires outcome="error" rather than reporting success
-            # and then raising. That's the exact "success for a call that
-            # goes on to fail" shape #1559 reverted.
+            # embedded_identity is set only for EmbeddedIntrinsicAdapter calls
+            # (the legacy PEFT path already gets this signal via adapter_scope).
+            # Kept in one try so any failure below — not just from transform
+            # itself — fires outcome="error" instead of reporting success and
+            # then raising, the exact bug #1559 reverted.
             try:
                 res = result_processor.transform(chunk, rewritten)  # type: ignore
 

@@ -847,31 +847,22 @@ async def _fire_embedded_invocation_complete(
     """Fires `adapter_function_invocation_complete` for an Embedded adapter call.
 
     `EmbeddedBinding.apply_activation` cannot know the real outcome at
-    request-mutation time (see its docstring), so this is called instead by
-    the backend at one of two points: `_await_embedded_generation` below, if
-    the generation call itself fails (network error, timeout, model error —
-    `outcome="error"`), or the `granite_formatters_processing` closure in
-    `openai.py`/`huggingface.py`, once a response exists and
-    `json.JSONDecodeError` on unparsable output (`outcome="schema_error"`) is
-    distinguishable from any other parse-time failure (`outcome="error"`) or
-    success. The two call sites are mutually exclusive: a generation failure
-    means no response ever reaches the closure.
+    request-mutation time (see its docstring), so this is called instead from
+    two mutually-exclusive points: `_await_embedded_generation` below, on a
+    generation failure (`outcome="error"`), or the
+    `granite_formatters_processing` closure in `openai.py`/`huggingface.py`,
+    once a response exists (`outcome="schema_error"` on unparsable JSON,
+    `"error"` otherwise, `"success"` if parsing succeeds).
 
-    Contract-level schema mismatches (an adapter's declared `IOContract`
-    rejecting output that *did* parse as JSON) are not classified here — that
-    validation runs later, in `call_intrinsic`, after this function has
-    already fired `outcome="success"`. `mellea.adapter_function.parse_failures`
-    therefore only counts malformed-JSON output for `binding_type="embedded"`,
-    not contract-level drift; tracked as a follow-up (issue #1560).
+    Contract-level schema mismatches (a declared `IOContract` rejecting output
+    that *did* parse as JSON) aren't classified here — that check runs later,
+    in `call_intrinsic`, after this already fired `"success"`. Tracked as a
+    follow-up (issue #1560).
 
-    Not merged with `adapter.py`'s `_fire_invocation_complete`, despite the
-    duplicated payload construction: `adapter.py` imports from this module
-    (for `EmbeddedBinding`, `Identity`, etc.), so a shared helper would have
-    to live here — but this one is always called from an already-running
-    coroutine and `await`s `invoke_hook` directly, while that one also
-    serves sync callers via `_run_async_in_thread`. Keeping them separate
-    avoids threading that sync-bridging concern through this simpler,
-    async-only call shape.
+    Kept separate from `adapter.py`'s `_fire_invocation_complete` (rather than
+    sharing the payload-construction code) because that one also serves sync
+    callers via `_run_async_in_thread`; this one always runs inside an
+    already-running coroutine and can just `await invoke_hook` directly.
 
     Args:
         identity: Identifies the adapter that was invoked.
