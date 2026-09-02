@@ -625,15 +625,20 @@ class AdapterMixin(Backend, abc.ABC):
                 f"Backend has no model ID; cannot resolve adapter {name!r}"
             )
 
-        # warnings.catch_warnings() modifies the process-global filter state and is not
-        # async/thread-safe.  Concurrent first-time resolves race on filter restoration;
-        # add_adapter is idempotent so the double-registration hazard is benign, but the
-        # filter race is a known Phase-1 gap: two concurrent first-time call_intrinsic
-        # calls can interleave their catch_warnings contexts, causing a DeprecationWarning
-        # to surface in user code during lazy-registration.  Phase 2 (see epic #929) adds a lock.
+        # Registration (add_adapter, possibly several times for the embedded-adapter
+        # loop below) and the warnings.catch_warnings() filter mutation around it both
+        # race under concurrent first-time resolves for the same name: add_adapter's
+        # own duplicate-registration check is an unguarded read-then-write on
+        # _added_adapters, and catch_warnings() mutates process-global filter state
+        # that is not async/thread-safe. `_adapter_activation_lock()` is the same lock
+        # every other verb on the generation path already holds while touching
+        # _added_adapters (load_peft_adapter, LocalFileBinding.activate/deactivate;
+        # see #1465) — reentrant on LocalHFBackend, so this composes safely with
+        # callers that already hold it, and a no-op nullcontext() for backends (e.g.
+        # OpenAIBackend) that don't need the serialization.
         # Suppress DeprecationWarning: the shim constructors warn user-facing code,
         # not internal registration paths.
-        with warnings.catch_warnings():
+        with self._adapter_activation_lock(), warnings.catch_warnings():
             warnings.simplefilter("ignore", DeprecationWarning)
             if getattr(self, "_uses_embedded_adapters", False):
                 repo_id = (
