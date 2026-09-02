@@ -18,7 +18,13 @@ public API end to end against a real Granite model and the real
 the `ADAPTER_FUNCTION_*` hook payloads and real model adapter state — never on
 the generated certainty score itself. See test/README.md's e2e rules and #1291
 (the flakiness class that score-content assertions produced in GPU intrinsic
-tests).
+tests). This does not make the test immune to model output: `check_certainty`
+still requires the adapter's raw output to parse as JSON containing a
+`certainty` key (`core.py`), so a real parse failure surfaces as an
+exception from the `core.check_certainty(...)` call itself, before any hook
+assertion runs — `hf_skip()` only converts Hub network errors to skips, not
+this. `call_intrinsic` pins `temperature=0.0` for exactly this reason, which
+keeps this residual risk low but not zero.
 
 Also proves, against the real PEFT model, that a second call to the same
 intrinsic succeeds: `load_peft_adapter`'s tolerance of PEFT's "Adapter with
@@ -39,6 +45,8 @@ pytestmark = [
     pytest.mark.huggingface,
     pytest.mark.e2e,
     pytest.mark.slow,
+    # 12GB, not test_local_file_e2e.py's 20GB: matches the existing bound for
+    # this same model (granite-4.1-3b) in test_core.py, not drift.
     require_gpu(min_vram_gb=12),
     pytest.mark.skipif(
         int(os.environ.get("CICD", 0)) == 1,
@@ -79,7 +87,8 @@ def chat_context(backend):
 
 
 def _assert_single_success_invocation(mock_invoke):
-    """Asserts exactly one activate/deactivate phase pair and success invocation."""
+    """Asserts exactly one activate/deactivate phase pair, and one invocation
+    with the expected outcome, name, adapter_type, binding_type, and revision."""
     phases = [p.phase for p in phase_payloads(mock_invoke)]
     assert phases == ["activate", "deactivate"]
 
@@ -88,6 +97,12 @@ def _assert_single_success_invocation(mock_invoke):
     invocation = invocations[0]
     assert invocation.outcome == "success"
     assert invocation.name == "uncertainty"
+    # resolve_adapter's lazy registration always registers AdapterType.LORA
+    # for this (non-embedded) path, regardless of which types the catalog
+    # lists as available (adapter.py's resolve_adapter, "pre-Phase-1
+    # default" comment) — "lora" is the real value on this call path, not
+    # "unknown" (the payload field's default if this were ever omitted).
+    assert invocation.adapter_type == "lora"
     assert invocation.binding_type == "local_file"
     assert invocation.revision == _UNCERTAINTY_REVISION
 
