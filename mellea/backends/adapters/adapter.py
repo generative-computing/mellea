@@ -644,10 +644,10 @@ class AdapterMixin(Backend, abc.ABC):
                 for a in EmbeddedIntrinsicAdapter.from_source(
                     repo_id, intrinsic_name=name
                 ):
-                    # EmbeddedIntrinsicAdapter is only valid for backends whose
-                    # add_adapter accepts the full Adapter type (e.g. OpenAIBackend).
-                    # LocalHFBackend.add_adapter expects LocalHFAdapter; HF backends
-                    # never set _uses_embedded_adapters=True.
+                    # EmbeddedIntrinsicAdapter is valid only for backends whose
+                    # add_adapter supports the Embedded/Granite Switch reality
+                    # (currently OpenAIBackend and LocalHFBackend when configured
+                    # with load_embedded_adapters=True).
                     self.add_adapter(a)
             else:
                 # AdapterType.LORA is the pre-Phase-1 default (mirrors old _util.py).

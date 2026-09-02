@@ -6,6 +6,7 @@
 import asyncio
 import threading
 import time
+import warnings
 from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import MagicMock, patch
@@ -32,8 +33,15 @@ from transformers.generation.utils import (
 )
 
 from mellea.backends import ModelOption
-from mellea.backends.adapters import AdapterMixin, AdapterType, IntrinsicAdapter
+from mellea.backends.adapters import (
+    AdapterMixin,
+    AdapterType,
+    EmbeddedBinding,
+    IntrinsicAdapter,
+    ServerMediatedBinding,
+)
 from mellea.backends.adapters._core import Identity
+from mellea.backends.adapters.adapter import EmbeddedIntrinsicAdapter
 from mellea.backends.adapters.catalog import IntrinsicsCatalogEntry
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.core import ModelOutputThunk
@@ -169,6 +177,14 @@ class _FakeRewrittenRequest:
             setattr(copied, key, value)
         return copied
 
+    def model_dump(self):
+        return {
+            "messages": [],
+            "extra_body": {},
+            "model": "adapter-model",
+            "temperature": self.temperature,
+        }
+
 
 class _FakeRewriter:
     def __init__(self, *args, **kwargs):
@@ -218,6 +234,24 @@ def _make_intrinsic_adapter_stub():
     return adapter
 
 
+def _make_embedded_adapter_stub() -> EmbeddedIntrinsicAdapter:
+    """Build an embedded adapter without exposing its deprecation warning in tests."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        return EmbeddedIntrinsicAdapter(
+            intrinsic_name="answerability",
+            config={
+                "model": None,
+                "response_format": None,
+                "transformations": None,
+                "instruction": None,
+                "parameters": {"max_completion_tokens": 8},
+                "sentence_boundaries": None,
+            },
+            technology="alora",
+        )
+
+
 def _make_intrinsic_backend_stub(stub_backend):
     stub_backend.formatter = SimpleNamespace(
         to_chat_messages=lambda linearized_ctx: [Message("user", "Is the sky blue?")]
@@ -238,10 +272,297 @@ def _make_intrinsic_backend_stub(stub_backend):
     stub_backend._generate_intrinsic_with_adapter_scope = (
         lambda adapter, generate_func, *args, **kwargs: generate_func(*args, **kwargs)
     )
+    stub_backend._generate_embedded_with_generation_lock = (
+        lambda generate_func, *args, **kwargs: generate_func(*args, **kwargs)
+    )
     stub_backend._find_adapter = lambda cap, types=None: AdapterMixin._find_adapter(
         stub_backend, cap, types
     )
     return stub_backend
+
+
+@pytest.mark.parametrize(
+    ("model_id", "expected"),
+    [
+        ("ibm-granite/granite-3.3-8b-instruct", "granite-3.3-8b-instruct"),
+        ("granite-switch", "granite-switch"),
+        ("/tmp/granite-switch-checkpoint", "granite-switch-checkpoint"),
+    ],
+)
+def test_base_model_name_handles_hub_ids_and_local_checkpoints(model_id, expected):
+    """Embedded registration accepts local checkpoint paths and unqualified model IDs."""
+    backend = _make_backend()
+    backend._model_id = model_id
+
+    assert backend.base_model_name == expected
+
+
+def test_load_embedded_adapters_registers_checkpoint_adapters():
+    """The constructor registers embedded adapters without invoking PEFT loading."""
+    adapter = _make_embedded_adapter_stub()
+    mock_tok = MagicMock(eos_token_id=0, vocab_size=32000)
+    mock_tok._tokenizer = MagicMock()
+    mock_tok._tokenizer.get_vocab_size.return_value = 32000
+    mock_tok.__len__ = MagicMock(return_value=32000)
+    mock_model = MagicMock(vocab_size=32000)
+
+    with (
+        patch("mellea.backends.huggingface.llguidance") as mock_llg,
+        patch.object(
+            EmbeddedIntrinsicAdapter, "from_source", return_value=[adapter]
+        ) as mock_from_source,
+    ):
+        mock_llg.hf.from_tokenizer.return_value = MagicMock(vocab_size=32000)
+        backend = LocalHFBackend(
+            model_id="ibm-granite/granite-3.3-8b-instruct",
+            custom_config=(mock_tok, mock_model, torch.device("cpu")),
+            load_embedded_adapters=True,
+            adapter_source="/tmp/switch-checkpoint",
+        )
+
+    mock_from_source.assert_called_once_with(
+        "/tmp/switch-checkpoint", revision="main", cache_dir=None
+    )
+    assert backend.list_adapters() == ["answerability_alora"]
+    assert backend._added_adapters["answerability_alora"] is adapter
+    assert adapter.backend is backend
+    assert isinstance(adapter.weights, EmbeddedBinding)
+    assert adapter.weights.source == backend.base_model_name
+    backend._model.load_adapter.assert_not_called()
+
+
+def test_load_embedded_adapters_requires_granite_switch_package():
+    """Automatic Switch checkpoint loading fails with an actionable dependency error."""
+    with patch(
+        "mellea.backends.huggingface.importlib.import_module",
+        side_effect=ImportError("granite_switch is unavailable"),
+    ):
+        with pytest.raises(ImportError, match=r'pip install "mellea\[hf\]"'):
+            LocalHFBackend(
+                model_id="ibm-granite/granite-switch-4.1-3b-preview",
+                load_embedded_adapters=True,
+            )
+
+
+def test_granite_switch_transformers_override_warning_is_self_retiring(monkeypatch):
+    """The compatibility warning appears only while Switch metadata excludes Transformers."""
+    import mellea.backends.huggingface as huggingface
+
+    monkeypatch.setattr(huggingface, "_SWITCH_TRANSFORMERS_WARNING_EMITTED", False)
+    monkeypatch.setattr(
+        huggingface.metadata,
+        "requires",
+        lambda distribution: ["transformers>=5.5.1,<5.10.0"],
+    )
+    monkeypatch.setattr(huggingface.metadata, "version", lambda distribution: "5.10.2")
+
+    with pytest.warns(UserWarning, match="explicit compatibility override"):
+        huggingface._warn_if_granite_switch_transformers_override_is_active()
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", UserWarning)
+        huggingface._warn_if_granite_switch_transformers_override_is_active()
+
+
+def test_granite_switch_transformers_override_warning_ignores_bad_metadata(monkeypatch):
+    """Malformed Granite Switch metadata must not prevent backend construction."""
+    import mellea.backends.huggingface as huggingface
+
+    monkeypatch.setattr(huggingface, "_SWITCH_TRANSFORMERS_WARNING_EMITTED", False)
+    monkeypatch.setattr(
+        huggingface.metadata, "requires", lambda distribution: ["transformers @@@"]
+    )
+    monkeypatch.setattr(huggingface.metadata, "version", lambda distribution: "5.10.2")
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", UserWarning)
+        huggingface._warn_if_granite_switch_transformers_override_is_active()
+
+
+def test_granite_switch_transformers_override_warning_clears_when_metadata_updates(
+    monkeypatch,
+):
+    """No warning remains after Granite Switch declares the installed version compatible."""
+    import mellea.backends.huggingface as huggingface
+
+    monkeypatch.setattr(huggingface, "_SWITCH_TRANSFORMERS_WARNING_EMITTED", False)
+    monkeypatch.setattr(
+        huggingface.metadata,
+        "requires",
+        lambda distribution: ["transformers>=5.5.1,<6.0.0"],
+    )
+    monkeypatch.setattr(huggingface.metadata, "version", lambda distribution: "5.10.2")
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", UserWarning)
+        huggingface._warn_if_granite_switch_transformers_override_is_active()
+
+
+def test_base_model_name_strips_trailing_path_separator():
+    """A local checkpoint path keeps its final directory name."""
+    backend = _make_backend()
+    backend._model_id = "/tmp/granite-switch-checkpoint/"
+
+    assert backend.base_model_name == "granite-switch-checkpoint"
+
+
+def test_chat_completion_request_forwards_template_kwargs_to_transformers():
+    """Template kwargs survive request conversion for local Granite Switch inference."""
+    tokenizer = MagicMock()
+    tokenizer.apply_chat_template.return_value = torch.zeros(1, 4, dtype=torch.long)
+    tokenizer.pad_token_id = 0
+    tokenizer.eos_token_id = 1
+    model = MagicMock()
+    model.device = "cpu"
+
+    chat_completion_request_to_transformers_inputs(
+        {
+            "messages": [{"role": "user", "content": "hello"}],
+            "extra_body": {
+                "chat_template_kwargs": {
+                    "adapter_name": "answerability",
+                    "template_option": "preserved",
+                }
+            },
+        },
+        tokenizer,
+        model,
+    )
+
+    tokenizer.apply_chat_template.assert_called_once_with(
+        conversation=[{"role": "user", "content": "hello"}],
+        add_generation_prompt=True,
+        adapter_name="answerability",
+        template_option="preserved",
+        return_tensors="pt",
+    )
+
+
+@pytest.mark.parametrize(
+    "reserved_name",
+    ["conversation", "tools", "documents", "add_generation_prompt", "return_tensors"],
+)
+def test_chat_completion_request_rejects_reserved_template_kwargs(reserved_name):
+    """Template kwargs must not overwrite framework-owned chat-template inputs."""
+    tokenizer = MagicMock()
+    model = MagicMock()
+
+    with pytest.raises(ValueError, match="cannot override Hugging Face"):
+        chat_completion_request_to_transformers_inputs(
+            {
+                "messages": [{"role": "user", "content": "hello"}],
+                "extra_body": {"chat_template_kwargs": {reserved_name: "bad"}},
+            },
+            tokenizer,
+            model,
+        )
+
+    tokenizer.apply_chat_template.assert_not_called()
+
+
+def test_chat_completion_request_rejects_non_dict_template_kwargs():
+    """Template kwargs must be a mapping before they reach the tokenizer."""
+    with pytest.raises(TypeError, match="must be a dict"):
+        chat_completion_request_to_transformers_inputs(
+            {
+                "messages": [{"role": "user", "content": "hello"}],
+                "extra_body": {"chat_template_kwargs": ["not", "a", "dict"]},
+            },
+            MagicMock(),
+            MagicMock(),
+        )
+
+
+@pytest.mark.asyncio
+async def test_embedded_intrinsic_activates_template_without_peft(stub_backend):
+    """Embedded calls select the template control token without PEFT lifecycle work."""
+    backend = _make_intrinsic_backend_stub(stub_backend)
+    adapter = _make_embedded_adapter_stub()
+    backend._added_adapters = {adapter.qualified_name: adapter}
+    peft_scope = MagicMock()
+    backend._generate_intrinsic_with_adapter_scope = peft_scope
+    captured: dict[str, object] = {}
+
+    def fake_transformers_inputs(request, tokenizer, model, ll_tokenizer=None):
+        captured["request"] = request
+        return {"input_tokens": object()}, {}
+
+    def fake_generate_with_transformers(tokenizer, model, generate_input, other_input):
+        return object()
+
+    with (
+        patch(
+            "mellea.backends.huggingface.granite_formatters.IntrinsicsRewriter",
+            _FakeRewriter,
+        ),
+        patch(
+            "mellea.backends.huggingface.granite_formatters.IntrinsicsResultProcessor",
+            _FakeResultProcessor,
+        ),
+        patch(
+            "mellea.formatters.granite.base.util.chat_completion_request_to_transformers_inputs",
+            side_effect=fake_transformers_inputs,
+        ),
+        patch(
+            "mellea.formatters.granite.base.util.generate_with_transformers",
+            side_effect=fake_generate_with_transformers,
+        ),
+    ):
+        output = await LocalHFBackend._generate_from_intrinsic(
+            backend,
+            Intrinsic("answerability"),
+            ChatContext().add(Message("user", "Is the sky blue?")),
+            model_options={},
+        )
+        assert output._gen.generate is not None
+        await output._gen.generate
+
+    request = captured["request"]
+    assert isinstance(request, dict)
+    assert request["extra_body"]["chat_template_kwargs"]["adapter_name"] == (
+        "answerability"
+    )
+    assert "model" not in request
+    peft_scope.assert_not_called()
+
+
+def test_generate_embedded_with_generation_lock_deactivates_peft_state():
+    """Embedded generation clears stale PEFT state before running the checkpoint."""
+    backend = _make_backend()
+    backend._model.active_adapters.return_value = []  # type: ignore[union-attr]
+
+    with patch.object(backend, "deactivate_peft_adapter") as mock_deactivate:
+        assert (
+            backend._generate_embedded_with_generation_lock(lambda: "output")
+            == "output"
+        )
+
+    mock_deactivate.assert_called_once_with("")
+
+
+def test_add_embedded_adapter_rejects_mutated_weights_without_binding_backend():
+    """A malformed shim must not retain this backend after registration fails."""
+    backend = _make_backend()
+    adapter = _make_embedded_adapter_stub()
+    adapter.weights = ServerMediatedBinding()
+
+    with pytest.raises(TypeError, match="must be an EmbeddedBinding"):
+        backend.add_adapter(adapter)
+
+    assert adapter.backend is None
+    assert adapter.qualified_name not in backend._added_adapters
+
+
+def test_load_peft_adapter_rejects_embedded_adapter():
+    """Embedded adapters are selected by the chat template, not loaded by PEFT."""
+    backend = _make_backend()
+    adapter = _make_embedded_adapter_stub()
+    backend.add_adapter(adapter)
+
+    with pytest.raises(TypeError, match="through PEFT"):
+        backend.load_peft_adapter(adapter.qualified_name)
+
+    backend._model.load_adapter.assert_not_called()
 
 
 def test_generate_with_adapter_lock_deactivates_and_calls_generate_func():
@@ -828,7 +1149,7 @@ async def test_intrinsic_seed_with_zero_temperature_keeps_greedy(stub_backend):
     captured = {}
 
     def fake_transformers_inputs(rewritten, tokenizer, model, ll_tokenizer=None):
-        assert rewritten.temperature == 0.0
+        assert rewritten["temperature"] == 0.0
         generate_input = {"input_tokens": object(), "do_sample": False}
         captured["generate_input"] = generate_input
         return generate_input, {}

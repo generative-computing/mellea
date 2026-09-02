@@ -4,9 +4,11 @@ description: "Adapter-accelerated RAG quality checks using LoRA/aLoRA adapters w
 # diataxis: how-to
 ---
 
-**Prerequisites:** `pip install "mellea[hf]"` for LocalHFBackend (GPU or Apple
-Silicon Mac recommended), or `pip install mellea` for OpenAIBackend with a
-[Granite Switch](/reference/glossary#granite-switch) model served via vLLM.
+**Prerequisites:** use `uv sync --extra hf` for runtime LoRA/aLoRA adapter
+functions and local [Granite Switch](/reference/glossary#granite-switch)
+checkpoints. Both local paths require a GPU or Apple Silicon Mac. An
+OpenAIBackend using a Granite Switch model served via vLLM uses
+`uv sync --extra switch` when it downloads embedded adapter metadata.
 
 Adapter functions are adapter-accelerated operations for RAG quality checks. They use
 LoRA/aLoRA adapters loaded directly into the Hugging Face backend — faster and more
@@ -15,7 +17,10 @@ reliable than prompting a general-purpose model for these specialized micro-task
 > **Backend note:** Adapter functions work with two backends:
 >
 > - **LocalHFBackend** — loads LoRA/aLoRA adapters from the catalog at runtime.
->   All adapter functions are available. Requires a GPU or Apple Silicon Mac.
+>   A local Granite Switch checkpoint can instead use
+>   `load_embedded_adapters=True`; install `mellea[hf]` first. Only
+>   adapter functions embedded in the checkpoint are then available. Requires a
+>   GPU or Apple Silicon Mac.
 > - **OpenAIBackend** — uses a Granite Switch model served via vLLM with
 >   `load_embedded_adapters=True`. Only adapter functions embedded in the model are
 >   available — check the model's `adapter_index.json` for the list.
@@ -32,6 +37,29 @@ from mellea.backends.huggingface import LocalHFBackend
 
 backend = LocalHFBackend(model_id="ibm-granite/granite-4.1-3b")
 ```
+
+## Use a local Granite Switch checkpoint
+
+Granite Switch checkpoints contain their adapter functions already. Pass the
+checkpoint to `LocalHFBackend` with `load_embedded_adapters=True`; existing
+helper functions such as `rag.check_answerability()` work unchanged.
+
+```python
+# Requires: mellea[hf]
+# Returns: LocalHFBackend
+from mellea.backends.huggingface import LocalHFBackend
+from mellea.backends.model_ids import IBM_GRANITE_SWITCH_4_1_3B_PREVIEW
+
+backend = LocalHFBackend(
+    model_id=IBM_GRANITE_SWITCH_4_1_3B_PREVIEW,
+    load_embedded_adapters=True,
+)
+```
+
+Only adapter functions listed in the checkpoint's `adapter_index.json` are
+available. Mellea warns once if Granite Switch's installed package metadata
+does not yet include Mellea's resolved Transformers version; the warning
+disappears after Granite Switch publishes compatible metadata.
 
 Or, with a Granite Switch model via the OpenAI backend:
 
@@ -297,7 +325,7 @@ implementations, not whether a composed `Adapter` can be registered directly:
 
 | Backend | `LocalFileBinding` (LocalFile/PEFT) | `EmbeddedBinding` (Embedded/Granite Switch) | `ServerMediatedBinding` |
 | --- | --- | --- | --- |
-| `LocalHFBackend` | ✅ shipping — `add_adapter` accepts a `LocalFileBinding` directly | 🔜 planned (#1018) | — |
+| `LocalHFBackend` | ✅ shipping — `add_adapter` accepts a `LocalFileBinding` directly | ✅ shipping — `load_embedded_adapters=True`, via the deprecated `EmbeddedIntrinsicAdapter` shim | — |
 | `OpenAIBackend` | — | ✅ shipping, via the deprecated `EmbeddedIntrinsicAdapter` shim above, which builds an `EmbeddedBinding` internally | — |
 
 `ServerMediatedBinding` has no backend implementation yet — see discussion #1486.

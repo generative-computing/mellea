@@ -1,34 +1,48 @@
 # Granite Switch Examples
 
-This directory contains examples for running Mellea adapter functions through an
-OpenAI-compatible backend using Granite Switch models.
+This directory contains examples for running Mellea adapter functions with
+Granite Switch models, either locally through `LocalHFBackend` or through an
+OpenAI-compatible vLLM deployment.
 
 ## What is Granite Switch?
 
 Granite Switch models ship with LoRA and aLoRA adapters pre-baked into the model
-weights. Instead of loading adapters at runtime (as `LocalHFBackend` does), these
-embedded adapters are activated via control tokens injected by the model's chat
-template. Only the I/O transformation configs are downloaded — no adapter weights
-are transferred.
+weights. Unlike runtime LoRA/aLoRA adapters on a standard `LocalHFBackend`,
+these embedded adapters are activated via control tokens injected by the model's
+chat template. Only the I/O transformation configs are downloaded — no adapter
+weights are transferred.
 
 ## Prerequisites
 
-1. A Granite Switch model hosted via [vLLM](https://docs.vllm.ai/):
+### Local Hugging Face inference
+
+Run the local example on a GPU or Apple Silicon Mac:
 
 ```bash
-python -m vllm.entrypoints.openai.api_server \
-    --model <granite-switch-model-id> \
-    --dtype bfloat16 \
-    --enable-prefix-caching
+uv sync --extra hf
 ```
 
-2. `pip install mellea`
+### OpenAI-compatible inference
+
+1. Host a Granite Switch model with [vLLM](https://docs.vllm.ai/).
+2. Install the `switch` extra to download embedded adapter metadata:
+
+```bash
+uv sync --extra switch
+```
 
 ## Available adapters
 
-Not all adapter functions are embedded in every Granite Switch model. You should check the model's `adapter_index.json` file for a definitive list. For granite switch models pre-built by IBM, we include a list of models in the Mellea `model_id`.
+Not all adapter functions are embedded in every Granite Switch model. Check the
+model's `adapter_index.json` for a definitive list. For Granite Switch models
+pre-built by IBM, Mellea includes a list of models in `model_id`.
 
 ## Files
+
+### answerability_local_hf.py
+
+Demonstrates `rag.check_answerability()` against a local Granite Switch
+checkpoint using `LocalHFBackend(load_embedded_adapters=True)`.
 
 ### answerability_openai.py
 
@@ -49,10 +63,11 @@ you only need a subset of adapters or want more control over adapter
 registration.
 
 ## Architecture
+
 ![Granite Libraries Software Stack Architecture in Mellea](../../docs/images/granite-libraries-mellea-architecture.png)
 
 ## Related
 
-- [`../intrinsics/`](../intrinsics/) — the same adapter functions using `LocalHFBackend`
+- [`../intrinsics/`](../intrinsics/) — runtime LoRA/aLoRA adapter functions
 - [Adapter Functions Documentation](../../docs/docs/advanced/intrinsics.md)
-- [Official Granite Switch Documentation](https://github.com/generative-computing/granite-switch) 
+- [Official Granite Switch Documentation](https://github.com/generative-computing/granite-switch)

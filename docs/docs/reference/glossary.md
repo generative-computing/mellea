@@ -273,7 +273,7 @@ Granite Libraries is the collective name for the three curated collections of
 [adapter functions](#adapter-function) published by IBM Granite:
 
 | Collection | Purpose |
-|-----------|---------|
+| ---------- | --------- |
 | **Granite Libraries Core** | General-purpose capabilities: certainty checking, requirement verification, context attribution |
 | **Granite Libraries RAG** | Retrieval-Augmented Generation pipeline: answerability, citations, hallucination detection, query rewriting |
 | **Granite Libraries Guardian** | Safety and compliance: guardian checks, policy guardrails, factuality detection and correction |
@@ -472,10 +472,11 @@ See: [Safety Guardrails](../how-to/safety-guardrails#policy-compliance)
 Granite Switch is the architecture and toolchain for composing adapter functions into a
 single deployable Granite model. The composer embeds LoRA/aLoRA adapter function weights
 directly into a base Granite model checkpoint, producing a self-contained model file that
-carries its adapter functions with it. When that checkpoint is served via vLLM and
-accessed through `OpenAIBackend` with `load_embedded_adapters=True`, adapter functions
-are available without runtime adapter loading. Only adapter functions embedded in the
-checkpoint are available — check the model's `adapter_index.json`.
+carries its adapter functions with it. It can be used through `OpenAIBackend`
+when served via vLLM, or directly through `LocalHFBackend`; both use
+`load_embedded_adapters=True` to register the checkpoint's adapter functions
+without runtime adapter loading. Only adapter functions embedded in the checkpoint
+are available — check the model's `adapter_index.json`.
 
 The resulting model file is sometimes called a **Granite Switch checkpoint** or simply a
 **checkpoint**. The toolchain that produces it is the **Granite Switch composer**.
@@ -567,8 +568,9 @@ See: [Use Images and Vision Models](../how-to/use-images-and-vision)
 in Mellea's implementation. It is a backend-level primitive — a structured generation
 operation backed by a LoRA/aLoRA adapter with special input/output handling (e.g.,
 constrained decoding, RAG retrieval). `LocalHFBackend` loads `Intrinsic` adapters at
-runtime; `OpenAIBackend` uses them when backed by a [Granite Switch](#granite-switch)
-checkpoint with `load_embedded_adapters=True`.
+runtime or uses adapter functions embedded in a local [Granite Switch](#granite-switch)
+checkpoint with `load_embedded_adapters=True`. `OpenAIBackend` also supports
+embedded adapter functions when backed by a Granite Switch deployment.
 
 > **Note:** The Python symbol `Intrinsic` (and related classes such as `IntrinsicAdapter`)
 > will be renamed to `AdapterFunction` / `Adapter` in a future phase of Epic #929
