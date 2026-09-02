@@ -1,36 +1,21 @@
 # Copyright IBM Corp. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Real e2e test: the intrinsic `adapter_scope` path against a real PEFT model.
+"""Real e2e test: `LocalHFBackend`'s intrinsic `adapter_scope` path against a
+real PEFT model.
 
-PR #1555 (#1465) routed `LocalHFBackend`'s LoRA/aLoRA intrinsic generation
-through `AdapterMixin.adapter_scope()`, via `_generate_intrinsic_with_adapter_scope`
-and `_IntrinsicPeftBinding`. That plumbing is covered by `MagicMock`-based unit
-tests (`test/backends/test_huggingface_unit.py`) that pin verb order, lock
-behaviour, and hook payload shape precisely, but never against a real
-`PeftModel` or a real downloaded adapter. `test_local_file_e2e.py` proves
-`adapter_scope()` against a real model, but drives `LocalFileBinding` directly,
-not the intrinsic path.
+Drives one real intrinsic call (`core.check_certainty`) through the public
+API against a real Granite model and the real "uncertainty" adapter, and
+asserts on the `ADAPTER_FUNCTION_*` hook payloads and real model adapter
+state — never on the generated certainty score itself.
 
-This test drives one real intrinsic call (`core.check_certainty`) through the
-public API end to end against a real Granite model and the real
-`ibm-granite/granitelib-core-r1.0` "uncertainty" adapter, and asserts only on
-the `ADAPTER_FUNCTION_*` hook payloads and real model adapter state — never on
-the generated certainty score itself. See test/README.md's e2e rules and #1291
-(the flakiness class that score-content assertions produced in GPU intrinsic
-tests). This does not make the test immune to model output: `check_certainty`
-still requires the adapter's raw output to parse as JSON containing a
-`certainty` key (`core.py`), so a real parse failure surfaces as an
-exception from the `core.check_certainty(...)` call itself, before any hook
-assertion runs — `hf_skip()` only converts Hub network errors to skips, not
-this. `call_intrinsic` pins `temperature=0.0` for exactly this reason, which
-keeps this residual risk low but not zero.
+`check_certainty` still requires the adapter's raw output to parse as JSON
+containing a `certainty` key, so a parse failure surfaces as an exception
+from the call itself, before any hook assertion runs; `call_intrinsic` pins
+`temperature=0.0` to keep that residual risk low.
 
-Also proves, against the real PEFT model, that a second call to the same
-intrinsic succeeds: `load_peft_adapter`'s tolerance of PEFT's "Adapter with
-name ... already exists" `ValueError` on a repeat load is a path the mocks in
-`test_huggingface_unit.py` cannot exercise, since nothing there ever loads
-twice into a real `PeftModel`.
+A second call proves adapter re-loading is tolerated against a real
+`PeftModel`, not just a mocked error-message match.
 """
 
 import os
@@ -46,8 +31,7 @@ pytestmark = [
     pytest.mark.huggingface,
     pytest.mark.e2e,
     pytest.mark.slow,
-    # 12GB, not test_local_file_e2e.py's 20GB: matches the existing bound for
-    # this same model (granite-4.1-3b) in test_core.py, not drift.
+    # Matches the VRAM bound used elsewhere for this same base model.
     require_gpu(min_vram_gb=12),
     pytest.mark.skipif(
         int(os.environ.get("CICD", 0)) == 1,
@@ -98,11 +82,6 @@ def _assert_single_success_invocation(mock_invoke: MagicMock) -> None:
     invocation = invocations[0]
     assert invocation.outcome == "success"
     assert invocation.name == "uncertainty"
-    # resolve_adapter's lazy registration always registers AdapterType.LORA
-    # for this (non-embedded) path, regardless of which types the catalog
-    # lists as available (adapter.py's resolve_adapter, "pre-Phase-1
-    # default" comment) — "lora" is the real value on this call path, not
-    # "unknown" (the payload field's default if this were ever omitted).
     assert invocation.adapter_type == "lora"
     assert invocation.binding_type == "local_file"
     assert invocation.revision == _UNCERTAINTY_REVISION
@@ -121,8 +100,7 @@ def test_check_certainty_adapter_scope_fires_hooks_and_activates_real_adapter(
 
 
 def test_check_certainty_adapter_scope_repeat_call_is_idempotent(backend, chat_context):
-    """A second call proves `load_peft_adapter`'s already-loaded tolerance
-    against a real model, not just the mocked `ValueError` string match."""
+    """A repeat call to the same intrinsic on the same backend succeeds cleanly."""
     with hf_skip(), capture_adapter_hooks() as first_invoke:
         core.check_certainty(chat_context, backend)
     _assert_single_success_invocation(first_invoke)
