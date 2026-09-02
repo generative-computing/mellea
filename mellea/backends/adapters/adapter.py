@@ -588,21 +588,26 @@ class AdapterMixin(Backend, abc.ABC):
     def _adapter_activation_lock(
         self,
     ) -> contextlib.AbstractContextManager[bool | None]:
-        """Exclusivity lock to hold while calling activate/deactivate verbs.
+        """Exclusivity lock to hold while calling activate/deactivate and registration verbs.
 
         Default is a no-op (`contextlib.nullcontext()`). Backends whose
         activation verbs mutate shared, non-thread-safe state (e.g.
         `LocalHFBackend`'s underlying PEFT model) override this to return
         their own lock, so callers like `LocalFileBinding.activate()` get
         the same exclusivity `_generate_with_adapter_lock` relies on.
+        `resolve_adapter()` also holds it for its own registration path.
 
-        Callers, including `resolve_adapter()`, may re-enter this lock from a
-        code path that already holds it on the same thread (e.g. an
-        `adapter_scope()` that calls back into a verb guarded by this lock).
-        An override must therefore return a reentrant lock (a
-        `threading.RLock`, as `LocalHFBackend` does) — a plain
-        `threading.Lock` here is a real deadlock hazard, not just a missed
-        optimisation.
+        A code path already holding this lock can re-enter it: on
+        `LocalHFBackend`, `_generate_intrinsic_with_adapter_scope` holds
+        `_generation_lock` for the whole generation, and the
+        `_IntrinsicPeftBinding` verbs it drives through `adapter_scope()`
+        each take `_adapter_activation_lock()` again on the same thread.
+        (`resolve_adapter()` itself is not currently called from inside that
+        hold — `call_intrinsic` resolves before `mfuncs.act` acquires it —
+        but nothing prevents a future caller from doing so.) An override must
+        therefore return a reentrant lock (a `threading.RLock`, as
+        `LocalHFBackend` does) — a plain `threading.Lock` here is a real
+        deadlock hazard, not just a missed optimisation.
         """
         return contextlib.nullcontext()
 
@@ -654,11 +659,13 @@ class AdapterMixin(Backend, abc.ABC):
         # _added_adapters, and catch_warnings() mutates process-global filter state
         # that is not async/thread-safe. `_adapter_activation_lock()` serializes both
         # races for backends that override it to return a real lock (LocalHFBackend's
-        # reentrant `_generation_lock`, shared with load_peft_adapter and
-        # LocalFileBinding.activate/deactivate; see #1465) — but not universally: it
-        # is a no-op nullcontext() by default (e.g. OpenAIBackend never serializes),
-        # and LocalFileBinding.prepare() and register_embedded_adapter_model() still
-        # call add_adapter() under their own, narrower locks rather than this one.
+        # reentrant `_generation_lock` — the same one load_peft_adapter's own callers
+        # already hold, and LocalFileBinding.activate/deactivate; see #1465) — but not
+        # universally: it is a no-op nullcontext() by default (e.g. OpenAIBackend
+        # never serializes), LocalFileBinding.prepare() calls add_adapter() under its
+        # own, narrower `_lifecycle_lock` instead, and register_embedded_adapter_model()
+        # calls add_adapter() under no lock at all (both call sites are backend
+        # __init__ today, so this is benign in practice, not closed by this fix).
         # Suppress DeprecationWarning: the shim constructors warn user-facing code,
         # not internal registration paths.
         with self._adapter_activation_lock(), warnings.catch_warnings():

@@ -2656,6 +2656,12 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         the lock caller 1 (and, on the outer level, caller 3's driver) takes,
         it is the only thing satisfying the precondition on those paths.
 
+        A fourth consumer, unrelated to that precondition: `resolve_adapter()`
+        (base class, `AdapterMixin`) also takes this same lock around its own
+        `add_adapter()`-based registration critical section (#1562), to
+        serialize concurrent first-time resolves rather than to satisfy the
+        activation precondition above.
+
         Caller 3's verb acquisitions therefore nest inside its driver's
         `_generation_lock` hold on the same thread (see
         `_generate_intrinsic_with_adapter_scope`'s docstring), which is

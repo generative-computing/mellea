@@ -679,7 +679,13 @@ class _TrackingLock:
 
     Used in place of a bare `MagicMock()` context manager so a test can
     assert the lock was acquired exactly once around the whole registration
-    critical section (not once per `add_adapter` call in the embedded loop).
+    critical section (not once per `add_adapter` call in the embedded loop),
+    and that `warnings.catch_warnings()` has already restored the filter
+    state by the time this lock releases (`filter_restored_at_exit`) — that
+    ordering is what closes the pre-existing filter-restoration race
+    alongside the registration race; the two context managers must nest with
+    the lock outermost so `catch_warnings().__exit__()` runs before this
+    lock's `__exit__()`.
     """
 
     def __init__(self) -> None:
@@ -687,6 +693,8 @@ class _TrackingLock:
         self.enter_count = 0
         self.exit_count = 0
         self.max_depth = 0
+        self._baseline_filters = list(warnings.filters)
+        self.filter_restored_at_exit: list[bool] = []
 
     def __enter__(self):
         self._lock.acquire()
@@ -695,9 +703,68 @@ class _TrackingLock:
         return None
 
     def __exit__(self, *exc_info):
+        # `simplefilter("ignore", DeprecationWarning)` happens to add an entry
+        # identical to one Python's own default filters already carry, so
+        # scanning `warnings.filters` for that entry can't tell "restored"
+        # apart from "never mutated" — checking against the exact pre-test
+        # snapshot (order included) is what actually distinguishes them.
+        self.filter_restored_at_exit.append(
+            list(warnings.filters) == self._baseline_filters
+        )
         self.exit_count += 1
         self._lock.release()
         return False
+
+
+def test_resolve_adapter_survives_reentrant_activation_lock():
+    """resolve_adapter() must not deadlock when called while the lock is already held.
+
+    `_adapter_activation_lock()`'s docstring documents a reentrancy contract:
+    an override must return a reentrant lock because a caller can already
+    hold it on the same thread. Nothing production calls today puts
+    `resolve_adapter()` on that path (`call_intrinsic` resolves before
+    `mfuncs.act` acquires the lock), so a regression to a non-reentrant
+    override — a real `threading.RLock` swapped for a plain `threading.Lock`
+    — would only surface as a hang the first time some future caller does
+    reenter, not as a test failure today. Simulate that caller directly:
+    hold the real lock this mock backend's `_adapter_activation_lock()`
+    returns, then call `resolve_adapter()` from inside that hold.
+    """
+    mock_catalog_entry = IntrinsicsCatalogEntry(
+        name="answerability",
+        repo_id="ibm-granite/granitelib-rag-r1.0",
+        revision="abc123",
+        adapter_types=(AdapterType.ALORA, AdapterType.LORA),
+    )
+    real_lock = threading.RLock()
+    mock_backend = MagicMock(spec=AdapterMixin)
+    mock_backend.base_model_name = "ibm-granite/granite-4.1-3b"
+    mock_backend._uses_embedded_adapters = False
+    mock_backend._added_adapters = {}
+    mock_backend._adapter_activation_lock.return_value = real_lock
+    mock_backend.add_adapter.side_effect = lambda a: (
+        mock_backend._added_adapters.__setitem__(a.qualified_name, a)
+    )
+    mock_backend._find_adapter.side_effect = lambda cap, types=None: (
+        AdapterMixin._find_adapter(mock_backend, cap, types)
+    )
+
+    with (
+        patch(
+            "mellea.backends.adapters.adapter.fetch_intrinsic_metadata",
+            return_value=mock_catalog_entry,
+        ),
+        patch(
+            "mellea.backends.adapters.adapter.intrinsics.obtain_io_yaml",
+            return_value="/fake/adapter.yaml",
+        ),
+        patch("builtins.open", mock_open(read_data="key: value")),
+        real_lock,  # simulate an already-in-progress caller holding the lock
+    ):
+        result = AdapterMixin.resolve_adapter(mock_backend, "answerability")
+
+    assert result is not None
+    assert result.identity.name == "answerability"
 
 
 def test_resolve_adapter_holds_activation_lock_during_lora_registration():
@@ -747,6 +814,12 @@ def test_resolve_adapter_holds_activation_lock_during_lora_registration():
 
     assert tracking_lock.enter_count == 1
     assert tracking_lock.exit_count == 1
+    assert tracking_lock.filter_restored_at_exit == [True], (
+        "warnings.catch_warnings() must be nested inside the activation lock "
+        "(lock outermost) so its filter restoration runs before the lock "
+        "releases — swapping the nesting order reopens the pre-existing "
+        "filter-restoration race between concurrent first-time resolves"
+    )
 
 
 def test_resolve_adapter_holds_activation_lock_once_across_embedded_loop():
@@ -773,10 +846,7 @@ def test_resolve_adapter_holds_activation_lock_once_across_embedded_loop():
     tracking_lock = _TrackingLock()
     mock_backend._adapter_activation_lock.return_value = tracking_lock
 
-    depths_seen: list[int] = []
-
     def fake_add_adapter(a):
-        depths_seen.append(tracking_lock.max_depth)
         mock_backend._added_adapters[a.qualified_name] = a
 
     mock_backend.add_adapter.side_effect = fake_add_adapter
@@ -790,12 +860,9 @@ def test_resolve_adapter_holds_activation_lock_once_across_embedded_loop():
     ):
         AdapterMixin.resolve_adapter(mock_backend, "answerability")
 
-    assert len(depths_seen) == 2, "both embedded adapters must have been registered"
-    # enter_count/exit_count == 1 is the whole signal here: max_depth is set once,
-    # in __enter__, so every depth recorded in depths_seen is 1 whenever
-    # enter_count == 1 holds — a per-adapter re-lock would only show up as
-    # enter_count > 1, never as a depth > 1 (depth only changes on the next
-    # __enter__, which only happens if the lock actually got re-acquired).
+    assert mock_backend.add_adapter.call_count == 2, (
+        "both embedded adapters must have been registered"
+    )
     assert tracking_lock.enter_count == 1, (
         "the lock must be acquired once for the whole loop, not per adapter"
     )
@@ -871,8 +938,8 @@ def test_resolve_adapter_concurrent_first_use_does_not_double_register():
         ),
         patch("builtins.open", mock_open(read_data="key: value")),
     ):
-        t1 = threading.Thread(target=call, args=(0,))
-        t2 = threading.Thread(target=call, args=(1,))
+        t1 = threading.Thread(target=call, args=(0,), daemon=True)
+        t2 = threading.Thread(target=call, args=(1,), daemon=True)
         t1.start()
         t2.start()
         t1.join(timeout=5)
@@ -890,6 +957,12 @@ def test_resolve_adapter_concurrent_first_use_does_not_double_register():
     assert len(registrations) == 1, (
         "exactly one adapter must be registered under the never-before-seen name"
     )
+    # `racy_add_adapter`'s own no-op guard (`if existing is not None: return`)
+    # would keep the assertion above green even without resolve_adapter's
+    # in-lock re-check of `_find_adapter(name)` — the loser would just call
+    # `add_adapter` a second time and no-op there instead. Pin the actual
+    # optimisation directly: the loser must never call `add_adapter` at all.
+    mock_backend.add_adapter.assert_called_once()
     assert results[0] is results[1] is registrations[0], (
         "both concurrent callers must resolve to the single registered adapter"
     )
