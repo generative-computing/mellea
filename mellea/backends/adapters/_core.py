@@ -776,10 +776,11 @@ class EmbeddedBinding:
         caller awaits the resulting `ModelOutputThunk`. Firing an
         invocation-complete event here would have to guess an `outcome` that
         this method cannot know, which is worse than not firing it: it would
-        report `outcome="success"` for calls that go on to fail. Wiring a
-        real invocation-complete signal requires the caller to fire it once
-        generation and parsing resolve — tracked as a follow-up, not part of
-        this method.
+        report `outcome="success"` for calls that go on to fail. Instead, the
+        caller fires `_fire_embedded_invocation_complete` once generation and
+        parsing resolve — see its use in `OpenAIBackend`'s and
+        `LocalHFBackend`'s `granite_formatters_processing` closures (issue
+        #1560).
 
         This method is `async` (unlike the rest of `EmbeddedBinding`'s
         surface) purely because hook dispatch (`invoke_hook`) is async; its
@@ -835,6 +836,54 @@ class EmbeddedBinding:
                 "request edit into an operation failure.",
                 exc_info=True,
             )
+
+
+async def _fire_embedded_invocation_complete(
+    *,
+    identity: Identity,
+    outcome: Literal["success", "schema_error", "error"],
+    error: BaseException | None,
+) -> None:
+    """Fires `adapter_function_invocation_complete` for an Embedded adapter call.
+
+    `EmbeddedBinding.apply_activation` cannot know the real outcome at
+    request-mutation time (see its docstring), so this is called instead by
+    the backend once generation and parsing actually resolve — from inside
+    the `granite_formatters_processing` closure in `openai.py`/`huggingface.py`,
+    the single synchronous point where a malformed/unparsable response
+    (`outcome="schema_error"`) is distinguishable from any other failure
+    (`outcome="error"`) or from success.
+
+    Args:
+        identity: Identifies the adapter that was invoked.
+        outcome: The resolved invocation outcome.
+        error: The exception raised during generation/parsing, or `None` on
+            success.
+    """
+    if not has_plugins(HookType.ADAPTER_FUNCTION_INVOCATION_COMPLETE):
+        return
+
+    from ...plugins.hooks.adapter_function import (
+        AdapterFunctionInvocationCompletePayload,
+    )
+
+    try:
+        payload = AdapterFunctionInvocationCompletePayload(
+            name=identity.name,
+            revision=None,
+            binding_type=EmbeddedBinding.binding_type,
+            adapter_type=identity.adapter_type,
+            outcome=outcome,
+            error=error,
+        )
+        await invoke_hook(HookType.ADAPTER_FUNCTION_INVOCATION_COMPLETE, payload)
+    except Exception:
+        MelleaLogger.get_logger().warning(
+            f"adapter_function_invocation_complete hook dispatch failed for "
+            f"{identity.name!r}; ignoring so it does not mask the real "
+            f"outcome ({outcome!r}).",
+            exc_info=True,
+        )
 
 
 class ServerMediatedBinding(WeightsBinding):

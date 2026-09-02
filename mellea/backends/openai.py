@@ -54,6 +54,7 @@ from ..stdlib.requirements import LLMaJRequirement
 from ..telemetry.context import generate_request_id, with_context
 from ._options import resolve_model_options
 from .adapters import EmbeddedActivationRequest, EmbeddedBinding
+from .adapters._core import Identity, _fire_embedded_invocation_complete
 from .adapters.adapter import AdapterInput, AdapterMixin, EmbeddedIntrinsicAdapter
 from .backend import FormatterBackend
 from .model_options import ModelOption
@@ -907,6 +908,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             chunk: ChatCompletion,
             rewritten: granite_formatters.ChatCompletion,
             result_processor: granite_formatters.IntrinsicsResultProcessor,
+            identity: Identity,
         ):
             """Accumulate content and apply intrinsic result processing."""
             import json as _json
@@ -914,15 +916,30 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             # Delegate standard metadata storage to the shared processing method.
             await self.processing(mot, chunk)
 
-            # Apply intrinsic-specific result transformation on top.
+            # Apply intrinsic-specific result transformation on top. This is the
+            # single synchronous point where the Embedded call's real outcome
+            # becomes known, so it also fires adapter_function_invocation_complete
+            # (apply_activation could not have known the outcome earlier).
             response_dict = chunk.model_dump()
             try:
                 res = result_processor.transform(response_dict, rewritten)
             except _json.JSONDecodeError as e:
+                await _fire_embedded_invocation_complete(
+                    identity=identity, outcome="schema_error", error=e
+                )
                 raise Exception(
                     f"Intrinsic did not return a JSON: "
                     f"{chunk.choices[0].message.content}"
                 ) from e
+            except Exception as e:
+                await _fire_embedded_invocation_complete(
+                    identity=identity, outcome="error", error=e
+                )
+                raise
+            else:
+                await _fire_embedded_invocation_complete(
+                    identity=identity, outcome="success", error=None
+                )
 
             # Overwrite the value accumulated by processing() with the
             # post-processed intrinsic output.
@@ -934,6 +951,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             granite_formatters_processing,
             rewritten=rewritten,
             result_processor=result_processor,
+            identity=adapter.identity,
         )
 
         output._gen.post_process = functools.partial(

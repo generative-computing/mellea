@@ -137,13 +137,12 @@ async def test_apply_activation_fires_phase_complete_metric():
 
 async def test_apply_activation_does_not_fire_invocation_complete():
     # apply_activation only edits the request — the real generate+parse
-    # outcome isn't known yet at this point (OpenAIBackend resolves it later,
-    # lazily, when the caller awaits the ModelOutputThunk). Firing
-    # `adapter_function_invocation_complete` here would have to guess an
-    # `outcome`, which would misreport failed calls as "success". Pin that it
-    # doesn't, so nobody "fixes" this back to a hardcoded success outcome
-    # without solving the underlying problem (see the docstring on
-    # apply_activation for the follow-up this needs).
+    # outcome isn't known yet at this point. Both backends fire
+    # `adapter_function_invocation_complete` later instead, once generation
+    # and parsing resolve (see _fire_embedded_invocation_complete and its
+    # callers in openai.py/huggingface.py, issue #1560). Pin that
+    # apply_activation itself still doesn't fire it, so nobody "fixes" this
+    # back to a hardcoded success outcome guessed at request-mutation time.
     pytest.importorskip("cpex", reason="cpex not installed — install mellea[hooks]")
     binding = EmbeddedBinding()
     request = EmbeddedActivationRequest(extra_body={}, api_params={})

@@ -21,6 +21,8 @@ from openai.types.completion_usage import CompletionUsage
 from mellea.backends.adapters import EmbeddedBinding, ServerMediatedBinding
 from mellea.backends.adapters.adapter import EmbeddedIntrinsicAdapter
 from mellea.backends.openai import OpenAIBackend
+from mellea.formatters.granite import IntrinsicsResultProcessor
+from mellea.plugins.types import HookType
 from mellea.stdlib import functional as mfuncs
 from mellea.stdlib.components import Intrinsic, Message
 from mellea.stdlib.context import ChatContext
@@ -114,6 +116,121 @@ async def test_activation_goes_through_embedded_binding(technology):
         "answerability"
     )
     assert call_kwargs["model"] == "granite-switch"
+
+
+def _invocation_complete_payloads(mock_invoke: AsyncMock) -> list:
+    return [
+        call.args[1]
+        for call in mock_invoke.call_args_list
+        if call.args[0] is HookType.ADAPTER_FUNCTION_INVOCATION_COMPLETE
+    ]
+
+
+async def test_invocation_complete_fires_success_for_embedded_call():
+    # Issue #1560: apply_activation cannot know the real outcome, so the
+    # backend must fire adapter_function_invocation_complete once generation
+    # and parsing resolve, inside granite_formatters_processing.
+    pytest.importorskip("cpex", reason="cpex not installed — install mellea[hooks]")
+    backend = _backend_with_adapter("alora")
+    mock_create = AsyncMock(return_value=_chat_completion())
+    mock_client = MagicMock()
+    mock_client.chat.completions.create = mock_create
+
+    with (
+        patch.object(
+            OpenAIBackend,
+            "_async_client",
+            new_callable=PropertyMock,
+            return_value=mock_client,
+        ),
+        patch("mellea.backends.adapters._core.has_plugins", return_value=True),
+        patch(
+            "mellea.backends.adapters._core.invoke_hook", new_callable=AsyncMock
+        ) as mock_invoke,
+    ):
+        ctx = ChatContext().add(Message("user", "What is the square root of 4?"))
+        mot, _ = await mfuncs.aact(
+            Intrinsic("answerability"), ctx, backend, strategy=None
+        )
+        await mot.avalue()
+
+    payloads = _invocation_complete_payloads(mock_invoke)
+    assert len(payloads) == 1
+    assert payloads[0].name == "answerability"
+    assert payloads[0].binding_type == "embedded"
+    assert payloads[0].adapter_type == "alora"
+    assert payloads[0].outcome == "success"
+    assert payloads[0].error is None
+
+
+async def test_invocation_complete_fires_schema_error_on_malformed_json():
+    # Regression test for the exact bug #1142/PR #1559 review caught: a
+    # malformed/non-JSON response must record outcome="schema_error", not
+    # "success" (the hardcoded value that was reverted).
+    pytest.importorskip("cpex", reason="cpex not installed — install mellea[hooks]")
+    backend = _backend_with_adapter("alora")
+    mock_create = AsyncMock(return_value=_chat_completion(content="not valid json"))
+    mock_client = MagicMock()
+    mock_client.chat.completions.create = mock_create
+
+    with (
+        patch.object(
+            OpenAIBackend,
+            "_async_client",
+            new_callable=PropertyMock,
+            return_value=mock_client,
+        ),
+        patch("mellea.backends.adapters._core.has_plugins", return_value=True),
+        patch(
+            "mellea.backends.adapters._core.invoke_hook", new_callable=AsyncMock
+        ) as mock_invoke,
+    ):
+        ctx = ChatContext().add(Message("user", "What is the square root of 4?"))
+        mot, _ = await mfuncs.aact(
+            Intrinsic("answerability"), ctx, backend, strategy=None
+        )
+        with pytest.raises(Exception, match="did not return a JSON"):
+            await mot.avalue()
+
+    payloads = _invocation_complete_payloads(mock_invoke)
+    assert len(payloads) == 1
+    assert payloads[0].outcome == "schema_error"
+    assert payloads[0].error is not None
+
+
+async def test_invocation_complete_fires_error_on_unrelated_exception():
+    pytest.importorskip("cpex", reason="cpex not installed — install mellea[hooks]")
+    backend = _backend_with_adapter("alora")
+    mock_create = AsyncMock(return_value=_chat_completion())
+    mock_client = MagicMock()
+    mock_client.chat.completions.create = mock_create
+
+    with (
+        patch.object(
+            OpenAIBackend,
+            "_async_client",
+            new_callable=PropertyMock,
+            return_value=mock_client,
+        ),
+        patch.object(
+            IntrinsicsResultProcessor, "transform", side_effect=ValueError("boom")
+        ),
+        patch("mellea.backends.adapters._core.has_plugins", return_value=True),
+        patch(
+            "mellea.backends.adapters._core.invoke_hook", new_callable=AsyncMock
+        ) as mock_invoke,
+    ):
+        ctx = ChatContext().add(Message("user", "What is the square root of 4?"))
+        mot, _ = await mfuncs.aact(
+            Intrinsic("answerability"), ctx, backend, strategy=None
+        )
+        with pytest.raises(ValueError, match="boom"):
+            await mot.avalue()
+
+    payloads = _invocation_complete_payloads(mock_invoke)
+    assert len(payloads) == 1
+    assert payloads[0].outcome == "error"
+    assert payloads[0].error is not None
 
 
 async def test_reassigned_weights_fail_loudly():

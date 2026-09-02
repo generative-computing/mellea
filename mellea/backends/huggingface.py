@@ -96,9 +96,11 @@ from .adapters import (
 )
 from .adapters._core import (
     Adapter as _AdapterCore,
+    Identity,
     IOContract,
     LocalFileBinding,
     WeightsBinding,
+    _fire_embedded_invocation_complete,
 )
 from .adapters.adapter import AdapterInput, EmbeddedIntrinsicAdapter
 from .backend import FormatterBackend
@@ -1044,11 +1046,34 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             rewritten: granite_formatters.ChatCompletion,
             result_processor: granite_formatters.IntrinsicsResultProcessor,
             input_ids,
+            embedded_identity: Identity | None,
         ):
+            # embedded_identity is set only for EmbeddedIntrinsicAdapter calls.
+            # This is the single synchronous point where the Embedded call's
+            # real outcome becomes known, so it also fires
+            # adapter_function_invocation_complete for that case (apply_activation
+            # could not have known the outcome earlier). The legacy PEFT path
+            # (embedded_identity=None) already gets this signal from
+            # adapter_scope, so it must not be fired again here.
             try:
                 res = result_processor.transform(chunk, rewritten)  # type: ignore
             except json.JSONDecodeError as e:
+                if embedded_identity is not None:
+                    await _fire_embedded_invocation_complete(
+                        identity=embedded_identity, outcome="schema_error", error=e
+                    )
                 raise Exception(f"Intrinsic did not return a JSON: {chunk}") from e
+            except Exception as e:
+                if embedded_identity is not None:
+                    await _fire_embedded_invocation_complete(
+                        identity=embedded_identity, outcome="error", error=e
+                    )
+                raise
+            else:
+                if embedded_identity is not None:
+                    await _fire_embedded_invocation_complete(
+                        identity=embedded_identity, outcome="success", error=None
+                    )
 
             # If logits were requested, stash the intercepted raw output so that
             # post_processing/_surface_logits can populate generation.logits/raw_logits.
@@ -1076,6 +1101,11 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             rewritten=rewritten,
             result_processor=result_processor,
             input_ids=generate_input["input_tokens"],
+            embedded_identity=(
+                adapter.identity
+                if isinstance(adapter, EmbeddedIntrinsicAdapter)
+                else None
+            ),
         )
 
         # TODO: Post-processing should release the lock for this generation.
