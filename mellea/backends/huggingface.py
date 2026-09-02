@@ -2459,6 +2459,9 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             ValueError: If the source has no matching embedded adapter functions.
             TypeError: If an adapter from the source has an unsupported binding.
         """
+        # No lock here: both call sites (here, and this class's __init__) run
+        # single-threaded during construction, before the backend is exposed to
+        # any other thread — see the matching note on OpenAIBackend's twin.
         adapters = EmbeddedIntrinsicAdapter.from_source(
             source, revision=revision, cache_dir=cache_dir
         )
@@ -2657,10 +2660,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         it is the only thing satisfying the precondition on those paths.
 
         A fourth consumer, unrelated to that precondition: `resolve_adapter()`
-        (base class, `AdapterMixin`) also takes this same lock around its own
-        `add_adapter()`-based registration critical section (#1562), to
-        serialize concurrent first-time resolves rather than to satisfy the
-        activation precondition above.
+        (base class) also takes this lock, to serialize registration.
 
         Caller 3's verb acquisitions therefore nest inside its driver's
         `_generation_lock` hold on the same thread (see

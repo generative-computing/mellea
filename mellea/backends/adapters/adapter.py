@@ -601,13 +601,11 @@ class AdapterMixin(Backend, abc.ABC):
         `LocalHFBackend`, `_generate_intrinsic_with_adapter_scope` holds
         `_generation_lock` for the whole generation, and the
         `_IntrinsicPeftBinding` verbs it drives through `adapter_scope()`
-        each take `_adapter_activation_lock()` again on the same thread.
-        (`resolve_adapter()` itself is not currently called from inside that
-        hold — `call_intrinsic` resolves before `mfuncs.act` acquires it —
-        but nothing prevents a future caller from doing so.) An override must
-        therefore return a reentrant lock (a `threading.RLock`, as
-        `LocalHFBackend` does) — a plain `threading.Lock` here is a real
-        deadlock hazard, not just a missed optimisation.
+        take `_adapter_activation_lock()` again on the same thread. (No
+        production caller currently reaches `resolve_adapter()` this way, but
+        nothing prevents one.) An override must therefore return a reentrant
+        lock (`threading.RLock`, as `LocalHFBackend` does) — a plain
+        `threading.Lock` here is a real deadlock hazard.
         """
         return contextlib.nullcontext()
 
@@ -629,18 +627,14 @@ class AdapterMixin(Backend, abc.ABC):
             KeyError: If the adapter cannot be found after registration.
 
         Note:
-            On `LocalHFBackend`, this holds `_generation_lock` for the whole
-            registration critical section below, including any Hugging Face
-            Hub download it triggers (`obtain_io_yaml`/`get_local_hf_path`
-            for the LORA path; `EmbeddedIntrinsicAdapter.from_source` for the
-            embedded path). A cold first resolve therefore serializes with —
-            and can stall behind, or block — every other caller of that same
-            lock (activation, generation, other resolves), including a
-            resolve made from the asyncio event-loop thread inside a
-            gathered set of coroutines. This mirrors the issue's own
-            suggested design (reuse the existing lock rather than add a
-            second one); a warm cache after the first resolve avoids the
-            download and keeps the critical section fast.
+            On backends with a real `_adapter_activation_lock()` override
+            (e.g. `LocalHFBackend`), a cold first resolve holds that lock
+            across any Hugging Face Hub download it triggers, so it can stall
+            every other caller of the same lock (activation, generation,
+            other resolves) — including a resolve on the asyncio event-loop
+            thread inside a gathered set of coroutines. This is a deliberate
+            trade-off (reusing the existing lock rather than adding a second
+            one); a warm cache after the first resolve avoids the download.
         """
         found = self._find_adapter(name)
         if found is not None:
@@ -652,30 +646,21 @@ class AdapterMixin(Backend, abc.ABC):
                 f"Backend has no model ID; cannot resolve adapter {name!r}"
             )
 
-        # Registration (add_adapter, possibly several times for the embedded-adapter
-        # loop below) and the warnings.catch_warnings() filter mutation around it both
-        # race under concurrent first-time resolves for the same name: add_adapter's
-        # own duplicate-registration check is an unguarded read-then-write on
-        # _added_adapters, and catch_warnings() mutates process-global filter state
-        # that is not async/thread-safe. `_adapter_activation_lock()` serializes both
-        # races for backends that override it to return a real lock (LocalHFBackend's
-        # reentrant `_generation_lock` — the same one load_peft_adapter's own callers
-        # already hold, and LocalFileBinding.activate/deactivate; see #1465) — but not
-        # universally: it is a no-op nullcontext() by default (e.g. OpenAIBackend
-        # never serializes), LocalFileBinding.prepare() calls add_adapter() under its
-        # own, narrower `_lifecycle_lock` instead, and register_embedded_adapter_model()
-        # calls add_adapter() under no lock at all (both call sites are backend
-        # __init__ today, so this is benign in practice, not closed by this fix).
+        # add_adapter()'s own duplicate check is an unguarded read-then-write on
+        # _added_adapters, and catch_warnings() below mutates thread-unsafe global
+        # filter state — both race under concurrent first-time resolves for the
+        # same name. `_adapter_activation_lock()` closes both: a no-op by default,
+        # LocalHFBackend's reentrant `_generation_lock` and OpenAIBackend's own
+        # lock otherwise. Not closed here: LocalFileBinding.prepare() (own
+        # `_lifecycle_lock`) and register_embedded_adapter_model() (no lock, but
+        # constructor-only today, so not currently reachable concurrently).
         # Suppress DeprecationWarning: the shim constructors warn user-facing code,
         # not internal registration paths.
         with self._adapter_activation_lock(), warnings.catch_warnings():
-            # Re-check now that the lock (if any) is held: a concurrent resolve for
-            # this same name may have registered it while we were waiting. Without
-            # this, the loser redundantly re-fetches (LORA: re-downloads io.yaml and
-            # weights; embedded: re-reads the checkpoint) and then hits the backend's
-            # own duplicate-registration guard, which logs a "client code attempted
-            # to add ... not idempotent" warning that misleadingly blames the caller
-            # for what is actually two legitimate concurrent resolve_adapter() calls.
+            # Re-check now the lock is held: a concurrent resolve may have already
+            # registered this name. Without this, the loser redundantly re-fetches
+            # and then hits the backend's own duplicate guard, which logs a
+            # misleading "client code ... not idempotent" warning.
             found = self._find_adapter(name)
             if found is not None:
                 return found

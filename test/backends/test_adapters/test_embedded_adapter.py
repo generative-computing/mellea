@@ -579,7 +579,12 @@ class TestOpenAIBackendRegistration:
         assert set(names) == {"answerability", "citations"}
         assert len(backend._added_adapters) == 2
 
-    def test_register_overwrites_existing(self, backend):
+    def test_add_adapter_refuses_duplicate_name(self, backend):
+        """A second add_adapter() for an already-registered name is refused, not applied.
+
+        Matches LocalHFBackend's own duplicate-registration guard (issue #1562):
+        the first registration wins, the second is a no-op.
+        """
         config1 = {"model": None, "parameters": {"max_completion_tokens": 10}}
         config2 = {"model": None, "parameters": {"max_completion_tokens": 20}}
 
@@ -590,7 +595,7 @@ class TestOpenAIBackendRegistration:
             backend._added_adapters["test_lora"].config["parameters"][
                 "max_completion_tokens"
             ]
-            == 20
+            == 10
         )
 
     def test_embedded_adapters_flag_loads_from_model_id(self, model_dir, hub_cache_dir):

@@ -4,10 +4,12 @@
 """A generic OpenAI compatible backend that wraps around the openai python sdk."""
 
 import asyncio
+import contextlib
 import datetime
 import functools
 import inspect
 import os
+import threading
 from collections.abc import Coroutine, Sequence
 from typing import Any
 
@@ -274,6 +276,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         self._client_cache = ClientCache(2)
 
         self._added_adapters: dict[str, EmbeddedIntrinsicAdapter] = {}
+        self._adapter_lock = threading.RLock()
 
         # Call once to create an async_client and populate the cache.
         _ = self._async_client
@@ -311,7 +314,8 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         currently only `EmbeddedIntrinsicAdapter` (the Embedded/Granite Switch
         reality) is supported; other realities are rejected at runtime. As a
         side effect, an `EmbeddedBinding` weights handler is stamped with this
-        backend's `base_model_name` in its `source` field.
+        backend's `base_model_name` in its `source` field. Refuses a name
+        already registered instead of silently overwriting it.
 
         Args:
             adapter (AdapterInput): The adapter to register. Must be an
@@ -325,6 +329,12 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 f"OpenAIBackend currently only supports EmbeddedIntrinsicAdapter. "
                 f"Got: {type(adapter).__name__}"
             )
+        if adapter.qualified_name in self._added_adapters:
+            MelleaLogger.get_logger().warning(
+                f"attempted to add adapter {adapter.qualified_name!r} but it is "
+                "already registered; refusing to overwrite it."
+            )
+            return
         adapter.backend = self
         if isinstance(adapter.weights, EmbeddedBinding):
             adapter.weights.source = self.base_model_name
@@ -337,6 +347,12 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             list[str]: Qualified adapter names.
         """
         return list(self._added_adapters.keys())
+
+    def _adapter_activation_lock(
+        self,
+    ) -> contextlib.AbstractContextManager[bool | None]:
+        """Serialize `add_adapter()` / registration for this backend."""
+        return self._adapter_lock
 
     # ------------------------------------------------------------------
     # Convenience registration helpers
@@ -357,6 +373,9 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         """
         import os
 
+        # No lock here: both call sites (here, and this class's __init__) run
+        # single-threaded during construction, before the backend is exposed to
+        # any other thread — see the matching note on LocalHFBackend's twin.
         adapters = EmbeddedIntrinsicAdapter.from_source(
             source, revision=revision, cache_dir=cache_dir
         )
