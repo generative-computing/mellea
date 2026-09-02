@@ -24,6 +24,7 @@ torch = pytest.importorskip("torch", reason="torch not installed — install mel
 
 from mellea.backends import ModelOption
 from mellea.backends.huggingface import (
+    _CHAT_TEMPLATE_THINKING_VARS,
     _GENERATE_KWARGS_ALLOWLIST,
     _HF_INTERNAL_TEMPLATE_VARS,
     LocalHFBackend,
@@ -44,6 +45,15 @@ def _make_backend(template: object) -> LocalHFBackend:
     b: LocalHFBackend = LocalHFBackend.__new__(LocalHFBackend)
     object.__setattr__(b, "_tokenizer", _FakeTokenizer())
     b._model_id = "test-org/test-model"
+    b.model_options = {}
+    # Mirrors LocalHFBackend.__init__'s real to_mellea_model_opts_map (huggingface.py)
+    # rather than an empty stand-in — the thinking aliases are load-bearing for
+    # _simplify_and_merge's precedence behaviour, exercised by the tests below.
+    b.to_mellea_model_opts_map = {
+        "think": ModelOption.THINKING,
+        "thinking": ModelOption.THINKING,
+        "enable_thinking": ModelOption.THINKING,
+    }
     b.from_mellea_model_opts_map = {ModelOption.MAX_NEW_TOKENS: "max_new_tokens"}
     return b
 
@@ -287,6 +297,89 @@ def test_filter_for_chat_template_renames_sentinel() -> None:
     assert result == {"max_new_tokens": 256}
 
 
+@pytest.mark.parametrize(
+    "template", ["{{ think }}", "{{ thinking }}", "{{ enable_thinking }}"]
+)
+def test_filter_for_chat_template_maps_thinking_to_template_variable(
+    template: str,
+) -> None:
+    """THINKING reaches the thinking variable detected from the template."""
+    b = _make_backend(template)
+    expected_key = next(
+        variable
+        for variable in _CHAT_TEMPLATE_THINKING_VARS
+        if variable in b._chat_template_allowlist
+    )
+
+    result = b._filter_for_chat_template({ModelOption.THINKING: True})
+
+    assert result == {expected_key: True}
+
+
+def test_filter_for_chat_template_drops_thinking_without_template_variable() -> None:
+    """THINKING does not invent a chat-template variable when none is recognised."""
+    b = _make_backend("{{ custom_tools }}")
+
+    result = b._filter_for_chat_template({ModelOption.THINKING: True})
+
+    assert result == {}
+
+
+def test_filter_for_chat_template_uses_per_call_thinking_alias_over_default() -> None:
+    """A per-call alias overrides a backend THINKING default before template filtering."""
+    b = _make_backend("{{ thinking }}")
+    b.model_options = {ModelOption.THINKING: False}
+
+    model_options = b._simplify_and_merge({"thinking": True})
+    result = b._filter_for_chat_template(model_options)
+
+    assert result == {"thinking": True}
+
+
+def test_filter_for_chat_template_drops_thinking_effort_level() -> None:
+    """HF does not send string THINKING levels to boolean chat-template variables."""
+    b = _make_backend("{{ thinking }}")
+
+    result = b._filter_for_chat_template({ModelOption.THINKING: "low"})
+
+    assert result == {}
+
+
+def test_filter_for_chat_template_drops_thinking_effort_level_via_alias() -> None:
+    """A recognised alias (`thinking`) folds into THINKING and is bool-gated too.
+
+    `to_mellea_model_opts_map` maps `thinking` to `ModelOption.THINKING`, so a
+    non-boolean value supplied via the alias is subject to the same
+    boolean-only restriction as one supplied via the sentinel directly
+    (see `test_filter_for_chat_template_drops_thinking_effort_level`) — there
+    is no separate unconstrained "native" path once the alias is recognised.
+    """
+    b = _make_backend("{{ thinking }}")
+
+    model_options = b._simplify_and_merge({"thinking": "low"})
+    result = b._filter_for_chat_template(model_options)
+
+    assert result == {}
+
+
+def test_filter_for_chat_template_sentinel_overrides_conflicting_alias_key() -> None:
+    """ModelOption.THINKING wins over an already-resolved alias key in backend_opts.
+
+    Regression test for an ordering bug: if a caller-supplied model_options
+    dict already contains both the ModelOption.THINKING sentinel and a
+    backend-specific alias key with a conflicting value, the sentinel must
+    still take precedence, matching the other backends (e.g. Ollama reads
+    ModelOption.THINKING directly at the generate call site).
+    """
+    b = _make_backend("{{ thinking }}")
+
+    result = b._filter_for_chat_template(
+        {ModelOption.THINKING: True, "thinking": False}
+    )
+
+    assert result == {"thinking": True}
+
+
 def test_filter_for_chat_template_empty_input() -> None:
     """Empty model_options produces an empty dict."""
     b = _make_backend("{{ think }}")
@@ -468,18 +561,30 @@ def test_generate_kwargs_allowlist_includes_known_generate_kwargs() -> None:
 # ---------------------------------------------------------------------------
 
 _GRANITE_MODEL_ID = "ibm-granite/granite-3.3-8b-instruct"
+_GRANITE_THINKING_MODEL_ID = "ibm-granite/granite-4.2-3b"
 
 
-def _try_load_granite_tokenizer():
-    """Return the Granite tokenizer if cached locally, else None."""
+def _try_load_granite_tokenizer(model_id: str):
+    """Return a Granite tokenizer from the local cache, or None.
+
+    A cached `config.json` does not guarantee the tokenizer's own files
+    (`tokenizer.json`, etc.) are also cached — e.g. after an interrupted or
+    partial download. `local_files_only=True` raises `OSError` in that case;
+    treat it the same as an absent cache rather than letting the test error.
+    """
+    from huggingface_hub import _CACHED_NO_EXIST, try_to_load_from_cache
+    from transformers import AutoTokenizer
+
+    cached_config = try_to_load_from_cache(model_id, "config.json")
+    if cached_config is None or cached_config is _CACHED_NO_EXIST:
+        return None
     try:
-        from transformers import AutoTokenizer
-
-        return AutoTokenizer.from_pretrained(_GRANITE_MODEL_ID, local_files_only=True)
-    except Exception:
+        return AutoTokenizer.from_pretrained(model_id, local_files_only=True)
+    except OSError:
         return None
 
 
+@pytest.mark.integration
 @pytest.mark.huggingface
 def test_granite_allowlist_includes_known_template_vars() -> None:
     """Granite's chat template exposes 'thinking' as a Jinja var.
@@ -492,7 +597,7 @@ def test_granite_allowlist_includes_known_template_vars() -> None:
     it means either the Granite template changed or _HF_INTERNAL_TEMPLATE_VARS
     is now incorrectly excluding something it should not.
     """
-    tok = _try_load_granite_tokenizer()
+    tok = _try_load_granite_tokenizer(_GRANITE_MODEL_ID)
     if tok is None:
         pytest.skip(
             f"{_GRANITE_MODEL_ID} not in local HF cache — run qualitative tests first"
@@ -512,6 +617,7 @@ def test_granite_allowlist_includes_known_template_vars() -> None:
     )
 
 
+@pytest.mark.integration
 @pytest.mark.huggingface
 def test_granite_allowlist_excludes_generate_only_options() -> None:
     """The Granite template does not reference GenerationConfig param names as Jinja vars.
@@ -523,7 +629,7 @@ def test_granite_allowlist_excludes_generate_only_options() -> None:
     Failure here means the Granite template now references a GenerationConfig
     parameter name as a Jinja variable, which would require revisiting the design.
     """
-    tok = _try_load_granite_tokenizer()
+    tok = _try_load_granite_tokenizer(_GRANITE_MODEL_ID)
     if tok is None:
         pytest.skip(
             f"{_GRANITE_MODEL_ID} not in local HF cache — run qualitative tests first"
@@ -553,6 +659,7 @@ def test_granite_allowlist_excludes_generate_only_options() -> None:
         )
 
 
+@pytest.mark.integration
 @pytest.mark.huggingface
 def test_granite_allowlist_excludes_hf_internal_vars() -> None:
     """HF-internal vars are excluded from the Granite allowlist.
@@ -562,7 +669,7 @@ def test_granite_allowlist_excludes_hf_internal_vars() -> None:
     leaks into the allowlist, forwarding it from model_options would duplicate
     a kwarg that apply_chat_template already provides, causing a TypeError.
     """
-    tok = _try_load_granite_tokenizer()
+    tok = _try_load_granite_tokenizer(_GRANITE_MODEL_ID)
     if tok is None:
         pytest.skip(
             f"{_GRANITE_MODEL_ID} not in local HF cache — run qualitative tests first"
@@ -579,6 +686,39 @@ def test_granite_allowlist_excludes_hf_internal_vars() -> None:
             f"HF-internal var '{var}' leaked into Granite allowlist — "
             f"check _HF_INTERNAL_TEMPLATE_VARS against the installed transformers version"
         )
+
+
+@pytest.mark.integration
+@pytest.mark.huggingface
+def test_granite_thinking_option_uses_detected_template_variable() -> None:
+    """Granite 4.2 receives THINKING under its detected template variable."""
+    tok = _try_load_granite_tokenizer(_GRANITE_THINKING_MODEL_ID)
+    if tok is None:
+        pytest.skip(
+            f"{_GRANITE_THINKING_MODEL_ID} not in local HF cache — "
+            "run the Granite 4.2 HF test lane first"
+        )
+
+    b: LocalHFBackend = LocalHFBackend.__new__(LocalHFBackend)
+    b._tokenizer = tok
+    b._model_id = _GRANITE_THINKING_MODEL_ID
+    b.from_mellea_model_opts_map = {ModelOption.MAX_NEW_TOKENS: "max_new_tokens"}
+
+    expected_key = next(
+        (
+            variable
+            for variable in _CHAT_TEMPLATE_THINKING_VARS
+            if variable in b._chat_template_allowlist
+        ),
+        None,
+    )
+
+    assert expected_key is not None, (
+        f"no recognised thinking variable in {sorted(b._chat_template_allowlist)}"
+    )
+    assert b._filter_for_chat_template({ModelOption.THINKING: False}) == {
+        expected_key: False
+    }
 
 
 if __name__ == "__main__":

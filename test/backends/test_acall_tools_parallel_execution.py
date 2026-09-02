@@ -21,12 +21,10 @@ from mellea.backends.tools import MelleaTool
 from mellea.core.base import ModelOutputThunk, ModelToolCall
 from mellea.stdlib.functional import acall_tools
 
-pytestmark = [pytest.mark.integration]
-
 
 @pytest.fixture
 def backend(mock_ollama_backend):
-    """Create an OllamaModelBackend for formatter.print() only.
+    """Create an Ollama backend with its external boundary mocked.
 
     Note: acall_tools() only uses backend.formatter, not inference.
     Tests use local Python functions as tool implementations, no model calls.

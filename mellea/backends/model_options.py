@@ -63,6 +63,8 @@ class ModelOption:
       `reasoning_effort="medium"`. Use this to engage reasoning on vLLM-served
       models such as Qwen3, Gemma 4, and GLM-4.5 — `"medium"` alone is
       silently ignored by those servers.
+      HuggingFace: forwards the value to the recognised chat-template variable
+      (`think`, `thinking`, or `enable_thinking`).
     * `False` — native Ollama backend: sends `think=False`.
       OpenAI-compatible backends: sets `chat_template_kwargs.enable_thinking=False`
       and `reasoning_effort="none"` to suppress the think block. Both are sent so
@@ -73,7 +75,9 @@ class ModelOption:
     * `"low"` / `"medium"` / `"high"` — passed directly as `reasoning_effort`
       (OpenAI-compatible backends only; no-op on vLLM).
 
-    Not yet supported by the HuggingFace backend (#1212).
+    HuggingFace supports boolean values only; a non-boolean value (e.g.
+    `"low"`) is silently ignored. If its chat template does not expose a
+    recognised thinking variable, the option is ignored regardless of value.
     """
     SEED = "@@@seed@@@"
     STREAM = "@@@stream@@@"

@@ -269,6 +269,8 @@ _HF_INTERNAL_TEMPLATE_VARS: frozenset[str] = frozenset(
     }
 )
 
+_CHAT_TEMPLATE_THINKING_VARS: tuple[str, ...] = ("think", "thinking", "enable_thinking")
+
 
 def _compute_generate_kwargs_allowlist() -> frozenset[str]:
     """Names that `transformers`' `model.generate` accepts as keyword arguments.
@@ -449,6 +451,9 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             "tools": ModelOption.TOOLS,
             "stream": ModelOption.STREAM,
             "stop_strings": ModelOption.STOP_SEQUENCES,
+            "think": ModelOption.THINKING,
+            "thinking": ModelOption.THINKING,
+            "enable_thinking": ModelOption.THINKING,
         }
 
         # A mapping of Mellea specific ModelOptions to the specific names for this backend.
@@ -2338,6 +2343,25 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         backend_opts = self._make_backend_specific_and_remove(
             model_options, for_generate=False
         )
+        thinking_template_var = next(
+            (
+                variable
+                for variable in _CHAT_TEMPLATE_THINKING_VARS
+                if variable in self._chat_template_allowlist
+            ),
+            None,
+        )
+        # Deliberately read THINKING from model_options, not backend_opts:
+        # _make_backend_specific_and_remove already stripped the @@@thinking@@@
+        # sentinel (HF has no from_mellea_model_opts_map entry for it, so
+        # remove_special_keys discards it), but model_options still has it.
+        # The resolved sentinel must win outright over whatever alias name is
+        # already in backend_opts, to match the other backends' precedence
+        # (e.g. Ollama reads ModelOption.THINKING directly at the generate
+        # call site rather than deferring to a backend-specific key).
+        thinking_value = model_options.get(ModelOption.THINKING)
+        if thinking_template_var is not None and type(thinking_value) is bool:
+            backend_opts[thinking_template_var] = thinking_value
         return {
             k: v for k, v in backend_opts.items() if k in self._chat_template_allowlist
         }
