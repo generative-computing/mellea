@@ -1764,6 +1764,9 @@ class Context(abc.ABC):
 
         Returns:
             ContextT: A new context instance whose `previous_node` is `previous`.
+
+        Raises:
+            AssertionError: If `previous` is not a `Context`, or if `data` is `None`.
         """
         assert isinstance(previous, Context), (
             "Cannot create a new context from a non-Context object."
