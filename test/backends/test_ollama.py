@@ -3,6 +3,7 @@
 
 import asyncio
 import json
+import os
 from typing import Annotated
 
 import ollama as _ollama
@@ -10,8 +11,8 @@ import pydantic
 import pytest
 
 from mellea import start_session
-from mellea.backends import ModelOption
-from mellea.backends.model_ids import IBM_GRANITE_4_1_3B
+from mellea.backends import ModelOption, model_ids
+from mellea.backends.model_ids import IBM_GRANITE_4_2_3B
 from mellea.backends.ollama import OllamaModelBackend
 from mellea.core import CBlock, Requirement
 from mellea.stdlib.context import SimpleContext
@@ -20,10 +21,32 @@ from mellea.stdlib.requirements import simple_validate
 # Mark all tests in this module as requiring Ollama
 pytestmark = [pytest.mark.ollama, pytest.mark.e2e]
 
+# Match granite4.2:3b's constrained default (Modelfile num_ctx: 8192) so the
+# runner is loaded once and never reloaded for a context-size mismatch.
+TEST_CONTEXT_WINDOW = 8192
+
+
+def _ollama_model_for_eval() -> str:
+    """Return the Ollama model tag driven by GRANITE42_MODEL env var.
+
+    Accepts either an Ollama tag (granite4.2:8b) or an HF model ID
+    (ibm-granite/granite-4.2-8b) — both select the right size.
+    Defaults to 3B.
+    """
+    name = os.environ.get("GRANITE42_MODEL", "")
+    if "8b" in name or "8B" in name:
+        assert model_ids.IBM_GRANITE_4_2_8B.ollama_name is not None
+        return model_ids.IBM_GRANITE_4_2_8B.ollama_name
+    if "30b" in name or "30B" in name:
+        assert model_ids.IBM_GRANITE_4_2_30B.ollama_name is not None
+        return model_ids.IBM_GRANITE_4_2_30B.ollama_name
+    assert IBM_GRANITE_4_2_3B.ollama_name is not None
+    return IBM_GRANITE_4_2_3B.ollama_name
+
 
 @pytest.fixture(scope="module", autouse=True)
 def _ensure_model_warm() -> None:
-    """Warm up the default model before tests run in this module.
+    """Warm up the selected model before tests run in this module.
 
     The conftest warms models when transitioning *into* the ollama test group, but
     that warm-up does not fire when this file is run in isolation (e.g.
@@ -34,12 +57,17 @@ def _ensure_model_warm() -> None:
 
     `keep_alive=-1` pins the model in memory until the conftest module-boundary
     eviction fires at the end of this test file.
+
+    Set GRANITE42_MODEL=granite4.2:8b (or ibm-granite/granite-4.2-8b)
+    to warm a different size.
     """
-    _model = IBM_GRANITE_4_1_3B.ollama_name
-    assert _model is not None  # IBM_GRANITE_4_1_3B always has ollama_name set
+    _model = _ollama_model_for_eval()
     try:
         _ollama.generate(
-            model=_model, prompt="hi", options={"num_predict": 1}, keep_alive=-1
+            model=_model,
+            prompt="hi",
+            options={"num_ctx": TEST_CONTEXT_WINDOW, "num_predict": 1},
+            keep_alive=-1,
         )
     except Exception:
         pass  # best-effort; per-test failures will be clearer than a fixture abort
@@ -47,8 +75,17 @@ def _ensure_model_warm() -> None:
 
 @pytest.fixture(scope="function")
 def session():
-    """Fresh Ollama session for each test."""
-    session = start_session()
+    """Fresh Ollama session for each test.
+
+    The model size is driven by GRANITE42_MODEL (see _ollama_model_for_eval).
+    """
+    session = start_session(
+        model_id=_ollama_model_for_eval(),
+        model_options={
+            ModelOption.CONTEXT_WINDOW: TEST_CONTEXT_WINDOW,
+            ModelOption.THINKING: False,
+        },
+    )
     yield session
     session.reset()
 
@@ -140,7 +177,7 @@ async def test_generate_from_raw(session) -> None:
         actions=[CBlock(value=prompt) for prompt in prompts],
         ctx=session.ctx,
         model_options={
-            ModelOption.CONTEXT_WINDOW: 2048,
+            ModelOption.CONTEXT_WINDOW: TEST_CONTEXT_WINDOW,
             # With raw prompts and high temperature, a response of arbitrary
             # length is normal operation.
             ModelOption.MAX_NEW_TOKENS: 100,
@@ -165,7 +202,7 @@ async def test_generate_from_raw_with_format(session) -> None:
         actions=[CBlock(value=prompt) for prompt in prompts],
         ctx=session.ctx,
         format=Answer,
-        model_options={ModelOption.CONTEXT_WINDOW: 2048},
+        model_options={ModelOption.CONTEXT_WINDOW: TEST_CONTEXT_WINDOW},
     )
 
     assert len(results) == len(prompts)

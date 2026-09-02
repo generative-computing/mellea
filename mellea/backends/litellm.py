@@ -76,7 +76,10 @@ class LiteLLMBackend(FormatterBackend):
             `ollama_chat/` → localhost:11434, `anthropic/` → Anthropic API).
             Use `None` for cloud providers; set explicitly for local servers
             such as vLLM or a non-default Ollama port.
-        model_options (dict | None): Default model options for generation requests.
+        model_options (dict | None): Default model options applied to every
+            generation request. Per-call options take precedence. Use
+            `{ModelOption.THINKING: False}` here to suppress the think block
+            on models that enable it by default.
 
     Attributes:
         to_mellea_model_opts_map (dict): Mapping from backend-specific option names to
@@ -87,7 +90,7 @@ class LiteLLMBackend(FormatterBackend):
 
     def __init__(
         self,
-        model_id: str = "ollama_chat/" + str(model_ids.IBM_GRANITE_4_1_3B.ollama_name),
+        model_id: str = "ollama_chat/" + str(model_ids.IBM_GRANITE_4_2_3B.ollama_name),
         formatter: ChatFormatter | None = None,
         base_url: str | None = None,
         model_options: dict | None = None,
@@ -386,9 +389,9 @@ class LiteLLMBackend(FormatterBackend):
 
         # Map THINKING to the correct backend parameter(s). Two mechanisms:
         # - chat_template_kwargs.enable_thinking: vLLM/Qwen3/Gemma4 (bool toggle)
-        # - reasoning_effort: LiteLLM/OpenAI-compatible (string level, or True → "medium")
-        # Both are set for True so each server picks up whichever it understands.
-        # NOTE: don't pass reasoning_effort=False — it is invalid; absence disables reasoning.
+        # - reasoning_effort: LiteLLM/OpenAI-compatible (string level; True → "medium",
+        #   False → "none")
+        # Both are set so each server picks up whichever it understands.
         thinking = model_opts.get(ModelOption.THINKING, None)
         original_thinking = thinking  # preserve raw caller value for the generate log
         reasoning_params: dict[str, Any] = {}
@@ -401,8 +404,15 @@ class LiteLLMBackend(FormatterBackend):
                 extra_params["extra_body"] = ctk_body
                 if thinking:
                     reasoning_params["reasoning_effort"] = "medium"
-                # False: do not send reasoning_effort — absent param disables reasoning;
-                # passing False would be invalid.
+                elif "ollama" in self._model_id.split("/")[0]:
+                    # Ollama-served thinking models (e.g. granite4.2) default to
+                    # thinking ON when reasoning_effort is absent; "none" is the
+                    # OpenAI enum value their /v1 endpoint maps to think=false
+                    # (Ollama >= 0.33.1). Real OpenAI/other reasoning providers
+                    # reject "none", so this is scoped to Ollama-routed models
+                    # (same provider-prefix check used for the streaming
+                    # tool-call workaround above).
+                    reasoning_params["reasoning_effort"] = "none"
             else:
                 reasoning_params["reasoning_effort"] = thinking
 

@@ -6,16 +6,16 @@ description: "Common errors, diagnostic steps, and fixes for Mellea programs."
 
 ## Installation
 
-### `granite4.1:3b` not found
+### `granite4.2:3b` not found
 
 ```text
-Error: model "granite4.1:3b" not found
+Error: model "granite4.2:3b" not found
 ```
 
 Pull the model before running:
 
 ```bash
-ollama pull granite4.1:3b
+ollama pull granite4.2:3b
 ```
 
 ### Python 3.13: `outlines` install failure

@@ -9,7 +9,8 @@ from unittest.mock import MagicMock, patch
 import ollama
 import pytest
 
-from mellea.backends.model_ids import IBM_GRANITE_4_1_3B
+from mellea.backends.model_ids import IBM_GRANITE_4_2_3B
+from mellea.backends.model_options import ModelOption
 from mellea.backends.ollama import OllamaModelBackend
 from mellea.plugins.manager import (
     disable_background_collection,
@@ -18,7 +19,7 @@ from mellea.plugins.manager import (
     enable_background_collection,
 )
 from mellea.stdlib.components import Message
-from mellea.stdlib.context import SimpleContext
+from mellea.stdlib.context import ChatContext
 from test.telemetry.conftest import reset_tracing_state
 
 # Check if OpenTelemetry is available
@@ -36,6 +37,10 @@ except ImportError:
 pytestmark = pytest.mark.skipif(
     not OTEL_AVAILABLE, reason="OpenTelemetry not installed"
 )
+
+# Match granite4.2:3b's constrained default (Modelfile num_ctx: 8192) so the
+# runner is loaded once and never reloaded for a context-size mismatch.
+TEST_CONTEXT_WINDOW = 8192
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -160,7 +165,7 @@ async def test_stream_mocked(span_exporter, monkeypatch, emit):
         mock_async_client_cls.return_value = mock_async_instance
 
         backend = OllamaModelBackend(model_id="test-model")
-        ctx = SimpleContext().add(Message(role="user", content="Count to 3"))
+        ctx = ChatContext().add(Message(role="user", content="Count to 3"))
 
         async with await stream(
             Message(role="assistant", content=""), backend, ctx
@@ -215,9 +220,7 @@ async def test_span_duration_captures_async_operation_mocked(
     span_exporter, mocked_tracing_backend
 ):
     """Test span duration without requiring a live Ollama server."""
-    ctx = SimpleContext().add(
-        Message(role="user", content="Say 'test' and nothing else")
-    )
+    ctx = ChatContext().add(Message(role="user", content="Say 'test' and nothing else"))
 
     mot, _ = await mocked_tracing_backend.generate_from_context(
         Message(role="assistant", content=""), ctx
@@ -248,9 +251,7 @@ async def test_context_propagation_parent_child_mocked(
     span_exporter, mocked_tracing_backend
 ):
     """Test parent-child span propagation without a live Ollama server."""
-    ctx = SimpleContext().add(
-        Message(role="user", content="Say 'test' and nothing else")
-    )
+    ctx = ChatContext().add(Message(role="user", content="Say 'test' and nothing else"))
 
     from mellea.telemetry import tracing
 
@@ -287,9 +288,7 @@ async def test_token_usage_recorded_after_completion_mocked(
     span_exporter, mocked_tracing_backend
 ):
     """Test deterministic token usage without a live Ollama server."""
-    ctx = SimpleContext().add(
-        Message(role="user", content="Say 'test' and nothing else")
-    )
+    ctx = ChatContext().add(Message(role="user", content="Say 'test' and nothing else"))
 
     mot, _ = await mocked_tracing_backend.generate_from_context(
         Message(role="assistant", content=""), ctx
@@ -320,7 +319,7 @@ async def test_span_not_closed_prematurely_mocked(
     span_exporter, mocked_tracing_backend
 ):
     """Test that a mocked async operation keeps its span open until completion."""
-    ctx = SimpleContext().add(Message(role="user", content="Count to 5"))
+    ctx = ChatContext().add(Message(role="user", content="Count to 5"))
 
     mot, _ = await mocked_tracing_backend.generate_from_context(
         Message(role="assistant", content=""), ctx
@@ -349,7 +348,7 @@ async def test_multiple_generations_separate_spans_mocked(
     span_exporter, mocked_tracing_backend
 ):
     """Test separate generation spans without a live Ollama server."""
-    ctx = SimpleContext().add(Message(role="user", content="Say 'test'"))
+    ctx = ChatContext().add(Message(role="user", content="Say 'test'"))
 
     mot1, _ = await mocked_tracing_backend.generate_from_context(
         Message(role="assistant", content=""), ctx
@@ -381,8 +380,18 @@ async def test_multiple_generations_separate_spans_mocked(
 async def test_span_duration_captures_async_operation(span_exporter):
     """Test that span duration includes the full async operation time."""
 
-    backend = OllamaModelBackend(model_id=IBM_GRANITE_4_1_3B.ollama_name)  # type: ignore
-    ctx = SimpleContext()
+    backend = OllamaModelBackend(  # type: ignore
+        model_id=IBM_GRANITE_4_2_3B.ollama_name,
+        model_options={
+            ModelOption.CONTEXT_WINDOW: TEST_CONTEXT_WINDOW,
+            ModelOption.THINKING: False,
+            # Bound the worst case: without a cap an unexpected long
+            # generation runs until the client's 300 s request cap (run
+            # 33152524235: 2542-token runaway on an uncapped request).
+            ModelOption.MAX_NEW_TOKENS: 64,
+        },
+    )
+    ctx = ChatContext()
     ctx = ctx.add(Message(role="user", content="Say 'test' and nothing else"))
 
     mot, _ = await backend.generate_from_context(
@@ -400,7 +409,7 @@ async def test_span_duration_captures_async_operation(span_exporter):
 
     backend_span = None
     for span in spans:
-        if span.name == f"chat {IBM_GRANITE_4_1_3B.ollama_name}":
+        if span.name == f"chat {IBM_GRANITE_4_2_3B.ollama_name}":
             backend_span = span
             break
 
@@ -420,8 +429,18 @@ async def test_span_duration_captures_async_operation(span_exporter):
 async def test_context_propagation_parent_child(span_exporter):
     """Test that parent-child span relationships are maintained."""
 
-    backend = OllamaModelBackend(model_id=IBM_GRANITE_4_1_3B.ollama_name)  # type: ignore
-    ctx = SimpleContext()
+    backend = OllamaModelBackend(  # type: ignore
+        model_id=IBM_GRANITE_4_2_3B.ollama_name,
+        model_options={
+            ModelOption.CONTEXT_WINDOW: TEST_CONTEXT_WINDOW,
+            ModelOption.THINKING: False,
+            # Bound the worst case: without a cap an unexpected long
+            # generation runs until the client's 300 s request cap (run
+            # 33152524235: 2542-token runaway on an uncapped request).
+            ModelOption.MAX_NEW_TOKENS: 64,
+        },
+    )
+    ctx = ChatContext()
     ctx = ctx.add(Message(role="user", content="Say 'test' and nothing else"))
 
     # Create a parent span using the module's own tracer provider
@@ -448,7 +467,7 @@ async def test_context_propagation_parent_child(span_exporter):
     for span in spans:
         if span.name == "parent_operation":
             parent_recorded = span
-        elif span.name == f"chat {IBM_GRANITE_4_1_3B.ollama_name}":  # Gen-AI convention
+        elif span.name == f"chat {IBM_GRANITE_4_2_3B.ollama_name}":  # Gen-AI convention
             child_recorded = span
 
     assert parent_recorded is not None, "Parent span not found"
@@ -470,8 +489,18 @@ async def test_context_propagation_parent_child(span_exporter):
 async def test_token_usage_recorded_after_completion(span_exporter):
     """Test that token usage metrics are recorded after async completion."""
 
-    backend = OllamaModelBackend(model_id=IBM_GRANITE_4_1_3B.ollama_name)  # type: ignore
-    ctx = SimpleContext()
+    backend = OllamaModelBackend(  # type: ignore
+        model_id=IBM_GRANITE_4_2_3B.ollama_name,
+        model_options={
+            ModelOption.CONTEXT_WINDOW: TEST_CONTEXT_WINDOW,
+            ModelOption.THINKING: False,
+            # Bound the worst case: without a cap an unexpected long
+            # generation runs until the client's 300 s request cap (run
+            # 33152524235: 2542-token runaway on an uncapped request).
+            ModelOption.MAX_NEW_TOKENS: 64,
+        },
+    )
+    ctx = ChatContext()
     ctx = ctx.add(Message(role="user", content="Say 'test' and nothing else"))
 
     mot, _ = await backend.generate_from_context(
@@ -486,9 +515,7 @@ async def test_token_usage_recorded_after_completion(span_exporter):
 
     backend_span = None
     for span in spans:
-        if (
-            span.name == f"chat {IBM_GRANITE_4_1_3B.ollama_name}"
-        ):  # Gen-AI convention uses 'chat {model}' for chat completions
+        if span.name == f"chat {IBM_GRANITE_4_2_3B.ollama_name}":
             backend_span = span
             break
 
@@ -522,8 +549,18 @@ async def test_token_usage_recorded_after_completion(span_exporter):
 async def test_span_not_closed_prematurely(span_exporter):
     """Test that spans are not closed before async operations complete."""
 
-    backend = OllamaModelBackend(model_id=IBM_GRANITE_4_1_3B.ollama_name)  # type: ignore
-    ctx = SimpleContext()
+    backend = OllamaModelBackend(  # type: ignore
+        model_id=IBM_GRANITE_4_2_3B.ollama_name,
+        model_options={
+            ModelOption.CONTEXT_WINDOW: TEST_CONTEXT_WINDOW,
+            ModelOption.THINKING: False,
+            # Bound the worst case: without a cap an unexpected long
+            # generation runs until the client's 300 s request cap (run
+            # 33152524235: 2542-token runaway on an uncapped request).
+            ModelOption.MAX_NEW_TOKENS: 64,
+        },
+    )
+    ctx = ChatContext()
     ctx = ctx.add(Message(role="user", content="Count to 5"))
 
     mot, _ = await backend.generate_from_context(
@@ -534,7 +571,7 @@ async def test_span_not_closed_prematurely(span_exporter):
     # because we haven't awaited the ModelOutputThunk
     spans_before = span_exporter.get_finished_spans()
     backend_spans_before = [
-        s for s in spans_before if s.name == f"chat {IBM_GRANITE_4_1_3B.ollama_name}"
+        s for s in spans_before if s.name == f"chat {IBM_GRANITE_4_2_3B.ollama_name}"
     ]  # Gen-AI convention
 
     # Now complete the async operation
@@ -544,7 +581,7 @@ async def test_span_not_closed_prematurely(span_exporter):
     # Now the span should be closed
     spans_after = span_exporter.get_finished_spans()
     backend_spans_after = [
-        s for s in spans_after if s.name == f"chat {IBM_GRANITE_4_1_3B.ollama_name}"
+        s for s in spans_after if s.name == f"chat {IBM_GRANITE_4_2_3B.ollama_name}"
     ]  # Gen-AI convention
 
     # The span should only appear after completion
@@ -559,8 +596,18 @@ async def test_span_not_closed_prematurely(span_exporter):
 async def test_multiple_generations_separate_spans(span_exporter):
     """Test that multiple generations create separate spans."""
 
-    backend = OllamaModelBackend(model_id=IBM_GRANITE_4_1_3B.ollama_name)  # type: ignore
-    ctx = SimpleContext()
+    backend = OllamaModelBackend(  # type: ignore
+        model_id=IBM_GRANITE_4_2_3B.ollama_name,
+        model_options={
+            ModelOption.CONTEXT_WINDOW: TEST_CONTEXT_WINDOW,
+            ModelOption.THINKING: False,
+            # Bound the worst case: without a cap an unexpected long
+            # generation runs until the client's 300 s request cap (run
+            # 33152524235: 2542-token runaway on an uncapped request).
+            ModelOption.MAX_NEW_TOKENS: 64,
+        },
+    )
+    ctx = ChatContext()
     ctx = ctx.add(Message(role="user", content="Say 'test'"))
 
     # Generate twice
@@ -578,7 +625,7 @@ async def test_multiple_generations_separate_spans(span_exporter):
     # Get the recorded spans
     spans = span_exporter.get_finished_spans()
     backend_spans = [
-        s for s in spans if s.name == f"chat {IBM_GRANITE_4_1_3B.ollama_name}"
+        s for s in spans if s.name == f"chat {IBM_GRANITE_4_2_3B.ollama_name}"
     ]  # Gen-AI convention
 
     assert len(backend_spans) >= 2, (
@@ -603,8 +650,18 @@ async def test_stream_e2e(span_exporter):
     """
     from mellea.stdlib.streaming import stream
 
-    backend = OllamaModelBackend(model_id=IBM_GRANITE_4_1_3B.ollama_name)  # type: ignore
-    ctx = SimpleContext().add(Message(role="user", content="Count to 3"))
+    backend = OllamaModelBackend(  # type: ignore
+        model_id=IBM_GRANITE_4_2_3B.ollama_name,
+        model_options={
+            ModelOption.CONTEXT_WINDOW: TEST_CONTEXT_WINDOW,
+            ModelOption.THINKING: False,
+            # Bound the worst case: without a cap an unexpected long
+            # generation runs until the client's 300 s request cap (run
+            # 33152524235: 2542-token runaway on an uncapped request).
+            ModelOption.MAX_NEW_TOKENS: 64,
+        },
+    )
+    ctx = ChatContext().add(Message(role="user", content="Count to 3"))
 
     async with await stream(
         Message(role="assistant", content=""), backend, ctx
@@ -618,7 +675,7 @@ async def test_stream_e2e(span_exporter):
     spans = span_exporter.get_finished_spans()
     streaming_span = next(s for s in spans if s.name == "stream")
     chat_span = next(
-        s for s in spans if s.name == f"chat {IBM_GRANITE_4_1_3B.ollama_name}"
+        s for s in spans if s.name == f"chat {IBM_GRANITE_4_2_3B.ollama_name}"
     )
 
     assert streaming_span.parent is None, "streaming span should be a root"

@@ -23,7 +23,7 @@ from typing import Any, Literal, overload
 from PIL import Image as PILImage
 
 from ..backends.model_ids import (
-    IBM_GRANITE_4_1_3B,
+    IBM_GRANITE_4_2_3B,
     IBM_GRANITE_4_HYBRID_SMALL,
     ModelIdentifier,
 )
@@ -94,7 +94,7 @@ def get_session() -> MelleaSession:
 
 def start_session(
     backend_name: Literal["ollama", "hf", "openai", "watsonx", "litellm"] = "ollama",
-    model_id: str | ModelIdentifier = IBM_GRANITE_4_1_3B,
+    model_id: str | ModelIdentifier = IBM_GRANITE_4_2_3B,
     ctx: Context | None = None,
     *,
     context_type: Literal["simple", "chat"] | None = None,

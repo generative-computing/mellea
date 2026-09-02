@@ -16,7 +16,7 @@ By the end you will have covered:
 - Context behaviour with concurrent async calls
 
 **Prerequisites:** [Tutorial 01](./your-first-generative-program) complete,
-`pip install mellea`, Ollama running locally with `granite4.1:3b` downloaded.
+`pip install mellea`, Ollama running locally with `granite4.2:3b` downloaded.
 
 ---
 

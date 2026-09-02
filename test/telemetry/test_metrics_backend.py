@@ -6,11 +6,12 @@
 Tests that backends correctly record token metrics through the telemetry system.
 """
 
+import asyncio
 import os
 
 import pytest
 
-from mellea.backends.model_ids import IBM_GRANITE_4_1_3B, IBM_GRANITE_4_HYBRID_SMALL
+from mellea.backends.model_ids import IBM_GRANITE_4_2_3B, IBM_GRANITE_4_HYBRID_SMALL
 from mellea.plugins.manager import (
     disable_background_collection,
     discard_background_tasks,
@@ -18,7 +19,7 @@ from mellea.plugins.manager import (
     enable_background_collection,
 )
 from mellea.stdlib.components import Message
-from mellea.stdlib.context import SimpleContext
+from mellea.stdlib.context import ChatContext
 from test.conftest import hf_skip
 from test.predicates import require_api_key, require_gpu
 from test.telemetry.conftest import reset_metrics_state
@@ -36,6 +37,10 @@ pytestmark = [
     pytest.mark.skipif(not OTEL_AVAILABLE, reason="OpenTelemetry not installed"),
     pytest.mark.e2e,
 ]
+
+# Match granite4.2:3b's constrained default (Modelfile num_ctx: 8192) so the
+# runner is loaded once and never reloaded for a context-size mismatch.
+TEST_CONTEXT_WINDOW = 8192
 
 
 @pytest.fixture
@@ -73,7 +78,7 @@ def hf_metrics_backend(gh_run):
 
     with hf_skip():
         backend = LocalHFBackend(
-            model_id=IBM_GRANITE_4_1_3B.hf_model_name,  # type: ignore
+            model_id=IBM_GRANITE_4_2_3B.hf_model_name,  # type: ignore
             cache=SimpleLRUCache(5),
         )
 
@@ -173,9 +178,25 @@ async def test_ollama_token_metrics_integration(
     monkeypatch.setenv("MELLEA_GENERATION_CHUNK_EVENTS", "true")
     provider = _setup_metrics_provider(metrics_module, metric_reader)
 
-    backend = OllamaModelBackend(model_id=IBM_GRANITE_4_1_3B.ollama_name)  # type: ignore
-    ctx = SimpleContext()
-    ctx = ctx.add(Message(role="user", content="Say 'hello' and nothing else"))
+    backend = OllamaModelBackend(  # type: ignore
+        model_id=IBM_GRANITE_4_2_3B.ollama_name,
+        model_options={
+            ModelOption.CONTEXT_WINDOW: TEST_CONTEXT_WINDOW,
+            ModelOption.THINKING: False,
+            # Bound the worst case: open-ended prompts have produced
+            # 1800+ token generations on CI, and at CI's ~9 t/s CPU decode
+            # that is a 3-15 minute single request that can eat the test's
+            # entire pytest-timeout budget. 64 tokens is far more than a
+            # counting answer needs.
+            ModelOption.MAX_NEW_TOKENS: 64,
+        },
+    )
+    ctx = ChatContext()
+    # A counting prompt reliably spans many output tokens, so the streaming
+    # branch always sees >=2 chunks (the time_per_output_chunk histogram only
+    # records inter-chunk intervals; a single-chunk reply like "Hello!" leaves
+    # it empty — observed in run 33163851256).
+    ctx = ctx.add(Message(role="user", content="Count from 1 to 10 and nothing else"))
 
     model_options = {ModelOption.STREAM: True} if stream else {}
     mot, _ = await backend.generate_from_context(
@@ -184,8 +205,19 @@ async def test_ollama_token_metrics_integration(
 
     # For streaming, consume the stream fully before checking metrics
     if stream:
-        await mot.astream()
-    await mot.avalue()
+        # The 120 s per-chunk stream guard does not bound total request time:
+        # a stalled or queued stream that keeps the HTTP connection alive
+        # (observed on CI: a 900 s /v1 stream, run 33015176815) keeps the
+        # per-chunk guard re-armed and rides to the 900 s pytest watchdog,
+        # killing the job. Bound the stream to the same 300 s the
+        # non-streaming paths use so a genuine stall surfaces as a bounded
+        # TimeoutError the flaky marker retries, matching non-streaming
+        # behaviour.
+        await asyncio.wait_for(mot.astream(), timeout=300.0)
+    # astream() returns as soon as its queue drains, so a long stream is
+    # finished by avalue(); keep that inside the same 300 s budget (run
+    # 33048969379: a 15 m stream escaped the astream bound above).
+    await asyncio.wait_for(mot.avalue(), timeout=300.0)
 
     # Force metrics export and collection
     await drain_background_tasks()
@@ -248,11 +280,33 @@ async def test_openai_token_metrics_integration(enable_metrics, metric_reader, s
 
     # Use Ollama's OpenAI-compatible endpoint
     backend = OpenAIBackend(
-        model_id=IBM_GRANITE_4_1_3B.ollama_name,  # type: ignore
+        model_id=IBM_GRANITE_4_2_3B.ollama_name,  # type: ignore
         base_url=f"http://{os.environ.get('OLLAMA_HOST', 'localhost:11434')}/v1",
         api_key="ollama",
+        # granite4.2 thinks by default and Ollama's /v1 endpoint exposes no
+        # template-kwargs control for it: THINKING: False sends
+        # reasoning_effort="none", which the CI-pinned Ollama 0.33.1 maps to
+        # think=false. Without it a 64-token generation is ~45 thinking
+        # tokens — minutes on a 4-vCPU runner, blowing the 300 s request cap
+        # whenever the runner is 2-3x slower than nominal (runs
+        # 33093698028, 33104419835). The vLLM-style
+        # chat_template_kwargs.enable_thinking workaround was ignored by
+        # Ollama, which is why every /v1 CI run wedged in the openai/litellm
+        # phase.
+        # Same output bound as the other live "say hello" tests: without it a
+        # non-compliant generation (observed 1800+ tokens on CI) can run for
+        # minutes on a ~9 t/s CPU runner and eat the test's entire budget.
+        model_options={ModelOption.THINKING: False, ModelOption.MAX_NEW_TOKENS: 64},
+        # Disable the OpenAI SDK's automatic retries and bound each request to
+        # the 300 s the other live paths use. With the SDK defaults (2 retries,
+        # 600 s read timeout) a stalled server multiplies into a
+        # 600 s + 600 s chain inside one attempt (observed in run
+        # 33039206380: a request timed out at 10m0s, the SDK retried, and the
+        # second attempt was killed by the 900 s pytest watchdog mid-flight).
+        max_retries=0,
+        timeout=300.0,
     )
-    ctx = SimpleContext()
+    ctx = ChatContext()
     ctx = ctx.add(Message(role="user", content="Say 'hello' and nothing else"))
 
     model_options = {ModelOption.STREAM: True} if stream else {}
@@ -262,8 +316,19 @@ async def test_openai_token_metrics_integration(enable_metrics, metric_reader, s
 
     # For streaming, consume the stream fully before checking metrics
     if stream:
-        await mot.astream()
-    await mot.avalue()
+        # The 120 s per-chunk stream guard does not bound total request time:
+        # a stalled or queued stream that keeps the HTTP connection alive
+        # (observed on CI: a 900 s /v1 stream, run 33015176815) keeps the
+        # per-chunk guard re-armed and rides to the 900 s pytest watchdog,
+        # killing the job. Bound the stream to the same 300 s the
+        # non-streaming paths use so a genuine stall surfaces as a bounded
+        # TimeoutError the flaky marker retries, matching non-streaming
+        # behaviour.
+        await asyncio.wait_for(mot.astream(), timeout=300.0)
+    # astream() returns as soon as its queue drains, so a long stream is
+    # finished by avalue(); keep that inside the same 300 s budget (run
+    # 33048969379: a 15 m stream escaped the astream bound above).
+    await asyncio.wait_for(mot.avalue(), timeout=300.0)
 
     await drain_background_tasks()
     provider.force_flush()
@@ -311,7 +376,7 @@ async def test_watsonx_token_metrics_integration(enable_metrics, metric_reader):
         model_id=IBM_GRANITE_4_HYBRID_SMALL.watsonx_name,  # type: ignore
         project_id=os.getenv("WATSONX_PROJECT_ID", "test-project"),
     )
-    ctx = SimpleContext()
+    ctx = ChatContext()
     ctx = ctx.add(Message(role="user", content="Say 'hello' and nothing else"))
 
     mot, _ = await backend.generate_from_context(
@@ -370,9 +435,36 @@ async def test_litellm_token_metrics_integration(
     provider = _setup_metrics_provider(metrics_module, metric_reader)
 
     # Use LiteLLM with openai/ prefix - it will use the OPENAI_BASE_URL env var
-    # This tests LiteLLM with a provider that properly returns token usage
-    backend = LiteLLMBackend(model_id=f"openai/{IBM_GRANITE_4_1_3B.ollama_name}")  # type: ignore
-    ctx = SimpleContext()
+    # This tests LiteLLM with a provider that properly returns token usage.
+    #
+    # "timeout" bounds each attempt to the same 300 s the native
+    # OllamaModelBackend uses, and "num_retries": 0 stops the OpenAI SDK from
+    # silently retrying a stalled attempt: without both, a single stalled
+    # request can consume the whole 900 s pytest-timeout budget (litellm falls
+    # back to a 600 s per-attempt timeout and the SDK retries twice), so the
+    # test dies to the watchdog with no retryable error. With the bound in
+    # place, a stall raises litellm.Timeout, whose APITimeoutError message the
+    # conftest flaky marker (OLLAMA_TIMEOUT_RERUN_PATTERNS) retries like a
+    # native ReadTimeout.
+    backend = LiteLLMBackend(  # type: ignore
+        model_id=f"openai/{IBM_GRANITE_4_2_3B.ollama_name}",
+        # MAX_NEW_TOKENS: same output bound as the other live "say hello"
+        # tests (see test_ollama_token_metrics_integration). THINKING: False
+        # is required: granite4.2 thinks by default and a 64-token
+        # generation is ~45 thinking tokens — minutes on a 4-vCPU CI runner,
+        # blowing the 300 s request cap (runs 33093698028, 33104419835).
+        # With the "openai/" prefix used here, litellm.py's ollama-prefix
+        # check (`"ollama" in self._model_id.split("/")[0]`) does not match,
+        # so reasoning_effort="none" is NOT sent on this path — MAX_NEW_TOKENS
+        # is what actually bounds the request.
+        model_options={
+            ModelOption.THINKING: False,
+            "timeout": 300.0,
+            "num_retries": 0,
+            ModelOption.MAX_NEW_TOKENS: 64,
+        },
+    )
+    ctx = ChatContext()
     ctx = ctx.add(Message(role="user", content="Say 'hello' and nothing else"))
 
     model_options = {ModelOption.STREAM: True} if stream else {}
@@ -382,8 +474,19 @@ async def test_litellm_token_metrics_integration(
 
     # For streaming, consume the stream fully before checking metrics
     if stream:
-        await mot.astream()
-    await mot.avalue()
+        # The 120 s per-chunk stream guard does not bound total request time:
+        # a stalled or queued stream that keeps the HTTP connection alive
+        # (observed on CI: a 900 s /v1 stream, run 33015176815) keeps the
+        # per-chunk guard re-armed and rides to the 900 s pytest watchdog,
+        # killing the job. Bound the stream to the same 300 s the
+        # non-streaming paths use so a genuine stall surfaces as a bounded
+        # TimeoutError the flaky marker retries, matching non-streaming
+        # behaviour.
+        await asyncio.wait_for(mot.astream(), timeout=300.0)
+    # astream() returns as soon as its queue drains, so a long stream is
+    # finished by avalue(); keep that inside the same 300 s budget (run
+    # 33048969379: a 15 m stream escaped the astream bound above).
+    await asyncio.wait_for(mot.avalue(), timeout=300.0)
 
     await drain_background_tasks()
     provider.force_flush()
@@ -430,7 +533,7 @@ async def test_huggingface_token_metrics_integration(
 
     provider = _setup_metrics_provider(metrics_module, metric_reader)
 
-    ctx = SimpleContext()
+    ctx = ChatContext()
     ctx = ctx.add(Message(role="user", content="Say 'hello' and nothing else"))
 
     model_options = {ModelOption.STREAM: True} if stream else {}
@@ -440,8 +543,19 @@ async def test_huggingface_token_metrics_integration(
 
     # For streaming, consume the stream fully before checking metrics
     if stream:
-        await mot.astream()
-    await mot.avalue()
+        # The 120 s per-chunk stream guard does not bound total request time:
+        # a stalled or queued stream that keeps the HTTP connection alive
+        # (observed on CI: a 900 s /v1 stream, run 33015176815) keeps the
+        # per-chunk guard re-armed and rides to the 900 s pytest watchdog,
+        # killing the job. Bound the stream to the same 300 s the
+        # non-streaming paths use so a genuine stall surfaces as a bounded
+        # TimeoutError the flaky marker retries, matching non-streaming
+        # behaviour.
+        await asyncio.wait_for(mot.astream(), timeout=300.0)
+    # astream() returns as soon as its queue drains, so a long stream is
+    # finished by avalue(); keep that inside the same 300 s budget (run
+    # 33048969379: a 15 m stream escaped the astream bound above).
+    await asyncio.wait_for(mot.avalue(), timeout=300.0)
 
     await drain_background_tasks()
     provider.force_flush()
@@ -481,7 +595,7 @@ async def test_error_metrics_on_backend_failure(enable_metrics, metric_reader):
         base_url=f"http://{os.environ.get('OLLAMA_HOST', 'localhost:11434')}/v1",
         api_key="dummy",
     )
-    ctx = SimpleContext()
+    ctx = ChatContext()
     ctx = ctx.add(Message(role="user", content="Say hello"))
 
     mot, _ = await backend.generate_from_context(
@@ -514,17 +628,22 @@ async def test_error_metrics_on_backend_failure(enable_metrics, metric_reader):
 @pytest.mark.ollama
 async def test_ollama_sampling_metrics_integration(enable_metrics, metric_reader):
     """Test that sampling metrics are recorded through a full RejectionSamplingStrategy loop."""
+    from mellea.backends.model_options import ModelOption
     from mellea.backends.ollama import OllamaModelBackend
     from mellea.stdlib.components import Instruction
-    from mellea.stdlib.context import SimpleContext
+    from mellea.stdlib.context import ChatContext
     from mellea.stdlib.sampling import RejectionSamplingStrategy
     from mellea.telemetry import metrics as metrics_module
 
     provider = _setup_metrics_provider(metrics_module, metric_reader)
 
-    backend = OllamaModelBackend(model_id=IBM_GRANITE_4_1_3B.ollama_name)  # type: ignore
+    backend = OllamaModelBackend(  # type: ignore
+        model_id=IBM_GRANITE_4_2_3B.ollama_name,
+        # Same output bound as the other live "say hello" tests.
+        model_options={ModelOption.THINKING: False, ModelOption.MAX_NEW_TOKENS: 64},
+    )
     strategy = RejectionSamplingStrategy(loop_budget=1)
-    ctx = SimpleContext()
+    ctx = ChatContext()
 
     result = await strategy.sample(
         action=Instruction("Say hello"), context=ctx, backend=backend, requirements=None
@@ -558,15 +677,20 @@ async def test_ollama_generate_from_raw_metrics_integration(
     enable_metrics, metric_reader
 ):
     """Token and latency metrics are recorded for `generate_from_raw` calls."""
+    from mellea.backends.model_options import ModelOption
     from mellea.backends.ollama import OllamaModelBackend
     from mellea.core import CBlock
-    from mellea.stdlib.context import SimpleContext
+    from mellea.stdlib.context import ChatContext
     from mellea.telemetry import metrics as metrics_module
 
     provider = _setup_metrics_provider(metrics_module, metric_reader)
 
-    backend = OllamaModelBackend(model_id=IBM_GRANITE_4_1_3B.ollama_name)  # type: ignore
-    ctx = SimpleContext()
+    backend = OllamaModelBackend(  # type: ignore
+        model_id=IBM_GRANITE_4_2_3B.ollama_name,
+        # Same output bound as the other live "say hello" tests.
+        model_options={ModelOption.THINKING: False, ModelOption.MAX_NEW_TOKENS: 64},
+    )
+    ctx = ChatContext()
     actions = [CBlock("Say 'hi' and nothing else."), CBlock("Say 'hello'.")]
 
     results = await backend.generate_from_raw(actions, ctx=ctx)
@@ -599,7 +723,7 @@ async def test_generate_from_raw_error_metrics_integration(
     """Test that error metrics are recorded when `generate_from_raw` fails."""
     from mellea.backends.openai import OpenAIBackend
     from mellea.core import CBlock
-    from mellea.stdlib.context import SimpleContext
+    from mellea.stdlib.context import ChatContext
     from mellea.telemetry import metrics as metrics_module
 
     provider = _setup_metrics_provider(metrics_module, metric_reader)
@@ -609,7 +733,7 @@ async def test_generate_from_raw_error_metrics_integration(
         base_url=f"http://{os.environ.get('OLLAMA_HOST', 'localhost:11434')}/v1",
         api_key="dummy",
     )
-    ctx = SimpleContext()
+    ctx = ChatContext()
     actions = [CBlock("Say 'hi'.")]
 
     with pytest.raises(Exception):

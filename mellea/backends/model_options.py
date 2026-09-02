@@ -65,8 +65,11 @@ class ModelOption:
       silently ignored by those servers.
     * `False` — native Ollama backend: sends `think=False`.
       OpenAI-compatible backends: sets `chat_template_kwargs.enable_thinking=False`
-      to suppress the think block. `reasoning_effort` is not sent (passing
-      `False` would be an invalid value for OpenAI; absence disables reasoning).
+      and `reasoning_effort="none"` to suppress the think block. Both are sent so
+      each server type picks up the mechanism it understands: vLLM honours
+      `chat_template_kwargs`, while Ollama's /v1 endpoint (>= 0.33.1) honours
+      `reasoning_effort` — and for models that default to thinking on (e.g.
+      granite4.2) absent `reasoning_effort` means thinking stays on.
     * `"low"` / `"medium"` / `"high"` — passed directly as `reasoning_effort`
       (OpenAI-compatible backends only; no-op on vLLM).
 
