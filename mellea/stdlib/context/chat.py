@@ -67,12 +67,14 @@ class ChatContext(Context):
             and uses it as the token budget.
 
     Class Attributes:
-        _propagated_fields: Instance-attribute names copied by `add()` and
-            `_make_root()` into every descendant node. Add new `ChatContext`
-            fields here so they propagate automatically.
+        _propagated_fields: Instance-attribute names copied into every descendant
+            node built via `__new__` (by `Context.from_previous`, `_make_root()`,
+            and `_rebuild_chat_context()`). Extends the base `Context` tuple; add
+            new `ChatContext` fields here so they propagate automatically.
     """
 
     _propagated_fields: tuple[str, ...] = (
+        *Context._propagated_fields,
         "_compactor",
         "_token_context_length_limit",
         "_model_id",
@@ -119,10 +121,15 @@ class ChatContext(Context):
     def _make_root(self, model_id: str | ModelIdentifier | None) -> ChatContext:
         """Return a new empty root `ChatContext`, propagating all `_propagated_fields` then binding `model_id`.
 
-        Uses `type(self)`, not `ChatContext`, so a subclass gets an instance of
-        itself back rather than being silently demoted to `ChatContext`.
+        Builds via `type(self).__new__(...)` (not `type(self)()`), so a subclass
+        gets an instance of itself back rather than being demoted to
+        `ChatContext`, and a subclass with required constructor arguments does not
+        raise `TypeError` here (the subclass `__init__` is deliberately not
+        re-run). Subclass configuration travels via `_propagated_fields`.
         """
-        new = type(self)()
+        cls = type(self)
+        new = cls.__new__(cls)
+        Context.__init__(new)
         for field in self._propagated_fields:
             setattr(new, field, getattr(self, field))
         # Override whatever _propagated_fields copied for _model_id: the caller
@@ -157,19 +164,24 @@ class ChatContext(Context):
             )
         return self._make_root(model_id)
 
-    def new_instance(self) -> ChatContext:
+    def new_instance(self) -> Self:
         """Return a new empty root `ChatContext`, preserving compactor, token budget, and `model_id`.
 
         Use this instead of `reset_to_new()` when you need to preserve the
         configuration of an existing instance. `reset_to_new()` is a classmethod
         that returns a bare `ChatContext()` with no configuration.
 
+        Narrows the base `Context.new_instance()` return (`Context`) to `Self`, so
+        a subclass gets an instance of its own type back. `_make_root` builds via
+        `type(self).__new__(...)`, so the runtime guarantee matches this static
+        type.
+
         Returns:
-            ChatContext: A fresh root context with the same compactor,
-            `token_context_length_limit`, and `model_id` as this instance, but
-            no history.
+            Self: A fresh root context of the same concrete subtype with the same
+            compactor, `token_context_length_limit`, and `model_id` as this
+            instance, but no history.
         """
-        return self._make_root(self._model_id)
+        return cast("Self", self._make_root(self._model_id))
 
     def add(self, c: Span) -> Self:
         """Append `c` and run the compactor; return the resulting context.
@@ -188,9 +200,9 @@ class ChatContext(Context):
         # itself back rather than being silently demoted to `ChatContext`.
         # Typed as `ChatContext` (not `Self`) because `compact()` below returns
         # `ChatContext`; the final `cast` re-narrows to `Self` for the return.
+        # `from_previous` already copies `_propagated_fields` from `self` onto the
+        # new node, so no explicit copy is needed here.
         new: ChatContext = type(self).from_previous(self, c)
-        for field in self._propagated_fields:
-            setattr(new, field, getattr(self, field))
         if self._compactor is not None:
             new = self._compactor.compact(new)
         # The compactor's rebuild preserves `type(self)`, so `new` is a `Self`
@@ -316,6 +328,18 @@ def _rebuild_chat_context(
         subclass whose invariants live only in `__init__` (rather than in
         `_propagated_fields`) will not have them re-established here; register
         such state in `_propagated_fields` so it propagates.
+
+    Migration:
+        `source` is now a **required** keyword argument (it was absent before the
+        subclass-preservation change). Custom compactors that call this helper —
+        including the documented `custom_compactor` recipe — must pass
+        `source=ctx` so the rebuilt nodes inherit `type(ctx)` and its
+        `_propagated_fields`. It is required rather than optional because a
+        missing `source` would silently discard subclass identity and state (the
+        exact regression this argument fixes). The `compactor` /
+        `token_context_length_limit` / `model_id` arguments still default to
+        `None`; a `None` now inherits the corresponding value from `source`
+        rather than clearing the field.
 
     Args:
         components: Components to materialise as the new context, in order.

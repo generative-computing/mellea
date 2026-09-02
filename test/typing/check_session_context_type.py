@@ -13,12 +13,13 @@ parameter. Verification is via `uv run mypy .`; the functions never execute.
 from typing import assert_type, cast
 
 from mellea import MelleaSession, start_session
-from mellea.core import Backend
+from mellea.core import Backend, Context
 from mellea.stdlib.context import ChatContext, SimpleContext
 
 backend = cast(Backend, None)
 chat_ctx = cast(ChatContext, None)
 simple_ctx = cast(SimpleContext, None)
+runtime_flag = cast(bool, None)
 
 
 # --- constructor infers the context type parameter ---
@@ -67,6 +68,38 @@ def check_start_session_explicit_ctx() -> None:
     session = start_session(ctx=chat_ctx)
     assert_type(session, MelleaSession[ChatContext])
     assert_type(session.ctx, ChatContext)
+
+
+# --- a runtime bool for allow_context_type_change widens to Context ---
+#
+# A `Literal[True]` opts into a deliberate type change, so the session can no
+# longer promise its input subtype and widens to `MelleaSession[Context]`. A
+# runtime `bool` variable (matching neither literal) must resolve to the same
+# widened overload rather than falling through to `Any`.
+
+
+def check_ctor_literal_true_widens() -> None:
+    session = MelleaSession(backend, chat_ctx, allow_context_type_change=True)
+    assert_type(session, MelleaSession[Context])
+    assert_type(session.ctx, Context)
+
+
+def check_ctor_runtime_bool_widens() -> None:
+    session = MelleaSession(backend, chat_ctx, allow_context_type_change=runtime_flag)
+    assert_type(session, MelleaSession[Context])
+    assert_type(session.ctx, Context)
+
+
+def check_ctor_literal_false_preserves_type() -> None:
+    session = MelleaSession(backend, chat_ctx, allow_context_type_change=False)
+    assert_type(session, MelleaSession[ChatContext])
+    assert_type(session.ctx, ChatContext)
+
+
+def check_start_session_runtime_bool_widens() -> None:
+    session = start_session(ctx=chat_ctx, allow_context_type_change=runtime_flag)
+    assert_type(session, MelleaSession[Context])
+    assert_type(session.ctx, Context)
 
 
 # --- clone preserves the context type parameter ---

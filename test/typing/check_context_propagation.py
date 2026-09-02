@@ -36,6 +36,7 @@ backend = cast(Backend, None)
 action: Instruction = cast(Instruction, None)
 chat_ctx = cast(ChatContext, None)
 simple_ctx = cast(SimpleContext, None)
+runtime_flag = cast(bool, None)
 
 
 # --- sync functions preserve the concrete context subtype ---
@@ -138,6 +139,48 @@ async def check_atransform_allow_change_widens() -> None:
         object(), "t", chat_ctx, backend, allow_context_type_change=True
     )
     assert_type(r, tuple[ModelOutputThunk[Any] | Any, Context])
+
+
+async def check_achat_allow_change_widens() -> None:
+    r = await achat("hi", chat_ctx, backend, allow_context_type_change=True)
+    assert_type(r, tuple[Message, Context])
+
+
+# --- a runtime `bool` (not a literal) resolves to the widened overload ---
+#
+# The reviewer's concern: passing a `bool` *variable* — the shape a caller hits
+# when threading `session.allow_context_type_change` through — matched neither
+# `Literal` overload, so the call fell through to `Any` and raised a public
+# call-overload error. The `bool`-typed fallback overload must resolve these to
+# the widened `-> Context` shape instead. `chat`/`achat` are checked because
+# `achat` previously carried no overloads at all.
+
+
+def check_chat_runtime_bool_widens() -> None:
+    r = chat("hi", chat_ctx, backend, allow_context_type_change=runtime_flag)
+    assert_type(r, tuple[Message, Context])
+
+
+async def check_achat_runtime_bool_widens() -> None:
+    r = await achat("hi", chat_ctx, backend, allow_context_type_change=runtime_flag)
+    assert_type(r, tuple[Message, Context])
+
+
+def check_act_runtime_bool_widens() -> None:
+    r = act(action, chat_ctx, backend, allow_context_type_change=runtime_flag)
+    assert_type(r, tuple[ComputedModelOutputThunk[str], Context])
+
+
+async def check_aact_runtime_bool_widens() -> None:
+    r = await aact(
+        action,
+        chat_ctx,
+        backend,
+        strategy=None,
+        await_result=True,
+        allow_context_type_change=runtime_flag,
+    )
+    assert_type(r, tuple[ComputedModelOutputThunk[str], Context])
 
 
 # --- a user-defined subclass keeps its own type through `.add()` ---

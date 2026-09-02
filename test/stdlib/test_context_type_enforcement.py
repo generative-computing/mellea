@@ -144,6 +144,42 @@ class _SimpleSubclass(SimpleContext):
     """A bare subclass of `SimpleContext`; see `_ChatSubclass` for the rationale."""
 
 
+class _RequiredArgChatSubclass(ChatContext):
+    """A `ChatContext` subclass whose constructor takes a required argument.
+
+    Registers `label` in `_propagated_fields` so it travels across `add()`,
+    `new_instance()`, and compaction. Its presence proves the built-via-`__new__`
+    construction path never re-runs `__init__` (which would raise `TypeError`
+    for the missing `label`), yet the subclass state still propagates.
+    """
+
+    _propagated_fields = (*ChatContext._propagated_fields, "label")
+
+    def __init__(self, label: str, **kwargs) -> None:
+        """Store the required `label` after delegating to `ChatContext.__init__`."""
+        super().__init__(**kwargs)
+        self.label = label
+
+
+class _StatefulSimpleSubclass(SimpleContext):
+    """A `SimpleContext` subclass that stores state set in its `__init__`.
+
+    `SimpleContext` has no config of its own, so this exercises the *base*
+    `Context._propagated_fields` mechanism: `SimpleContext.add` inherits
+    `Context.from_previous`, which builds via `__new__` and skips `__init__`.
+    Registering `tag` in `_propagated_fields` is what keeps it alive across
+    `add()`; without the base-level copy the next attribute access would raise
+    `AttributeError`.
+    """
+
+    _propagated_fields = (*SimpleContext._propagated_fields, "tag")
+
+    def __init__(self, tag: str = "default") -> None:
+        """Store `tag` after delegating to `SimpleContext.__init__`."""
+        super().__init__()
+        self.tag = tag
+
+
 # The stdlib contexts, a direct `Context` subclass, and bare subclasses of the
 # stdlib contexts. The subclasses are what catch the "named constructor instead
 # of `type(self)`" bug: they inherit `add` verbatim, so they only stay their own
@@ -202,6 +238,80 @@ def test_chat_subclass_survives_compaction():
         ctx.add(_action()).add(Message(role="assistant", content="one")).add(_action())
     )
     assert type(ctx) is _ChatSubclass
+
+
+def test_chat_subclass_propagated_field_survives_compaction():
+    """A subclass-owned `_propagated_fields` value survives the compactor rebuild.
+
+    `_rebuild_chat_context` must copy *every* attribute named in the concrete
+    class's `_propagated_fields` — not just the three built-in `ChatContext`
+    fields — onto each rebuilt node. If it copied only the built-ins, the extra
+    field would vanish here and the next `add` would raise `AttributeError`.
+    """
+    ctx = _RequiredArgChatSubclass("keep-me", window_size=1)
+    ctx = (
+        ctx.add(_action()).add(Message(role="assistant", content="one")).add(_action())
+    )
+    assert type(ctx) is _RequiredArgChatSubclass
+    # The compactor fired on the third add; the subclass field must still be here.
+    assert ctx.label == "keep-me"
+
+
+def test_required_arg_subclass_add_preserves_state():
+    """`add()` on a required-arg subclass keeps its type and state without re-running __init__.
+
+    The construction path builds via `type(self).__new__(...)`, so a subclass
+    whose `__init__` demands a required argument does not raise `TypeError` on
+    `add()`, and its registered `_propagated_fields` value carries forward.
+    """
+    ctx = _RequiredArgChatSubclass("hello")
+    added = ctx.add(_action())
+    assert type(added) is _RequiredArgChatSubclass
+    assert added.label == "hello"
+
+
+def test_required_arg_subclass_new_instance_preserves_state():
+    """`new_instance()` on a required-arg subclass keeps its type and state.
+
+    Like `add()`, `new_instance()` builds via `__new__`, so the missing required
+    constructor argument never trips `TypeError`, and the subclass field is
+    carried onto the fresh root.
+    """
+    ctx = _RequiredArgChatSubclass("hello").add(_action())
+    fresh = ctx.new_instance()
+    assert type(fresh) is _RequiredArgChatSubclass
+    assert fresh.is_root_node
+    assert fresh.label == "hello"
+
+
+def test_simple_subclass_propagated_field_survives_add():
+    """A `SimpleContext` subclass field survives `add()` via the base mechanism.
+
+    `SimpleContext.add` inherits `Context.from_previous`, which builds via
+    `__new__` and skips `__init__`. The base `Context._propagated_fields` copy
+    is the only thing keeping `tag` alive here; without it the assertion below
+    would raise `AttributeError`. This is the regression the base-level lift
+    fixes for non-`ChatContext` extension points.
+    """
+    ctx = _StatefulSimpleSubclass("keep-me")
+    added = ctx.add(_action())
+    assert type(added) is _StatefulSimpleSubclass
+    assert added.tag == "keep-me"
+
+
+def test_simple_subclass_propagated_field_survives_repeated_add():
+    """Chained `add()` on a stateful `SimpleContext` subclass keeps its field.
+
+    `SimpleContext` retains no history, so each `add` builds a fresh node from
+    the previous one; the propagated `tag` must ride along every hop.
+    """
+    ctx = (
+        _StatefulSimpleSubclass("keep-me")
+        .add(_action())
+        .add(Message(role="assistant", content="hi"))
+    )
+    assert type(ctx) is _StatefulSimpleSubclass
+    assert ctx.tag == "keep-me"
 
 
 async def test_chat_subclass_passes_functional_guard():
