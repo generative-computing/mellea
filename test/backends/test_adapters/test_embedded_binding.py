@@ -164,16 +164,7 @@ async def test_apply_activation_does_not_fire_invocation_complete():
 async def test_fire_embedded_invocation_complete_swallows_hook_dispatch_failure(
     outcome,
 ):
-    """A failing invocation-complete hook dispatch must not raise out of the helper.
-
-    Regression guard for `_fire_embedded_invocation_complete` (issue #1560):
-    its callers in `openai.py`/`huggingface.py` `await` this from inside their
-    own `except`/`else` branches. If `invoke_hook` raising propagated out of
-    this helper unguarded, it would replace the real outcome being reported
-    (or, from an `except` branch, mask the body's real exception) with a
-    hook-dispatch failure — mirrors `test_adapter_scope_swallows_invocation_hook_failure_on_clean_run`
-    for the `local_file` binding's sibling helper.
-    """
+    """A failing hook dispatch must not mask the real outcome/exception it's reporting."""
     pytest.importorskip("cpex", reason="cpex not installed — install mellea[hooks]")
 
     with (

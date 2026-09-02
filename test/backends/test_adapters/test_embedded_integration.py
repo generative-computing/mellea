@@ -127,9 +127,6 @@ def _invocation_complete_payloads(mock_invoke: AsyncMock) -> list:
 
 
 async def test_invocation_complete_fires_success_for_embedded_call():
-    # Issue #1560: apply_activation cannot know the real outcome, so the
-    # backend must fire adapter_function_invocation_complete once generation
-    # and parsing resolve, inside granite_formatters_processing.
     pytest.importorskip("cpex", reason="cpex not installed — install mellea[hooks]")
     backend = _backend_with_adapter("alora")
     mock_create = AsyncMock(return_value=_chat_completion())
@@ -164,9 +161,7 @@ async def test_invocation_complete_fires_success_for_embedded_call():
 
 
 async def test_invocation_complete_fires_schema_error_on_malformed_json():
-    # Regression test for the exact bug #1142/PR #1559 review caught: a
-    # malformed/non-JSON response must record outcome="schema_error", not
-    # "success" (the hardcoded value that was reverted).
+    # Pins #1142/#1559: a non-JSON response must record schema_error, not success.
     pytest.importorskip("cpex", reason="cpex not installed — install mellea[hooks]")
     backend = _backend_with_adapter("alora")
     mock_create = AsyncMock(return_value=_chat_completion(content="not valid json"))
@@ -234,12 +229,9 @@ async def test_invocation_complete_fires_error_on_unrelated_exception():
 
 
 async def test_invocation_complete_fires_error_on_generation_failure():
-    # Regression test for the "generation itself fails" gap: an exception
-    # raised by the OpenAI SDK call (network error, timeout, provider error)
-    # never reaches granite_formatters_processing — ModelOutputThunk.avalue()
-    # raises it directly off the queue — so it must still fire
-    # adapter_function_invocation_complete(outcome="error"), via
-    # _await_embedded_generation, not the closure.
+    # A failure in the SDK call itself never reaches granite_formatters_processing —
+    # avalue() raises it straight off the queue — so _await_embedded_generation
+    # must fire outcome="error" instead.
     pytest.importorskip("cpex", reason="cpex not installed — install mellea[hooks]")
     backend = _backend_with_adapter("alora")
     mock_create = AsyncMock(side_effect=RuntimeError("simulated provider error"))
@@ -272,11 +264,8 @@ async def test_invocation_complete_fires_error_on_generation_failure():
 
 
 async def test_invocation_complete_fires_error_on_empty_choices():
-    # Regression guard: self.processing(mot, chunk) ran outside the
-    # classification try, so a response with an empty choices list (content
-    # filter rejection, some proxy errors) raised IndexError from
-    # OpenAIBackend.processing() before any fire site — the call silently
-    # dropped out of both invocations and parse_failures.
+    # An empty-choices response (content filter, proxy error) raises IndexError
+    # from self.processing() — must still fire outcome="error", not skip firing.
     pytest.importorskip("cpex", reason="cpex not installed — install mellea[hooks]")
     backend = _backend_with_adapter("alora")
     empty_choices_response = _chat_completion().model_copy(update={"choices": []})

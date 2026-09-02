@@ -846,23 +846,19 @@ async def _fire_embedded_invocation_complete(
 ) -> None:
     """Fires `adapter_function_invocation_complete` for an Embedded adapter call.
 
-    `EmbeddedBinding.apply_activation` cannot know the real outcome at
-    request-mutation time (see its docstring), so this is called instead from
-    two mutually-exclusive points: `_await_embedded_generation` below, on a
-    generation failure (`outcome="error"`), or the
-    `granite_formatters_processing` closure in `openai.py`/`huggingface.py`,
-    once a response exists (`outcome="schema_error"` on unparsable JSON,
-    `"error"` otherwise, `"success"` if parsing succeeds).
+    Called from one of two mutually-exclusive points, since
+    `EmbeddedBinding.apply_activation` can't know the outcome yet at
+    request-mutation time (see its docstring): `_await_embedded_generation`
+    below, on a generation failure, or `granite_formatters_processing` in
+    `openai.py`/`huggingface.py`, once a response exists.
 
-    Contract-level schema mismatches (a declared `IOContract` rejecting output
-    that *did* parse as JSON) aren't classified here — that check runs later,
-    in `call_intrinsic`, after this already fired `"success"`. Tracked as a
-    follow-up (issue #1560).
+    Doesn't classify contract-level `IOContract` mismatches on already-valid
+    JSON — that check runs later, in `call_intrinsic`, after this already
+    fired `"success"` (tracked in #1611).
 
-    Kept separate from `adapter.py`'s `_fire_invocation_complete` (rather than
-    sharing the payload-construction code) because that one also serves sync
-    callers via `_run_async_in_thread`; this one always runs inside an
-    already-running coroutine and can just `await invoke_hook` directly.
+    Kept separate from `adapter.py`'s `_fire_invocation_complete`: that one
+    also serves sync callers via `_run_async_in_thread`, while this always
+    runs inside an already-running coroutine and can just `await invoke_hook`.
 
     Args:
         identity: Identifies the adapter that was invoked.

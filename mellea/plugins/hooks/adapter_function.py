@@ -24,15 +24,15 @@ class AdapterFunctionInvocationCompletePayload(MelleaBasePayload):
 
     Note:
         The span of work `outcome` covers differs by `binding_type`, so
-        aggregating this metric across bindings mixes events with different
-        scope. For `"local_file"`, `AdapterMixin.adapter_scope` closes once
-        generation returns — parsing happens later, outside its `finally` —
-        so its outcome covers activate→generate→deactivate only. For
-        `"embedded"`, the outcome covers generate+JSON-parse (see
-        `_fire_embedded_invocation_complete` in
-        `mellea.backends.adapters._core`), but not the later contract-level
-        `IOContract` validation in `call_intrinsic` — a contract-mismatch on
-        already-valid JSON still records `"success"` for either binding.
+        aggregating across bindings mixes events with different scope.
+        `"local_file"` covers activate→generate→deactivate only
+        (`AdapterMixin.adapter_scope` closes before parsing runs);
+        `"embedded"` covers generate+JSON-parse
+        (`_fire_embedded_invocation_complete` in
+        `mellea.backends.adapters._core`). Neither covers the later
+        contract-level `IOContract` validation in `call_intrinsic` — a
+        contract-mismatch on already-valid JSON records `"success"` for
+        either binding (tracked in #1611).
     """
 
     name: str

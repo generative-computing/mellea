@@ -539,15 +539,10 @@ async def _run_embedded_intrinsic_and_collect_invocation_payloads(
 ) -> tuple[list, Exception | None]:
     """Drives `_generate_from_intrinsic` for an embedded adapter to resolution.
 
-    Returns `(payloads, raised)`: the `AdapterFunctionInvocationCompletePayload`s
-    fired via `mellea.backends.adapters._core.invoke_hook` while
-    `output._gen.process` (`granite_formatters_processing`) resolves — the
-    closure lives in `_core.py`, not `adapter.py`, so `capture_adapter_hooks()`
-    does not intercept it (see `test_embedded_binding.py`'s equivalent
-    patching) — and the exception `process()` raised, or `None` on success.
-    Callers must assert on `raised`'s type/message, not just the payloads:
-    otherwise a `process()` that fired the hook but swallowed its own raise
-    (turning a failed intrinsic into a silently empty value) would still pass.
+    Returns `(payloads, raised)`: the invocation-complete payloads fired via
+    `_core.invoke_hook` while `output._gen.process` resolves, and the
+    exception `process()` raised (or `None` on success). Callers must assert
+    on `raised`, not just the payloads, so a swallowed raise can't pass.
     """
     backend = _make_intrinsic_backend_stub(stub_backend)
     backend.processing = AsyncMock(return_value=None)
@@ -614,9 +609,6 @@ async def _run_embedded_intrinsic_and_collect_invocation_payloads(
 
 @pytest.mark.asyncio
 async def test_embedded_intrinsic_invocation_complete_fires_success(stub_backend):
-    # Issue #1560: LocalHFBackend's embedded path must fire
-    # adapter_function_invocation_complete once generation+parsing resolve,
-    # the same as OpenAIBackend's.
     pytest.importorskip("cpex", reason="cpex not installed — install mellea[hooks]")
 
     class _PassthroughResultProcessor:
@@ -641,9 +633,7 @@ async def test_embedded_intrinsic_invocation_complete_fires_success(stub_backend
 
 @pytest.mark.asyncio
 async def test_embedded_intrinsic_invocation_complete_fires_schema_error(stub_backend):
-    # Regression test for the exact bug #1142/PR #1559 review caught: a
-    # malformed/non-JSON response must record outcome="schema_error", not
-    # "success" (the hardcoded value that was reverted).
+    # Pins #1142/#1559: a non-JSON response must record schema_error, not success.
     pytest.importorskip("cpex", reason="cpex not installed — install mellea[hooks]")
 
     class _JSONDecodeErrorResultProcessor:
@@ -691,12 +681,9 @@ async def test_embedded_intrinsic_invocation_complete_fires_error(stub_backend):
 async def test_embedded_intrinsic_invocation_complete_fires_error_on_generation_failure(
     stub_backend,
 ):
-    # Regression test for the "generation itself fails" gap: an exception
-    # raised by the backend's own generation call (network error, timeout,
-    # model error) never reaches `granite_formatters_processing` — it's
-    # raised directly by `ModelOutputThunk.avalue()` from the queue — so it
-    # must still fire adapter_function_invocation_complete(outcome="error"),
-    # via `_await_embedded_generation`, not the closure.
+    # A failure in the backend's own generation call never reaches
+    # granite_formatters_processing — avalue() raises it straight off the
+    # queue — so _await_embedded_generation must fire outcome="error" instead.
     pytest.importorskip("cpex", reason="cpex not installed — install mellea[hooks]")
     backend = _make_intrinsic_backend_stub(stub_backend)
     backend.processing = AsyncMock(return_value=None)
@@ -757,13 +744,9 @@ async def test_embedded_intrinsic_invocation_complete_fires_error_on_generation_
 async def test_legacy_peft_intrinsic_never_fires_embedded_invocation_complete(
     stub_backend,
 ):
-    # Pins AC5 (issue #1560): granite_formatters_processing is shared between
-    # the embedded and legacy PEFT paths, gated by `embedded_identity`. This
-    # drives the PEFT path (an `IntrinsicAdapter`, not `EmbeddedIntrinsicAdapter`)
-    # and asserts zero `_core`-level invocation-complete payloads — if a future
-    # edit dropped the isinstance guard binding `embedded_identity`, this would
-    # start double-firing (once via `_core` here, once via `adapter_scope` in
-    # `adapter.py`) or firing for a binding that isn't embedded at all.
+    # Drives the legacy PEFT path (embedded_identity=None) and pins that it
+    # never fires the embedded helper — guards the isinstance check that
+    # gates embedded_identity from silently double-firing.
     pytest.importorskip("cpex", reason="cpex not installed — install mellea[hooks]")
     backend = _make_intrinsic_backend_stub(stub_backend)
     backend.processing = AsyncMock(return_value=None)
