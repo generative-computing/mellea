@@ -848,11 +848,30 @@ async def _fire_embedded_invocation_complete(
 
     `EmbeddedBinding.apply_activation` cannot know the real outcome at
     request-mutation time (see its docstring), so this is called instead by
-    the backend once generation and parsing actually resolve — from inside
-    the `granite_formatters_processing` closure in `openai.py`/`huggingface.py`,
-    the single synchronous point where a malformed/unparsable response
-    (`outcome="schema_error"`) is distinguishable from any other failure
-    (`outcome="error"`) or from success.
+    the backend at one of two points: `_await_embedded_generation` below, if
+    the generation call itself fails (network error, timeout, model error —
+    `outcome="error"`), or the `granite_formatters_processing` closure in
+    `openai.py`/`huggingface.py`, once a response exists and
+    `json.JSONDecodeError` on unparsable output (`outcome="schema_error"`) is
+    distinguishable from any other parse-time failure (`outcome="error"`) or
+    success. The two call sites are mutually exclusive: a generation failure
+    means no response ever reaches the closure.
+
+    Contract-level schema mismatches (an adapter's declared `IOContract`
+    rejecting output that *did* parse as JSON) are not classified here — that
+    validation runs later, in `call_intrinsic`, after this function has
+    already fired `outcome="success"`. `mellea.adapter_function.parse_failures`
+    therefore only counts malformed-JSON output for `binding_type="embedded"`,
+    not contract-level drift; tracked as a follow-up (issue #1560).
+
+    Not merged with `adapter.py`'s `_fire_invocation_complete`, despite the
+    duplicated payload construction: `adapter.py` imports from this module
+    (for `EmbeddedBinding`, `Identity`, etc.), so a shared helper would have
+    to live here — but this one is always called from an already-running
+    coroutine and `await`s `invoke_hook` directly, while that one also
+    serves sync callers via `_run_async_in_thread`. Keeping them separate
+    avoids threading that sync-bridging concern through this simpler,
+    async-only call shape.
 
     Args:
         identity: Identifies the adapter that was invoked.
@@ -884,6 +903,36 @@ async def _fire_embedded_invocation_complete(
             f"outcome ({outcome!r}).",
             exc_info=True,
         )
+
+
+async def _await_embedded_generation(coro: Any, identity: Identity) -> Any:
+    """Awaits `coro`, firing `outcome="error"` if generation itself fails.
+
+    `granite_formatters_processing` only runs once a response object exists,
+    so a failure in the generation call itself — a network error, timeout, or
+    provider error — never reaches it: `ModelOutputThunk.avalue()` raises a
+    queue-carried exception before `_gen.process` is ever invoked. Wrap the
+    coroutine handed to `send_to_queue` with this so that case still fires
+    `adapter_function_invocation_complete`. The two fire sites are mutually
+    exclusive: if `coro` succeeds, this returns normally and
+    `granite_formatters_processing` fires later; if it raises, that closure
+    never runs.
+
+    Args:
+        coro: The backend's generation call (e.g. the OpenAI SDK coroutine, or
+            an `asyncio.to_thread` call wrapping local generation).
+        identity: Identifies the adapter being invoked.
+
+    Returns:
+        `coro`'s result, unchanged.
+    """
+    try:
+        return await coro
+    except BaseException as e:
+        await _fire_embedded_invocation_complete(
+            identity=identity, outcome="error", error=e
+        )
+        raise
 
 
 class ServerMediatedBinding(WeightsBinding):

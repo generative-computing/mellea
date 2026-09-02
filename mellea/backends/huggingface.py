@@ -91,15 +91,16 @@ from .adapters import (
     AdapterMixin,
     EmbeddedActivationRequest,
     EmbeddedBinding,
+    Identity,
     IntrinsicAdapter,
     LocalHFAdapter,
 )
 from .adapters._core import (
     Adapter as _AdapterCore,
-    Identity,
     IOContract,
     LocalFileBinding,
     WeightsBinding,
+    _await_embedded_generation,
     _fire_embedded_invocation_complete,
 )
 from .adapters.adapter import AdapterInput, EmbeddedIntrinsicAdapter
@@ -1023,14 +1024,17 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 other_input,
             )
         else:
-            chat_response = asyncio.to_thread(
-                self._generate_embedded_with_generation_lock,
-                granite_formatters.base.util.generate_with_transformers,  # type: ignore
-                # Passed as args/kwargs to generate.
-                self._tokenizer,
-                model_arg,
-                generate_input,
-                other_input,
+            chat_response = _await_embedded_generation(
+                asyncio.to_thread(
+                    self._generate_embedded_with_generation_lock,
+                    granite_formatters.base.util.generate_with_transformers,  # type: ignore
+                    # Passed as args/kwargs to generate.
+                    self._tokenizer,
+                    model_arg,
+                    generate_input,
+                    other_input,
+                ),
+                adapter.identity,
             )
 
         output = ModelOutputThunk(None)
@@ -1049,14 +1053,44 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             embedded_identity: Identity | None,
         ):
             # embedded_identity is set only for EmbeddedIntrinsicAdapter calls.
-            # This is the single synchronous point where the Embedded call's
-            # real outcome becomes known, so it also fires
-            # adapter_function_invocation_complete for that case (apply_activation
-            # could not have known the outcome earlier). The legacy PEFT path
+            # This is the point where a malformed response is distinguishable
+            # from any other failure or from success, so it also fires
+            # adapter_function_invocation_complete for that case
+            # (apply_activation could not have known the outcome earlier; a
+            # failure in generation itself, before a response exists, is
+            # instead reported by _await_embedded_generation around the
+            # asyncio.to_thread call above). The legacy PEFT path
             # (embedded_identity=None) already gets this signal from
             # adapter_scope, so it must not be fired again here.
+            # Kept in one try so any failure here — including from the tail
+            # logits-stash/processing work below, not just the transform
+            # itself — fires outcome="error" rather than reporting success
+            # and then raising. That's the exact "success for a call that
+            # goes on to fail" shape #1559 reverted.
             try:
                 res = result_processor.transform(chunk, rewritten)  # type: ignore
+
+                # If logits were requested, stash the intercepted raw output
+                # so post_processing/_surface_logits can populate
+                # generation.logits/raw_logits.
+                if want_scores:
+                    if raw_hf_output_cell[0] is not None:
+                        mot.raw.response = raw_hf_output_cell[0]
+                        raw_hf_output_cell[0] = None
+                    else:
+                        warn_key = "intrinsic_no_hf_output"
+                        if warn_key not in self._warned_about:
+                            self._warned_about.add(warn_key)
+                            MelleaLogger.get_logger().warning(
+                                "ModelOption.LOGITS/RAW_LOGITS requested on intrinsic path but "
+                                "generate_with_transformers did not return a GenerateDecoderOnlyOutput; "
+                                "generation.logits and generation.raw_logits will be None."
+                            )
+
+                # processing expects a str or a GenerateDecoderOnlyOutput. Extract the str.
+                result = await self.processing(
+                    mot, res.choices[0].message.content, input_ids=input_ids
+                )
             except json.JSONDecodeError as e:
                 if embedded_identity is not None:
                     await _fire_embedded_invocation_complete(
@@ -1074,27 +1108,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                     await _fire_embedded_invocation_complete(
                         identity=embedded_identity, outcome="success", error=None
                     )
-
-            # If logits were requested, stash the intercepted raw output so that
-            # post_processing/_surface_logits can populate generation.logits/raw_logits.
-            if want_scores:
-                if raw_hf_output_cell[0] is not None:
-                    mot.raw.response = raw_hf_output_cell[0]
-                    raw_hf_output_cell[0] = None
-                else:
-                    warn_key = "intrinsic_no_hf_output"
-                    if warn_key not in self._warned_about:
-                        self._warned_about.add(warn_key)
-                        MelleaLogger.get_logger().warning(
-                            "ModelOption.LOGITS/RAW_LOGITS requested on intrinsic path but "
-                            "generate_with_transformers did not return a GenerateDecoderOnlyOutput; "
-                            "generation.logits and generation.raw_logits will be None."
-                        )
-
-            # processing expects a str or a GenerateDecoderOnlyOutput. Extract the str.
-            return await self.processing(
-                mot, res.choices[0].message.content, input_ids=input_ids
-            )
+                return result
 
         output._gen.process = functools.partial(
             granite_formatters_processing,

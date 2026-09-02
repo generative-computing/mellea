@@ -21,6 +21,18 @@ class AdapterFunctionInvocationCompletePayload(MelleaBasePayload):
         adapter_type: Adapter mechanism (e.g. `"lora"`, `"alora"`).
         outcome: `"success"`, `"schema_error"`, or `"error"`.
         error: The exception raised during invocation, or `None` on success.
+
+    Note:
+        The span of work `outcome` covers differs by `binding_type`, so
+        aggregating this metric across bindings mixes events with different
+        scope. For `"local_file"`, `AdapterMixin.adapter_scope` closes once
+        generation returns — parsing happens later, outside its `finally` —
+        so its outcome covers activate→generate→deactivate only. For
+        `"embedded"`, the outcome covers generate+JSON-parse (see
+        `_fire_embedded_invocation_complete` in
+        `mellea.backends.adapters._core`), but not the later contract-level
+        `IOContract` validation in `call_intrinsic` — a contract-mismatch on
+        already-valid JSON still records `"success"` for either binding.
     """
 
     name: str

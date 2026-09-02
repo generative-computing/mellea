@@ -53,8 +53,11 @@ from ..stdlib.components import Intrinsic, Message
 from ..stdlib.requirements import LLMaJRequirement
 from ..telemetry.context import generate_request_id, with_context
 from ._options import resolve_model_options
-from .adapters import EmbeddedActivationRequest, EmbeddedBinding
-from .adapters._core import Identity, _fire_embedded_invocation_complete
+from .adapters import EmbeddedActivationRequest, EmbeddedBinding, Identity
+from .adapters._core import (
+    _await_embedded_generation,
+    _fire_embedded_invocation_complete,
+)
 from .adapters.adapter import AdapterInput, AdapterMixin, EmbeddedIntrinsicAdapter
 from .backend import FormatterBackend
 from .model_options import ModelOption
@@ -888,12 +891,15 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 d["role"] = m.role
             messages_dicts.append(d)
 
-        chat_response = self._async_client.chat.completions.create(
-            model=self._model_id,
-            messages=messages_dicts,  # type: ignore
-            tools=formatted_tools if use_tools else None,  # type: ignore
-            extra_body=extra_body,
-            **api_params,
+        chat_response = _await_embedded_generation(
+            self._async_client.chat.completions.create(
+                model=self._model_id,
+                messages=messages_dicts,  # type: ignore
+                tools=formatted_tools if use_tools else None,  # type: ignore
+                extra_body=extra_body,
+                **api_params,
+            ),
+            adapter.identity,
         )
 
         # --- wire up ModelOutputThunk with intrinsic post-processing ------
@@ -916,13 +922,23 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             # Delegate standard metadata storage to the shared processing method.
             await self.processing(mot, chunk)
 
-            # Apply intrinsic-specific result transformation on top. This is the
-            # single synchronous point where the Embedded call's real outcome
-            # becomes known, so it also fires adapter_function_invocation_complete
-            # (apply_activation could not have known the outcome earlier).
+            # Apply intrinsic-specific result transformation on top. This is
+            # the point where a malformed response is distinguishable from
+            # any other failure or from success, so it also fires
+            # adapter_function_invocation_complete (apply_activation could
+            # not have known the outcome earlier; a failure in generation
+            # itself, before a response exists, is instead reported by
+            # _await_embedded_generation around the API call above).
             response_dict = chunk.model_dump()
             try:
                 res = result_processor.transform(response_dict, rewritten)
+                # Overwrite the value accumulated by processing() with the
+                # post-processed intrinsic output. Kept inside this try so a
+                # malformed `res` (e.g. an empty choices list) still fires
+                # outcome="error" rather than reporting success and then
+                # raising — the exact "success for a call that goes on to
+                # fail" shape #1559 reverted.
+                mot._underlying_value = res.choices[0].message.content
             except _json.JSONDecodeError as e:
                 await _fire_embedded_invocation_complete(
                     identity=identity, outcome="schema_error", error=e
@@ -940,10 +956,6 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 await _fire_embedded_invocation_complete(
                     identity=identity, outcome="success", error=None
                 )
-
-            # Overwrite the value accumulated by processing() with the
-            # post-processed intrinsic output.
-            mot._underlying_value = res.choices[0].message.content
 
         # Processing functions only pass the ModelOutputThunk (and current chunk
         # of response). Bind the other vars necessary for each processing step.

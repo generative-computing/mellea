@@ -17,6 +17,7 @@ from mellea.backends.adapters import (
     EmbeddedBinding,
     Identity,
 )
+from mellea.backends.adapters._core import _fire_embedded_invocation_complete
 from mellea.plugins.types import HookType
 
 
@@ -157,3 +158,34 @@ async def test_apply_activation_does_not_fire_invocation_complete():
 
     fired_hook_types = [call.args[0] for call in mock_invoke.call_args_list]
     assert HookType.ADAPTER_FUNCTION_INVOCATION_COMPLETE not in fired_hook_types
+
+
+@pytest.mark.parametrize("outcome", ["success", "schema_error", "error"])
+async def test_fire_embedded_invocation_complete_swallows_hook_dispatch_failure(
+    outcome,
+):
+    """A failing invocation-complete hook dispatch must not raise out of the helper.
+
+    Regression guard for `_fire_embedded_invocation_complete` (issue #1560):
+    its callers in `openai.py`/`huggingface.py` `await` this from inside their
+    own `except`/`else` branches. If `invoke_hook` raising propagated out of
+    this helper unguarded, it would replace the real outcome being reported
+    (or, from an `except` branch, mask the body's real exception) with a
+    hook-dispatch failure — mirrors `test_adapter_scope_swallows_invocation_hook_failure_on_clean_run`
+    for the `local_file` binding's sibling helper.
+    """
+    pytest.importorskip("cpex", reason="cpex not installed — install mellea[hooks]")
+
+    with (
+        patch("mellea.backends.adapters._core.has_plugins", return_value=True),
+        patch(
+            "mellea.backends.adapters._core.invoke_hook",
+            side_effect=RuntimeError("invocation hook dispatch blew up"),
+        ),
+    ):
+        # Must not raise despite the hook dispatch failing.
+        await _fire_embedded_invocation_complete(
+            identity=_identity("answerability"),
+            outcome=outcome,
+            error=ValueError("boom") if outcome != "success" else None,
+        )

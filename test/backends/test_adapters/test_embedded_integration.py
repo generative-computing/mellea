@@ -233,6 +233,44 @@ async def test_invocation_complete_fires_error_on_unrelated_exception():
     assert payloads[0].error is not None
 
 
+async def test_invocation_complete_fires_error_on_generation_failure():
+    # Regression test for the "generation itself fails" gap: an exception
+    # raised by the OpenAI SDK call (network error, timeout, provider error)
+    # never reaches granite_formatters_processing — ModelOutputThunk.avalue()
+    # raises it directly off the queue — so it must still fire
+    # adapter_function_invocation_complete(outcome="error"), via
+    # _await_embedded_generation, not the closure.
+    pytest.importorskip("cpex", reason="cpex not installed — install mellea[hooks]")
+    backend = _backend_with_adapter("alora")
+    mock_create = AsyncMock(side_effect=RuntimeError("simulated provider error"))
+    mock_client = MagicMock()
+    mock_client.chat.completions.create = mock_create
+
+    with (
+        patch.object(
+            OpenAIBackend,
+            "_async_client",
+            new_callable=PropertyMock,
+            return_value=mock_client,
+        ),
+        patch("mellea.backends.adapters._core.has_plugins", return_value=True),
+        patch(
+            "mellea.backends.adapters._core.invoke_hook", new_callable=AsyncMock
+        ) as mock_invoke,
+    ):
+        ctx = ChatContext().add(Message("user", "What is the square root of 4?"))
+        mot, _ = await mfuncs.aact(
+            Intrinsic("answerability"), ctx, backend, strategy=None
+        )
+        with pytest.raises(RuntimeError, match="simulated provider error"):
+            await mot.avalue()
+
+    payloads = _invocation_complete_payloads(mock_invoke)
+    assert len(payloads) == 1
+    assert payloads[0].outcome == "error"
+    assert isinstance(payloads[0].error, RuntimeError)
+
+
 async def test_reassigned_weights_fail_loudly():
     """Reassigning `.weights` off the EmbeddedBinding must fail at generation.
 
