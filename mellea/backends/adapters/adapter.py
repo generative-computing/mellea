@@ -595,6 +595,14 @@ class AdapterMixin(Backend, abc.ABC):
         `LocalHFBackend`'s underlying PEFT model) override this to return
         their own lock, so callers like `LocalFileBinding.activate()` get
         the same exclusivity `_generate_with_adapter_lock` relies on.
+
+        Callers, including `resolve_adapter()`, may re-enter this lock from a
+        code path that already holds it on the same thread (e.g. an
+        `adapter_scope()` that calls back into a verb guarded by this lock).
+        An override must therefore return a reentrant lock (a
+        `threading.RLock`, as `LocalHFBackend` does) — a plain
+        `threading.Lock` here is a real deadlock hazard, not just a missed
+        optimisation.
         """
         return contextlib.nullcontext()
 
@@ -614,6 +622,20 @@ class AdapterMixin(Backend, abc.ABC):
         Raises:
             ValueError: If the backend has no model ID.
             KeyError: If the adapter cannot be found after registration.
+
+        Note:
+            On `LocalHFBackend`, this holds `_generation_lock` for the whole
+            registration critical section below, including any Hugging Face
+            Hub download it triggers (`obtain_io_yaml`/`get_local_hf_path`
+            for the LORA path; `EmbeddedIntrinsicAdapter.from_source` for the
+            embedded path). A cold first resolve therefore serializes with —
+            and can stall behind, or block — every other caller of that same
+            lock (activation, generation, other resolves), including a
+            resolve made from the asyncio event-loop thread inside a
+            gathered set of coroutines. This mirrors the issue's own
+            suggested design (reuse the existing lock rather than add a
+            second one); a warm cache after the first resolve avoids the
+            download and keeps the critical section fast.
         """
         found = self._find_adapter(name)
         if found is not None:
@@ -630,15 +652,27 @@ class AdapterMixin(Backend, abc.ABC):
         # race under concurrent first-time resolves for the same name: add_adapter's
         # own duplicate-registration check is an unguarded read-then-write on
         # _added_adapters, and catch_warnings() mutates process-global filter state
-        # that is not async/thread-safe. `_adapter_activation_lock()` is the same lock
-        # every other verb on the generation path already holds while touching
-        # _added_adapters (load_peft_adapter, LocalFileBinding.activate/deactivate;
-        # see #1465) — reentrant on LocalHFBackend, so this composes safely with
-        # callers that already hold it, and a no-op nullcontext() for backends (e.g.
-        # OpenAIBackend) that don't need the serialization.
+        # that is not async/thread-safe. `_adapter_activation_lock()` serializes both
+        # races for backends that override it to return a real lock (LocalHFBackend's
+        # reentrant `_generation_lock`, shared with load_peft_adapter and
+        # LocalFileBinding.activate/deactivate; see #1465) — but not universally: it
+        # is a no-op nullcontext() by default (e.g. OpenAIBackend never serializes),
+        # and LocalFileBinding.prepare() and register_embedded_adapter_model() still
+        # call add_adapter() under their own, narrower locks rather than this one.
         # Suppress DeprecationWarning: the shim constructors warn user-facing code,
         # not internal registration paths.
         with self._adapter_activation_lock(), warnings.catch_warnings():
+            # Re-check now that the lock (if any) is held: a concurrent resolve for
+            # this same name may have registered it while we were waiting. Without
+            # this, the loser redundantly re-fetches (LORA: re-downloads io.yaml and
+            # weights; embedded: re-reads the checkpoint) and then hits the backend's
+            # own duplicate-registration guard, which logs a "client code attempted
+            # to add ... not idempotent" warning that misleadingly blames the caller
+            # for what is actually two legitimate concurrent resolve_adapter() calls.
+            found = self._find_adapter(name)
+            if found is not None:
+                return found
+
             warnings.simplefilter("ignore", DeprecationWarning)
             if getattr(self, "_uses_embedded_adapters", False):
                 repo_id = (

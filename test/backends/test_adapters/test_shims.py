@@ -767,7 +767,7 @@ def test_resolve_adapter_holds_activation_lock_once_across_embedded_loop():
     mock_backend = MagicMock(spec=AdapterMixin)
     mock_backend.base_model_name = "ibm-granite/granite-4.1-3b"
     mock_backend._uses_embedded_adapters = True
-    mock_backend._adapter_source = "ibm-research/granite-switch-prerelease"
+    mock_backend._adapter_source = "ibm-granite/granite-switch-micro"
     mock_backend._added_adapters = {}
 
     tracking_lock = _TrackingLock()
@@ -791,13 +791,15 @@ def test_resolve_adapter_holds_activation_lock_once_across_embedded_loop():
         AdapterMixin.resolve_adapter(mock_backend, "answerability")
 
     assert len(depths_seen) == 2, "both embedded adapters must have been registered"
+    # enter_count/exit_count == 1 is the whole signal here: max_depth is set once,
+    # in __enter__, so every depth recorded in depths_seen is 1 whenever
+    # enter_count == 1 holds — a per-adapter re-lock would only show up as
+    # enter_count > 1, never as a depth > 1 (depth only changes on the next
+    # __enter__, which only happens if the lock actually got re-acquired).
     assert tracking_lock.enter_count == 1, (
         "the lock must be acquired once for the whole loop, not per adapter"
     )
     assert tracking_lock.exit_count == 1
-    assert all(depth == 1 for depth in depths_seen), (
-        "every add_adapter call must run at lock depth 1 (single acquisition)"
-    )
 
 
 def test_resolve_adapter_concurrent_first_use_does_not_double_register():
@@ -875,6 +877,14 @@ def test_resolve_adapter_concurrent_first_use_does_not_double_register():
         t2.start()
         t1.join(timeout=5)
         t2.join(timeout=5)
+        # A still-alive thread here would still be running resolve_adapter()
+        # against the patches this `with` block is about to tear down on exit
+        # — exactly the patch-torn-down-while-in-use hazard the comment above
+        # documents. Assert liveness before leaving the patch context, not
+        # after, so a hang surfaces as this failure instead of a flaky
+        # downstream corruption.
+        assert not t1.is_alive(), "t1 did not finish within the join timeout"
+        assert not t2.is_alive(), "t2 did not finish within the join timeout"
 
     assert not errors, f"resolve_adapter raised under concurrency: {errors}"
     assert len(registrations) == 1, (
