@@ -34,6 +34,7 @@ twice into a real `PeftModel`.
 """
 
 import os
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -86,7 +87,7 @@ def chat_context(backend):
     return ctx
 
 
-def _assert_single_success_invocation(mock_invoke):
+def _assert_single_success_invocation(mock_invoke: MagicMock) -> None:
     """Asserts exactly one activate/deactivate phase pair, and one invocation
     with the expected outcome, name, adapter_type, binding_type, and revision."""
     phases = [p.phase for p in phase_payloads(mock_invoke)]
