@@ -1705,6 +1705,39 @@ async def test_event_streamer_drain_after_close_is_cancel_tolerant() -> None:
 
 
 @pytest.mark.asyncio
+async def test_event_streamer_aclose_propagates_outer_cancellation() -> None:
+    """Outer cancellation of the task running aclose() must propagate, not be absorbed."""
+    inner_cancelled = asyncio.Event()
+
+    async def _absorbs_first_cancel() -> None:
+        try:
+            await asyncio.sleep(60)
+        except asyncio.CancelledError:
+            # aclose() has issued its .cancel(); it is now blocked awaiting us.
+            inner_cancelled.set()
+            await asyncio.sleep(60)  # absorb so aclose stays at the await
+
+    es = EventStreamer()
+    es._pump_task = asyncio.create_task(_absorbs_first_cancel())
+    await asyncio.sleep(0)
+
+    close_task = asyncio.create_task(es.aclose())
+    await asyncio.wait_for(inner_cancelled.wait(), timeout=2.0)
+
+    # Cancel the aclose task from outside (simulates a wait_for timeout or an
+    # outer TaskGroup cancelling this coroutine).
+    close_task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(close_task, timeout=2.0)
+
+    es._pump_task.cancel()
+    try:
+        await asyncio.wait_for(es._pump_task, timeout=1.0)
+    except (TimeoutError, asyncio.CancelledError):
+        pass
+
+
+@pytest.mark.asyncio
 async def test_event_streamer_iteration_after_exhaustion_stops() -> None:
     """A second full iteration terminates immediately, not blocking on an empty queue."""
     backend = StreamingMockBackend("One. Two. ", token_size=2)

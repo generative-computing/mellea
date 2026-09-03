@@ -443,7 +443,11 @@ class EventStreamer:
                 try:
                     await self._pump_task
                 except asyncio.CancelledError:
-                    pass  # we cancelled it; consume the resulting CancelledError
+                    # Consume the pump's own cancellation; propagate an external
+                    # cancel of this task (cancelling() > 0).
+                    cur = asyncio.current_task()
+                    if cur is not None and cur.cancelling() > 0:
+                        raise
             elif not self._pump_task.cancelled():
                 # Retrieve the stored exception so it isn't "never retrieved" at GC.
                 self._pump_task.exception()
