@@ -209,11 +209,9 @@ async def test_chat_template_kwargs_set():
 
 
 async def test_construction_time_extra_body_default_survives_intrinsic_call():
-    """Issue #1539: a construction-time `extra_body` default (e.g. a thinking
-    default) must survive an intrinsic call that supplies its own, unrelated
-    per-call `extra_body` — and both must still coexist with the adapter's own
-    `chat_template_kwargs.adapter_name` write.
-    """
+    """A construction-time extra_body default must survive an intrinsic call
+    that supplies its own unrelated per-call extra_body, alongside the
+    adapter's own chat_template_kwargs.adapter_name write."""
     backend = _make_backend_with_adapter(
         _SIMPLE_CONFIG,
         model_options={

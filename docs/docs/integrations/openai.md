@@ -437,11 +437,10 @@ Toggling thinking per call is also possible via `model_options={"extra_body":
 ...}` on the call itself. The older pattern of setting a persistent default
 via `model_options={"extra_body": ...}` at **construction** time also works —
 `chat_template_kwargs` in a construction-time `model_options["extra_body"]` is
-deep-merged with any per-call `extra_body`, so it is no longer silently
-dropped by a call that happens to pass its own, unrelated per-call
-`extra_body` ([#1539](https://github.com/generative-computing/mellea/issues/1539)).
-Prefer `default_extra_body` regardless — it is the dedicated mechanism for
-values you want to persist across every call.
+deep-merged with any per-call `extra_body`, so a call that passes its own,
+unrelated per-call `extra_body` does not drop it. Prefer `default_extra_body`
+regardless — it is the dedicated mechanism for values you want to persist
+across every call.
 
 Note also that switching `enable_thinking` mid-session changes the rendered
 chat-template prefix on servers like vLLM, which can invalidate that

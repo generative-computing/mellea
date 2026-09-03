@@ -130,7 +130,7 @@ def test_model_option_merge():
 
 
 def test_model_option_merge_extra_body_unrelated_key_preserves_default():
-    """Issue #1539: an unrelated per-call extra_body must not clobber a backend-level default."""
+    """An unrelated per-call extra_body must not clobber a backend-level default."""
     default_model_opts = {
         "extra_body": {"chat_template_kwargs": {"enable_thinking": False}}
     }

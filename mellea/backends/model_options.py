@@ -224,13 +224,10 @@ class ModelOption:
     ) -> dict[str, Any]:
         """Merge two `extra_body` dicts, deep-merging their `chat_template_kwargs`.
 
-        Every other key is a flat overwrite, matching `merge_model_options`.
-        `chat_template_kwargs` is special-cased because it commonly has more
-        than one independent writer (e.g. a thinking-mode default and an
-        adapter-activation call) that must not clobber each other. If either
-        side's `chat_template_kwargs` is present but not a dict (malformed
-        input), deep-merging is skipped and the flat-overwrite result is used
-        instead — `overwrite`'s value wins when present, else `base`'s.
+        Every other key is a flat overwrite, matching `merge_model_options`. If
+        either side's `chat_template_kwargs` is present but not a dict, the
+        deep-merge is skipped and `overwrite`'s value wins when present, else
+        `base`'s.
 
         Args:
             base (dict[str, Any]): Lower-precedence `extra_body` dict.
@@ -271,8 +268,7 @@ class ModelOption:
         Creates a new dict that contains all keys and values from persistent opts and overwrite opts.
         If there are duplicate keys, overwrite opts key value pairs will be used, except for
         `extra_body`: when both sides have a dict there, their `chat_template_kwargs` sub-dicts
-        are deep-merged (see `_merge_extra_body`) instead of one replacing the other, since
-        `extra_body` commonly carries independent writes from more than one source.
+        are deep-merged (see `_merge_extra_body`) instead of one replacing the other.
 
         Args:
             persistent_opts (dict[str, Any]): Base model options (lower precedence).

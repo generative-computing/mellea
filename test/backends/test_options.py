@@ -62,8 +62,8 @@ def test_resolve_model_options_unrelated_keys_are_preserved():
 
 
 def test_resolve_model_options_extra_body_default_survives_unrelated_call_extra_body():
-    """Issue #1539: a backend-level extra_body default must not be dropped by an
-    unrelated per-call extra_body (e.g. an intrinsic/adapter routing call)."""
+    """A backend-level extra_body default must survive an unrelated per-call
+    extra_body (e.g. an intrinsic/adapter routing call)."""
     resolved = resolve_model_options(
         backend_defaults={
             "extra_body": {"chat_template_kwargs": {"enable_thinking": False}}
