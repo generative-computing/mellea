@@ -22,7 +22,7 @@ Demonstrates:
 - Streaming token-by-token generation
 - Sentence-level chunking via `stream()`
 - Per-chunk validation with custom `stream_validate()` methods
-- Accessing stream events via the STREAMING_EVENT hook
+- Iterating typed stream events via `stream(as_events=True)`
 - Early exit on validation failure
 
 ### Word-Level Chunking
@@ -76,7 +76,7 @@ Demonstrates:
 
 **Stream Validation**: Apply requirements at chunk level for early exit—stop generation when a constraint is violated.
 
-**Stream Events**: Process stream events through the `STREAMING_EVENT` hook to monitor generation progress:
+**Stream Events**: Observe a run's lifecycle as typed events — iterate them for one stream with `stream(as_events=True)`, or subscribe the `STREAMING_EVENT` hook to watch many streams at once:
 - `ChunkEvent` — A new chunk of text
 - `QuickCheckEvent` — Initial validation result
 - `FullValidationEvent` — Complete validation after full generation

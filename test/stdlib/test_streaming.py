@@ -37,6 +37,7 @@ from mellea.stdlib.streaming import (
     ChunkEvent,
     CompletedEvent,
     ErrorEvent,
+    EventStreamer,
     FullValidationEvent,
     QuickCheckEvent,
     RetryEvent,
@@ -140,6 +141,51 @@ class StreamingMockBackend(Backend):
         _ = task
         new_ctx = ctx.add(action).add(mot)
         return mot, new_ctx
+
+    async def _generate_from_raw(
+        self, actions: Any, ctx: Any, **kwargs: Any
+    ) -> tuple[list[ModelOutputThunk], dict[str, Any] | None]:
+        raise NotImplementedError
+
+
+async def _feed_tokens_then_error(
+    mot: ModelOutputThunk, response: str, token_size: int
+) -> None:
+    """Feed `response` one token at a time, then push an exception onto the queue."""
+    i = 0
+    while i < len(response):
+        await mot._gen.queue.put(response[i : i + token_size])
+        await asyncio.sleep(0)
+        i += token_size
+    await mot._gen.queue.put(RuntimeError("stream boom"))
+
+
+class StreamingErrorBackend(Backend):
+    """Streams a few tokens, then raises mid-generation."""
+
+    _model_id: str = "streaming-error-model"
+    _provider: str = "streaming-error-provider"
+
+    def __init__(self, response: str, token_size: int = 2) -> None:
+        self._response = response
+        self._token_size = token_size
+
+    async def _generate_from_context(
+        self,
+        action: Any,
+        ctx: Context,
+        *,
+        format: Any = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+    ) -> tuple[ModelOutputThunk, Context]:
+        _ = format, model_options, tool_calls
+        mot = _make_mot()
+        task = asyncio.create_task(
+            _feed_tokens_then_error(mot, self._response, self._token_size)
+        )
+        _ = task
+        return mot, ctx.add(action).add(mot)
 
     async def _generate_from_raw(
         self, actions: Any, ctx: Any, **kwargs: Any
@@ -1146,6 +1192,21 @@ async def test_exception_in_stream_validate_propagates_and_cancels() -> None:
 
 
 @pytest.mark.asyncio
+async def test_backend_error_mid_stream_propagates_and_cancels() -> None:
+    """A backend error during generation propagates from the loop and cancels gen."""
+    backend = StreamingErrorBackend("One. Two. ", token_size=2)
+
+    streamer = await stream(_action(), backend, _ctx(), chunking="sentence")
+    with pytest.raises(RuntimeError, match="stream boom"):
+        async with streamer:
+            async for _chunk in streamer:
+                pass
+
+    assert streamer.completed_normally is False
+    assert streamer._mot.is_computed() is True
+
+
+@pytest.mark.asyncio
 async def test_rejects_precomputed_mot() -> None:
     """A backend returning an already-computed MOT raises RuntimeError.
 
@@ -1430,6 +1491,356 @@ async def test_error_event_on_stream_validate_exception() -> None:
     assert len(error_events) == 1
     assert error_events[0].exception_type == "RuntimeError"
     assert "boom" in error_events[0].detail
+
+
+# ---------------------------------------------------------------------------
+# EventStreamer (stream(as_events=True))
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_as_events_returns_event_streamer() -> None:
+    """stream(as_events=True) returns an EventStreamer; the default returns a Streamer."""
+    backend = StreamingMockBackend("One. ", token_size=2)
+    es = await stream(_action(), backend, _ctx(), as_events=True, chunking="sentence")
+    assert isinstance(es, EventStreamer)
+    await es.aclose()
+
+    backend2 = StreamingMockBackend("One. ", token_size=2)
+    s = await stream(_action(), backend2, _ctx(), chunking="sentence")
+    assert isinstance(s, Streamer)
+    await s.aclose()
+
+
+@pytest.mark.asyncio
+async def test_event_streamer_natural_completion() -> None:
+    """Iterating events yields per-chunk pairs, then Done/FullValidation/Completed."""
+    response = "One. Two. "
+    backend = StreamingMockBackend(response, token_size=2)
+
+    events: list[StreamEvent] = []
+    async with await stream(
+        _action(),
+        backend,
+        _ctx(),
+        requirements=[AlwaysUnknownReq()],
+        chunking="sentence",
+        as_events=True,
+    ) as es:
+        async for ev in es:
+            events.append(ev)
+
+    types = [type(e) for e in events]
+    # Per-chunk QuickCheck/Chunk pairs precede the terminal trio.
+    assert types[0] is QuickCheckEvent
+    assert types[1] is ChunkEvent
+    assert types[-3:] == [StreamingDoneEvent, FullValidationEvent, CompletedEvent]
+    # Terminal CompletedEvent is delivered through the iterator on success.
+    assert isinstance(events[-1], CompletedEvent)
+    assert events[-1].success is True
+    # ChunkEvent.text carries each chunk — the same chunks a Streamer would yield.
+    chunk_texts = [e.text for e in events if isinstance(e, ChunkEvent)]
+    assert chunk_texts == ["One.", "Two."]
+    # Outcome properties mirror the wrapped Streamer.
+    assert es.completed_normally is True
+    assert es.full_text == response
+    assert es.failed_early is False
+
+
+@pytest.mark.asyncio
+async def test_event_streamer_requirement_fail_no_raise() -> None:
+    """A mid-stream requirement failure yields a failing QuickCheck + Completed, no raise."""
+    response = "one two three four five six "
+    backend = StreamingMockBackend(response, token_size=2)
+
+    events: list[StreamEvent] = []
+    async with await stream(
+        _action(),
+        backend,
+        _ctx(),
+        requirements=[FailAfterWordsReq(threshold=3)],
+        chunking="word",
+        as_events=True,
+    ) as es:
+        async for ev in es:
+            events.append(ev)
+
+    quick_checks = [e for e in events if isinstance(e, QuickCheckEvent)]
+    assert quick_checks[-1].passed is False
+    # No natural-completion events on early exit; Completed is still delivered.
+    assert not any(
+        isinstance(e, (StreamingDoneEvent, FullValidationEvent)) for e in events
+    )
+    assert isinstance(events[-1], CompletedEvent)
+    assert events[-1].success is False
+    assert es.failed_early is True
+
+
+@pytest.mark.asyncio
+async def test_event_streamer_error_reraises() -> None:
+    """A mid-stream error yields Error + Completed, then the loop re-raises."""
+
+    class _RaisingReq(Requirement):
+        def format_for_llm(self) -> str:
+            return "raiser"
+
+        async def stream_validate(
+            self, chunk: str, *, backend: Any, ctx: Any
+        ) -> PartialValidationResult:
+            raise RuntimeError("boom")
+
+        async def validate(
+            self,
+            backend: Any,
+            ctx: Any,
+            *,
+            format: Any = None,
+            model_options: Any = None,
+        ) -> ValidationResult:
+            return ValidationResult(result=True)
+
+    backend = StreamingMockBackend("Hello world. ", token_size=3)
+
+    events: list[StreamEvent] = []
+    with pytest.raises(RuntimeError, match="boom"):
+        async with await stream(
+            _action(),
+            backend,
+            _ctx(),
+            requirements=[_RaisingReq()],
+            chunking="sentence",
+            as_events=True,
+        ) as es:
+            async for ev in es:
+                events.append(ev)
+
+    # The consumer still sees the terminal events before the exception surfaces.
+    error_events = [e for e in events if isinstance(e, ErrorEvent)]
+    assert len(error_events) == 1
+    assert error_events[0].exception_type == "RuntimeError"
+    assert isinstance(events[-1], CompletedEvent)
+    assert events[-1].success is False
+
+
+@pytest.mark.asyncio
+async def test_event_streamer_early_break_releases_pump() -> None:
+    """An early break releases the background pump without leaking the task."""
+    response = "One. Two. Three. Four. Five. "
+    backend = StreamingMockBackend(response, token_size=2)
+
+    seen = 0
+    async with await stream(
+        _action(), backend, _ctx(), chunking="sentence", as_events=True
+    ) as es:
+        async for ev in es:
+            if isinstance(ev, ChunkEvent):
+                seen += 1
+                if seen == 2:
+                    break
+
+    assert seen == 2
+    # aclose() (via __aexit__) cancelled and awaited the pump — no orphan task.
+    assert es._pump_task is not None
+    assert es._pump_task.done() is True
+    assert es.completed_normally is False
+    # A second aclose() on the done+cancelled pump must be an idempotent no-op.
+    assert es._pump_task.cancelled() is True
+    await es.aclose()
+
+
+@pytest.mark.asyncio
+async def test_event_streamer_resume_after_break_drains_remainder() -> None:
+    """Iterating again after an early break resumes and drains the terminal events."""
+    response = "One. Two. Three. Four. Five. "
+    backend = StreamingMockBackend(response, token_size=2)
+
+    first: list[StreamEvent] = []
+    rest: list[StreamEvent] = []
+    async with await stream(
+        _action(), backend, _ctx(), chunking="sentence", as_events=True
+    ) as es:
+        async for ev in es:
+            first.append(ev)
+            if isinstance(ev, ChunkEvent):
+                break  # stop after the first chunk
+        # Same handle, second loop: resumes from the next queued event.
+        async for ev in es:
+            rest.append(ev)
+
+    # Resume drained every remaining chunk — nothing lost between the loops.
+    chunk_texts = [e.text for e in first + rest if isinstance(e, ChunkEvent)]
+    assert chunk_texts == ["One.", "Two.", "Three.", "Four.", "Five."]
+    # It ran to natural completion, ending on a successful CompletedEvent.
+    assert isinstance(rest[-1], CompletedEvent)
+    assert rest[-1].success is True
+    # No event is delivered to both loops.
+    assert not (set(map(id, first)) & set(map(id, rest)))
+    assert es._exhausted is True
+
+
+@pytest.mark.asyncio
+async def test_event_streamer_drain_after_close_is_cancel_tolerant() -> None:
+    """Draining leftover events after the context closes returns them without raising."""
+    response = "One. Two. Three. Four. Five. "
+    backend = StreamingMockBackend(response, token_size=2)
+
+    async with await stream(
+        _action(), backend, _ctx(), chunking="sentence", as_events=True
+    ) as es:
+        async for ev in es:
+            if isinstance(ev, ChunkEvent):
+                break
+
+    # aclose() cancelled the still-running pump on block exit; draining the
+    # queued leftovers must not surface the pump's own CancelledError.
+    tail = [ev async for ev in es]
+    assert es._exhausted is True
+    # Exactly one terminal event, marked unsuccessful — confirming we drained
+    # the cancelled path (finalize queued it during cancellation), not a stream
+    # that happened to finish on its own.
+    completed = [e for e in tail if isinstance(e, CompletedEvent)]
+    assert len(completed) == 1
+    assert completed[0].success is False
+    assert es.completed_normally is False
+
+
+@pytest.mark.asyncio
+async def test_event_streamer_aclose_propagates_outer_cancellation() -> None:
+    """Outer cancellation of the task running aclose() must propagate, not be absorbed."""
+    inner_cancelled = asyncio.Event()
+
+    async def _absorbs_first_cancel() -> None:
+        try:
+            await asyncio.sleep(60)
+        except asyncio.CancelledError:
+            # aclose() has issued its .cancel(); it is now blocked awaiting us.
+            inner_cancelled.set()
+            await asyncio.sleep(60)  # absorb so aclose stays at the await
+
+    es = EventStreamer()
+    es._pump_task = asyncio.create_task(_absorbs_first_cancel())
+    await asyncio.sleep(0)
+
+    close_task = asyncio.create_task(es.aclose())
+    await asyncio.wait_for(inner_cancelled.wait(), timeout=2.0)
+
+    # Cancel the aclose task from outside (simulates a wait_for timeout or an
+    # outer TaskGroup cancelling this coroutine).
+    close_task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(close_task, timeout=2.0)
+
+    es._pump_task.cancel()
+    try:
+        await asyncio.wait_for(es._pump_task, timeout=1.0)
+    except (TimeoutError, asyncio.CancelledError):
+        pass
+
+
+@pytest.mark.asyncio
+async def test_event_streamer_iteration_after_exhaustion_stops() -> None:
+    """A second full iteration terminates immediately, not blocking on an empty queue."""
+    backend = StreamingMockBackend("One. Two. ", token_size=2)
+
+    async with await stream(
+        _action(), backend, _ctx(), chunking="sentence", as_events=True
+    ) as es:
+        async for _ev in es:
+            pass
+        assert es._exhausted is True
+
+        async def _drain_all() -> list[StreamEvent]:
+            return [ev async for ev in es]
+
+        # Would hang on an empty queue without the exhaustion guard.
+        again = await asyncio.wait_for(_drain_all(), timeout=1.0)
+
+    assert again == []
+
+
+@pytest.mark.asyncio
+async def test_event_streamer_abandoned_faulted_pump_retrieved_on_close() -> None:
+    """aclose() retrieves a faulted, undrained pump's exception so it isn't orphaned."""
+    es = await stream(
+        _action(),
+        StreamingErrorBackend("Hi. ", token_size=2),
+        _ctx(),
+        chunking="sentence",
+        as_events=True,
+    )
+    # Let the pump run to its faulted completion WITHOUT draining the queue, so
+    # nothing has retrieved its exception yet.
+    assert es._pump_task is not None
+    for _ in range(1000):
+        if es._pump_task.done():
+            break
+        await asyncio.sleep(0)
+    task = es._pump_task
+    assert task.done() and not task.cancelled()
+    # `_log_traceback` is asyncio's own flag: True while the exception is
+    # unretrieved (and would be logged "never retrieved" at GC), False once read.
+    assert task._log_traceback is True
+
+    await es.aclose()
+
+    assert task._log_traceback is False  # aclose() retrieved it
+
+
+@pytest.mark.asyncio
+async def test_event_streamer_baseexception_in_setup_does_not_hang(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A bare BaseException during pump setup surfaces to the caller instead of hanging."""
+
+    class _SetupBoom(BaseException):
+        pass
+
+    async def _boom(*_a: Any, **_k: Any) -> Streamer:
+        raise _SetupBoom("setup boom")
+
+    monkeypatch.setattr("mellea.stdlib.streaming._stream", _boom)
+    with pytest.raises(_SetupBoom, match="setup boom"):
+        await asyncio.wait_for(
+            stream(
+                _action(),
+                StreamingMockBackend("x", token_size=1),
+                _ctx(),
+                as_events=True,
+            ),
+            timeout=2.0,
+        )
+
+
+@pytest.mark.asyncio
+async def test_event_streamer_setup_error_raises_from_stream() -> None:
+    """A setup failure (precomputed MOT) raises eagerly from stream(), like Streamer.
+
+    The pump runs setup before signalling ready; stream() waits on that and
+    re-raises, so a non-streaming backend fails at the call, not on iteration.
+    """
+
+    class PrecomputedBackend(Backend):
+        _model_id: str = "precomputed-mock-model"
+        _provider: str = "precomputed-mock-provider"
+
+        async def _generate_from_context(
+            self,
+            action: Any,
+            ctx: Any,
+            *,
+            format: Any = None,
+            model_options: dict | None = None,
+            tool_calls: bool = False,
+        ) -> tuple[ModelOutputThunk, Any]:
+            return ModelOutputThunk(value="already done"), ctx
+
+        async def _generate_from_raw(
+            self, actions: Any, ctx: Any, **kwargs: Any
+        ) -> tuple[list[ModelOutputThunk], dict[str, Any] | None]:
+            raise NotImplementedError
+
+    with pytest.raises(RuntimeError, match="already-computed MOT"):
+        await stream(_action(), PrecomputedBackend(), _ctx(), as_events=True)
 
 
 if __name__ == "__main__":

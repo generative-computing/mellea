@@ -20,7 +20,6 @@ token-local — forbidden words, length budgets, numeric thresholds.
 """
 
 import asyncio
-from typing import Any
 
 from mellea.core.backend import Backend
 from mellea.core.base import Context
@@ -29,7 +28,6 @@ from mellea.core.requirement import (
     Requirement,
     ValidationResult,
 )
-from mellea.plugins import hook, register
 from mellea.stdlib.components import Instruction
 from mellea.stdlib.streaming import (
     ChunkEvent,
@@ -96,41 +94,32 @@ async def main() -> None:
 
     word_count = 0
 
-    @hook("streaming_event")
-    async def print_events(payload: Any, ctx: Any) -> None:
-        nonlocal word_count
-        event = payload.event
-        match event:
-            case ChunkEvent():
-                word_count += 1
-                # Only print every 5th word to keep output readable
-                if word_count % 5 == 1:
-                    print(f"  ...word {word_count}: {event.text!r}")
-            case QuickCheckEvent(passed=False):
-                print(
-                    f"  QUICK_CHECK[word {event.chunk_index}]: FAIL — "
-                    f"{event.results[0].reason if event.results else 'unknown'}"
-                )
-            case StreamingDoneEvent():
-                print(
-                    f"  STREAMING_DONE: {word_count} words, {len(event.full_text)} chars"
-                )
-            case FullValidationEvent():
-                print(f"  FULL_VALIDATION: {'PASS' if event.passed else 'FAIL'}")
-            case CompletedEvent():
-                print(f"  COMPLETED: success={event.success}")
-            case _:
-                pass
-
-    register(print_events)
-
-    print("Stream events as they arrive (one per word):")
+    print("Stream events as they arrive (one ChunkEvent per word):")
     async with await stream(
-        action, backend, ctx, requirements=[req], chunking="word"
+        action, backend, ctx, requirements=[req], chunking="word", as_events=True
     ) as streamer:
-        # Draining the stream fires the events; the hook does the printing.
-        async for _word in streamer:
-            pass
+        async for event in streamer:
+            match event:
+                case ChunkEvent():
+                    word_count += 1
+                    # Only print every 5th word to keep output readable
+                    if word_count % 5 == 1:
+                        print(f"  ...word {word_count}: {event.text!r}")
+                case QuickCheckEvent(passed=False):
+                    print(
+                        f"  QUICK_CHECK[word {event.chunk_index}]: FAIL — "
+                        f"{event.results[0].reason if event.results else 'unknown'}"
+                    )
+                case StreamingDoneEvent():
+                    print(
+                        f"  STREAMING_DONE: {word_count} words, {len(event.full_text)} chars"
+                    )
+                case FullValidationEvent():
+                    print(f"  FULL_VALIDATION: {'PASS' if event.passed else 'FAIL'}")
+                case CompletedEvent():
+                    print(f"  COMPLETED: success={event.success}")
+                case _:
+                    pass
 
     print(f"\nCompleted normally: {streamer.completed_normally}")
     if streamer.streaming_failures:

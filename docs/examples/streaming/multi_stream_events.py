@@ -5,7 +5,8 @@
 `stream()` yields validated chunks through `async for`, but its typed lifecycle
 events (`ChunkEvent`, `QuickCheckEvent`, `StreamingDoneEvent`,
 `FullValidationEvent`, `CompletedEvent`, `ErrorEvent`) are surfaced through the
-`STREAMING_EVENT` plugin hook rather than the iterator.
+`STREAMING_EVENT` plugin hook — or, for a single stream, from
+`stream(as_events=True)`.
 
 Demonstrates:
 - Registering a `@hook("streaming_event")` function to receive every stream's events

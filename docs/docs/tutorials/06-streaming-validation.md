@@ -18,7 +18,7 @@ By the end you will have covered:
 - Early-exit cancellation and reading `streaming_failures`
 - Choosing between `"word"`, `"sentence"`, and `"paragraph"` chunking
 - Observing the typed event vocabulary (`ChunkEvent`, `QuickCheckEvent`, …)
-  through the `streaming_event` hook
+  by iterating `stream(as_events=True)`
 - Subclassing `ChunkingStrategy` to define a custom split boundary
 
 **Prerequisites:** [Tutorial 02](./streaming-and-async) (async and streaming),
@@ -322,11 +322,10 @@ common English word like `"and"` or `"the"`.
 
 ## Step 4: Observing the event lifecycle
 
-The `async for` loop gives you validated chunks. To observe the full lifecycle —
-per-chunk validation results, stream completion, final validation, errors —
-subscribe to the `streaming_event` hook. `stream()` fires one typed `StreamEvent`
-per lifecycle moment through this hook, so a plugin can watch a run without
-touching the chunk iterator.
+The `async for` loop above yields validated chunks. To observe the full lifecycle
+instead — per-chunk validation results, stream completion, final validation,
+errors — pass `as_events=True`: `stream()` then returns an `EventStreamer` that
+yields one typed `StreamEvent` per lifecycle moment in place of chunks.
 
 ```python
 # Requires: mellea
@@ -337,7 +336,6 @@ import re
 from mellea.core.backend import Backend
 from mellea.core.base import Context
 from mellea.core.requirement import PartialValidationResult, Requirement, ValidationResult
-from mellea.plugins import hook, register
 from mellea.stdlib.components import Instruction
 from mellea.stdlib.streaming import (
     ChunkEvent,
@@ -376,40 +374,33 @@ class MaxSentencesReq(Requirement):
         return ValidationResult(result=self._count <= self._limit)
 
 
-@hook("streaming_event")
-async def print_events(payload, ctx) -> None:
-    event = payload.event
-    match event:
-        case ChunkEvent():
-            print(f"  chunk[{event.chunk_index}]: {event.text!r}")
-        case QuickCheckEvent(passed=False):
-            print(f"  FAIL at chunk {event.chunk_index}: {event.results[0].reason}")
-        case StreamingDoneEvent():
-            print(f"  stream done — {len(event.full_text)} chars")
-        case FullValidationEvent():
-            print(f"  final validation: {'pass' if event.passed else 'fail'}")
-        case CompletedEvent():
-            print(f"  completed — success={event.success}")
-        case _:
-            pass
-
-
 async def main() -> None:
     from mellea.stdlib.session import start_session
 
     m = start_session()
-    register(print_events)
 
-    # Draining the stream drives generation; print_events fires per event.
     async with await stream(
         Instruction("Write a two-sentence summary of the water cycle."),
         m.backend,
         m.ctx,
         requirements=[MaxSentencesReq(limit=3)],
         chunking="sentence",
+        as_events=True,
     ) as streamer:
-        async for _chunk in streamer:
-            pass
+        async for event in streamer:
+            match event:
+                case ChunkEvent():
+                    print(f"  chunk[{event.chunk_index}]: {event.text!r}")
+                case QuickCheckEvent(passed=False):
+                    print(f"  FAIL at chunk {event.chunk_index}: {event.results[0].reason}")
+                case StreamingDoneEvent():
+                    print(f"  stream done — {len(event.full_text)} chars")
+                case FullValidationEvent():
+                    print(f"  final validation: {'pass' if event.passed else 'fail'}")
+                case CompletedEvent():
+                    print(f"  completed — success={event.success}")
+                case _:
+                    pass
 
 
 asyncio.run(main())
@@ -577,7 +568,7 @@ explicitly or subclass to override `flush()`.
 | `stream()` + `requirements=` | Per-chunk validation with automatic early exit |
 | `async for chunk in streamer` | Validated chunks as they arrive, inside `async with` for safe cleanup |
 | `streamer.failed_early` / `streamer.streaming_failures` | Detect and inspect a mid-stream requirement failure |
-| `streaming_event` hook | Typed event stream — observe every chunk, validation result, and lifecycle signal |
+| `stream(as_events=True)` | Typed event stream (an `EventStreamer`) — observe every chunk, validation result, and lifecycle signal |
 | `"word"` / `"sentence"` / `"paragraph"` | Built-in chunking strategies trading reaction speed for context |
 | `ChunkingStrategy` subclass | Custom split boundaries for structured output (lists, code, CSV) |
 
