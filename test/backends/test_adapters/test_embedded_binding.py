@@ -17,6 +17,7 @@ from mellea.backends.adapters import (
     EmbeddedBinding,
     Identity,
 )
+from mellea.backends.adapters._core import _fire_embedded_invocation_complete
 from mellea.plugins.types import HookType
 
 
@@ -137,13 +138,12 @@ async def test_apply_activation_fires_phase_complete_metric():
 
 async def test_apply_activation_does_not_fire_invocation_complete():
     # apply_activation only edits the request — the real generate+parse
-    # outcome isn't known yet at this point (OpenAIBackend resolves it later,
-    # lazily, when the caller awaits the ModelOutputThunk). Firing
-    # `adapter_function_invocation_complete` here would have to guess an
-    # `outcome`, which would misreport failed calls as "success". Pin that it
-    # doesn't, so nobody "fixes" this back to a hardcoded success outcome
-    # without solving the underlying problem (see the docstring on
-    # apply_activation for the follow-up this needs).
+    # outcome isn't known yet at this point. Both backends fire
+    # `adapter_function_invocation_complete` later instead, once generation
+    # and parsing resolve (see _fire_embedded_invocation_complete and its
+    # callers in openai.py/huggingface.py, issue #1560). Pin that
+    # apply_activation itself still doesn't fire it, so nobody "fixes" this
+    # back to a hardcoded success outcome guessed at request-mutation time.
     pytest.importorskip("cpex", reason="cpex not installed — install mellea[hooks]")
     binding = EmbeddedBinding()
     request = EmbeddedActivationRequest(extra_body={}, api_params={})
@@ -158,3 +158,25 @@ async def test_apply_activation_does_not_fire_invocation_complete():
 
     fired_hook_types = [call.args[0] for call in mock_invoke.call_args_list]
     assert HookType.ADAPTER_FUNCTION_INVOCATION_COMPLETE not in fired_hook_types
+
+
+@pytest.mark.parametrize("outcome", ["success", "schema_error", "error"])
+async def test_fire_embedded_invocation_complete_swallows_hook_dispatch_failure(
+    outcome,
+):
+    """A failing hook dispatch must not mask the real outcome/exception it's reporting."""
+    pytest.importorskip("cpex", reason="cpex not installed — install mellea[hooks]")
+
+    with (
+        patch("mellea.backends.adapters._core.has_plugins", return_value=True),
+        patch(
+            "mellea.backends.adapters._core.invoke_hook",
+            side_effect=RuntimeError("invocation hook dispatch blew up"),
+        ),
+    ):
+        # Must not raise despite the hook dispatch failing.
+        await _fire_embedded_invocation_complete(
+            identity=_identity("answerability"),
+            outcome=outcome,
+            error=ValueError("boom") if outcome != "success" else None,
+        )

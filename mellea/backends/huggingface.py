@@ -91,6 +91,7 @@ from .adapters import (
     AdapterMixin,
     EmbeddedActivationRequest,
     EmbeddedBinding,
+    Identity,
     IntrinsicAdapter,
     LocalHFAdapter,
 )
@@ -99,6 +100,8 @@ from .adapters._core import (
     IOContract,
     LocalFileBinding,
     WeightsBinding,
+    _await_embedded_generation,
+    _fire_embedded_invocation_complete,
 )
 from .adapters.adapter import AdapterInput, EmbeddedIntrinsicAdapter
 from .backend import FormatterBackend
@@ -1021,14 +1024,17 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 other_input,
             )
         else:
-            chat_response = asyncio.to_thread(
-                self._generate_embedded_with_generation_lock,
-                granite_formatters.base.util.generate_with_transformers,  # type: ignore
-                # Passed as args/kwargs to generate.
-                self._tokenizer,
-                model_arg,
-                generate_input,
-                other_input,
+            chat_response = _await_embedded_generation(
+                asyncio.to_thread(
+                    self._generate_embedded_with_generation_lock,
+                    granite_formatters.base.util.generate_with_transformers,  # type: ignore
+                    # Passed as args/kwargs to generate.
+                    self._tokenizer,
+                    model_arg,
+                    generate_input,
+                    other_input,
+                ),
+                adapter.identity,
             )
 
         output = ModelOutputThunk(None)
@@ -1044,38 +1050,66 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             rewritten: granite_formatters.ChatCompletion,
             result_processor: granite_formatters.IntrinsicsResultProcessor,
             input_ids,
+            embedded_identity: Identity | None,
         ):
+            # embedded_identity is set only for EmbeddedIntrinsicAdapter calls
+            # (the legacy PEFT path already gets this signal via adapter_scope).
+            # Kept in one try so any failure below — not just from transform
+            # itself — fires outcome="error" instead of reporting success and
+            # then raising, the exact bug #1559 reverted.
             try:
                 res = result_processor.transform(chunk, rewritten)  # type: ignore
+
+                # If logits were requested, stash the intercepted raw output
+                # so post_processing/_surface_logits can populate
+                # generation.logits/raw_logits.
+                if want_scores:
+                    if raw_hf_output_cell[0] is not None:
+                        mot.raw.response = raw_hf_output_cell[0]
+                        raw_hf_output_cell[0] = None
+                    else:
+                        warn_key = "intrinsic_no_hf_output"
+                        if warn_key not in self._warned_about:
+                            self._warned_about.add(warn_key)
+                            MelleaLogger.get_logger().warning(
+                                "ModelOption.LOGITS/RAW_LOGITS requested on intrinsic path but "
+                                "generate_with_transformers did not return a GenerateDecoderOnlyOutput; "
+                                "generation.logits and generation.raw_logits will be None."
+                            )
+
+                # processing expects a str or a GenerateDecoderOnlyOutput. Extract the str.
+                result = await self.processing(
+                    mot, res.choices[0].message.content, input_ids=input_ids
+                )
             except json.JSONDecodeError as e:
+                if embedded_identity is not None:
+                    await _fire_embedded_invocation_complete(
+                        identity=embedded_identity, outcome="schema_error", error=e
+                    )
                 raise Exception(f"Intrinsic did not return a JSON: {chunk}") from e
-
-            # If logits were requested, stash the intercepted raw output so that
-            # post_processing/_surface_logits can populate generation.logits/raw_logits.
-            if want_scores:
-                if raw_hf_output_cell[0] is not None:
-                    mot.raw.response = raw_hf_output_cell[0]
-                    raw_hf_output_cell[0] = None
-                else:
-                    warn_key = "intrinsic_no_hf_output"
-                    if warn_key not in self._warned_about:
-                        self._warned_about.add(warn_key)
-                        MelleaLogger.get_logger().warning(
-                            "ModelOption.LOGITS/RAW_LOGITS requested on intrinsic path but "
-                            "generate_with_transformers did not return a GenerateDecoderOnlyOutput; "
-                            "generation.logits and generation.raw_logits will be None."
-                        )
-
-            # processing expects a str or a GenerateDecoderOnlyOutput. Extract the str.
-            return await self.processing(
-                mot, res.choices[0].message.content, input_ids=input_ids
-            )
+            except Exception as e:
+                if embedded_identity is not None:
+                    await _fire_embedded_invocation_complete(
+                        identity=embedded_identity, outcome="error", error=e
+                    )
+                raise
+            else:
+                if embedded_identity is not None:
+                    await _fire_embedded_invocation_complete(
+                        identity=embedded_identity, outcome="success", error=None
+                    )
+                return result
 
         output._gen.process = functools.partial(
             granite_formatters_processing,
             rewritten=rewritten,
             result_processor=result_processor,
             input_ids=generate_input["input_tokens"],
+            embedded_identity=(
+                adapter.identity
+                if isinstance(adapter, EmbeddedIntrinsicAdapter)
+                else None
+            ),
         )
 
         # TODO: Post-processing should release the lock for this generation.

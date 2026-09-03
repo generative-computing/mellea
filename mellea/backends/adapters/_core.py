@@ -776,10 +776,11 @@ class EmbeddedBinding:
         caller awaits the resulting `ModelOutputThunk`. Firing an
         invocation-complete event here would have to guess an `outcome` that
         this method cannot know, which is worse than not firing it: it would
-        report `outcome="success"` for calls that go on to fail. Wiring a
-        real invocation-complete signal requires the caller to fire it once
-        generation and parsing resolve — tracked as a follow-up, not part of
-        this method.
+        report `outcome="success"` for calls that go on to fail. Instead, the
+        caller fires `_fire_embedded_invocation_complete` once generation and
+        parsing resolve — see its use in `OpenAIBackend`'s and
+        `LocalHFBackend`'s `granite_formatters_processing` closures (issue
+        #1560).
 
         This method is `async` (unlike the rest of `EmbeddedBinding`'s
         surface) purely because hook dispatch (`invoke_hook`) is async; its
@@ -835,6 +836,95 @@ class EmbeddedBinding:
                 "request edit into an operation failure.",
                 exc_info=True,
             )
+
+
+async def _fire_embedded_invocation_complete(
+    *,
+    identity: Identity,
+    outcome: Literal["success", "schema_error", "error"],
+    error: BaseException | None,
+) -> None:
+    """Fires `adapter_function_invocation_complete` for an Embedded adapter call.
+
+    Called from one of two mutually-exclusive points, since
+    `EmbeddedBinding.apply_activation` can't know the outcome yet at
+    request-mutation time (see its docstring): `_await_embedded_generation`
+    below, on a generation failure, or `granite_formatters_processing` in
+    `openai.py`/`huggingface.py`, once a response exists.
+
+    Doesn't classify contract-level `IOContract` mismatches on already-valid
+    JSON — that check runs later, in `call_intrinsic`, after this already
+    fired `"success"` (tracked in #1611).
+
+    Kept separate from `adapter.py`'s `_fire_invocation_complete`: that one
+    also serves sync callers via `_run_async_in_thread`, while this always
+    runs inside an already-running coroutine and can just `await invoke_hook`.
+
+    Args:
+        identity: Identifies the adapter that was invoked.
+        outcome: The resolved invocation outcome.
+        error: The exception raised during generation/parsing, or `None` on
+            success.
+    """
+    if not has_plugins(HookType.ADAPTER_FUNCTION_INVOCATION_COMPLETE):
+        return
+
+    from ...plugins.hooks.adapter_function import (
+        AdapterFunctionInvocationCompletePayload,
+    )
+
+    try:
+        payload = AdapterFunctionInvocationCompletePayload(
+            name=identity.name,
+            revision=None,
+            binding_type=EmbeddedBinding.binding_type,
+            adapter_type=identity.adapter_type,
+            outcome=outcome,
+            error=error,
+        )
+        await invoke_hook(HookType.ADAPTER_FUNCTION_INVOCATION_COMPLETE, payload)
+    except Exception:
+        MelleaLogger.get_logger().warning(
+            f"adapter_function_invocation_complete hook dispatch failed for "
+            f"{identity.name!r}; ignoring so it does not mask the real "
+            f"outcome ({outcome!r}).",
+            exc_info=True,
+        )
+
+
+async def _await_embedded_generation(coro: Any, identity: Identity) -> Any:
+    """Awaits `coro`, firing `outcome="error"` if generation itself fails.
+
+    `granite_formatters_processing` only runs once a response object exists,
+    so a failure in the generation call itself — a network error, timeout, or
+    provider error — never reaches it: `ModelOutputThunk.avalue()` raises a
+    queue-carried exception before `_gen.process` is ever invoked. Wrap the
+    coroutine handed to `send_to_queue` with this so that case still fires
+    `adapter_function_invocation_complete`. The two fire sites are mutually
+    exclusive: if `coro` succeeds, this returns normally and
+    `granite_formatters_processing` fires later; if it raises, that closure
+    never runs.
+
+    Catches `BaseException`, not `Exception`, so a cancellation
+    (`asyncio.CancelledError`) is also recorded as `outcome="error"` rather
+    than left unclassified — deliberate, matching `adapter.py`'s
+    `local_file`-binding sibling helper.
+
+    Args:
+        coro: The backend's generation call (e.g. the OpenAI SDK coroutine, or
+            an `asyncio.to_thread` call wrapping local generation).
+        identity: Identifies the adapter being invoked.
+
+    Returns:
+        `coro`'s result, unchanged.
+    """
+    try:
+        return await coro
+    except BaseException as e:
+        await _fire_embedded_invocation_complete(
+            identity=identity, outcome="error", error=e
+        )
+        raise
 
 
 class ServerMediatedBinding(WeightsBinding):

@@ -4,12 +4,13 @@
 """Unit tests for HuggingFace backend pure-logic helpers — no model load required."""
 
 import asyncio
+import json
 import threading
 import time
 import warnings
 from types import SimpleNamespace
 from typing import Any, cast
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -48,6 +49,7 @@ from mellea.core import ModelOutputThunk
 from mellea.formatters.granite.base.util import (
     chat_completion_request_to_transformers_inputs,
 )
+from mellea.plugins.types import HookType
 from mellea.stdlib.components import (
     AudioBlock,
     AudioUrlBlock,
@@ -524,6 +526,285 @@ async def test_embedded_intrinsic_activates_template_without_peft(stub_backend):
     )
     assert "model" not in request
     peft_scope.assert_not_called()
+
+
+class _FakeChatCompletionResponseWithContent:
+    def __init__(self, content: str):
+        message = SimpleNamespace(content=content)
+        self.choices = [SimpleNamespace(message=message)]
+
+
+async def _run_embedded_intrinsic_and_collect_invocation_payloads(
+    stub_backend, result_processor_cls: type
+) -> tuple[list, Exception | None]:
+    """Drives `_generate_from_intrinsic` for an embedded adapter to resolution.
+
+    Returns `(payloads, raised)`: the invocation-complete payloads fired via
+    `_core.invoke_hook` while `output._gen.process` resolves, and the
+    exception `process()` raised (or `None` on success). Callers must assert
+    on `raised`, not just the payloads, so a swallowed raise can't pass.
+    """
+    backend = _make_intrinsic_backend_stub(stub_backend)
+    backend.processing = AsyncMock(return_value=None)
+    adapter = _make_embedded_adapter_stub()
+    backend._added_adapters = {adapter.qualified_name: adapter}
+
+    def fake_transformers_inputs(request, tokenizer, model, ll_tokenizer=None):
+        return {"input_tokens": object()}, {}
+
+    def fake_generate_with_transformers(tokenizer, model, generate_input, other_input):
+        return _FakeChatCompletionResponseWithContent('{"result": "ok"}')
+
+    with (
+        patch(
+            "mellea.backends.huggingface.granite_formatters.IntrinsicsRewriter",
+            _FakeRewriter,
+        ),
+        patch(
+            "mellea.backends.huggingface.granite_formatters.IntrinsicsResultProcessor",
+            result_processor_cls,
+        ),
+        patch(
+            "mellea.formatters.granite.base.util.chat_completion_request_to_transformers_inputs",
+            side_effect=fake_transformers_inputs,
+        ),
+        patch(
+            "mellea.formatters.granite.base.util.generate_with_transformers",
+            side_effect=fake_generate_with_transformers,
+        ),
+        patch("mellea.backends.adapters._core.has_plugins", return_value=True),
+        patch(
+            "mellea.backends.adapters._core.invoke_hook", new_callable=AsyncMock
+        ) as mock_invoke,
+    ):
+        output = await LocalHFBackend._generate_from_intrinsic(
+            backend,
+            Intrinsic("answerability"),
+            ChatContext().add(Message("user", "Is the sky blue?")),
+            model_options={},
+        )
+        assert output._gen.generate is not None
+        await output._gen.generate
+
+        assert output._gen.process is not None
+        raised: Exception | None = None
+        while not output._gen.queue.empty():
+            item = output._gen.queue.get_nowait()
+            if item is not None:
+                # The schema_error/error cases deliberately make
+                # granite_formatters_processing raise; capture it (rather than
+                # swallowing it) so callers can assert on it directly.
+                try:
+                    await output._gen.process(output, item)
+                except Exception as e:
+                    raised = e
+
+    payloads = [
+        call.args[1]
+        for call in mock_invoke.call_args_list
+        if call.args[0] is HookType.ADAPTER_FUNCTION_INVOCATION_COMPLETE
+    ]
+    return payloads, raised
+
+
+@pytest.mark.asyncio
+async def test_embedded_intrinsic_invocation_complete_fires_success(stub_backend):
+    pytest.importorskip("cpex", reason="cpex not installed — install mellea[hooks]")
+
+    class _PassthroughResultProcessor:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def transform(self, chunk, rewritten):
+            return chunk
+
+    payloads, raised = await _run_embedded_intrinsic_and_collect_invocation_payloads(
+        stub_backend, _PassthroughResultProcessor
+    )
+
+    assert raised is None
+    assert len(payloads) == 1
+    assert payloads[0].name == "answerability"
+    assert payloads[0].binding_type == "embedded"
+    assert payloads[0].adapter_type == "alora"
+    assert payloads[0].outcome == "success"
+    assert payloads[0].error is None
+
+
+@pytest.mark.asyncio
+async def test_embedded_intrinsic_invocation_complete_fires_schema_error(stub_backend):
+    # Pins #1142/#1559: a non-JSON response must record schema_error, not success.
+    pytest.importorskip("cpex", reason="cpex not installed — install mellea[hooks]")
+
+    class _JSONDecodeErrorResultProcessor:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def transform(self, chunk, rewritten):
+            raise json.JSONDecodeError("bad json", "not valid json", 0)
+
+    payloads, raised = await _run_embedded_intrinsic_and_collect_invocation_payloads(
+        stub_backend, _JSONDecodeErrorResultProcessor
+    )
+
+    assert isinstance(raised, Exception)
+    assert "did not return a JSON" in str(raised)
+    assert isinstance(raised.__cause__, json.JSONDecodeError)
+    assert len(payloads) == 1
+    assert payloads[0].outcome == "schema_error"
+    assert payloads[0].error is not None
+
+
+@pytest.mark.asyncio
+async def test_embedded_intrinsic_invocation_complete_fires_error(stub_backend):
+    pytest.importorskip("cpex", reason="cpex not installed — install mellea[hooks]")
+
+    class _RaisingResultProcessor:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def transform(self, chunk, rewritten):
+            raise ValueError("boom")
+
+    payloads, raised = await _run_embedded_intrinsic_and_collect_invocation_payloads(
+        stub_backend, _RaisingResultProcessor
+    )
+
+    assert isinstance(raised, ValueError)
+    assert str(raised) == "boom"
+    assert len(payloads) == 1
+    assert payloads[0].outcome == "error"
+    assert payloads[0].error is not None
+
+
+@pytest.mark.asyncio
+async def test_embedded_intrinsic_invocation_complete_fires_error_on_generation_failure(
+    stub_backend,
+):
+    # A failure in the backend's own generation call never reaches
+    # granite_formatters_processing — avalue() raises it straight off the
+    # queue — so _await_embedded_generation must fire outcome="error" instead.
+    pytest.importorskip("cpex", reason="cpex not installed — install mellea[hooks]")
+    backend = _make_intrinsic_backend_stub(stub_backend)
+    backend.processing = AsyncMock(return_value=None)
+    adapter = _make_embedded_adapter_stub()
+    backend._added_adapters = {adapter.qualified_name: adapter}
+
+    def fake_transformers_inputs(request, tokenizer, model, ll_tokenizer=None):
+        return {"input_tokens": object()}, {}
+
+    def failing_generate_with_transformers(
+        tokenizer, model, generate_input, other_input
+    ):
+        raise RuntimeError("simulated model error")
+
+    with (
+        patch(
+            "mellea.backends.huggingface.granite_formatters.IntrinsicsRewriter",
+            _FakeRewriter,
+        ),
+        patch(
+            "mellea.backends.huggingface.granite_formatters.IntrinsicsResultProcessor",
+            _FakeResultProcessor,
+        ),
+        patch(
+            "mellea.formatters.granite.base.util.chat_completion_request_to_transformers_inputs",
+            side_effect=fake_transformers_inputs,
+        ),
+        patch(
+            "mellea.formatters.granite.base.util.generate_with_transformers",
+            side_effect=failing_generate_with_transformers,
+        ),
+        patch("mellea.backends.adapters._core.has_plugins", return_value=True),
+        patch(
+            "mellea.backends.adapters._core.invoke_hook", new_callable=AsyncMock
+        ) as mock_invoke,
+    ):
+        output = await LocalHFBackend._generate_from_intrinsic(
+            backend,
+            Intrinsic("answerability"),
+            ChatContext().add(Message("user", "Is the sky blue?")),
+            model_options={},
+        )
+        assert output._gen.generate is not None
+        with pytest.raises(RuntimeError, match="simulated model error"):
+            await output.avalue()
+
+    payloads = [
+        call.args[1]
+        for call in mock_invoke.call_args_list
+        if call.args[0] is HookType.ADAPTER_FUNCTION_INVOCATION_COMPLETE
+    ]
+    assert len(payloads) == 1
+    assert payloads[0].outcome == "error"
+    assert isinstance(payloads[0].error, RuntimeError)
+
+
+@pytest.mark.asyncio
+async def test_legacy_peft_intrinsic_never_fires_embedded_invocation_complete(
+    stub_backend,
+):
+    # Drives the legacy PEFT path (embedded_identity=None) and pins that it
+    # never fires the embedded helper — guards the isinstance check that
+    # gates embedded_identity from silently double-firing.
+    pytest.importorskip("cpex", reason="cpex not installed — install mellea[hooks]")
+    backend = _make_intrinsic_backend_stub(stub_backend)
+    backend.processing = AsyncMock(return_value=None)
+    adapter = _make_intrinsic_adapter_stub()
+    backend._added_adapters = {adapter.qualified_name: adapter}
+
+    def fake_transformers_inputs(request, tokenizer, model, ll_tokenizer=None):
+        return {"input_tokens": object()}, {}
+
+    def fake_generate_with_transformers(tokenizer, model, generate_input, other_input):
+        return _FakeChatCompletionResponseWithContent('{"result": "ok"}')
+
+    class _PassthroughResultProcessor:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def transform(self, chunk, rewritten):
+            return chunk
+
+    with (
+        patch(
+            "mellea.backends.huggingface.granite_formatters.IntrinsicsRewriter",
+            _FakeRewriter,
+        ),
+        patch(
+            "mellea.backends.huggingface.granite_formatters.IntrinsicsResultProcessor",
+            _PassthroughResultProcessor,
+        ),
+        patch(
+            "mellea.formatters.granite.base.util.chat_completion_request_to_transformers_inputs",
+            side_effect=fake_transformers_inputs,
+        ),
+        patch(
+            "mellea.formatters.granite.base.util.generate_with_transformers",
+            side_effect=fake_generate_with_transformers,
+        ),
+        patch("mellea.backends.adapters._core.has_plugins", return_value=True),
+        patch(
+            "mellea.backends.adapters._core.invoke_hook", new_callable=AsyncMock
+        ) as mock_invoke,
+    ):
+        output = await LocalHFBackend._generate_from_intrinsic(
+            backend,
+            Intrinsic("answerability"),
+            ChatContext().add(Message("user", "Is the sky blue?")),
+            model_options={},
+        )
+        assert output._gen.generate is not None
+        await output._gen.generate
+
+        assert output._gen.process is not None
+        while not output._gen.queue.empty():
+            item = output._gen.queue.get_nowait()
+            if item is not None:
+                await output._gen.process(output, item)
+
+    fired_hook_types = [call.args[0] for call in mock_invoke.call_args_list]
+    assert HookType.ADAPTER_FUNCTION_INVOCATION_COMPLETE not in fired_hook_types
 
 
 def test_generate_embedded_with_generation_lock_deactivates_peft_state():

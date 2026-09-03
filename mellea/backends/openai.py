@@ -55,7 +55,11 @@ from ..stdlib.components import Intrinsic, Message
 from ..stdlib.requirements import LLMaJRequirement
 from ..telemetry.context import generate_request_id, with_context
 from ._options import resolve_model_options
-from .adapters import EmbeddedActivationRequest, EmbeddedBinding
+from .adapters import EmbeddedActivationRequest, EmbeddedBinding, Identity
+from .adapters._core import (
+    _await_embedded_generation,
+    _fire_embedded_invocation_complete,
+)
 from .adapters.adapter import AdapterInput, AdapterMixin, EmbeddedIntrinsicAdapter
 from .backend import FormatterBackend
 from .model_options import ModelOption
@@ -906,12 +910,15 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 d["role"] = m.role
             messages_dicts.append(d)
 
-        chat_response = self._async_client.chat.completions.create(
-            model=self._model_id,
-            messages=messages_dicts,  # type: ignore
-            tools=formatted_tools if use_tools else None,  # type: ignore
-            extra_body=extra_body,
-            **api_params,
+        chat_response = _await_embedded_generation(
+            self._async_client.chat.completions.create(
+                model=self._model_id,
+                messages=messages_dicts,  # type: ignore
+                tools=formatted_tools if use_tools else None,  # type: ignore
+                extra_body=extra_body,
+                **api_params,
+            ),
+            adapter.identity,
         )
 
         # --- wire up ModelOutputThunk with intrinsic post-processing ------
@@ -926,26 +933,43 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             chunk: ChatCompletion,
             rewritten: granite_formatters.ChatCompletion,
             result_processor: granite_formatters.IntrinsicsResultProcessor,
+            identity: Identity,
         ):
             """Accumulate content and apply intrinsic result processing."""
             import json as _json
 
-            # Delegate standard metadata storage to the shared processing method.
-            await self.processing(mot, chunk)
-
-            # Apply intrinsic-specific result transformation on top.
-            response_dict = chunk.model_dump()
+            # Kept in one try, including the self.processing() call: a
+            # response with an empty choices list raises IndexError there
+            # (openai.py's processing() indexes chunk.choices[0].message
+            # unguarded), and that must still fire outcome="error" rather
+            # than skip the fire site entirely.
             try:
+                # Delegate standard metadata storage to the shared processing method.
+                await self.processing(mot, chunk)
+
+                response_dict = chunk.model_dump()
                 res = result_processor.transform(response_dict, rewritten)
+                # Kept inside the try: a malformed `res` (e.g. an empty
+                # choices list) must still fire outcome="error", not success
+                # then raise — the exact bug #1559 reverted.
+                mot._underlying_value = res.choices[0].message.content
             except _json.JSONDecodeError as e:
+                await _fire_embedded_invocation_complete(
+                    identity=identity, outcome="schema_error", error=e
+                )
                 raise Exception(
                     f"Intrinsic did not return a JSON: "
                     f"{chunk.choices[0].message.content}"
                 ) from e
-
-            # Overwrite the value accumulated by processing() with the
-            # post-processed intrinsic output.
-            mot._underlying_value = res.choices[0].message.content
+            except Exception as e:
+                await _fire_embedded_invocation_complete(
+                    identity=identity, outcome="error", error=e
+                )
+                raise
+            else:
+                await _fire_embedded_invocation_complete(
+                    identity=identity, outcome="success", error=None
+                )
 
         # Processing functions only pass the ModelOutputThunk (and current chunk
         # of response). Bind the other vars necessary for each processing step.
@@ -953,6 +977,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             granite_formatters_processing,
             rewritten=rewritten,
             result_processor=result_processor,
+            identity=adapter.identity,
         )
 
         output._gen.post_process = functools.partial(
