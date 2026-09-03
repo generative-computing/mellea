@@ -78,6 +78,6 @@ def test_hf_backend_overrides_adapter_activation_lock():
     assert "_adapter_activation_lock" in vars(LocalHFBackend)
 
 
-def test_openai_backend_does_not_override_adapter_activation_lock():
-    """OpenAIBackend has no PEFT model state, so it keeps the mixin's no-op default."""
-    assert "_adapter_activation_lock" not in vars(OpenAIBackend)
+def test_openai_backend_overrides_adapter_activation_lock():
+    """OpenAIBackend overrides the lock too, to serialize registration (issue #1562)."""
+    assert "_adapter_activation_lock" in vars(OpenAIBackend)
