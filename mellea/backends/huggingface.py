@@ -2644,7 +2644,12 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         self._added_adapters[adapter.qualified_name] = adapter
 
     def register_embedded_adapter_model(
-        self, source: str, *, revision: str = "main", cache_dir: str | None = None
+        self,
+        source: str,
+        *,
+        revision: str = "main",
+        cache_dir: str | None = None,
+        intrinsic_name: str | None = None,
     ) -> list[str]:
         """Register embedded adapter functions from a Granite Switch checkpoint.
 
@@ -2652,6 +2657,9 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             source: Local checkpoint directory or Hugging Face Hub repository ID.
             revision: Git revision when loading from the Hub.
             cache_dir: Cache directory for Hub downloads.
+            intrinsic_name: If provided, register only the adapter matching
+                this adapter function name. `None` registers all adapters
+                found in `source`.
 
         Returns:
             Names of the registered adapter functions.
@@ -2667,7 +2675,10 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         # single-threaded during construction, before the backend is exposed to
         # any other thread — see the matching note on OpenAIBackend's twin.
         discovered = _discover_embedded_adapters(
-            source, revision=revision, cache_dir=cache_dir
+            source,
+            revision=revision,
+            cache_dir=cache_dir,
+            intrinsic_name=intrinsic_name,
         )
         names = []
         for adapter, config in discovered:

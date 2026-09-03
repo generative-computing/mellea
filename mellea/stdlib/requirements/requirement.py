@@ -6,7 +6,7 @@
 from collections.abc import Callable
 from typing import Any, cast, overload
 
-from ...backends.adapters import get_io_contract
+from ...backends.adapters import AdapterType, get_io_contract
 from ...core import (
     CBlock,
     Context,
@@ -82,13 +82,22 @@ class ALoraRequirement(Requirement, Intrinsic):
         description (str): Human-readable requirement description.
         intrinsic_name (str | None): Name of the ALoRA intrinsic to use.
             Defaults to `"requirement-check"`.
+        adapter_types (tuple[AdapterType, ...] | None): Adapter types to look
+            up for `intrinsic_name`. Required when `intrinsic_name` is a
+            custom, non-catalog adapter function (see `Intrinsic`); ignored
+            for a catalog name, which supplies its own.
 
     Attributes:
         use_aloras (bool): Always `True`; this class always attempts to use
             ALoRA adapters for validation.
     """
 
-    def __init__(self, description: str, intrinsic_name: str | None = None):
+    def __init__(
+        self,
+        description: str,
+        intrinsic_name: str | None = None,
+        adapter_types: tuple[AdapterType, ...] | None = None,
+    ):
         """Initialize ALoraRequirement with a description and optional intrinsic adapter name."""
         # TODO: We may want to actually do the validation_fn here so that we can set the score.
         super().__init__(
@@ -104,6 +113,7 @@ class ALoraRequirement(Requirement, Intrinsic):
             self,
             intrinsic_name=intrinsic_name,
             intrinsic_kwargs={"requirement": f"{self.description}"},
+            adapter_types=adapter_types,
         )
 
 

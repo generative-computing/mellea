@@ -430,14 +430,22 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         return adapter.identity.name, config
 
     def register_embedded_adapter_model(
-        self, source: str, *, revision: str = "main", cache_dir: str | None = None
+        self,
+        source: str,
+        *,
+        revision: str = "main",
+        cache_dir: str | None = None,
+        intrinsic_name: str | None = None,
     ) -> list[str]:
-        """Register all embedded adapters from an Embedded Adapter model.
+        """Register embedded adapters from an Embedded Adapter model.
 
         Args:
             source (str): A local model directory path or Hugging Face Hub repo ID.
             revision (str): Git revision when loading from Hugging Face Hub.
             cache_dir (str | None): Cache directory for HF downloads.
+            intrinsic_name (str | None): If provided, register only the adapter
+                matching this adapter function name. `None` registers all
+                adapters found in `source`.
 
         Returns:
             list[str]: Names of the registered intrinsics.
@@ -446,7 +454,10 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         # single-threaded during construction, before the backend is exposed to
         # any other thread — see the matching note on LocalHFBackend's twin.
         discovered = _discover_embedded_adapters(
-            source, revision=revision, cache_dir=cache_dir
+            source,
+            revision=revision,
+            cache_dir=cache_dir,
+            intrinsic_name=intrinsic_name,
         )
         names = []
         for adapter, config in discovered:
