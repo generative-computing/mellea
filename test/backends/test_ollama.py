@@ -357,11 +357,15 @@ async def test_thinking_suppressed_per_call(thinking_on_session) -> None:
     assert not mot.thinking, f"Expected no thinking trace, got: {mot.thinking!r}"
 
 
-# Runs only manually / in `-m slow` sweeps: PR CI (quality.yml) and the nightly
-# script both inherit pyproject.toml's default `-m "not slow"`, so this is the
-# only test in the module that would catch a regression in think-block capture
-# itself (the THINKING=False tests would pass vacuously in that case). A
-# regression in the merge/override plumbing is still caught by the other two.
+# Runs only manually / in `-m slow` sweeps. PR CI (quality.yml) never overrides
+# `-m`, so it inherits pyproject.toml's default `-m "not slow"` and never runs
+# this test. The nightly script committed here has the same default, but it's
+# driven by an external nightly.py not in this repo, so whether nightly
+# actually invokes `-m slow` is unverified rather than ruled out. Either way,
+# this is the only test in the module that would catch a regression in
+# think-block capture itself (the THINKING=False tests would pass vacuously in
+# that case). A regression in the merge/override plumbing is still caught by
+# the other two.
 @pytest.mark.slow  # generates a full think block, unlike its THINKING=False siblings
 async def test_thinking_enabled_mot_field_nonempty(session) -> None:
     """THINKING=True per call overrides a THINKING=False construction-time default."""
