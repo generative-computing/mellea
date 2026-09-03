@@ -84,12 +84,17 @@ class ALoraRequirement(Requirement, Intrinsic):
             Defaults to `"requirement-check"`.
         adapter_types (tuple[AdapterType, ...] | None): Adapter types to look
             up for `intrinsic_name`. Required when `intrinsic_name` is a
-            custom, non-catalog adapter function (see `Intrinsic`); ignored
-            for a catalog name, which supplies its own.
+            custom, non-catalog adapter function (see `Intrinsic`). Optional
+            for a catalog name, which otherwise supplies its own — but an
+            explicit value here overrides the catalog's, it is not ignored.
 
     Attributes:
         use_aloras (bool): Always `True`; this class always attempts to use
             ALoRA adapters for validation.
+
+    Raises:
+        ValueError: `intrinsic_name` is a custom, non-catalog adapter
+            function and `adapter_types` was not provided.
     """
 
     def __init__(

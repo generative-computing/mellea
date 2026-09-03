@@ -99,18 +99,27 @@ or from deliberately testing a new revision, the failure mode is the same:
 `IOContract.parse` raises `AdapterSchemaMismatchError` when the model's JSON
 output doesn't satisfy the declared contract.
 
-Calling an adapter directly through `Intrinsic`/`mfuncs.act()` propagates
-this exception — catch it where you call:
+`mfuncs.act(Intrinsic(...), ...)` on its own only returns the model's raw
+output — it does not parse or validate it, so it never raises this error.
+The high-level adapter function wrappers (`core.requirement_check`,
+`core.check_certainty`, the `rag` module's functions) do both: they call
+`mfuncs.act()` internally, then parse the result against the adapter's
+contract. Catch the exception there:
 
 ```python
 from mellea.backends.adapters import AdapterSchemaMismatchError
-import mellea.stdlib.functional as mfuncs
-from mellea.stdlib.components import Intrinsic
+from mellea.stdlib.components.intrinsic import core
+from mellea.stdlib.components import Message
+from mellea.stdlib.context import ChatContext
+
+context = (
+    ChatContext()
+    .add(Message("user", "Can you help me plan a trip?"))
+    .add(Message("assistant", "Sure — where are you headed?"))
+)
 
 try:
-    out, _ = mfuncs.act(Intrinsic("requirement-check", intrinsic_kwargs={
-        "requirement": "The assistant is helpful."
-    }), ctx, backend)
+    score = core.requirement_check(context, backend, "The assistant is helpful.")
 except AdapterSchemaMismatchError as e:
     print(f"Schema mismatch: expected {e.expected_keys}, observed {e.observed_keys}")
     if e.reason:
@@ -123,6 +132,12 @@ except AdapterSchemaMismatchError as e:
 as "requirement not met":
 
 ```python
+from mellea import MelleaSession
+from mellea.stdlib.requirements import ALoraRequirement
+
+m = MelleaSession(backend, ctx=context)
+requirement = ALoraRequirement("The assistant is helpful.")
+
 val_res = m.validate([requirement])
 for result in val_res:
     if result.error is not None:
@@ -139,4 +154,4 @@ evidence your model got worse at the task.
 **See also:**
 [Adapter functions](../advanced/intrinsics.md) |
 [Adding a custom adapter function in 20 lines](./07-custom-adapter-function.md) |
-[Reading adapter function telemetry](./09-adapter-function-telemetry.md)
+[Adapter function metrics](../observability/metrics.md#adapter-function-metrics)

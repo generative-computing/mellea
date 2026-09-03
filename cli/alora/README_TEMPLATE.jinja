@@ -32,6 +32,13 @@ and an intrinsic component. The adapter connects to the HuggingFace model reposi
 where the trained weights are stored, and the intrinsic wraps it as a composable Mellea
 component that can be used with any compatible backend.
 
+> **Repo layout:** the code below only works if `{{ userid }}/{{ intrinsic_name }}`
+> was uploaded with `m alora upload ... --intrinsic --io-yaml ./io.yaml` — that
+> command places weights at `{{ intrinsic_name }}/<base-model>/alora/`, which is
+> where `LocalFileBinding` looks for them. The plain `m alora upload` (without
+> `--intrinsic`) pushes weights to the repo root instead, and this code will
+> fail with `ValueError: Intrinsic '{{ intrinsic_name }}' ... not found`.
+
 Make sure you have Mellea installed (`uv pip install mellea`), then use the code below to
 integrate this intrinsic into your application.
 
@@ -62,13 +69,23 @@ def _{{ intrinsic_name }}_adapter() -> Adapter:
             name=_INTRINSIC_ADAPTER_NAME,
             adapter_type=AdapterType.ALORA,
             repo_id=_INTRINSIC_MODEL_ID,
+            # A custom, non-catalog adapter has no catalog entry to resolve
+            # revision=None from — pin it explicitly.
+            revision="main",
         ),
     )
 
 
 class {{ intrinsic_name_camelcase }}Intrinsic(Intrinsic, SimpleComponent):
     def __init__(self, {{ arglist }}):
-        Intrinsic.__init__(self, intrinsic_name=_INTRINSIC_ADAPTER_NAME)
+        # adapter_types is required here: "{{ intrinsic_name }}" is outside
+        # Mellea's intrinsics catalog, so Intrinsic has no catalog entry to
+        # fall back to.
+        Intrinsic.__init__(
+            self,
+            intrinsic_name=_INTRINSIC_ADAPTER_NAME,
+            adapter_types=(AdapterType.ALORA,),
+        )
         SimpleComponent.__init__(self, {{ arglist_as_kwargs }})
 
     def format_for_llm(self):

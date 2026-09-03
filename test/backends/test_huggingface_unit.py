@@ -1206,6 +1206,58 @@ def _wire_fake_peft_model(backend: LocalHFBackend) -> None:
     backend._model.active_adapters.side_effect = lambda: list(active)  # type: ignore[attr-defined]
 
 
+def test_generate_composed_local_file_with_adapter_scope_activates_during_generation():
+    """Composed-adapter counterpart of the test above, exercising the real
+    `_generate_composed_local_file_with_adapter_scope` method directly.
+
+    Coverage gap noted in review: the only other test reaching this method
+    goes through `stub_backend`, whose fixture replaces it with a
+    pass-through bypassing the lock hold, `adapter_scope` drive, and both
+    `_assert_correct_adapters` calls entirely — so the method that owns that
+    logic had no direct coverage of its own, unlike its shim sibling above.
+    """
+    from mellea.backends.adapters._core import (
+        Adapter as _AdapterCore,
+        LocalFileBinding as _LocalFileBinding,
+    )
+    from mellea.backends.adapters.io_contracts import get_io_contract
+
+    backend = _make_backend()
+    _wire_fake_peft_model(backend)
+
+    binding = _LocalFileBinding(
+        name="answerability",
+        adapter_type=AdapterType.ALORA,
+        repo_id="fake/repo",
+        revision="fake0000000000000000000000000000000000000",
+    )
+    binding.backend = backend
+    binding.path = "/fake/path"
+    binding._loaded = True
+    composed = _AdapterCore(
+        identity=Identity(
+            name="answerability", adapter_type="alora", capability="answerability"
+        ),
+        io_contract=get_io_contract("answerability"),
+        weights=binding,
+    )
+
+    seen_during_generation = []
+
+    def fake_generate():
+        seen_during_generation.append(backend._model.active_adapters())
+        return "output"
+
+    out = backend._generate_composed_local_file_with_adapter_scope(
+        composed, fake_generate
+    )
+
+    assert out == "output"
+    assert seen_during_generation == [[binding.qualified_name]]
+    assert backend._model.active_adapters() == []
+    backend._model.set_adapter.assert_any_call([])  # type: ignore[attr-defined]
+
+
 def test_generate_intrinsic_with_adapter_scope_activates_during_generation():
     """Generation demonstrably runs with the adapter active — asserted from
     inside the generate callback via the real (mocked) PEFT model state, not
@@ -1484,6 +1536,130 @@ def test_remove_adapter_deregisters_composed_embedded_adapter():
     assert key not in backend.list_adapters()
     assert key not in backend._composed_adapters
     assert key not in backend._composed_adapter_configs
+
+
+def test_load_peft_adapter_on_composed_embedded_adapter_raises_type_error():
+    """load_peft_adapter() must reject a composed Embedded adapter with TypeError.
+
+    Regression: a composed Embedded adapter lives only in _composed_adapters,
+    never _added_adapters (see add_adapter's composed-Adapter branch). Without
+    a check there, load_peft_adapter's `_added_adapters.get(...)` miss raised
+    ValueError("was not previously added") instead of the documented
+    TypeError explaining it's activated by the chat template, not PEFT —
+    misleading, since the adapter genuinely was added.
+    """
+    from mellea.backends.adapters._core import (
+        Adapter as _AdapterCore,
+        EmbeddedBinding,
+        Identity,
+    )
+    from mellea.backends.adapters.io_contracts import get_io_contract
+
+    backend = _make_backend()
+    composed = _AdapterCore(
+        identity=Identity(
+            name="answerability", adapter_type="alora", capability="answerability"
+        ),
+        io_contract=get_io_contract("answerability"),
+        weights=EmbeddedBinding(),
+    )
+    backend.add_adapter(composed)
+
+    with pytest.raises(TypeError, match="cannot load embedded adapter"):
+        backend.load_peft_adapter("answerability_alora")
+
+
+def test_add_adapter_shim_refuses_name_already_claimed_by_composed_adapter():
+    """The legacy/shim add_adapter path must see composed-adapter registrations too.
+
+    Regression: the duplicate-name guard on the shim path only checked
+    `_added_adapters`, not `_composed_adapters` — a composed Adapter already
+    registered under a qualified name did not stop a later shim
+    `EmbeddedIntrinsicAdapter` (or bare `LocalFileBinding`) from silently
+    claiming the same name, defeating the "adapter loading is not
+    idempotent" invariant the warning message itself describes.
+    """
+    from mellea.backends.adapters._core import (
+        Adapter as _AdapterCore,
+        EmbeddedBinding as _EmbeddedBinding,
+        Identity as _Identity,
+    )
+    from mellea.backends.adapters.io_contracts import get_io_contract
+
+    backend = _make_backend()
+    composed = _AdapterCore(
+        identity=_Identity(
+            name="answerability", adapter_type="alora", capability="answerability"
+        ),
+        io_contract=get_io_contract("answerability"),
+        weights=_EmbeddedBinding(),
+    )
+    backend.add_adapter(composed)
+    assert "answerability_alora" in backend._composed_adapters
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        shim = EmbeddedIntrinsicAdapter("answerability", config={}, technology="alora")
+
+    backend.add_adapter(shim)
+
+    assert shim.backend is None
+    assert "answerability_alora" not in backend._added_adapters
+
+
+def test_register_embedded_adapter_model_refused_duplicate_does_not_clobber_cached_config():
+    """register_embedded_adapter_model() must not overwrite a live adapter's cached
+    config, or falsely report it as (re-)registered, when add_adapter() refuses
+    a duplicate name.
+
+    Regression: add_adapter() silently refuses (logs a warning, returns) rather
+    than raising for an already-registered qualified name. The loop here used to
+    write `discovered`'s config into `_composed_adapter_configs` and append the
+    name unconditionally, so a second discovery call for the same adapter name
+    would overwrite the first, still-registered adapter's config with whatever
+    the second (possibly different) discovery produced, and falsely list it as
+    registered in the returned names.
+    """
+    from mellea.backends.adapters._core import (
+        Adapter as _AdapterCore,
+        EmbeddedBinding as _EmbeddedBinding,
+        Identity as _Identity,
+    )
+    from mellea.backends.adapters.io_contracts import get_io_contract
+
+    backend = _make_backend()
+
+    def _make_composed():
+        return _AdapterCore(
+            identity=_Identity(
+                name="answerability", adapter_type="alora", capability="answerability"
+            ),
+            io_contract=get_io_contract("answerability"),
+            weights=_EmbeddedBinding(),
+        )
+
+    first_config = {"version": "first"}
+    with patch(
+        "mellea.backends.huggingface._discover_embedded_adapters",
+        return_value=[(_make_composed(), first_config)],
+    ):
+        names = backend.register_embedded_adapter_model(
+            "some/repo", intrinsic_name="answerability"
+        )
+    assert names == ["answerability"]
+    assert backend._composed_adapter_configs["answerability_alora"] is first_config
+
+    second_config = {"version": "second"}
+    with patch(
+        "mellea.backends.huggingface._discover_embedded_adapters",
+        return_value=[(_make_composed(), second_config)],
+    ):
+        names = backend.register_embedded_adapter_model(
+            "some/other-repo", intrinsic_name="answerability"
+        )
+
+    assert names == []
+    assert backend._composed_adapter_configs["answerability_alora"] is first_config
 
 
 def test_add_adapter_after_remove_adapter_allows_a_fresh_registration():

@@ -896,7 +896,9 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
         Raises:
             ValueError: A composed Embedded adapter has no cached config
-                (never registered via `add_adapter`/`register_embedded_adapter_model`).
+                (never registered via `add_adapter`/`register_embedded_adapter_model`),
+                or a composed LocalFile adapter's `io.yaml` did not parse to a
+                mapping.
             TypeError: A composed Adapter's `weights` is neither a
                 `LocalFileBinding` nor an `EmbeddedBinding`.
         """
@@ -915,7 +917,13 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                     alora=binding.adapter_type is AdapterType.ALORA,
                 )
                 with open(io_yaml_path, encoding="utf-8") as f:
-                    config = yaml.safe_load(f)
+                    loaded = yaml.safe_load(f)
+                if not isinstance(loaded, dict):
+                    raise ValueError(
+                        f"io.yaml for adapter {binding.name!r} at {io_yaml_path} "
+                        f"did not parse to a mapping (got {type(loaded).__name__})."
+                    )
+                config = loaded
                 self._composed_adapter_configs[key] = config
             return adapter.identity.name, config
         if isinstance(adapter.weights, EmbeddedBinding):
@@ -2653,7 +2661,9 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                     f"adapter {adapter.name} with type {adapter.adapter_type} has already been added to backend {adapter.backend}"
                 )
 
-        existing = self._added_adapters.get(adapter.qualified_name)
+        existing = self._added_adapters.get(
+            adapter.qualified_name
+        ) or self._composed_adapters.get(adapter.qualified_name)
         if existing is not None:
             MelleaLogger.get_logger().warning(
                 f"Client code attempted to add {adapter.name} with type {adapter.adapter_type} "
@@ -2719,8 +2729,18 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         )
         names = []
         for adapter, config in discovered:
+            key = _composed_adapter_key(adapter)
             self.add_adapter(adapter)
-            self._composed_adapter_configs[_composed_adapter_key(adapter)] = config
+            # add_adapter() silently refuses (logs a warning, returns) rather than
+            # raising when `key` is already registered — checking `key in
+            # self._composed_adapters` isn't enough, since a prior registration
+            # already left it there; compare identity to confirm *this* adapter
+            # is the one that's actually registered before caching its config,
+            # or a refused call would overwrite the live adapter's config with
+            # this one's and falsely report it as registered below.
+            if self._composed_adapters.get(key) is not adapter:
+                continue
+            self._composed_adapter_configs[key] = config
             names.append(adapter.identity.name)
         return names
 
@@ -2742,6 +2762,15 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         """
         adapter = self._added_adapters.get(adapter_qualified_name, None)
         if adapter is None:
+            # A composed Embedded adapter never lands in `_added_adapters` (see
+            # `add_adapter`'s composed-Adapter branch) — check there before
+            # concluding the name was never added at all.
+            composed = self._composed_adapters.get(adapter_qualified_name, None)
+            if composed is not None and isinstance(composed.weights, EmbeddedBinding):
+                raise TypeError(
+                    f"cannot load embedded adapter {adapter_qualified_name} through PEFT; "
+                    "it is activated by the chat template"
+                )
             raise ValueError(
                 f"could not load adapter {adapter_qualified_name} for backend {self}: adapter was not previously added"
             )

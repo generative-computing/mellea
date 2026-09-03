@@ -17,7 +17,8 @@ By the end you will have covered:
 - Validating output with `ALoraRequirement` against a custom adapter name
 
 **Prerequisites:** `pip install "mellea[hf]"`, a trained LoRA/aLoRA adapter
-uploaded to Hugging Face Hub (see
+uploaded to Hugging Face Hub with
+`m alora upload ... --intrinsic --io-yaml ./io.yaml` (see
 [LoRA and aLoRA adapters](../advanced/lora-and-alora-adapters.md) for
 training and uploading), and a GPU or Apple Silicon Mac.
 
@@ -29,6 +30,14 @@ Mellea's built-in adapter functions (`answerability`, `requirement-check`,
 etc.) are looked up from a catalog that supplies their `repo_id` and
 `revision`. A custom adapter has no catalog entry, so you supply those
 fields yourself:
+
+> **Repo layout matters:** `LocalFileBinding` only finds weights at
+> `<name>/<base-model>/<lora|alora>/` inside `repo_id` — the same layout
+> Mellea's own built-in adapter functions use, and the one `m alora upload
+> --intrinsic --io-yaml ./io.yaml` produces. The plain `m alora upload`
+> (no `--intrinsic`) pushes weights to the repo root instead, which
+> `LocalFileBinding` cannot find — if you used that command, re-upload with
+> `--intrinsic` before continuing.
 
 ```python
 # Requires: mellea[hf]
@@ -142,4 +151,4 @@ that this tutorial's composed `Adapter` replaces without a class of its own:
 
 **See also:** [Adapter functions](../advanced/intrinsics.md) |
 [LoRA and aLoRA adapters](../advanced/lora-and-alora-adapters.md) |
-[Reading adapter function telemetry](./09-adapter-function-telemetry.md)
+[Adapter function metrics](../observability/metrics.md#adapter-function-metrics)

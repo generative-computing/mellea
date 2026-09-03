@@ -315,9 +315,10 @@ you can construct by hand, so registration goes through
 
 ```python
 from mellea.backends.openai import OpenAIBackend
+from mellea.backends.model_ids import IBM_GRANITE_SWITCH_4_1_3B_PREVIEW
 
 switch_backend = OpenAIBackend(
-    model_id="granite-switch",
+    model_id=IBM_GRANITE_SWITCH_4_1_3B_PREVIEW.hf_model_name,
     api_key="EMPTY",
     base_url="http://localhost:8000/v1",
     load_embedded_adapters=False,
@@ -327,7 +328,7 @@ switch_backend = OpenAIBackend(
 # io.yaml config a bare Adapter(weights=EmbeddedBinding.from_base_model(...))
 # construction has no way to supply.
 switch_backend.register_embedded_adapter_model(
-    "granite-switch", intrinsic_name="answerability"
+    IBM_GRANITE_SWITCH_4_1_3B_PREVIEW.hf_model_name, intrinsic_name="answerability"
 )
 ```
 
@@ -356,4 +357,4 @@ Safety and factuality checks use a separate set of Guardian-specific adapter fun
 **See also:**
 [Adding a custom adapter function in 20 lines](../tutorials/07-custom-adapter-function.md) |
 [Handling a breaking adapter schema change](../tutorials/08-adapter-schema-migrations.md) |
-[Reading adapter function telemetry](../tutorials/09-adapter-function-telemetry.md)
+[Adapter function metrics](../observability/metrics.md#adapter-function-metrics)
