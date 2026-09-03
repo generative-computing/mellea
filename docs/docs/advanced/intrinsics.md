@@ -14,7 +14,7 @@ Adapter functions are adapter-accelerated operations for RAG quality checks. The
 LoRA/aLoRA adapters loaded directly into the Hugging Face backend — faster and more
 reliable than prompting a general-purpose model for these specialized micro-tasks.
 
-> **Backend note:** Adapter functions work with two backends:
+> **Backend note:** Adapter functions work with three backends:
 >
 > - **LocalHFBackend** — loads LoRA/aLoRA adapters from the catalog at runtime.
 >   A local Granite Switch checkpoint can instead use
@@ -25,8 +25,13 @@ reliable than prompting a general-purpose model for these specialized micro-task
 >   `load_embedded_adapters=True`. Only adapter functions embedded in the model are
 >   available — check the model's `adapter_index.json` for the list.
 >   See `docs/docs/examples/granite-switch/README.md`
+> - **OllamaModelBackend**: uses an Ollama model that bundles the adapter,
+>   for example `gabegoodhart/granite4.1-uncertainty:3b`, which is `granite4.1:3b`
+>   plus the uncertainty aLoRA. Ollama bundles one adapter per model, so pass
+>   `adapter_models={"uncertainty": "<tag>", ...}` to route each adapter function
+>   to its model. Install `mellea[switch]` to download the adapter's `io.yaml`.
 >
-> Adapter functions do not work with Ollama or other remote backends.
+> Adapter functions do not work with other remote backends.
 
 Set up the backend once and reuse it across adapter function calls:
 
