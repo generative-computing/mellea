@@ -263,6 +263,8 @@ def _make_intrinsic_backend_stub(stub_backend):
         to_chat_messages=lambda linearized_ctx: [Message("user", "Is the sky blue?")]
     )
     stub_backend._added_adapters = {}
+    stub_backend._composed_adapters = {}
+    stub_backend._composed_adapter_configs = {}
     stub_backend._tokenizer = object()
     stub_backend._model = object()
     stub_backend._llguidance_tokenizer = object()
@@ -350,7 +352,6 @@ def test_load_embedded_adapters_registers_checkpoint_adapters():
     # The composed Adapter is registered, not the shim instance, so the
     # shim's own `.backend` is never touched; the binding it shares with the
     # composed Adapter (asserted above) is what actually gets stamped.
-    assert adapter.weights.source == backend.base_model_name
     assert adapter.weights.source == backend.base_model_name
     backend._model.load_adapter.assert_not_called()
 
@@ -917,6 +918,58 @@ async def test_composed_adapter_drives_generate_from_intrinsic(stub_backend):
                 await output._gen.process(output, item)
                 processed = True
         assert processed, "the composed local-file path must produce a response"
+
+
+def test_composed_local_file_config_is_cached_after_first_derivation():
+    """`_intrinsic_adapter_name_and_config` must not re-derive (re-download,
+    re-parse) a composed LocalFile adapter's io.yaml on every call.
+
+    Regression: the first version of this helper called
+    `intrinsics.obtain_io_yaml` (a Hugging Face Hub round trip) and re-parsed
+    the file on *every* invocation, unlike the shim it replaces (which loads
+    once in `IntrinsicAdapter.__init__`). Every composed-LocalFile intrinsic
+    call — the default path via `resolve_adapter` — paid that cost.
+    """
+    from mellea.backends.adapters._core import (
+        Adapter as _AdapterCore,
+        Identity,
+        LocalFileBinding,
+    )
+    from mellea.backends.adapters.catalog import AdapterType
+    from mellea.backends.adapters.io_contracts import get_io_contract
+
+    backend = _make_backend()
+    backend._composed_adapter_configs = {}
+    binding = LocalFileBinding(
+        name="answerability",
+        adapter_type=AdapterType.ALORA,
+        repo_id="ibm-granite/granitelib-rag-r1.0",
+        revision="abc123",
+    )
+    composed = _AdapterCore(
+        identity=Identity(
+            name="answerability", adapter_type="alora", capability="answerability"
+        ),
+        io_contract=get_io_contract("answerability"),
+        weights=binding,
+    )
+
+    with (
+        patch(
+            "mellea.formatters.granite.intrinsics.obtain_io_yaml",
+            return_value="/fake/adapter.yaml",
+        ) as mock_obtain,
+        patch("builtins.open", mock_open(read_data="key: value")),
+        patch("yaml.safe_load", return_value={"parameters": {}}),
+    ):
+        name1, config1 = backend._intrinsic_adapter_name_and_config(composed)
+        name2, config2 = backend._intrinsic_adapter_name_and_config(composed)
+
+    assert mock_obtain.call_count == 1, (
+        "obtain_io_yaml must only run once; the second call should hit the cache"
+    )
+    assert name1 == name2 == "answerability"
+    assert config1 is config2
 
 
 def test_generate_embedded_with_generation_lock_deactivates_peft_state():

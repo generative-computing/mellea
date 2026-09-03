@@ -837,9 +837,11 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 streaming is requested (intrinsic post-processing requires
                 the complete response).
             ValueError: If no embedded adapter is registered for the requested
-                intrinsic.
-            TypeError: If the adapter isn't an EmbeddedIntrinsicAdapter, or its
-                `weights` isn't an EmbeddedBinding (only reachable if a caller
+                intrinsic, or a composed `Adapter` has no io.yaml config
+                cached (see `_intrinsic_adapter_name_and_config`).
+            TypeError: If the adapter is neither an `EmbeddedIntrinsicAdapter`
+                nor a composed `Adapter`, or its `weights` isn't an
+                `EmbeddedBinding` (for the shim, only reachable if a caller
                 reassigns `.weights` after construction).
         """
         if not ctx.is_chat_context:

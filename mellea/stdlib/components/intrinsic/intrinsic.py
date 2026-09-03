@@ -65,11 +65,16 @@ class Intrinsic(Component[str]):
             # told us which adapter types to look up, so a catalog entry
             # (whose repo_id/revision this class never reads — see
             # `adapter_types` and `intrinsic_name` properties below) isn't
-            # needed to construct a usable Intrinsic.
+            # needed to construct a usable Intrinsic. "not-a-catalog-entry"
+            # (rather than "unpinned") avoids colliding with the
+            # `mellea.adapter_function.*` telemetry sentinel, which already
+            # uses the string "unpinned" to mean "revision is None" for a
+            # real, catalog-resolvable adapter — a different situation from
+            # this synthetic entry having no revision concept at all.
             self.metadata = IntrinsicsCatalogEntry(
                 name=intrinsic_name,
                 repo_id="",
-                revision="unpinned",
+                revision="not-a-catalog-entry",
                 adapter_types=adapter_types,
             )
         if intrinsic_kwargs is None:

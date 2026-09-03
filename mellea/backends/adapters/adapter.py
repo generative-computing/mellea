@@ -752,9 +752,13 @@ class AdapterMixin(Backend, abc.ABC):
                 for a, config in _discover_embedded_adapters(
                     repo_id, intrinsic_name=name
                 ):
+                    # Register first, then cache the config: if add_adapter
+                    # refuses the registration (e.g. a duplicate key), no
+                    # orphaned config entry is left behind for a key that
+                    # was never actually stored in the registry.
+                    self.add_adapter(a)
                     if configs is not None:
                         configs[_composed_adapter_key(a)] = config
-                    self.add_adapter(a)
             else:
                 # AdapterType.LORA is the pre-Phase-1 default (mirrors old _util.py).
                 # Every current catalog entry supports LORA.  Phase 2 (see epic #929)

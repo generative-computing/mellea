@@ -828,6 +828,15 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         (see `add_adapter`) — there is no throwaway `_IntrinsicPeftBinding` to
         build, so this drives `adapter_scope` directly on `adapter` itself.
 
+        Does not call `binding.prepare()`: `add_adapter`/`resolve_adapter`
+        already guarantee it before this method's caller can reach a
+        registered adapter, and calling it again here would acquire
+        `binding._lifecycle_lock` while already holding `_generation_lock` —
+        the reverse of the order `LocalFileBinding.release()` acquires them
+        in (`_lifecycle_lock` then, via `_adapter_activation_lock()`,
+        `_generation_lock`), a lock-order inversion that can deadlock a
+        `release()` racing an in-flight generation on the same binding.
+
         Args:
             adapter: The composed `Adapter` to activate for this call; its
                 `weights` must be a `LocalFileBinding` already registered with
@@ -839,11 +848,17 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
         Returns:
             Whatever `generate_func` returns.
+
+        Raises:
+            TypeError: `adapter.weights` is not a `LocalFileBinding`.
         """
         binding = adapter.weights
-        assert isinstance(binding, LocalFileBinding)
+        if not isinstance(binding, LocalFileBinding):
+            raise TypeError(
+                "LocalHFBackend's composed local-file generation path requires "
+                f"a LocalFileBinding; got {type(binding).__name__}."
+            )
         with self._generation_lock:
-            binding.prepare()
             with self.adapter_scope(adapter):
                 _assert_correct_adapters(binding.qualified_name, self._model)
                 out = generate_func(*args, **kwargs)
@@ -861,9 +876,12 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         `IntrinsicsResultProcessor` (Epic #929, issue #1144) — so this derives
         the same io.yaml config a shim would have loaded:
 
-        - LocalFile/PEFT reality: re-downloaded via `obtain_io_yaml` from the
-          binding's own `repo_id`/`revision`, mirroring
-          `IntrinsicAdapter.__init__`.
+        - LocalFile/PEFT reality: derived via `obtain_io_yaml` from the
+          binding's own `repo_id`/`revision` on first use, mirroring
+          `IntrinsicAdapter.__init__` — then cached in
+          `_composed_adapter_configs`, the same dict the Embedded reality
+          uses, so a Hugging Face Hub round trip and a YAML re-parse don't
+          happen on every generation call.
         - Embedded/Granite Switch reality: looked up from
           `_composed_adapter_configs`, cached at registration time (see
           `add_adapter`/`register_embedded_adapter_model`) since it comes from
@@ -886,15 +904,19 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             return adapter.name, adapter.config
         if isinstance(adapter.weights, LocalFileBinding):
             binding = adapter.weights
-            io_yaml_path = intrinsics.obtain_io_yaml(
-                binding.name,
-                self.base_model_name,
-                binding.repo_id,
-                revision=binding.resolved_revision(),
-                alora=binding.adapter_type is AdapterType.ALORA,
-            )
-            with open(io_yaml_path, encoding="utf-8") as f:
-                config = yaml.safe_load(f)
+            key = _composed_adapter_key(adapter)
+            config = self._composed_adapter_configs.get(key)
+            if config is None:
+                io_yaml_path = intrinsics.obtain_io_yaml(
+                    binding.name,
+                    self.base_model_name,
+                    binding.repo_id,
+                    revision=binding.resolved_revision(),
+                    alora=binding.adapter_type is AdapterType.ALORA,
+                )
+                with open(io_yaml_path, encoding="utf-8") as f:
+                    config = yaml.safe_load(f)
+                self._composed_adapter_configs[key] = config
             return adapter.identity.name, config
         if isinstance(adapter.weights, EmbeddedBinding):
             key = _composed_adapter_key(adapter)
@@ -943,11 +965,15 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
         Raises:
             ValueError: If no adapter is registered for the requested intrinsic,
-                or if the context contains images or audio; `LocalHFBackend`
-                does not support multimodal inputs.
-            TypeError: If the adapter is neither an `IntrinsicAdapter` nor an
-                `EmbeddedIntrinsicAdapter`, or if an embedded adapter does not
-                have an `EmbeddedBinding`.
+                the context contains images or audio (`LocalHFBackend` does
+                not support multimodal inputs), or a composed Embedded
+                adapter has no io.yaml config cached (see
+                `_intrinsic_adapter_name_and_config`).
+            TypeError: If the adapter is neither an `IntrinsicAdapter`, an
+                `EmbeddedIntrinsicAdapter`, nor a composed `Adapter`; if an
+                `EmbeddedIntrinsicAdapter`'s `weights` is not an
+                `EmbeddedBinding`; or if a composed `Adapter`'s `weights` is
+                an unsupported binding type.
         """
         if not ctx.is_chat_context:
             raise Exception("Does not yet support non-chat contexts.")
@@ -2594,8 +2620,15 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 return
             if isinstance(adapter.weights, LocalFileBinding):
                 binding = adapter.weights
-                if binding.backend is None:
-                    binding.bind_backend(self)
+                # bind_backend() itself raises if binding.backend is already
+                # a *different* backend, and no-ops if it's already self —
+                # calling it unconditionally (rather than guarding on
+                # `binding.backend is None`) is what makes that raise
+                # reachable; the guard used to skip straight to prepare()
+                # (a silent no-op once loaded), registering this adapter on
+                # `self` while the binding's weights stayed activated
+                # against whatever backend it was really bound to.
+                binding.bind_backend(self)
                 binding.prepare()
                 self._composed_adapters[key] = adapter
                 return
@@ -2805,6 +2838,14 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
         adapter = self._added_adapters.pop(adapter_qualified_name, None)
         if adapter is None:
+            # A composed Embedded adapter (see add_adapter) lives only in
+            # _composed_adapters — it never has a bare-binding entry in
+            # _added_adapters to mutate .backend/.path on — so it must be
+            # checked here rather than falling through to the "not
+            # registered" log below.
+            if self._composed_adapters.pop(adapter_qualified_name, None) is not None:
+                self._composed_adapter_configs.pop(adapter_qualified_name, None)
+                return
             MelleaLogger.get_logger().info(
                 f"could not remove adapter {adapter_qualified_name} for backend {self}: "
                 "adapter was not registered"
@@ -2813,9 +2854,9 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
         adapter.backend = None
         adapter.path = None
-        # A composed Adapter registered here (see add_adapter) shares this
-        # qualified name; drop its entry too so a stale one doesn't outlive
-        # the binding it wraps.
+        # A composed LocalFile Adapter registered here (see add_adapter)
+        # shares this qualified name; drop its entry too so a stale one
+        # doesn't outlive the binding it wraps.
         self._composed_adapters.pop(adapter_qualified_name, None)
         self._composed_adapter_configs.pop(adapter_qualified_name, None)
 

@@ -214,5 +214,37 @@ def test_add_adapter_rejects_second_composed_registration_for_same_capability():
     assert other_binding.backend is None
 
 
+def test_add_adapter_rejects_binding_already_bound_to_a_different_backend():
+    """Registering a composed Adapter whose LocalFileBinding is already bound
+    to a *different* backend must raise, not silently misroute.
+
+    Regression: `add_adapter`'s composed-LocalFileBinding branch used to skip
+    `bind_backend()` — the only call that raises for this — whenever
+    `binding.backend` was already set, then called the now-no-op `prepare()`
+    and registered the adapter on the *new* backend anyway. A later
+    `adapter_scope()`/`activate()` on the new backend would then activate
+    PEFT state on the *original* backend's model instead, with no error at
+    any point.
+    """
+    backend_a = _make_backend()
+    backend_b = _make_backend()
+    binding = _make_binding()
+    adapter = _make_adapter(binding)
+
+    with patch(
+        "mellea.formatters.granite.intrinsics.obtain_lora",
+        return_value="/fake/local/adapter/path",
+    ):
+        backend_a.add_adapter(adapter)
+        assert binding.backend is backend_a
+
+        with pytest.raises(RuntimeError, match="cannot change the backend"):
+            backend_b.add_adapter(adapter)
+
+    # The failed registration attempt must not have touched backend_a's claim.
+    assert binding.backend is backend_a
+    assert backend_b._find_adapter("answerability") is None
+
+
 if __name__ == "__main__":
     pytest.main([__file__])

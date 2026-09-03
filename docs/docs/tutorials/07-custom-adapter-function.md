@@ -142,4 +142,4 @@ that this tutorial's composed `Adapter` replaces without a class of its own:
 
 **See also:** [Adapter functions](../advanced/intrinsics.md) |
 [LoRA and aLoRA adapters](../advanced/lora-and-alora-adapters.md) |
-[Reading adapter function telemetry](./adapter-function-telemetry)
+[Reading adapter function telemetry](./09-adapter-function-telemetry.md)

@@ -222,6 +222,7 @@ print(result)
 # Returns: dict
 import mellea.stdlib.functional as mfuncs
 from mellea.backends.adapters import Adapter, Identity, LocalFileBinding, get_io_contract
+from mellea.backends.adapters.catalog import AdapterType, fetch_intrinsic_metadata
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.stdlib.components import Intrinsic, Message
 from mellea.stdlib.context import ChatContext
@@ -229,12 +230,25 @@ from mellea.stdlib.context import ChatContext
 backend = LocalHFBackend(model_id="ibm-granite/granite-4.1-3b")
 
 # Compose an adapter by task name — get_io_contract returns the catalog's
-# declared contract (or a permissive fallback for a name outside it), and
-# LocalFileBinding.from_catalog resolves the repo/revision to download.
+# declared contract (or a permissive fallback for a name outside it).
+# requirement-check's catalog entry lists LoRA before aLoRA, so
+# LocalFileBinding.from_catalog would pick LoRA — build the binding
+# explicitly instead when you want the aLoRA variant specifically; identity
+# and weights must agree, since nothing currently cross-checks them.
+_metadata = fetch_intrinsic_metadata("requirement-check")
 req_adapter = Adapter(
-    identity=Identity(name="requirement-check", adapter_type="alora"),
+    identity=Identity(
+        name="requirement-check",
+        adapter_type="alora",
+        capability=_metadata.effective_capability,
+    ),
     io_contract=get_io_contract("requirement-check"),
-    weights=LocalFileBinding.from_catalog("requirement-check"),
+    weights=LocalFileBinding(
+        name="requirement-check",
+        adapter_type=AdapterType.ALORA,
+        repo_id=_metadata.repo_id,
+        revision=_metadata.revision,
+    ),
 )
 backend.add_adapter(req_adapter)
 
@@ -279,9 +293,8 @@ by `add_adapter`, so a caller need not call `prepare()` itself:
 
 ```python
 # Requires: mellea[hf]
-from mellea.backends.adapters import Adapter, EmbeddedBinding, Identity, LocalFileBinding, get_io_contract
+from mellea.backends.adapters import Adapter, Identity, LocalFileBinding, get_io_contract
 from mellea.backends.huggingface import LocalHFBackend
-from mellea.backends.openai import OpenAIBackend
 
 # LocalFile/PEFT reality — LocalHFBackend downloads and loads the weights.
 hf_backend = LocalHFBackend(model_id="ibm-granite/granite-4.1-3b")
@@ -295,20 +308,27 @@ hf_backend.add_adapter(hf_adapter)  # downloads and loads the weights
 
 `EmbeddedBinding` has no weights to manage — the adapter is already part of
 the served base model — so it exposes a single method, `apply_activation`,
-that edits the outgoing request instead of a lifecycle:
+that edits the outgoing request instead of a lifecycle. Its `io.yaml` config
+comes from the served checkpoint's `adapter_index.json`, not from anything
+you can construct by hand, so registration goes through
+`register_embedded_adapter_model` rather than a bare `add_adapter` call:
 
 ```python
+from mellea.backends.openai import OpenAIBackend
+
 switch_backend = OpenAIBackend(
     model_id="granite-switch",
     api_key="EMPTY",
     base_url="http://localhost:8000/v1",
+    load_embedded_adapters=False,
 )
-switch_adapter = Adapter(
-    identity=Identity(name="answerability", adapter_type="alora"),
-    io_contract=get_io_contract("answerability"),
-    weights=EmbeddedBinding.from_base_model(switch_backend),
+# Discovers "answerability" from the model's Hugging Face repo and composes
+# an Adapter (Identity + IOContract + EmbeddedBinding) for it, including the
+# io.yaml config a bare Adapter(weights=EmbeddedBinding.from_base_model(...))
+# construction has no way to supply.
+switch_backend.register_embedded_adapter_model(
+    "granite-switch", intrinsic_name="answerability"
 )
-switch_backend.add_adapter(switch_adapter)
 ```
 
 Weights-binding support by backend today:
