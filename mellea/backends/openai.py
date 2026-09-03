@@ -57,10 +57,17 @@ from ..telemetry.context import generate_request_id, with_context
 from ._options import resolve_model_options
 from .adapters import EmbeddedActivationRequest, EmbeddedBinding, Identity
 from .adapters._core import (
+    Adapter as _AdapterCore,
     _await_embedded_generation,
     _fire_embedded_invocation_complete,
 )
-from .adapters.adapter import AdapterInput, AdapterMixin, EmbeddedIntrinsicAdapter
+from .adapters.adapter import (
+    AdapterInput,
+    AdapterMixin,
+    EmbeddedIntrinsicAdapter,
+    _composed_adapter_key,
+    _discover_embedded_adapters,
+)
 from .backend import FormatterBackend
 from .model_options import ModelOption
 from .tools import (
@@ -279,7 +286,12 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         self._client_cache = ClientCache(2)
 
-        self._added_adapters: dict[str, EmbeddedIntrinsicAdapter] = {}
+        self._added_adapters: dict[str, EmbeddedIntrinsicAdapter | _AdapterCore] = {}
+        # Raw io.yaml config for composed Adapter instances (Epic #929, issue
+        # #1144), keyed by _composed_adapter_key(). A composed Adapter has no
+        # `.config` field (that's shim-only state); see
+        # _intrinsic_adapter_name_and_config.
+        self._composed_adapter_configs: dict[str, dict] = {}
         self._adapter_lock = threading.RLock()
 
         # Call once to create an async_client and populate the cache.
@@ -323,26 +335,46 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         Args:
             adapter (AdapterInput): The adapter to register. Must be an
-                `EmbeddedIntrinsicAdapter`.
+                `EmbeddedIntrinsicAdapter` or a composed `Adapter` whose
+                `weights` is an `EmbeddedBinding`.
 
         Raises:
-            TypeError: If `adapter` is not an `EmbeddedIntrinsicAdapter`.
+            TypeError: If `adapter` is not a supported Embedded adapter.
         """
-        if not isinstance(adapter, EmbeddedIntrinsicAdapter):
-            raise TypeError(
-                f"OpenAIBackend currently only supports EmbeddedIntrinsicAdapter. "
-                f"Got: {type(adapter).__name__}"
-            )
-        if adapter.qualified_name in self._added_adapters:
-            MelleaLogger.get_logger().warning(
-                f"attempted to add adapter {adapter.qualified_name!r} but it is "
-                "already registered; refusing to overwrite it."
-            )
+        if isinstance(adapter, EmbeddedIntrinsicAdapter):
+            if adapter.qualified_name in self._added_adapters:
+                MelleaLogger.get_logger().warning(
+                    f"attempted to add adapter {adapter.qualified_name!r} but it is "
+                    "already registered; refusing to overwrite it."
+                )
+                return
+            adapter.backend = self
+            if isinstance(adapter.weights, EmbeddedBinding):
+                adapter.weights.source = self.base_model_name
+            self._added_adapters[adapter.qualified_name] = adapter
             return
-        adapter.backend = self
-        if isinstance(adapter.weights, EmbeddedBinding):
+
+        if isinstance(adapter, _AdapterCore):
+            if not isinstance(adapter.weights, EmbeddedBinding):
+                raise TypeError(
+                    "OpenAIBackend only supports the Embedded/Granite Switch "
+                    f"reality for a composed Adapter; got {type(adapter.weights).__name__}."
+                )
+            key = _composed_adapter_key(adapter)
+            if key in self._added_adapters:
+                MelleaLogger.get_logger().warning(
+                    f"attempted to add adapter {key!r} but it is already "
+                    "registered; refusing to overwrite it."
+                )
+                return
             adapter.weights.source = self.base_model_name
-        self._added_adapters[adapter.qualified_name] = adapter
+            self._added_adapters[key] = adapter
+            return
+
+        raise TypeError(
+            "OpenAIBackend currently only supports EmbeddedIntrinsicAdapter or a "
+            f"composed Adapter. Got: {type(adapter).__name__}"
+        )
 
     def list_adapters(self) -> list[str]:
         """Return qualified names of all registered adapters.
@@ -362,6 +394,41 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
     # Convenience registration helpers
     # ------------------------------------------------------------------
 
+    def _intrinsic_adapter_name_and_config(
+        self, adapter: "EmbeddedIntrinsicAdapter | _AdapterCore"
+    ) -> tuple[str, dict]:
+        """Return the adapter-function name and raw io.yaml config for an adapter.
+
+        `EmbeddedIntrinsicAdapter` carries both directly (`.name`/`.config`).
+        A composed `Adapter` carries neither — `io_contract` does not yet
+        drive `IntrinsicsRewriter`/`IntrinsicsResultProcessor` (Epic #929,
+        issue #1144) — so its config is looked up from
+        `_composed_adapter_configs`, cached at registration time (see
+        `add_adapter`/`register_embedded_adapter_model`) since it comes from
+        `adapter_index.json`/`io.yaml` and cannot be cheaply re-derived.
+
+        Args:
+            adapter: The adapter to resolve a name and config for.
+
+        Returns:
+            tuple[str, dict]: The adapter-function name and its parsed
+            io.yaml config.
+
+        Raises:
+            ValueError: A composed adapter has no cached config (never
+                registered via `add_adapter`/`register_embedded_adapter_model`).
+        """
+        if isinstance(adapter, EmbeddedIntrinsicAdapter):
+            return adapter.name, adapter.config
+        key = _composed_adapter_key(adapter)
+        config = self._composed_adapter_configs.get(key)
+        if config is None:
+            raise ValueError(
+                f"No io.yaml config cached for composed adapter {key!r}; register "
+                "it via register_embedded_adapter_model() or resolve_adapter()."
+            )
+        return adapter.identity.name, config
+
     def register_embedded_adapter_model(
         self, source: str, *, revision: str = "main", cache_dir: str | None = None
     ) -> list[str]:
@@ -375,19 +442,18 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         Returns:
             list[str]: Names of the registered intrinsics.
         """
-        import os
-
         # No lock here: both call sites (here, and this class's __init__) run
         # single-threaded during construction, before the backend is exposed to
         # any other thread — see the matching note on LocalHFBackend's twin.
-        adapters = EmbeddedIntrinsicAdapter.from_source(
+        discovered = _discover_embedded_adapters(
             source, revision=revision, cache_dir=cache_dir
         )
-
-        for adapter in adapters:
+        names = []
+        for adapter, config in discovered:
             self.add_adapter(adapter)
-
-        return [a.intrinsic_name for a in adapters]
+            self._composed_adapter_configs[_composed_adapter_key(adapter)] = config
+            names.append(adapter.identity.name)
+        return names
 
     @property
     def _async_client(self) -> openai.AsyncOpenAI:
@@ -785,16 +851,18 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         # TODO: OpenAIBackend only supports EmbeddedAdapters.
         #       It should be refactored into a specific adapter.transform() function.
-        if not isinstance(adapter, EmbeddedIntrinsicAdapter):
+        if not isinstance(adapter, (EmbeddedIntrinsicAdapter, _AdapterCore)):
             raise TypeError(
-                f"OpenAIBackend only supports EmbeddedIntrinsicAdapter, got: {type(adapter).__name__}"
+                "OpenAIBackend only supports EmbeddedIntrinsicAdapter or a composed "
+                f"Adapter, got: {type(adapter).__name__}"
             )
 
-        intrinsic_config = adapter.config
-        assert intrinsic_config is not None
+        adapter_name, intrinsic_config = self._intrinsic_adapter_name_and_config(
+            adapter
+        )
 
         rewriter = granite_formatters.IntrinsicsRewriter(
-            config_dict=intrinsic_config, model_name=adapter.name
+            config_dict=intrinsic_config, model_name=adapter_name
         )
         result_processor = granite_formatters.IntrinsicsResultProcessor(
             config_dict=intrinsic_config

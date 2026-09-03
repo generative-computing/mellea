@@ -42,7 +42,10 @@ from mellea.backends.adapters import (
     ServerMediatedBinding,
 )
 from mellea.backends.adapters._core import Identity
-from mellea.backends.adapters.adapter import EmbeddedIntrinsicAdapter
+from mellea.backends.adapters.adapter import (
+    EmbeddedIntrinsicAdapter,
+    _ShimWeightsBinding,
+)
 from mellea.backends.adapters.catalog import IntrinsicsCatalogEntry
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.core import ModelOutputThunk
@@ -233,6 +236,7 @@ def _make_intrinsic_adapter_stub():
             name="answerability", adapter_type="alora", capability="answerability"
         ),
     )
+    object.__setattr__(adapter, "weights", _ShimWeightsBinding())
     return adapter
 
 
@@ -280,6 +284,15 @@ def _make_intrinsic_backend_stub(stub_backend):
     stub_backend._find_adapter = lambda cap, types=None: AdapterMixin._find_adapter(
         stub_backend, cap, types
     )
+    stub_backend._intrinsic_adapter_name_and_config = lambda adapter: (
+        LocalHFBackend._intrinsic_adapter_name_and_config(stub_backend, adapter)
+    )
+    # Composed-Adapter counterpart of _generate_intrinsic_with_adapter_scope
+    # above — same bypass, for the same reason (these tests exercise
+    # option-merging/logits capture, not activation semantics).
+    stub_backend._generate_composed_local_file_with_adapter_scope = (
+        lambda adapter, generate_func, *args, **kwargs: generate_func(*args, **kwargs)
+    )
     return stub_backend
 
 
@@ -323,12 +336,21 @@ def test_load_embedded_adapters_registers_checkpoint_adapters():
         )
 
     mock_from_source.assert_called_once_with(
-        "/tmp/switch-checkpoint", revision="main", cache_dir=None
+        "/tmp/switch-checkpoint", revision="main", cache_dir=None, intrinsic_name=None
     )
     assert backend.list_adapters() == ["answerability_alora"]
-    assert backend._added_adapters["answerability_alora"] is adapter
-    assert adapter.backend is backend
+    # register_embedded_adapter_model discovers via the non-shim
+    # _discover_embedded_adapters factory (Epic #929, issue #1144), which
+    # lifts the shim's identity/io_contract/weights into a composed Adapter
+    # stored in _composed_adapters, not the shim instance itself.
+    registered = backend._composed_adapters["answerability_alora"]
+    assert registered.identity == adapter.identity
+    assert registered.weights is adapter.weights
     assert isinstance(adapter.weights, EmbeddedBinding)
+    # The composed Adapter is registered, not the shim instance, so the
+    # shim's own `.backend` is never touched; the binding it shares with the
+    # composed Adapter (asserted above) is what actually gets stamped.
+    assert adapter.weights.source == backend.base_model_name
     assert adapter.weights.source == backend.base_model_name
     backend._model.load_adapter.assert_not_called()
 

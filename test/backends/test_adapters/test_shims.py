@@ -24,7 +24,7 @@ from mellea.backends.adapters import (
     get_io_contract,
 )
 from mellea.backends.adapters._core import Identity, LocalFileBinding
-from mellea.backends.adapters.adapter import AdapterMixin
+from mellea.backends.adapters.adapter import AdapterMixin, _composed_adapter_key
 from mellea.backends.adapters.catalog import AdapterType, IntrinsicsCatalogEntry
 
 # ---------------------------------------------------------------------------
@@ -584,7 +584,12 @@ def test_resolve_adapter_raises_without_base_model():
 
 
 def test_resolve_adapter_lazy_creates_and_returns():
-    """resolve_adapter must create an IntrinsicAdapter when none is registered."""
+    """resolve_adapter must create a composed Adapter when none is registered.
+
+    Epic #929, issue #1144: resolve_adapter's default (LORA) construction site
+    builds a composed `Adapter(identity, io_contract, LocalFileBinding)`, not
+    the deprecated `IntrinsicAdapter` shim.
+    """
     mock_catalog_entry = IntrinsicsCatalogEntry(
         name="answerability",
         repo_id="ibm-granite/granitelib-rag-r1.0",
@@ -599,7 +604,7 @@ def test_resolve_adapter_lazy_creates_and_returns():
 
     def fake_add_adapter(a):
         created_adapters.append(a)
-        mock_backend._added_adapters[a.qualified_name] = a
+        mock_backend._added_adapters[_composed_adapter_key(a)] = a
 
     mock_backend._added_adapters = {}
     mock_backend.add_adapter.side_effect = fake_add_adapter
@@ -607,16 +612,9 @@ def test_resolve_adapter_lazy_creates_and_returns():
         AdapterMixin._find_adapter(mock_backend, cap, types)
     )
 
-    with (
-        patch(
-            "mellea.backends.adapters.adapter.fetch_intrinsic_metadata",
-            return_value=mock_catalog_entry,
-        ),
-        patch(
-            "mellea.backends.adapters.adapter.intrinsics.obtain_io_yaml",
-            return_value="/fake/adapter.yaml",
-        ),
-        patch("builtins.open", mock_open(read_data="key: value")),
+    with patch(
+        "mellea.backends.adapters.adapter.fetch_intrinsic_metadata",
+        return_value=mock_catalog_entry,
     ):
         result = AdapterMixin.resolve_adapter(mock_backend, "answerability")
 
@@ -624,8 +622,10 @@ def test_resolve_adapter_lazy_creates_and_returns():
         "add_adapter must be called for a new capability"
     )
     assert len(created_adapters) == 1
-    assert isinstance(created_adapters[0], IntrinsicAdapter)
-    assert created_adapters[0].adapter_type == AdapterType.LORA
+    assert isinstance(created_adapters[0], Adapter)
+    assert not isinstance(created_adapters[0], IntrinsicAdapter)
+    assert isinstance(created_adapters[0].weights, LocalFileBinding)
+    assert created_adapters[0].weights.adapter_type == AdapterType.LORA
     assert result is created_adapters[0]
 
 
@@ -648,22 +648,17 @@ def test_resolve_adapter_catalog_alias_returns_registered_adapter():
     mock_backend._uses_embedded_adapters = False
     mock_backend._added_adapters = {}
     mock_backend.add_adapter.side_effect = lambda adapter: (
-        mock_backend._added_adapters.__setitem__(adapter.qualified_name, adapter)
+        mock_backend._added_adapters.__setitem__(
+            _composed_adapter_key(adapter), adapter
+        )
     )
     mock_backend._find_adapter.side_effect = lambda cap, types=None: (
         AdapterMixin._find_adapter(mock_backend, cap, types)
     )
 
-    with (
-        patch(
-            "mellea.backends.adapters.adapter.fetch_intrinsic_metadata",
-            return_value=mock_catalog_entry,
-        ),
-        patch(
-            "mellea.backends.adapters.adapter.intrinsics.obtain_io_yaml",
-            return_value="/fake/adapter.yaml",
-        ),
-        patch("builtins.open", mock_open(read_data="key: value")),
+    with patch(
+        "mellea.backends.adapters.adapter.fetch_intrinsic_metadata",
+        return_value=mock_catalog_entry,
     ):
         result = AdapterMixin.resolve_adapter(mock_backend, "guardian-core")
 
@@ -743,7 +738,7 @@ def test_resolve_adapter_survives_reentrant_activation_lock():
     mock_backend._added_adapters = {}
     mock_backend._adapter_activation_lock.return_value = real_lock
     mock_backend.add_adapter.side_effect = lambda a: (
-        mock_backend._added_adapters.__setitem__(a.qualified_name, a)
+        mock_backend._added_adapters.__setitem__(_composed_adapter_key(a), a)
     )
     mock_backend._find_adapter.side_effect = lambda cap, types=None: (
         AdapterMixin._find_adapter(mock_backend, cap, types)
@@ -754,11 +749,6 @@ def test_resolve_adapter_survives_reentrant_activation_lock():
             "mellea.backends.adapters.adapter.fetch_intrinsic_metadata",
             return_value=mock_catalog_entry,
         ),
-        patch(
-            "mellea.backends.adapters.adapter.intrinsics.obtain_io_yaml",
-            return_value="/fake/adapter.yaml",
-        ),
-        patch("builtins.open", mock_open(read_data="key: value")),
         real_lock,  # simulate an already-in-progress caller holding the lock
     ):
         result = AdapterMixin.resolve_adapter(mock_backend, "answerability")
@@ -792,23 +782,16 @@ def test_resolve_adapter_holds_activation_lock_during_lora_registration():
         assert tracking_lock.enter_count == 1 and tracking_lock.exit_count == 0, (
             "add_adapter must run while the activation lock is held"
         )
-        mock_backend._added_adapters[a.qualified_name] = a
+        mock_backend._added_adapters[_composed_adapter_key(a)] = a
 
     mock_backend.add_adapter.side_effect = fake_add_adapter
     mock_backend._find_adapter.side_effect = lambda cap, types=None: (
         AdapterMixin._find_adapter(mock_backend, cap, types)
     )
 
-    with (
-        patch(
-            "mellea.backends.adapters.adapter.fetch_intrinsic_metadata",
-            return_value=mock_catalog_entry,
-        ),
-        patch(
-            "mellea.backends.adapters.adapter.intrinsics.obtain_io_yaml",
-            return_value="/fake/adapter.yaml",
-        ),
-        patch("builtins.open", mock_open(read_data="key: value")),
+    with patch(
+        "mellea.backends.adapters.adapter.fetch_intrinsic_metadata",
+        return_value=mock_catalog_entry,
     ):
         AdapterMixin.resolve_adapter(mock_backend, "answerability")
 
@@ -847,7 +830,7 @@ def test_resolve_adapter_holds_activation_lock_once_across_embedded_loop():
     mock_backend._adapter_activation_lock.return_value = tracking_lock
 
     def fake_add_adapter(a):
-        mock_backend._added_adapters[a.qualified_name] = a
+        mock_backend._added_adapters[_composed_adapter_key(a)] = a
 
     mock_backend.add_adapter.side_effect = fake_add_adapter
     mock_backend._find_adapter.side_effect = lambda cap, types=None: (
@@ -902,11 +885,12 @@ def test_resolve_adapter_concurrent_first_use_does_not_double_register():
     )
 
     def racy_add_adapter(adapter):
-        existing = registry.get(adapter.qualified_name)
+        key = _composed_adapter_key(adapter)
+        existing = registry.get(key)
         if existing is not None:
             return
         time.sleep(0.02)  # widen the read-then-write window
-        registry[adapter.qualified_name] = adapter
+        registry[key] = adapter
         registrations.append(adapter)
 
     mock_backend.add_adapter.side_effect = racy_add_adapter
