@@ -1569,6 +1569,46 @@ def test_load_peft_adapter_on_composed_embedded_adapter_raises_type_error():
         backend.load_peft_adapter("answerability_alora")
 
 
+def test_add_adapter_allows_composed_wrapper_of_a_standalone_registered_binding():
+    """A composed Adapter wrapping an already-standalone-registered LocalFileBinding
+    must register into _composed_adapters, not be silently refused.
+
+    Regression: the duplicate-key guard on the composed branch checked
+    `key in self._added_adapters` unconditionally — a LocalFileBinding
+    registered standalone (bare `add_adapter(binding)`) lands there under the
+    same key, so a subsequent `add_adapter(composed_wrapping_that_binding)`
+    hit the guard and was silently dropped: the binding's weights stayed
+    loaded and functional, but the composed Adapter carrying `identity`/
+    `io_contract` never made it into `_composed_adapters`, so
+    `_find_adapter(capability)` could never find this capability.
+    """
+    from mellea.backends.adapters._core import (
+        Adapter as _AdapterCore,
+        LocalFileBinding as _LocalFileBinding,
+    )
+    from mellea.backends.adapters.io_contracts import get_io_contract
+
+    backend = _make_backend()
+    binding = _LocalFileBinding(
+        name="answerability", adapter_type=AdapterType.ALORA, repo_id="fake/repo"
+    )
+    binding.get_local_hf_path = lambda base_model_name: "/fake/path"
+    backend.add_adapter(binding)
+    assert backend._added_adapters["answerability_alora"] is binding
+
+    composed = _AdapterCore(
+        identity=Identity(
+            name="answerability", adapter_type="alora", capability="answerability"
+        ),
+        io_contract=get_io_contract("answerability"),
+        weights=binding,
+    )
+    backend.add_adapter(composed)
+
+    assert backend._composed_adapters["answerability_alora"] is composed
+    assert backend._find_adapter("answerability") is composed
+
+
 def test_add_adapter_shim_refuses_name_already_claimed_by_composed_adapter():
     """The legacy/shim add_adapter path must see composed-adapter registrations too.
 
@@ -1660,6 +1700,86 @@ def test_register_embedded_adapter_model_refused_duplicate_does_not_clobber_cach
 
     assert names == []
     assert backend._composed_adapter_configs["answerability_alora"] is first_config
+
+
+def test_remove_adapter_deregisters_composed_local_file_adapter():
+    """remove_adapter() must clean up a composed LocalFile adapter's entries too.
+
+    Coverage gap noted in review: only the composed-Embedded path (above) had
+    a regression test for this cleanup; the composed-LocalFile branch at the
+    same call site (which additionally clears the bare binding's
+    `.backend`/`.path`) had none.
+    """
+    from mellea.backends.adapters._core import (
+        Adapter as _AdapterCore,
+        LocalFileBinding as _LocalFileBinding,
+    )
+    from mellea.backends.adapters.io_contracts import get_io_contract
+
+    backend = _make_backend()
+    binding = _LocalFileBinding(
+        name="answerability",
+        adapter_type=AdapterType.ALORA,
+        repo_id="fake/repo",
+        revision="fake0000000000000000000000000000000000000",
+    )
+    binding.backend = backend
+    binding.path = "/fake/path"
+    binding._loaded = True
+    composed = _AdapterCore(
+        identity=Identity(
+            name="answerability", adapter_type="alora", capability="answerability"
+        ),
+        io_contract=get_io_contract("answerability"),
+        weights=binding,
+    )
+    key = "answerability_alora"
+    # Simulates the post-add_adapter() state directly, bypassing the real
+    # PEFT-loading side effects add_adapter() would otherwise trigger.
+    backend._added_adapters[key] = binding
+    backend._composed_adapters[key] = composed
+    backend._composed_adapter_configs[key] = {"parameters": {}}
+
+    backend.remove_adapter(key)
+
+    assert key not in backend.list_adapters()
+    assert key not in backend._added_adapters
+    assert key not in backend._composed_adapters
+    assert key not in backend._composed_adapter_configs
+    assert binding.backend is None
+    assert binding.path is None
+
+
+def test_intrinsic_adapter_name_and_config_raises_for_uncached_composed_embedded():
+    """`_intrinsic_adapter_name_and_config` must raise its documented ValueError
+    when a composed Embedded adapter has no cached config.
+
+    Coverage gap noted in review: the happy path (config present) was
+    tested; this error branch — reachable if a composed Embedded adapter was
+    registered via bare `add_adapter()` rather than
+    `register_embedded_adapter_model()`/`resolve_adapter()`, which are the
+    only call sites that populate `_composed_adapter_configs` for it — was not.
+    """
+    from mellea.backends.adapters._core import (
+        Adapter as _AdapterCore,
+        EmbeddedBinding as _EmbeddedBinding,
+    )
+    from mellea.backends.adapters.io_contracts import get_io_contract
+
+    backend = _make_backend()
+    composed = _AdapterCore(
+        identity=Identity(
+            name="answerability", adapter_type="alora", capability="answerability"
+        ),
+        io_contract=get_io_contract("answerability"),
+        weights=_EmbeddedBinding(),
+    )
+    backend.add_adapter(composed)
+    assert "answerability_alora" in backend._composed_adapters
+    assert "answerability_alora" not in backend._composed_adapter_configs
+
+    with pytest.raises(ValueError, match=r"No io\.yaml config cached"):
+        backend._intrinsic_adapter_name_and_config(composed)
 
 
 def test_add_adapter_after_remove_adapter_allows_a_fresh_registration():

@@ -38,6 +38,11 @@ class Intrinsic(Component[str]):
     Attributes:
         metadata: The intrinsic metadata fetched from the catalog, or a
             synthetic entry for a name outside it (see `adapter_types` above).
+            For that synthetic entry, `metadata.repo_id` is `""` and
+            `metadata.revision` is `"not-a-catalog-entry"` — this class never
+            reads either field itself, but code that does (e.g. after
+            reaching in via `intrinsic.metadata.repo_id`) should treat an
+            empty `repo_id` as "no catalog entry", not as a real value.
         intrinsic_kwargs (dict): Keyword arguments passed to the intrinsic.
         intrinsic_name (str): User-visible name of this intrinsic (property).
         adapter_types (tuple[AdapterType, ...]): Available adapter types that

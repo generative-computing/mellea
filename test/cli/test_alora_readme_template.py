@@ -13,6 +13,7 @@ generates for a non-catalog adapter name.
 
 import os
 import re
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -80,3 +81,32 @@ def test_readme_template_constructs_composed_adapter_for_non_catalog_name():
 
     intrinsic = namespace["StemboltsIntrinsic"](description="a cracked stembolt")
     assert intrinsic.metadata.name == "stembolts"
+
+
+@pytest.mark.unit
+async def test_readme_template_async_wrapper_constructs_intrinsic_correctly():
+    """The generated `async_<name>` wrapper must construct its `Intrinsic` subclass
+    with only the arglist, not an extra positional intrinsic-name argument.
+
+    Regression guard: `async_stembolts(...)` previously called
+    `StemboltsIntrinsic("stembolts", description)` — an extra leading
+    positional the sync `stembolts(...)` wrapper (right below it) never had
+    — raising `TypeError: __init__() takes 2 positional arguments but 3 were
+    given` for every user who called the generated async wrapper.
+    """
+    code = _extract_python_sample(_render_template())
+    namespace: dict = {}
+    exec(code, namespace)
+
+    backend = MagicMock()
+    backend.list_adapters.return_value = ["stembolts_alora"]
+    backend.generate_from_context = AsyncMock(return_value="mocked output")
+
+    result = await namespace["async_stembolts"](
+        description="a cracked stembolt", ctx=MagicMock(), backend=backend
+    )
+
+    assert result == "mocked output"
+    backend.generate_from_context.assert_awaited_once()
+    action = backend.generate_from_context.await_args.args[0]
+    assert isinstance(action, namespace["StemboltsIntrinsic"])

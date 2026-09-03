@@ -286,7 +286,9 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         self._client_cache = ClientCache(2)
 
-        self._added_adapters: dict[str, EmbeddedIntrinsicAdapter | _AdapterCore] = {}
+        # EmbeddedIntrinsicAdapter is itself an _AdapterCore subclass, so this
+        # single type covers both the shim and composed-Adapter realities.
+        self._added_adapters: dict[str, _AdapterCore] = {}
         # Raw io.yaml config for composed Adapter instances (Epic #929, issue
         # #1144), keyed by _composed_adapter_key(). A composed Adapter has no
         # `.config` field (that's shim-only state); see
@@ -468,8 +470,17 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         )
         names = []
         for adapter, config in discovered:
+            key = _composed_adapter_key(adapter)
             self.add_adapter(adapter)
-            self._composed_adapter_configs[_composed_adapter_key(adapter)] = config
+            # add_adapter() silently refuses (logs a warning, returns) rather than
+            # raising when `key` is already registered — compare identity to
+            # confirm *this* adapter is the one that's actually registered before
+            # caching its config, or a refused call would overwrite the live
+            # adapter's config with this one's and falsely report it as
+            # registered below (mirrors LocalHFBackend's identical guard).
+            if self._added_adapters.get(key) is not adapter:
+                continue
+            self._composed_adapter_configs[key] = config
             names.append(adapter.identity.name)
         return names
 
@@ -871,7 +882,9 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         # TODO: OpenAIBackend only supports EmbeddedAdapters.
         #       It should be refactored into a specific adapter.transform() function.
-        if not isinstance(adapter, (EmbeddedIntrinsicAdapter, _AdapterCore)):
+        # EmbeddedIntrinsicAdapter is itself an _AdapterCore subclass, so checking
+        # for _AdapterCore alone covers both the shim and composed-Adapter realities.
+        if not isinstance(adapter, _AdapterCore):
             raise TypeError(
                 "OpenAIBackend only supports EmbeddedIntrinsicAdapter or a composed "
                 f"Adapter, got: {type(adapter).__name__}"

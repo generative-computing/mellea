@@ -2618,7 +2618,14 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             adapter, (IntrinsicAdapter, EmbeddedIntrinsicAdapter)
         ):
             key = _composed_adapter_key(adapter)
-            if key in self._added_adapters or key in self._composed_adapters:
+            # A LocalFileBinding registered standalone (bare add_adapter(binding))
+            # lands in _added_adapters under this same key — that's not a
+            # collision if it's the very binding this composed Adapter wraps,
+            # only if some *other* object already claimed the name.
+            existing_added = self._added_adapters.get(key)
+            if (
+                existing_added is not None and existing_added is not adapter.weights
+            ) or key in self._composed_adapters:
                 MelleaLogger.get_logger().warning(
                     f"Client code attempted to add {adapter.identity.name} with type "
                     f"{adapter.identity.adapter_type} but {key!r} is already "

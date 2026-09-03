@@ -811,3 +811,59 @@ async def test_tools_passed_to_api():
     assert tools is not None
     assert len(tools) == 1
     assert tools[0]["function"]["name"] == "get_temperature"
+
+
+def test_register_embedded_adapter_model_refused_duplicate_does_not_clobber_cached_config():
+    """register_embedded_adapter_model() must not overwrite a live adapter's cached
+    config, or falsely report it as (re-)registered, when add_adapter() refuses
+    a duplicate name.
+
+    Regression: add_adapter() silently refuses (logs a warning, returns) rather
+    than raising for an already-registered qualified name. The loop here used to
+    write `discovered`'s config into `_composed_adapter_configs` and append the
+    name unconditionally — mirrors the identical bug fixed on LocalHFBackend.
+    """
+    from mellea.backends.adapters._core import (
+        Adapter as _AdapterCore,
+        EmbeddedBinding as _EmbeddedBinding,
+        Identity as _Identity,
+    )
+    from mellea.backends.adapters.io_contracts import get_io_contract
+
+    backend = OpenAIBackend(
+        model_id="granite-switch",
+        api_key="fake-key",
+        base_url="http://localhost:9999/v1",
+    )
+
+    def _make_composed():
+        return _AdapterCore(
+            identity=_Identity(
+                name="answerability", adapter_type="alora", capability="answerability"
+            ),
+            io_contract=get_io_contract("answerability"),
+            weights=_EmbeddedBinding(),
+        )
+
+    first_config = {"version": "first"}
+    with patch(
+        "mellea.backends.openai._discover_embedded_adapters",
+        return_value=[(_make_composed(), first_config)],
+    ):
+        names = backend.register_embedded_adapter_model(
+            "some/repo", intrinsic_name="answerability"
+        )
+    assert names == ["answerability"]
+    assert backend._composed_adapter_configs["answerability_alora"] is first_config
+
+    second_config = {"version": "second"}
+    with patch(
+        "mellea.backends.openai._discover_embedded_adapters",
+        return_value=[(_make_composed(), second_config)],
+    ):
+        names = backend.register_embedded_adapter_model(
+            "some/other-repo", intrinsic_name="answerability"
+        )
+
+    assert names == []
+    assert backend._composed_adapter_configs["answerability_alora"] is first_config

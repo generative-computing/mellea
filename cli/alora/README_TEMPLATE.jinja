@@ -95,7 +95,7 @@ async def async_{{ intrinsic_name }}({{ arglist }}, ctx: Context, backend: Backe
     # Backend.add_adapter should be idempotent, but we'll go ahead and check just in case.
     if _INTRINSIC_QUALIFIED_NAME not in backend.list_adapters():
         backend.add_adapter(_{{ intrinsic_name }}_adapter())
-    action = {{ intrinsic_name_camelcase }}Intrinsic("{{ intrinsic_name }}", {{ arglist_without_type_annotations }})
+    action = {{ intrinsic_name_camelcase }}Intrinsic({{ arglist_without_type_annotations }})
     mot = await backend.generate_from_context(action, ctx)
     return mot
 
