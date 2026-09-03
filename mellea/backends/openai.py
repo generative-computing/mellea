@@ -1581,10 +1581,14 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 `generate_from_chat_context` to record on the context.
 
         Raises:
-            DeltaNotDerivable: If history was re-rendered rather than extended. Propagated
-                deliberately: falling back to messages would serve the re-rendering
-                policy under a context that promised otherwise.
-            TokenizeUnavailable: If the server cannot tokenize, for the same reason.
+            DeltaNotDerivable: If history was re-rendered rather than extended. Raised
+                before anything is sent, and CAUGHT by `_generate_from_context`, which
+                falls back to the chat send for that turn -- correct output, no prefix
+                reuse. Callers reaching this method directly get the exception.
+            TokenizeUnavailable: If the server cannot tokenize. Deliberately NOT caught
+                by that fallback: it means no usable /tokenize route exists, so id
+                retention can never work against this server, and swallowing it would
+                leave `retain_token_ids` silently inert.
             NotImplementedError: If tools or streaming were requested -- chat-endpoint
                 features this transport cannot honour.
         """
@@ -1909,16 +1913,41 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         # it only reuses, via `_reuse_intrinsic_prefix_ids`. Both call the same
         # `_build_prompt_ids`; only the commit differs.
         if isinstance(ctx, ChatContext) and ctx.retains_token_ids:
-            return await self._generate_via_token_ids(
-                ctx,
-                conversation,
-                (extra_params.get("extra_body") or {}).get("chat_template_kwargs"),
-                action=action,
-                linearized_context=linearized_context,
-                _format=_format,
-                model_options=model_opts,
-                has_tools=use_tools,
-            )
+            try:
+                return await self._generate_via_token_ids(
+                    ctx,
+                    conversation,
+                    (extra_params.get("extra_body") or {}).get("chat_template_kwargs"),
+                    action=action,
+                    linearized_context=linearized_context,
+                    _format=_format,
+                    model_options=model_opts,
+                    has_tools=use_tools,
+                )
+            except DeltaNotDerivable as e:
+                # The retained prefix cannot describe this turn: earlier messages were
+                # re-rendered rather than extended, history shrank, or the recorded
+                # digest no longer matches. Fall through to the chat send, which
+                # re-renders from text and is always correct -- only the prefix-cache
+                # reuse is lost. `_build_prompt_ids` raises this BEFORE any request, so
+                # nothing has been sent and the fall-through is a clean first attempt.
+                #
+                # `TokenizeUnavailable` is deliberately NOT caught: it means the server
+                # has no usable /tokenize route, so id retention can never work here.
+                # Swallowing it would leave `retain_token_ids` permanently inert with no
+                # signal, which is the failure this policy exists to make visible.
+                #
+                # The context keeps its retained ids rather than clearing them, so a
+                # later turn that lines up with the prefix again can resume reuse -- a
+                # one-off divergence (documents added for a single turn) does not
+                # permanently forfeit the cache.
+                MelleaLogger.get_logger().warning(
+                    "token-id history could not be extended for this turn, so it was "
+                    "sent as chat messages instead: %s The turn itself is unaffected; "
+                    "the server's prefix cache is re-primed from this render, and any "
+                    "control tokens in earlier turns are dropped from it.",
+                    e,
+                )
 
         chat_response: Coroutine[
             Any, Any, ChatCompletion | openai.AsyncStream[ChatCompletionChunk]
