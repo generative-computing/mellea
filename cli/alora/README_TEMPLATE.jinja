@@ -41,21 +41,29 @@ from mellea.core import Context
 from mellea.backends import Backend
 from mellea.stdlib.components.simple import SimpleComponent
 from mellea.backends.adapters import AdapterMixin
-from mellea.backends.adapters.adapter import CustomIntrinsicAdapter
+from mellea.backends.adapters import Adapter, Identity, LocalFileBinding, get_io_contract
+from mellea.backends.adapters.catalog import AdapterType
 from mellea.stdlib.components.intrinsic import Intrinsic
 
 
 _INTRINSIC_MODEL_ID = "{{ userid }}/{{ intrinsic_name }}"
 _INTRINSIC_ADAPTER_NAME = "{{ intrinsic_name }}"
+_INTRINSIC_QUALIFIED_NAME = f"{_INTRINSIC_ADAPTER_NAME}_{AdapterType.ALORA.value}"
 
 
-class {{ intrinsic_name_camelcase }}Adapter(CustomIntrinsicAdapter):
-    def __init__(self, base_model_name: str):
-        super().__init__(
-            model_id=_INTRINSIC_MODEL_ID,
-            intrinsic_name=_INTRINSIC_ADAPTER_NAME,
-            base_model_name=base_model_name,
-        )
+def _{{ intrinsic_name }}_adapter() -> Adapter:
+    """Compose this trained adapter (LoRA/aLoRA weights at `_INTRINSIC_MODEL_ID`)
+    from its Identity, output contract, and weights binding, rather than a
+    dedicated shim class."""
+    return Adapter(
+        identity=Identity(name=_INTRINSIC_ADAPTER_NAME, adapter_type="alora"),
+        io_contract=get_io_contract(_INTRINSIC_ADAPTER_NAME),
+        weights=LocalFileBinding(
+            name=_INTRINSIC_ADAPTER_NAME,
+            adapter_type=AdapterType.ALORA,
+            repo_id=_INTRINSIC_MODEL_ID,
+        ),
+    )
 
 
 class {{ intrinsic_name_camelcase }}Intrinsic(Intrinsic, SimpleComponent):
@@ -68,8 +76,8 @@ class {{ intrinsic_name_camelcase }}Intrinsic(Intrinsic, SimpleComponent):
 
 async def async_{{ intrinsic_name }}({{ arglist }}, ctx: Context, backend: Backend | AdapterMixin):
     # Backend.add_adapter should be idempotent, but we'll go ahead and check just in case.
-    if adapter.qualified_name not in backend.list_adapters():
-        backend.add_adapter({{ intrinsic_name_camelcase }}Adapter(backend.base_model_name))
+    if _INTRINSIC_QUALIFIED_NAME not in backend.list_adapters():
+        backend.add_adapter(_{{ intrinsic_name }}_adapter())
     action = {{ intrinsic_name_camelcase }}Intrinsic("{{ intrinsic_name }}", {{ arglist_without_type_annotations }})
     mot = await backend.generate_from_context(action, ctx)
     return mot
@@ -77,9 +85,8 @@ async def async_{{ intrinsic_name }}({{ arglist }}, ctx: Context, backend: Backe
 
 def {{ intrinsic_name }}({{ arglist }}, ctx: Context, backend: Backend | AdapterMixin):
     # Backend.add_adapter should be idempotent, but we'll go ahead and check just in case.
-    adapter = {{ intrinsic_name_camelcase }}Adapter(backend.base_model_name)
-    if adapter.qualified_name not in backend.list_adapters():
-        backend.add_adapter(adapter)
+    if _INTRINSIC_QUALIFIED_NAME not in backend.list_adapters():
+        backend.add_adapter(_{{ intrinsic_name }}_adapter())
     action = {{ intrinsic_name_camelcase }}Intrinsic({{ arglist_without_type_annotations }})
     return mfuncs.act(action, ctx, backend)
 
