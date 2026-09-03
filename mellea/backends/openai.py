@@ -131,8 +131,8 @@ def derive_delta(prev_ids: list[int], full_ids: list[int]) -> list[int]:
         raise DeltaNotDerivable(
             f"the full render is shorter than the already-sent side "
             f"({len(full_ids)} < {len(prev_ids)} ids), so history shrank rather than "
-            "grew. Compaction dropping a turn will do this. Token-id history cannot "
-            "continue; use a context without `retain_token_ids`."
+            "grew. Compaction dropping a turn will do this. No suffix describes the "
+            "new turn alone, so the retained ids cannot be extended."
         )
     for i, (was, now) in enumerate(zip(prev_ids, full_ids, strict=False)):
         if was != now:
@@ -141,8 +141,8 @@ def derive_delta(prev_ids: list[int], full_ids: list[int]) -> list[int]:
                 f"({was} != {now}), so it re-renders earlier turns instead of "
                 "extending them. Common causes: documents or other template kwargs "
                 "introduced mid-conversation, or an adapter whose control token is "
-                "emitted at sequence position 0. Use a context without "
-                "`retain_token_ids` for those."
+                "emitted at sequence position 0. No suffix describes the new turn "
+                "alone, so the retained ids cannot be extended."
             )
     return list(full_ids[len(prev_ids) :])
 
@@ -1457,8 +1457,8 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 "than grew. Compaction dropping turns will do this, as will the "
                 "token-budget truncation `view_for_generation()` applies once a "
                 "model_id is bound. The already-sent side can no longer be identified, "
-                "so no suffix describes the new turn alone; use a context without "
-                "`retain_token_ids`."
+                "so no suffix describes the new turn alone; this turn re-renders as "
+                "chat messages and only its prefix-cache hit is lost."
             )
 
         # Prove the leading prefix is still the SAME messages (over TEXT, so immune to
@@ -1472,9 +1472,9 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 "the retained ids' leading prefix no longer matches this conversation: "
                 "an earlier message's content changed, or the oldest turns were "
                 "dropped, while the message count stayed at or above the retained "
-                "boundary. Splicing the old ids would send the server a prompt whose "
-                "prefix it never cached; use a context without `retain_token_ids`, or "
-                "let this request re-render."
+                "boundary. Splicing the old ids would send a prompt whose prefix the "
+                "server never cached, so the ids are not reused; this turn re-renders "
+                "as chat messages and only its prefix-cache hit is lost."
             )
 
         full_ids = await self._tokenize_chat(
