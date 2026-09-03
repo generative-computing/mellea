@@ -1,10 +1,10 @@
 # pytest: huggingface, e2e, slow
 """How `ALoraRequirement` routes validation through a fast adapter.
 
-Uses the catalog-native `requirement-check` adapter (registered here via
-`IntrinsicAdapter`, still the only working way to drive `_generate_from_intrinsic` —
-see #1144) to compare aLoRA-backed validation against full LLM-as-judge generation
-for the same requirement. `LLMaJRequirement` is used for the comparison because
+Uses the catalog-native `requirement-check` adapter, registered here as a
+composed `Adapter` (Identity + IOContract + LocalFileBinding), to compare
+aLoRA-backed validation against full LLM-as-judge generation for the same
+requirement. `LLMaJRequirement` is used for the comparison because
 `ALoraRequirement` always routes through the registered adapter regardless of
 `backend.default_to_constraint_checking_alora`.
 
@@ -18,8 +18,13 @@ runnable as an automated example).
 import time
 
 from mellea import MelleaSession, model_ids
-from mellea.backends.adapters import AdapterType
-from mellea.backends.adapters.adapter import IntrinsicAdapter
+from mellea.backends.adapters import (
+    Adapter,
+    Identity,
+    LocalFileBinding,
+    get_io_contract,
+)
+from mellea.backends.adapters.catalog import AdapterType, fetch_intrinsic_metadata
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.core import GenerateLog, ValidationResult
 from mellea.stdlib.context import ChatContext
@@ -40,11 +45,21 @@ m = MelleaSession(backend=backend, ctx=ChatContext())
 # returning an ordinary failed check or propagating the exception. The ALORA
 # type is also load-bearing here: routing only looks up ("alora",), so
 # registering the LORA variant instead would hit the same failure.
+_requirement_check_metadata = fetch_intrinsic_metadata("requirement-check")
 backend.add_adapter(
-    IntrinsicAdapter(  # emits a DeprecationWarning — see module docstring, #1144
-        "requirement-check",
-        adapter_type=AdapterType.ALORA,
-        base_model_name=backend.base_model_name,
+    Adapter(
+        identity=Identity(
+            name="requirement-check",
+            adapter_type="alora",
+            capability=_requirement_check_metadata.effective_capability,
+        ),
+        io_contract=get_io_contract("requirement-check"),
+        weights=LocalFileBinding(
+            name="requirement-check",
+            adapter_type=AdapterType.ALORA,
+            repo_id=_requirement_check_metadata.repo_id,
+            revision=_requirement_check_metadata.revision,
+        ),
     )
 )
 
