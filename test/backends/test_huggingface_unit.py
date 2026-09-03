@@ -1526,10 +1526,9 @@ def test_remove_adapter_deregisters_composed_embedded_adapter():
         io_contract=get_io_contract("answerability"),
         weights=EmbeddedBinding(),
     )
-    backend.add_adapter(composed)
+    backend.add_adapter(composed, config={"parameters": {}})
     key = "answerability_alora"
     assert key in backend.list_adapters()
-    backend._composed_adapter_configs[key] = {"parameters": {}}
 
     backend.remove_adapter(key)
 
@@ -1563,7 +1562,7 @@ def test_load_peft_adapter_on_composed_embedded_adapter_raises_type_error():
         io_contract=get_io_contract("answerability"),
         weights=EmbeddedBinding(),
     )
-    backend.add_adapter(composed)
+    backend.add_adapter(composed, config={"parameters": {}})
 
     with pytest.raises(TypeError, match="cannot load embedded adapter"):
         backend.load_peft_adapter("answerability_alora")
@@ -1634,7 +1633,7 @@ def test_add_adapter_shim_refuses_name_already_claimed_by_composed_adapter():
         io_contract=get_io_contract("answerability"),
         weights=_EmbeddedBinding(),
     )
-    backend.add_adapter(composed)
+    backend.add_adapter(composed, config={"parameters": {}})
     assert "answerability_alora" in backend._composed_adapters
 
     with warnings.catch_warnings():
@@ -1750,15 +1749,13 @@ def test_remove_adapter_deregisters_composed_local_file_adapter():
     assert binding.path is None
 
 
-def test_intrinsic_adapter_name_and_config_raises_for_uncached_composed_embedded():
-    """`_intrinsic_adapter_name_and_config` must raise its documented ValueError
-    when a composed Embedded adapter has no cached config.
+def test_add_adapter_raises_for_composed_embedded_adapter_without_config():
+    """add_adapter() must reject a composed Embedded adapter with no config.
 
-    Coverage gap noted in review: the happy path (config present) was
-    tested; this error branch — reachable if a composed Embedded adapter was
-    registered via bare `add_adapter()` rather than
-    `register_embedded_adapter_model()`/`resolve_adapter()`, which are the
-    only call sites that populate `_composed_adapter_configs` for it — was not.
+    Registering one without a config would make it discoverable
+    (list_adapters()/_find_adapter()) but permanently unable to generate —
+    add_adapter() is now the only call site that registers this shape, so it
+    must refuse rather than defer the failure to generation time.
     """
     from mellea.backends.adapters._core import (
         Adapter as _AdapterCore,
@@ -1774,9 +1771,39 @@ def test_intrinsic_adapter_name_and_config_raises_for_uncached_composed_embedded
         io_contract=get_io_contract("answerability"),
         weights=_EmbeddedBinding(),
     )
-    backend.add_adapter(composed)
-    assert "answerability_alora" in backend._composed_adapters
+
+    with pytest.raises(ValueError, match=r"No io\.yaml config given"):
+        backend.add_adapter(composed)
+
+    assert "answerability_alora" not in backend._composed_adapters
     assert "answerability_alora" not in backend._composed_adapter_configs
+
+
+def test_intrinsic_adapter_name_and_config_raises_for_uncached_composed_embedded():
+    """`_intrinsic_adapter_name_and_config` must raise its documented ValueError
+    when a composed Embedded adapter has no cached config.
+
+    Simulates the post-add_adapter() state directly rather than through the
+    public API: add_adapter() itself now refuses to register this shape
+    without a config (see the test above), so the only way to reach this
+    branch is a registry that got into this state some other way — this
+    keeps the branch covered without depending on that being possible.
+    """
+    from mellea.backends.adapters._core import (
+        Adapter as _AdapterCore,
+        EmbeddedBinding as _EmbeddedBinding,
+    )
+    from mellea.backends.adapters.io_contracts import get_io_contract
+
+    backend = _make_backend()
+    composed = _AdapterCore(
+        identity=Identity(
+            name="answerability", adapter_type="alora", capability="answerability"
+        ),
+        io_contract=get_io_contract("answerability"),
+        weights=_EmbeddedBinding(),
+    )
+    backend._composed_adapters["answerability_alora"] = composed
 
     with pytest.raises(ValueError, match=r"No io\.yaml config cached"):
         backend._intrinsic_adapter_name_and_config(composed)

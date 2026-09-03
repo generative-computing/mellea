@@ -2579,7 +2579,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         """Returns the base_model_id of the model used by the backend. For example, `granite-3.3-8b-instruct` for `ibm-granite/granite-3.3-8b-instruct`."""
         return pathlib.PurePath(self._model_id).name
 
-    def add_adapter(self, adapter: AdapterInput) -> None:
+    def add_adapter(self, adapter: AdapterInput, *, config: dict | None = None) -> None:
         """Register an adapter function with this backend.
 
         Downloads the adapter weights (via `adapter.get_local_hf_path`) and records
@@ -2595,9 +2595,19 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             adapter (AdapterInput): The adapter to register. Must be a
                 `LocalHFAdapter`, `LocalFileBinding`, `EmbeddedIntrinsicAdapter`,
                 or a composed `Adapter`; other adapter realities are rejected.
+            config (dict | None): Raw io.yaml config for a composed `Adapter`
+                whose `weights` is an `EmbeddedBinding`. Required for that
+                shape (its config cannot be cheaply re-derived later, unlike a
+                `LocalFileBinding`'s); rejected for every other shape.
 
         Raises:
-            TypeError: If `adapter` is not a supported local or embedded adapter.
+            TypeError: If `adapter` is not a supported local or embedded
+                adapter, or `config` is given for a shape other than a
+                composed `EmbeddedBinding` adapter.
+            ValueError: If `adapter` is a composed `Adapter` whose `weights` is
+                an `EmbeddedBinding` and `config` is not given — registering it
+                without one would make it discoverable but permanently unable
+                to generate.
             Exception: If `adapter` has already been added to a different backend.
         """
         if not isinstance(
@@ -2617,6 +2627,26 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         if isinstance(adapter, _AdapterCore) and not isinstance(
             adapter, (IntrinsicAdapter, EmbeddedIntrinsicAdapter)
         ):
+            # Validated ahead of the duplicate-registration guard below: a
+            # malformed config= argument must raise even when the call would
+            # otherwise be a silently-refused duplicate.
+            if isinstance(adapter.weights, EmbeddedBinding):
+                if config is None:
+                    raise ValueError(
+                        f"No io.yaml config given for composed embedded adapter "
+                        f"{adapter.identity.name!r}; registering it without one "
+                        "would leave it discoverable but unable to generate. "
+                        "Pass config=, or register it via "
+                        "register_embedded_adapter_model() or resolve_adapter()."
+                    )
+            elif config is not None:
+                raise TypeError(
+                    "config= is only accepted for a composed Adapter whose "
+                    f"weights is an EmbeddedBinding; got "
+                    f"{type(adapter.weights).__name__}, which derives its "
+                    "config lazily from io.yaml on first use."
+                )
+
             key = _composed_adapter_key(adapter)
             # A LocalFileBinding registered standalone (bare add_adapter(binding))
             # lands in _added_adapters under this same key — that's not a
@@ -2634,8 +2664,10 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 )
                 return
             if isinstance(adapter.weights, EmbeddedBinding):
+                assert config is not None  # validated above
                 adapter.weights.source = self.base_model_name
                 self._composed_adapters[key] = adapter
+                self._composed_adapter_configs[key] = config
                 return
             if isinstance(adapter.weights, LocalFileBinding):
                 binding = adapter.weights
@@ -2737,17 +2769,16 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         names = []
         for adapter, config in discovered:
             key = _composed_adapter_key(adapter)
-            self.add_adapter(adapter)
-            # add_adapter() silently refuses (logs a warning, returns) rather than
-            # raising when `key` is already registered — checking `key in
-            # self._composed_adapters` isn't enough, since a prior registration
-            # already left it there; compare identity to confirm *this* adapter
-            # is the one that's actually registered before caching its config,
-            # or a refused call would overwrite the live adapter's config with
-            # this one's and falsely report it as registered below.
+            # add_adapter() caches config atomically with registration now, so
+            # a refused duplicate (a different object already holding `key`)
+            # never reaches that write — no separate clobber guard needed for
+            # the config. The identity check below is still required, though:
+            # add_adapter() returns None on both success and silent refusal,
+            # so this is the only way to know whether *this* adapter is the
+            # one that actually ended up registered, for the `names` result.
+            self.add_adapter(adapter, config=config)
             if self._composed_adapters.get(key) is not adapter:
                 continue
-            self._composed_adapter_configs[key] = config
             names.append(adapter.identity.name)
         return names
 

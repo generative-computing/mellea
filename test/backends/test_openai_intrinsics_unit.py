@@ -188,7 +188,6 @@ def _make_backend_with_composed_adapter(config: dict) -> OpenAIBackend:
         EmbeddedBinding,
         Identity,
     )
-    from mellea.backends.adapters.adapter import _composed_adapter_key
     from mellea.backends.adapters.io_contracts import get_io_contract
 
     backend = OpenAIBackend(
@@ -203,8 +202,7 @@ def _make_backend_with_composed_adapter(config: dict) -> OpenAIBackend:
         io_contract=get_io_contract("answerability"),
         weights=EmbeddedBinding(),
     )
-    backend.add_adapter(adapter)
-    backend._composed_adapter_configs[_composed_adapter_key(adapter)] = config
+    backend.add_adapter(adapter, config=config)
     return backend
 
 

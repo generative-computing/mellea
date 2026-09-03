@@ -539,7 +539,7 @@ class AdapterMixin(Backend, abc.ABC):
         """
 
     @abc.abstractmethod
-    def add_adapter(self, adapter: AdapterInput) -> None:
+    def add_adapter(self, adapter: AdapterInput, *, config: dict | None = None) -> None:
         """Register an adapter with this backend so it can be loaded later.
 
         The adapter must not already have been added to a different backend.
@@ -548,12 +548,25 @@ class AdapterMixin(Backend, abc.ABC):
         backend rejects an embedded adapter), so a statically valid call may
         still be rejected at runtime.
 
+        `config` is the raw io.yaml mapping for a composed `Adapter`/
+        `_AdapterCore` whose `weights` is an `EmbeddedBinding` — that reality's
+        config cannot be cheaply re-derived later, so it must be supplied here
+        (see `_discover_embedded_adapters`/`resolve_adapter`), rather than
+        being fetched lazily the way a `LocalFileBinding`'s io.yaml is.
+
         Args:
             adapter (AdapterInput): The adapter to register with this backend.
+            config (dict | None): Raw io.yaml config for a composed
+                `EmbeddedBinding` adapter. Ignored (and rejected) for every
+                other adapter reality.
 
         Raises:
             TypeError: If `adapter` belongs to a reality this backend does not
-                support.
+                support, or `config` is given for a reality other than a
+                composed `EmbeddedBinding` adapter.
+            ValueError: If `adapter.weights` is an `EmbeddedBinding` and
+                `config` is not given — registering it without a config would
+                make it discoverable but permanently unable to generate.
         """
 
     @abc.abstractmethod
@@ -757,17 +770,17 @@ class AdapterMixin(Backend, abc.ABC):
                 # add_adapter supports the Embedded/Granite Switch reality
                 # (currently OpenAIBackend and LocalHFBackend when configured
                 # with load_embedded_adapters=True).
-                configs = getattr(self, "_composed_adapter_configs", None)
+                #
+                # Passing config= lets add_adapter() cache it atomically with
+                # registration, gated behind its own duplicate-key guard — a
+                # refused duplicate (a different object already holds the
+                # key) therefore never reaches the config write, so this
+                # can't clobber a live adapter's cached config the way a
+                # register-then-separately-cache sequence could.
                 for a, config in _discover_embedded_adapters(
                     repo_id, intrinsic_name=name
                 ):
-                    # Register first, then cache the config: if add_adapter
-                    # refuses the registration (e.g. a duplicate key), no
-                    # orphaned config entry is left behind for a key that
-                    # was never actually stored in the registry.
-                    self.add_adapter(a)
-                    if configs is not None:
-                        configs[_composed_adapter_key(a)] = config
+                    self.add_adapter(a, config=config)
             else:
                 # AdapterType.LORA is the pre-Phase-1 default (mirrors old _util.py).
                 # Every current catalog entry supports LORA.  Phase 2 (see epic #929)

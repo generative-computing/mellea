@@ -284,7 +284,10 @@ weights binding into a single, inspectable object. Both `LocalHFBackend` and
 dispatching on the weights binding's reality (`LocalFileBinding` for
 LocalFile/PEFT, `EmbeddedBinding` for Embedded/Granite Switch) — alongside
 the deprecated shim classes, which remain functional for now (Epic #929,
-issue #1144).
+issue #1144). An `EmbeddedBinding` adapter additionally requires `add_adapter`'s
+`config=` argument (the raw io.yaml mapping) — `add_adapter` raises `ValueError`
+without it, since that reality's config cannot be cheaply re-derived later; see
+below.
 
 Each weights binding models how its deployment turns an adapter on.
 `LocalFileBinding` downloads and loads LoRA/aLoRA weights, so it exposes a
@@ -311,7 +314,8 @@ the served base model — so it exposes a single method, `apply_activation`,
 that edits the outgoing request instead of a lifecycle. Its `io.yaml` config
 comes from the served checkpoint's `adapter_index.json`, not from anything
 you can construct by hand, so registration goes through
-`register_embedded_adapter_model` rather than a bare `add_adapter` call:
+`register_embedded_adapter_model` (or `resolve_adapter`) rather than a bare
+`add_adapter(adapter)` call with no `config=`:
 
 ```python
 from mellea.backends.openai import OpenAIBackend
@@ -336,8 +340,8 @@ Weights-binding support by backend today:
 
 | Backend | `LocalFileBinding` (LocalFile/PEFT) | `EmbeddedBinding` (Embedded/Granite Switch) | `ServerMediatedBinding` |
 | --- | --- | --- | --- |
-| `LocalHFBackend` | ✅ shipping — `add_adapter` accepts a composed `Adapter` or a bare `LocalFileBinding` directly | ✅ shipping — `load_embedded_adapters=True`, or `add_adapter`/`register_embedded_adapter_model` with a composed `Adapter` | — |
-| `OpenAIBackend` | — | ✅ shipping — `load_embedded_adapters=True`, or `add_adapter`/`register_embedded_adapter_model` with a composed `Adapter` | — |
+| `LocalHFBackend` | ✅ shipping — `add_adapter` accepts a composed `Adapter` or a bare `LocalFileBinding` directly | ✅ shipping — `load_embedded_adapters=True`, or `add_adapter(adapter, config=...)`/`register_embedded_adapter_model` with a composed `Adapter` | — |
+| `OpenAIBackend` | — | ✅ shipping — `load_embedded_adapters=True`, or `add_adapter(adapter, config=...)`/`register_embedded_adapter_model` with a composed `Adapter` | — |
 
 `ServerMediatedBinding` has no backend implementation yet — see discussion #1486.
 Discovering *multiple* embedded adapters from a Granite Switch checkpoint or

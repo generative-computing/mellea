@@ -325,7 +325,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
     # AdapterMixin implementation
     # ------------------------------------------------------------------
 
-    def add_adapter(self, adapter: AdapterInput) -> None:
+    def add_adapter(self, adapter: AdapterInput, *, config: dict | None = None) -> None:
         """Register an adapter with this backend.
 
         Accepts the full `AdapterInput` union to honour the mixin contract, but
@@ -339,11 +339,24 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             adapter (AdapterInput): The adapter to register. Must be an
                 `EmbeddedIntrinsicAdapter` or a composed `Adapter` whose
                 `weights` is an `EmbeddedBinding`.
+            config (dict | None): Raw io.yaml config for a composed `Adapter`.
+                Required for that shape (its config cannot be cheaply
+                re-derived later); rejected for `EmbeddedIntrinsicAdapter`,
+                which already carries its own `.config`.
 
         Raises:
-            TypeError: If `adapter` is not a supported Embedded adapter.
+            TypeError: If `adapter` is not a supported Embedded adapter, or
+                `config` is given for an `EmbeddedIntrinsicAdapter`.
+            ValueError: If `adapter` is a composed `Adapter` and `config` is
+                not given — registering it without one would make it
+                discoverable but permanently unable to generate.
         """
         if isinstance(adapter, EmbeddedIntrinsicAdapter):
+            if config is not None:
+                raise TypeError(
+                    "config= is not accepted for an EmbeddedIntrinsicAdapter; "
+                    "it already carries its own .config."
+                )
             if adapter.qualified_name in self._added_adapters:
                 MelleaLogger.get_logger().warning(
                     f"attempted to add adapter {adapter.qualified_name!r} but it is "
@@ -362,6 +375,17 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                     "OpenAIBackend only supports the Embedded/Granite Switch "
                     f"reality for a composed Adapter; got {type(adapter.weights).__name__}."
                 )
+            # Validated ahead of the duplicate-registration guard below: a
+            # malformed config= argument must raise even when the call would
+            # otherwise be a silently-refused duplicate.
+            if config is None:
+                raise ValueError(
+                    f"No io.yaml config given for composed embedded adapter "
+                    f"{adapter.identity.name!r}; registering it without one "
+                    "would leave it discoverable but unable to generate. "
+                    "Pass config=, or register it via "
+                    "register_embedded_adapter_model() or resolve_adapter()."
+                )
             key = _composed_adapter_key(adapter)
             if key in self._added_adapters:
                 MelleaLogger.get_logger().warning(
@@ -371,6 +395,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 return
             adapter.weights.source = self.base_model_name
             self._added_adapters[key] = adapter
+            self._composed_adapter_configs[key] = config
             return
 
         raise TypeError(
@@ -471,16 +496,16 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         names = []
         for adapter, config in discovered:
             key = _composed_adapter_key(adapter)
-            self.add_adapter(adapter)
-            # add_adapter() silently refuses (logs a warning, returns) rather than
-            # raising when `key` is already registered — compare identity to
-            # confirm *this* adapter is the one that's actually registered before
-            # caching its config, or a refused call would overwrite the live
-            # adapter's config with this one's and falsely report it as
-            # registered below (mirrors LocalHFBackend's identical guard).
+            # add_adapter() caches config atomically with registration now, so
+            # a refused duplicate (a different object already holding `key`)
+            # never reaches that write — no separate clobber guard needed for
+            # the config. The identity check below is still required, though:
+            # add_adapter() returns None on both success and silent refusal,
+            # so this is the only way to know whether *this* adapter is the
+            # one that actually ended up registered, for the `names` result.
+            self.add_adapter(adapter, config=config)
             if self._added_adapters.get(key) is not adapter:
                 continue
-            self._composed_adapter_configs[key] = config
             names.append(adapter.identity.name)
         return names
 

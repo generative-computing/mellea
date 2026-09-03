@@ -829,7 +829,7 @@ def test_resolve_adapter_holds_activation_lock_once_across_embedded_loop():
     tracking_lock = _TrackingLock()
     mock_backend._adapter_activation_lock.return_value = tracking_lock
 
-    def fake_add_adapter(a):
+    def fake_add_adapter(a, config=None):
         mock_backend._added_adapters[_composed_adapter_key(a)] = a
 
     mock_backend.add_adapter.side_effect = fake_add_adapter

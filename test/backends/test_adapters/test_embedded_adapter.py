@@ -676,10 +676,19 @@ class TestOpenAIBackendComposedAdapterRegistration:
 
     def test_add_composed_adapter(self, backend):
         adapter = self._make_composed_adapter()
-        backend.add_adapter(adapter)
+        backend.add_adapter(adapter, config={"parameters": {}})
         assert "answerability_alora" in backend._added_adapters
         assert backend._added_adapters["answerability_alora"] is adapter
         assert adapter.weights.source == backend.base_model_name  # type: ignore[union-attr]
+        assert backend._composed_adapter_configs["answerability_alora"] == {
+            "parameters": {}
+        }
+
+    def test_add_composed_adapter_without_config_raises(self, backend):
+        adapter = self._make_composed_adapter()
+        with pytest.raises(ValueError, match=r"No io\.yaml config given"):
+            backend.add_adapter(adapter)
+        assert "answerability_alora" not in backend._added_adapters
 
     def test_add_composed_adapter_rejects_non_embedded_weights(self, backend):
         from mellea.backends.adapters._core import Adapter, Identity, LocalFileBinding
@@ -695,17 +704,17 @@ class TestOpenAIBackendComposedAdapterRegistration:
     def test_add_composed_adapter_refuses_duplicate_name(self, backend):
         first = self._make_composed_adapter()
         second = self._make_composed_adapter()
-        backend.add_adapter(first)
-        backend.add_adapter(second)
+        backend.add_adapter(first, config={"parameters": {}})
+        backend.add_adapter(second, config={"parameters": {}})
         assert backend._added_adapters["answerability_alora"] is first
 
     def test_composed_adapter_discoverable_by_capability(self, backend):
         adapter = self._make_composed_adapter()
-        backend.add_adapter(adapter)
+        backend.add_adapter(adapter, config={"parameters": {}})
         assert backend._find_adapter("answerability") is adapter
 
     def test_list_adapters_includes_composed_adapter(self, backend):
-        backend.add_adapter(self._make_composed_adapter())
+        backend.add_adapter(self._make_composed_adapter(), config={"parameters": {}})
         backend.add_adapter(
             EmbeddedIntrinsicAdapter(
                 "citations", config=_CITATIONS_CONFIG, technology="lora"
