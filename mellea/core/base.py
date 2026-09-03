@@ -22,6 +22,7 @@ import base64
 import binascii
 import datetime
 import enum
+import errno
 import logging
 import os
 import threading
@@ -246,6 +247,29 @@ class ImageUrlBlock(CBlock):
         return f"ImageUrlBlock({self.value}, {self._meta.__repr__()})"
 
 
+_ERROR_ECHO_MAX_CHARS: int = 120
+"""Longest prefix of a caller-supplied string echoed back in an error message."""
+
+
+def _truncate_for_error(s: str) -> str:
+    """Quote a caller-supplied string for an error message, bounding its length.
+
+    Audio helpers accept paths and URLs, so a caller who passes a base64 payload by
+    mistake would otherwise put an entire clip into an exception -- and from there into
+    logs. Truncating at the point of formatting keeps that bounded.
+
+    Args:
+        s (str): The caller-supplied string to echo.
+
+    Returns:
+        str: A repr-quoted value, suffixed with an elision marker and the original
+            length when it was truncated.
+    """
+    if len(s) <= _ERROR_ECHO_MAX_CHARS:
+        return repr(s)
+    return f"{s[:_ERROR_ECHO_MAX_CHARS]!r}... ({len(s)} chars total)"
+
+
 class AudioBlock(CBlock):
     """An `AudioBlock` represents audio as base64 data.
 
@@ -354,10 +378,19 @@ class AudioBlock(CBlock):
             return "flac"
         if data[:4] == b"OggS":
             return "ogg"
-        # MP3: an ID3v2 tag, or a bare frame header whose 11-bit sync word is set.
+        # MP3: an ID3v2 tag, or a bare MPEG audio frame header.
         if data[:3] == b"ID3":
             return "mp3"
-        if len(data) >= 2 and data[0] == 0xFF and (data[1] & 0xE0) == 0xE0:
+        if (
+            len(data) >= 2
+            and data[0] == 0xFF
+            and (data[1] & 0xE0) == 0xE0
+            # The 11-bit sync word alone also matches ADTS AAC, whose sync is 12 bits
+            # (0xFFF...) — so 0xF1 passes the check above and AAC would be reported as
+            # mp3. The 2-bit layer field separates them: MPEG audio uses Layer I/II/III
+            # (0b11/0b10/0b01) while ADTS always encodes 0b00.
+            and (data[1] & 0x06) != 0
+        ):
             return "mp3"
         return None
 
@@ -412,22 +445,28 @@ class AudioBlock(CBlock):
             AudioBlock: A new `AudioBlock` wrapping the base64-encoded file contents.
 
         Raises:
-            ValueError: If `path` cannot be opened (it is reported as a bad path rather
-                than surfacing a raw OS error, because `audio=` also accepts URLs and
-                base64 strings by mistake), or if `format` is `None` and the format
-                cannot be detected from the file's contents.
+            ValueError: If `path` cannot be opened (reported as a bad path rather than
+                surfacing the raw OS error, whose text would repeat the whole argument),
+                or if `format` is `None` and the format cannot be detected from the
+                file's contents.
         """
+        # Callers reach here with a mistaken URL or base64 payload, so anything echoed
+        # back must be truncated -- a full clip's base64 in an exception ends up in logs.
+        shown = _truncate_for_error(os.fspath(path))
         try:
             with open(path, "rb") as f:
                 data = f.read()
         except OSError as e:
-            # `audio=` accepts bare strings, so a URL or a base64 payload lands here as
-            # FileNotFoundError / "File name too long". Say what was expected instead.
+            # Deliberately not interpolating `e`: OSError's str() repeats the untruncated
+            # filename, which defeats the truncation above. The type and errno are the
+            # actionable parts.
+            code = errno.errorcode.get(e.errno, e.errno) if e.errno is not None else "?"
             raise ValueError(
-                f"Could not read audio file {os.fspath(path)[:120]!r}: expected a path "
-                f"to an audio file on disk. ({type(e).__name__}: {e}) "
-                "To load remote audio, fetch the bytes and use AudioBlock.from_bytes(); "
-                "for base64 data use AudioBlock(value, format=...)."
+                f"Could not read audio file {shown}: expected a path to an audio file "
+                f"on disk ({type(e).__name__}: {code}). To load remote audio use "
+                "AudioBlock.from_url() or AudioUrlBlock; for raw bytes use "
+                "AudioBlock.from_bytes(); for base64 data use "
+                "AudioBlock(value, format=...)."
             ) from e
         if format is None:
             # Detect once here so the error can name the path, then hand the result to
@@ -435,7 +474,7 @@ class AudioBlock(CBlock):
             format = cls.detect_format(data)
             if format is None:
                 raise ValueError(
-                    f"Could not identify the audio format of {os.fspath(path)!r}. "
+                    f"Could not identify the audio format of {shown}. "
                     "Pass format explicitly (e.g. format='wav') if you know it."
                 )
         return cls.from_bytes(data, format, meta)
@@ -466,16 +505,25 @@ class AudioBlock(CBlock):
         """
         if not url.startswith(("http://", "https://")):
             raise ValueError(
-                f"AudioBlock.from_url requires an http:// or https:// URL; got: {url!r}. "
-                "For a local file use AudioBlock.from_file()."
+                f"AudioBlock.from_url requires an http:// or https:// URL; got: "
+                f"{_truncate_for_error(url)}. For a local file use "
+                "AudioBlock.from_file()."
             )
         encoded = _cached_download_audio_as_base64(url)
         if format is None:
             format = cls.detect_format(base64.b64decode(encoded))
             if format is None:
+                # The download is already cached at this point. A URL that transiently
+                # served a non-audio 200 would otherwise stay cached, so every retry
+                # would replay the bad body instead of re-fetching. Drop it.
+                # A concurrent reader can still observe the entry between insert and
+                # eviction; closing that window means holding the cache lock across the
+                # download, which is not worth it for a transient error path.
+                _evict_audio_url_from_cache(url)
                 raise ValueError(
-                    f"Could not identify the audio format of the data at {url!r}. "
-                    "Pass format explicitly (e.g. format='wav') if you know it."
+                    f"Could not identify the audio format of the data at "
+                    f"{_truncate_for_error(url)}. Pass format explicitly "
+                    "(e.g. format='wav') if you know it."
                 )
         return cls(encoded, format, meta)
 
@@ -487,8 +535,8 @@ class AudioBlock(CBlock):
 class AudioUrlBlock(CBlock):
     """An `AudioUrlBlock` represents audio as a URL.
 
-    No provider accepts audio by URL — OpenAI Chat Completions has no audio-by-URL
-    content part — so backends resolve the URL to base64 on your behalf via
+    OpenAI Chat Completions has no audio-by-URL content part, so backends resolve the
+    URL to base64 on your behalf via
     `resolve_base64`, mirroring how `ImageUrlBlock` is handled for backends that
     require inline images. The download is memoized per URL, so re-sending the same
     clip across conversation turns fetches it once.
@@ -559,12 +607,27 @@ _audio_base64_cache: OrderedDict[str, str] = OrderedDict()
 _audio_base64_cache_lock = threading.Lock()
 
 
+def _evict_audio_url_from_cache(url: str) -> None:
+    """Drop a URL's cached payload so the next request re-downloads it.
+
+    Used when a download succeeded at the HTTP level but the body turned out not to be
+    usable audio: keeping it would make every retry replay the bad response.
+
+    Args:
+        url: The URL whose cache entry to remove. A no-op if absent.
+    """
+    with _audio_base64_cache_lock:
+        _audio_base64_cache.pop(url, None)
+
+
 def _cached_download_audio_as_base64(url: str) -> str:
     """Download audio as base64, memoizing the result per URL.
 
     Mirrors `_cached_download_image_as_base64`: the download runs outside the lock so
     concurrent fetches of distinct URLs proceed in parallel, and only the small cache
-    read/write is serialized.
+    read/write is serialized. Consequently two callers racing on a cold URL may both
+    fetch it — the result is identical and the last writer simply wins, so the duplicate
+    work is the only cost.
 
     Args:
         url: An `http://` or `https://` URL pointing to an audio file.
@@ -2419,6 +2482,15 @@ def get_images_from_component(c: Component) -> None | list[ImageBlock | ImageUrl
     `format_for_llm`, so components that only declare attachments there are still
     visible to backend capability checks.
 
+    The fallback fires only when the attribute is *absent*, not when it is present and
+    empty. A component that exposes `images = None` while declaring images on its
+    representation is therefore invisible here, yet the formatter still copies them onto
+    the `Message` — a backend that cannot carry them would drop them silently. That
+    combination is unsupported: a component's attribute must agree with its
+    representation. The alternative, falling back whenever the attribute yields nothing,
+    would add a `format_for_llm()` call for every attachment-free component on every
+    capability scan, which is why this is a deliberate trade rather than an oversight.
+
     Args:
         c: The `Component` whose `images` attribute is inspected.
 
@@ -2449,6 +2521,10 @@ def get_audio_from_component(c: Component) -> None | list[AudioBlock | AudioUrlB
     the `audio` declared on the `TemplateRepresentation` returned by `format_for_llm`,
     so components that only declare attachments there are still visible to backend
     capability checks.
+
+    The fallback fires only when the attribute is *absent*, not when it is present and
+    empty — see `get_images_from_component` for why that is deliberate. A component's
+    `audio` attribute must agree with the `audio` on its representation.
 
     Args:
         c: The `Component` whose `audio` attribute is inspected.

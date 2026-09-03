@@ -63,8 +63,9 @@ bytes, so a mislabelled file is reported accurately — a WAV named `.mp3` yield
 # Returns: str
 from mellea.core import AudioBlock
 
+# `speech.mp3` here is actually a WAV file that was given the wrong extension.
 clip = AudioBlock.from_file("speech.mp3")
-print(clip.format)  # "mp3"
+print(clip.format)  # "wav" — read from the file's contents, not its name
 ```
 
 ```python
@@ -106,9 +107,8 @@ from_raw = AudioBlock(b64, format="wav")  # format required
 
 ### Remote audio
 
-No provider accepts audio by URL — OpenAI Chat Completions has no audio-by-URL content
-part — so Mellea downloads the clip and inlines it for you. There are two ways, differing
-only in *when* the fetch happens.
+OpenAI Chat Completions has no audio-by-URL content part, so Mellea downloads the clip and
+inlines it for you. There are two ways, differing only in *when* the fetch happens.
 
 `AudioBlock.from_url()` downloads immediately, so a bad URL fails at the call site:
 
@@ -142,6 +142,12 @@ Prefer `AudioUrlBlock` when the same URL is used repeatedly; prefer `from_url` w
 want the failure surfaced eagerly. Downloads are capped at 50 MB with a 30-second
 timeout, and `AudioUrlBlock` requires an explicit `format` because nothing has been
 fetched yet at construction time.
+
+> **Note:** some servers do accept audio by URL through non-standard extensions to the
+> OpenAI schema — [vLLM's `audio_url`](https://docs.vllm.ai/en/v0.6.2/getting_started/examples/openai_audio_api_client.html)
+> is one. Mellea always downloads and inlines instead, which works everywhere. Passing a
+> URL straight through to a server that supports it would be a future addition, gated on
+> detecting such a server; it would let the download and cache be skipped.
 
 ---
 

@@ -299,6 +299,46 @@ def test_audio_detect_format_unrecognised(data: bytes):
     assert AudioBlock.detect_format(data) is None
 
 
+@pytest.mark.parametrize(
+    "byte1",
+    [
+        0xF1,  # ADTS, MPEG-4, no CRC
+        0xF9,  # ADTS, MPEG-2, no CRC
+        0xF0,  # ADTS, MPEG-4, with CRC
+    ],
+)
+def test_audio_detect_format_adts_aac_is_not_mp3(byte1: int):
+    """ADTS AAC shares MP3's 11-bit sync word and must not be reported as mp3.
+
+    AAC's syncword is 12 bits (0xFFF...), so `0xF1 & 0xE0 == 0xE0` passes a sync-only
+    check. The 2-bit layer field separates them: ADTS always encodes 0b00, MPEG audio
+    never does. Mislabelling would send AAC bytes tagged `format="mp3"`.
+
+    These byte patterns are synthetic so the test needs no encoder, but the case is real:
+    `ffmpeg -c:a aac -f adts` produces a file starting `ff f1 50 40`, which the
+    sync-only check reported as mp3.
+    """
+    adts = bytes([0xFF, byte1]) + b"\x00" * 40
+    assert AudioBlock.detect_format(adts) is None
+
+
+@pytest.mark.parametrize(
+    "byte1,layer", [(0xFB, "III"), (0xF5, "II"), (0xF7, "I"), (0xE3, "III (MPEG 2.5)")]
+)
+def test_audio_detect_format_all_mpeg_layers_still_mp3(byte1: int, layer: str):
+    """Excluding ADTS must not exclude any real MPEG audio layer."""
+    frame = bytes([0xFF, byte1]) + b"\x00" * 40
+    assert AudioBlock.detect_format(frame) == "mp3", f"Layer {layer} regressed"
+
+
+def test_audio_from_file_rejects_adts_aac(tmp_path):
+    """An AAC file must fail loudly rather than be loaded as mp3."""
+    path = tmp_path / "clip.aac"
+    path.write_bytes(bytes([0xFF, 0xF1]) + b"\x00" * 64)
+    with pytest.raises(ValueError, match="Could not identify the audio format"):
+        AudioBlock.from_file(path)
+
+
 def test_audio_from_bytes_detects_format():
     wav = _make_wav_bytes()
     block = AudioBlock.from_bytes(wav)
@@ -372,14 +412,38 @@ def test_audio_from_file_non_path_string_gives_actionable_error(not_a_path: str)
     """
     with pytest.raises(ValueError, match="expected a path to an audio file") as exc:
         AudioBlock.from_file(not_a_path)
-    assert "from_bytes" in str(exc.value)
+    msg = str(exc.value)
+    # Point at every alternative, since any of them could be what the caller meant.
+    assert "from_url" in msg and "from_bytes" in msg
+
+
+def test_audio_from_file_error_does_not_echo_the_whole_input():
+    """A base64 payload passed as a path must not be reproduced in the exception.
+
+    The path is truncated when formatted, but interpolating the OSError would undo that:
+    `str(OSError)` repeats the full filename, so a whole clip's base64 would land in the
+    message and from there into logs.
+    """
+    payload = base64.b64encode(b"\x00" * 7500).decode()
+    assert len(payload) > 9000, "fixture must exceed the truncation threshold"
+
+    with pytest.raises(ValueError) as exc:
+        AudioBlock.from_file(payload)
+
+    msg = str(exc.value)
+    assert payload not in msg, "the full input leaked into the error"
+    assert len(msg) < 500, f"message length should not scale with input; got {len(msg)}"
+    # The actionable parts survive truncation.
+    assert "expected a path to an audio file" in msg
+    assert "chars total" in msg, "truncation should say how much was elided"
 
 
 # --- AudioBlock.from_url / AudioUrlBlock.resolve_base64 ---
 #
-# No provider accepts audio by URL, so a URL must be resolved to inline base64 —
-# eagerly via from_url, or lazily at send time via AudioUrlBlock.resolve_base64.
-# The network is patched out throughout; these assert wiring, not connectivity.
+# OpenAI Chat Completions has no audio-by-URL content part, so a URL must be resolved to
+# inline base64 — eagerly via from_url, or lazily at send time via
+# AudioUrlBlock.resolve_base64. The network is patched out throughout; these assert
+# wiring, not connectivity.
 
 
 def test_audio_from_url_downloads_and_detects_format():
@@ -427,6 +491,48 @@ def test_audio_url_block_resolve_base64_delegates_to_cache():
     ) as mock_dl:
         assert block.resolve_base64() == encoded
     mock_dl.assert_called_once_with("https://example.com/clip.wav")
+
+
+def test_audio_from_url_evicts_cache_when_detection_fails():
+    """A transient non-audio 200 must not be cached, or retries replay the bad body.
+
+    Without eviction the first attempt caches the response, so every later attempt fails
+    identically without re-fetching — the URL is permanently poisoned for the process.
+    """
+    from mellea.core.base import _audio_base64_cache
+
+    url = "https://example.com/transiently-broken.wav"
+    _audio_base64_cache.pop(url, None)
+    not_audio = base64.b64encode(b"<html>error page</html>" + b"\x00" * 40).decode()
+
+    with patch(
+        "mellea.core.base._download_audio_as_base64", return_value=not_audio
+    ) as mock_dl:
+        for _ in range(2):
+            with pytest.raises(ValueError, match="Could not identify the audio format"):
+                AudioBlock.from_url(url)
+            assert url not in _audio_base64_cache, "bad body must not stay cached"
+
+    assert mock_dl.call_count == 2, "each retry must re-download, not replay the cache"
+    _audio_base64_cache.pop(url, None)
+
+
+def test_audio_from_url_recovers_once_the_url_serves_audio():
+    """After a transient failure, a corrected response must be picked up."""
+    from mellea.core.base import _audio_base64_cache
+
+    url = "https://example.com/recovers.wav"
+    _audio_base64_cache.pop(url, None)
+    bad = base64.b64encode(b"<html>error</html>" + b"\x00" * 40).decode()
+    good = base64.b64encode(_make_wav_bytes()).decode()
+
+    with patch("mellea.core.base._download_audio_as_base64", side_effect=[bad, good]):
+        with pytest.raises(ValueError):
+            AudioBlock.from_url(url)
+        block = AudioBlock.from_url(url)
+
+    assert block.format == "wav"
+    _audio_base64_cache.pop(url, None)
 
 
 def test_audio_download_cache_fetches_once_per_url():
@@ -590,7 +696,16 @@ def test_representation_fallback_validates_element_types():
 
 
 def test_representation_fallback_not_consulted_when_attribute_present():
-    """Components exposing the attribute must not pay for an extra format_for_llm call."""
+    """Components exposing the attribute must not pay for an extra format_for_llm call.
+
+    This pins a deliberate performance trade, not merely current behaviour. Falling back
+    whenever the attribute yields nothing — rather than only when it is missing — would
+    make the guard agree with the payload path (the formatter always reads `tr.audio`),
+    but would add a `format_for_llm()` call for every attachment-free `Message` and
+    `Instruction` on every capability scan. The contract instead requires a component's
+    attribute to agree with its representation; see `get_images_from_component`. Do not
+    "fix" this by loosening the condition without weighing that cost.
+    """
 
     class _WithAttributeAndRepresentation(_ComponentDeclaringOnRepresentation):
         audio = None  # attribute present, so the fallback must be skipped

@@ -421,10 +421,13 @@ def message_to_openai_message(
         `replay_reasoning` is `True` and reasoning is present, the dict also
         carries a `"reasoning_content"` field.
 
+    An `AudioUrlBlock` is resolved to inline base64 here, because the OpenAI Chat
+    Completions audio schema has no audio-by-URL content part. That resolution is
+    blocking; callers should `await prefetch_audio_urls` first so it is a cache hit.
+
     Raises:
-        ValueError: If the message contains an `AudioUrlBlock`. The OpenAI Chat
-            Completions audio schema does not support audio by URL; fetch the
-            audio and pass it as an `AudioBlock` with base64 data instead.
+        ValueError: If an `AudioUrlBlock`'s audio cannot be downloaded or exceeds the
+            size cap (see `AudioUrlBlock.resolve_base64`).
         ValueError: If the message's `provider_fields` names a target that does not
             match `provider` and includes no `"*"` (see `merge_provider_fields`).
         TypeError: If `provider_fields` is not a `dict`, or a matching value within

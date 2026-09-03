@@ -12,6 +12,8 @@ Mocks the OpenAI async client to verify that `_generate_from_intrinsic` correctl
 - raises when no adapter is registered or streaming is requested
 """
 
+import asyncio
+import base64
 import json
 import pathlib
 from copy import deepcopy
@@ -744,3 +746,91 @@ async def test_tools_passed_to_api():
     assert tools is not None
     assert len(tools) == 1
     assert tools[0]["function"]["name"] == "get_temperature"
+
+
+_WAV_B64 = base64.b64encode(
+    b"RIFF$\x00\x00\x00WAVEfmt "
+    b"\x10\x00\x00\x00\x01\x00\x01\x00"
+    b"@\x1f\x00\x00\x80>\x00\x00"
+    b"\x02\x00\x10\x00data\x00\x00\x00\x00"
+).decode()
+
+
+def _audio_cases():
+    """Both audio block types, since each reached the rewriter by a different route."""
+    from mellea.core import AudioBlock, AudioUrlBlock
+
+    return [
+        pytest.param(AudioBlock(_WAV_B64, format="wav"), id="AudioBlock"),
+        pytest.param(
+            AudioUrlBlock("https://example.com/clip.wav", format="wav"),
+            id="AudioUrlBlock",
+        ),
+    ]
+
+
+@pytest.mark.parametrize("audio_block", _audio_cases())
+async def test_intrinsic_path_rejects_audio_with_actionable_error(audio_block):
+    """Audio in an intrinsic context must fail clearly, not as a pydantic dump.
+
+    `IntrinsicsRewriter` validates the conversation against a strict `ChatCompletion`
+    whose message `content` must be a plain string, so a multimodal content list raises
+    a dozen validation errors naming message variants the caller never chose. The guard
+    turns that into one sentence. `LocalHFBackend` guards its intrinsic path the same way.
+    """
+    backend = _make_backend_with_adapter(_SIMPLE_CONFIG)
+    ctx = ChatContext().add(Message("user", "Is the sky blue?", audio=[audio_block]))
+    mock_create = AsyncMock(return_value=_simple_chat_completion())
+    mock_client = MagicMock()
+    mock_client.chat.completions.create = mock_create
+
+    with patch.object(
+        OpenAIBackend,
+        "_async_client",
+        new_callable=PropertyMock,
+        return_value=mock_client,
+    ):
+        with pytest.raises(ValueError, match="does not support audio on the intrinsic"):
+            mot, _ = await mfuncs.aact(
+                Intrinsic("answerability"), ctx, backend, strategy=None
+            )
+            await mot.avalue()
+
+    mock_create.assert_not_called()
+
+
+async def test_intrinsic_path_does_not_download_audio_it_will_reject():
+    """The guard runs before the prefetch, so a rejected URL block is never fetched."""
+    from mellea.core import AudioUrlBlock
+
+    backend = _make_backend_with_adapter(_SIMPLE_CONFIG)
+    ctx = ChatContext().add(
+        Message(
+            "user",
+            "Is the sky blue?",
+            audio=[AudioUrlBlock("https://example.com/clip.wav", format="wav")],
+        )
+    )
+    mock_client = MagicMock()
+    mock_client.chat.completions.create = AsyncMock(
+        return_value=_simple_chat_completion()
+    )
+
+    with (
+        patch(
+            "mellea.core.base._cached_download_audio_as_base64", return_value=_WAV_B64
+        ) as mock_dl,
+        patch.object(
+            OpenAIBackend,
+            "_async_client",
+            new_callable=PropertyMock,
+            return_value=mock_client,
+        ),
+    ):
+        with pytest.raises(ValueError, match="does not support audio on the intrinsic"):
+            mot, _ = await mfuncs.aact(
+                Intrinsic("answerability"), ctx, backend, strategy=None
+            )
+            await mot.avalue()
+
+    mock_dl.assert_not_called()
