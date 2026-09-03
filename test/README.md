@@ -456,8 +456,9 @@ Tests skip automatically when requirements are not met:
 | **On-demand nightly** | Not yet available | IBM internal LSF cluster | Comment-triggered nightly against a PR branch. Tracked in [#734](https://github.com/generative-computing/mellea/issues/734); ask a maintainer if you need pre-merge GPU validation today. |
 
 **PR CI** (`ci.yml` → `quality.yml`): pre-commit checks, then Ollama installed
-and `granite4:micro` + `granite4:micro-h` pulled, then `uv run -m pytest -v
---junit-xml=... test`. `docs/examples/` is not collected in PR CI.
+and `granite4.2:3b` + `granite4:micro-h` + the `granite-vision-4.1-4b` GGUF
+pulled, then `uv run -m pytest -v --junit-xml=... test`. `docs/examples/` is
+not collected in PR CI.
 
 **Nightly** (`test/scripts/run_tests_with_ollama_and_vllm.sh`): starts local
 Ollama and (when GPU present) a local vLLM server, then runs
