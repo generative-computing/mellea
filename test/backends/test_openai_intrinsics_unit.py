@@ -208,6 +208,47 @@ async def test_chat_template_kwargs_set():
     assert extra_body["chat_template_kwargs"]["adapter_name"] == "answerability"
 
 
+async def test_construction_time_extra_body_default_survives_intrinsic_call():
+    """Issue #1539: a construction-time `extra_body` default (e.g. a thinking
+    default) must survive an intrinsic call that supplies its own, unrelated
+    per-call `extra_body` — and both must still coexist with the adapter's own
+    `chat_template_kwargs.adapter_name` write.
+    """
+    backend = _make_backend_with_adapter(
+        _SIMPLE_CONFIG,
+        model_options={
+            "extra_body": {"chat_template_kwargs": {"enable_thinking": False}}
+        },
+    )
+    ctx = _make_context()
+    mock_create = AsyncMock(return_value=_simple_chat_completion())
+
+    mock_client = MagicMock()
+    mock_client.chat.completions.create = mock_create
+
+    with patch.object(
+        OpenAIBackend,
+        "_async_client",
+        new_callable=PropertyMock,
+        return_value=mock_client,
+    ):
+        mot, _ = await mfuncs.aact(
+            Intrinsic("answerability"),
+            ctx,
+            backend,
+            strategy=None,
+            model_options={"extra_body": {"some_unrelated_field": 123}},
+        )
+        await mot.avalue()
+
+    mock_create.assert_called_once()
+    extra_body = mock_create.call_args.kwargs.get("extra_body", {})
+
+    assert extra_body["some_unrelated_field"] == 123
+    assert extra_body["chat_template_kwargs"]["enable_thinking"] is False
+    assert extra_body["chat_template_kwargs"]["adapter_name"] == "answerability"
+
+
 async def test_result_processor_applied():
     """Full answerability config: likelihood + nest transforms produce the expected JSON."""
     backend = _make_backend_with_adapter(_ANSWERABILITY_CONFIG)
