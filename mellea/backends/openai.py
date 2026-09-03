@@ -82,11 +82,6 @@ format: None = None  # typing this variable in order to shadow the global format
 # generic request path. It renders a chat conversation through the server's own chat
 # template and returns the ids, letting this backend work in id space with no local
 # tokenizer.
-#
-# Why this lives here and not on `LocalHFBackend`: Granite Switch activation
-# is OpenAI-only today (#1018, `huggingface.py::_generate_with_adapter_lock`), so no
-# local path injects the adapter control tokens this exists to preserve. When #1018
-# lands, the id-space logic below is backend-agnostic and should move to a shared home.
 
 
 class TokenizeUnavailable(RuntimeError):
@@ -1582,13 +1577,11 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         Raises:
             DeltaNotDerivable: If history was re-rendered rather than extended. Raised
-                before anything is sent, and CAUGHT by `_generate_from_context`, which
-                falls back to the chat send for that turn -- correct output, no prefix
-                reuse. Callers reaching this method directly get the exception.
-            TokenizeUnavailable: If the server cannot tokenize. Deliberately NOT caught
-                by that fallback: it means no usable /tokenize route exists, so id
-                retention can never work against this server, and swallowing it would
-                leave `retain_token_ids` silently inert.
+                before anything is sent. `_generate_from_chat_context_standard` catches
+                it and falls back to the chat send; direct callers get the exception.
+            TokenizeUnavailable: If the server cannot tokenize. Not caught by that
+                fallback, since no usable `/tokenize` route means id retention cannot
+                work against this server at all.
             NotImplementedError: If tools or streaming were requested -- chat-endpoint
                 features this transport cannot honour.
         """
@@ -1926,21 +1919,12 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 )
             except DeltaNotDerivable as e:
                 # The retained prefix cannot describe this turn: earlier messages were
-                # re-rendered rather than extended, history shrank, or the recorded
-                # digest no longer matches. Fall through to the chat send, which
-                # re-renders from text and is always correct -- only the prefix-cache
-                # reuse is lost. `_build_prompt_ids` raises this BEFORE any request, so
-                # nothing has been sent and the fall-through is a clean first attempt.
+                # re-rendered rather than extended, history shrank, or the digest no
+                # longer matches. Raised before any request, so falling through to the
+                # chat send below is a clean first attempt -- correct output, no reuse.
                 #
-                # `TokenizeUnavailable` is deliberately NOT caught: it means the server
-                # has no usable /tokenize route, so id retention can never work here.
-                # Swallowing it would leave `retain_token_ids` permanently inert with no
-                # signal, which is the failure this policy exists to make visible.
-                #
-                # The context keeps its retained ids rather than clearing them, so a
-                # later turn that lines up with the prefix again can resume reuse -- a
-                # one-off divergence (documents added for a single turn) does not
-                # permanently forfeit the cache.
+                # Retained ids are left in place rather than cleared, so a later turn
+                # that lines up with the prefix again resumes reuse.
                 MelleaLogger.get_logger().warning(
                     "token-id history could not be extended for this turn, so it was "
                     "sent as chat messages instead: %s The turn itself is unaffected; "
