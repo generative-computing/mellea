@@ -161,5 +161,58 @@ def test_deactivate_runs_even_when_generation_body_raises():
     assert isinstance(invocations[0].error, RuntimeError)
 
 
+def test_add_adapter_registers_composed_adapter_via_backend():
+    """`backend.add_adapter(composed_adapter)` drives the binding lifecycle
+    itself (Epic #929, issue #1144) — a caller no longer has to call
+    `binding.bind_backend()`/`binding.prepare()` separately before the
+    composed `Adapter` becomes resolvable by capability name.
+    """
+    backend = _make_backend()
+    binding = _make_binding()
+    adapter = _make_adapter(binding)
+
+    with patch(
+        "mellea.formatters.granite.intrinsics.obtain_lora",
+        return_value="/fake/local/adapter/path",
+    ):
+        backend.add_adapter(adapter)
+
+        assert binding.backend is backend
+        assert binding.qualified_name in backend.list_adapters()
+        # add_adapter also makes the composed Adapter itself discoverable by
+        # capability, unlike registering a bare LocalFileBinding directly.
+        found = backend._find_adapter("answerability")
+        assert found is adapter
+
+        with capture_adapter_hooks() as mock_invoke:
+            with backend.adapter_scope(adapter):
+                backend._model.set_adapter.assert_called_with(binding.qualified_name)  # type: ignore[union-attr]
+            backend._model.set_adapter.assert_called_with([])  # type: ignore[union-attr]
+
+    invocations = [p for p in hook_payloads(mock_invoke) if hasattr(p, "outcome")]
+    assert len(invocations) == 1
+    assert invocations[0].outcome == "success"
+
+
+def test_add_adapter_rejects_second_composed_registration_for_same_capability():
+    """A second `add_adapter` for the same capability is refused, not silently
+    overwritten — mirrors the shim's duplicate-registration guard."""
+    backend = _make_backend()
+    binding = _make_binding()
+    adapter = _make_adapter(binding)
+    other_binding = _make_binding()
+    other_adapter = _make_adapter(other_binding)
+
+    with patch(
+        "mellea.formatters.granite.intrinsics.obtain_lora",
+        return_value="/fake/local/adapter/path",
+    ):
+        backend.add_adapter(adapter)
+        backend.add_adapter(other_adapter)
+
+    assert backend._find_adapter("answerability") is adapter
+    assert other_binding.backend is None
+
+
 if __name__ == "__main__":
     pytest.main([__file__])

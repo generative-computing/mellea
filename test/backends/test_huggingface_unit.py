@@ -10,7 +10,7 @@ import time
 import warnings
 from types import SimpleNamespace
 from typing import Any, cast
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, mock_open, patch
 
 import pytest
 
@@ -827,6 +827,96 @@ async def test_legacy_peft_intrinsic_never_fires_embedded_invocation_complete(
 
     fired_hook_types = [call.args[0] for call in mock_invoke.call_args_list]
     assert HookType.ADAPTER_FUNCTION_INVOCATION_COMPLETE not in fired_hook_types
+
+
+@pytest.mark.asyncio
+async def test_composed_adapter_drives_generate_from_intrinsic(stub_backend):
+    """A composed `Adapter` (not the `IntrinsicAdapter` shim) drives the full
+    `_generate_from_intrinsic` path — name/config resolution, the composed
+    `_generate_composed_local_file_with_adapter_scope` dispatch, and normal
+    post-processing — end to end (Epic #929, issue #1144).
+    """
+    from mellea.backends.adapters._core import (
+        Adapter as _AdapterCore,
+        Identity,
+        LocalFileBinding,
+    )
+    from mellea.backends.adapters.catalog import AdapterType
+    from mellea.backends.adapters.io_contracts import get_io_contract
+
+    backend = _make_intrinsic_backend_stub(stub_backend)
+    backend.processing = AsyncMock(return_value=None)
+    binding = LocalFileBinding(
+        name="answerability",
+        adapter_type=AdapterType.ALORA,
+        repo_id="ibm-granite/granitelib-rag-r1.0",
+        revision="abc123",
+    )
+    composed = _AdapterCore(
+        identity=Identity(
+            name="answerability", adapter_type="alora", capability="answerability"
+        ),
+        io_contract=get_io_contract("answerability"),
+        weights=binding,
+    )
+    backend._added_adapters = {}
+    backend._composed_adapters = {"answerability_alora": composed}
+    backend.base_model_name = "granite-4.1-3b"
+
+    def fake_transformers_inputs(request, tokenizer, model, ll_tokenizer=None):
+        return {"input_tokens": object()}, {}
+
+    def fake_generate_with_transformers(tokenizer, model, generate_input, other_input):
+        return _FakeChatCompletionResponseWithContent('{"result": "ok"}')
+
+    class _PassthroughResultProcessor:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def transform(self, chunk, rewritten):
+            return chunk
+
+    with (
+        patch(
+            "mellea.backends.huggingface.granite_formatters.IntrinsicsRewriter",
+            _FakeRewriter,
+        ),
+        patch(
+            "mellea.backends.huggingface.granite_formatters.IntrinsicsResultProcessor",
+            _PassthroughResultProcessor,
+        ),
+        patch(
+            "mellea.formatters.granite.base.util.chat_completion_request_to_transformers_inputs",
+            side_effect=fake_transformers_inputs,
+        ),
+        patch(
+            "mellea.formatters.granite.base.util.generate_with_transformers",
+            side_effect=fake_generate_with_transformers,
+        ),
+        patch(
+            "mellea.formatters.granite.intrinsics.obtain_io_yaml",
+            return_value="/fake/adapter.yaml",
+        ),
+        patch("builtins.open", mock_open(read_data="key: value")),
+        patch("yaml.safe_load", return_value={"parameters": {}}),
+    ):
+        output = await LocalHFBackend._generate_from_intrinsic(
+            backend,
+            Intrinsic("answerability"),
+            ChatContext().add(Message("user", "Is the sky blue?")),
+            model_options={},
+        )
+        assert output._gen.generate is not None
+        await output._gen.generate
+
+        assert output._gen.process is not None
+        processed = False
+        while not output._gen.queue.empty():
+            item = output._gen.queue.get_nowait()
+            if item is not None:
+                await output._gen.process(output, item)
+                processed = True
+        assert processed, "the composed local-file path must produce a response"
 
 
 def test_generate_embedded_with_generation_lock_deactivates_peft_state():

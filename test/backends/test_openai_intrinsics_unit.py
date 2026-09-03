@@ -175,6 +175,39 @@ def _make_context() -> ChatContext:
     return ChatContext().add(Message("user", "What is the square root of 4?"))
 
 
+def _make_backend_with_composed_adapter(config: dict) -> OpenAIBackend:
+    """Return an OpenAIBackend with a composed `Adapter` registered directly.
+
+    Composed-Adapter counterpart of `_make_backend_with_adapter` (Epic #929,
+    issue #1144): `add_adapter` and `_generate_from_intrinsic` must drive the
+    same generation path for a composed `Adapter` as for the deprecated
+    `EmbeddedIntrinsicAdapter` shim.
+    """
+    from mellea.backends.adapters._core import (
+        Adapter as _AdapterCore,
+        EmbeddedBinding,
+        Identity,
+    )
+    from mellea.backends.adapters.adapter import _composed_adapter_key
+    from mellea.backends.adapters.io_contracts import get_io_contract
+
+    backend = OpenAIBackend(
+        model_id="granite-switch",
+        api_key="fake-key",
+        base_url="http://localhost:9999/v1",
+    )
+    adapter = _AdapterCore(
+        identity=Identity(
+            name="answerability", adapter_type="alora", capability="answerability"
+        ),
+        io_contract=get_io_contract("answerability"),
+        weights=EmbeddedBinding(),
+    )
+    backend.add_adapter(adapter)
+    backend._composed_adapter_configs[_composed_adapter_key(adapter)] = config
+    return backend
+
+
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
@@ -183,6 +216,36 @@ def _make_context() -> ChatContext:
 async def test_chat_template_kwargs_set():
     """_generate_from_intrinsic injects intrinsic_name into chat_template_kwargs."""
     backend = _make_backend_with_adapter(_SIMPLE_CONFIG)
+    ctx = _make_context()
+    mock_create = AsyncMock(return_value=_simple_chat_completion())
+
+    mock_client = MagicMock()
+    mock_client.chat.completions.create = mock_create
+
+    with patch.object(
+        OpenAIBackend,
+        "_async_client",
+        new_callable=PropertyMock,
+        return_value=mock_client,
+    ):
+        mot, _ = await mfuncs.aact(
+            Intrinsic("answerability"), ctx, backend, strategy=None
+        )
+        await mot.avalue()
+
+    mock_create.assert_called_once()
+    call_kwargs = mock_create.call_args
+    extra_body = call_kwargs.kwargs.get("extra_body", {})
+
+    assert "chat_template_kwargs" in extra_body
+    assert extra_body["chat_template_kwargs"]["adapter_name"] == "answerability"
+
+
+async def test_composed_adapter_drives_generate_from_intrinsic():
+    """A composed `Adapter` (not the `EmbeddedIntrinsicAdapter` shim) drives
+    the same generation path — activation, name/config resolution — as the
+    shim (Epic #929, issue #1144)."""
+    backend = _make_backend_with_composed_adapter(_SIMPLE_CONFIG)
     ctx = _make_context()
     mock_create = AsyncMock(return_value=_simple_chat_completion())
 
