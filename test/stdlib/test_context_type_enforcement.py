@@ -257,6 +257,32 @@ def test_chat_subclass_propagated_field_survives_compaction():
     assert ctx.label == "keep-me"
 
 
+def test_custom_compactor_cannot_demote_subtype():
+    """A custom `InlineCompactor` that returns a plain `ChatContext` cannot demote the caller.
+
+    `ChatContext.add()` promises `Self`, but the `InlineCompactor` extension
+    contract lets a custom `compact()` return any `ChatContext` — including a
+    demoted one. `add()` must detect the demotion and rebuild the compacted
+    history back into `type(self)`, so a `ChatContext` subtype paired with a
+    demoting compactor still gets its own type back (issue #1522).
+    """
+    from mellea.stdlib.context.chat import _rebuild_chat_context
+    from mellea.stdlib.context.compactor import InlineCompactor
+
+    class _DemotingCompactor(InlineCompactor):
+        """Discards the input's subtype by rebuilding as a bare `ChatContext`."""
+
+        def compact(self, ctx: ChatContext, *, backend=None) -> ChatContext:
+            return _rebuild_chat_context(ctx.as_list(), source=ctx, cls=ChatContext)
+
+    ctx = _RequiredArgChatSubclass("keep-me", compactor=_DemotingCompactor())
+    added = ctx.add(_action())
+    # The rebuild must restore the subtype and its propagated state, despite the
+    # compactor having demoted the compacted node to a plain `ChatContext`.
+    assert type(added) is _RequiredArgChatSubclass
+    assert added.label == "keep-me"
+
+
 def test_required_arg_subclass_add_preserves_state():
     """`add()` on a required-arg subclass keeps its type and state without re-running __init__.
 

@@ -205,8 +205,17 @@ class ChatContext(Context):
         new: ChatContext = type(self).from_previous(self, c)
         if self._compactor is not None:
             new = self._compactor.compact(new)
-        # The compactor's rebuild preserves `type(self)`, so `new` is a `Self`
-        # instance; cast informs the checker of what the runtime guarantees.
+            # The built-in compactors rebuild via `type(ctx)`, so they preserve
+            # the concrete subtype. A *custom* `InlineCompactor` need not — its
+            # `compact()` may return a plain `ChatContext`, which would make the
+            # `Self` cast below unsound (issue #1522). If the returned type was
+            # demoted, rebuild the compacted history back into `type(self)`,
+            # re-copying `_propagated_fields` so subclass-owned state survives.
+            if type(new) is not type(self):
+                new = _rebuild_chat_context(new.as_list(), source=self)
+        # `new` is now guaranteed to be a `type(self)` instance (either the
+        # compactor preserved it, or the rebuild above restored it), so the cast
+        # informs the checker of what the runtime guarantees.
         return cast("Self", new)
 
     def view_for_generation(self) -> list[Span] | None:

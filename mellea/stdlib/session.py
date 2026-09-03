@@ -191,9 +191,37 @@ def start_session(
     context_type: Literal["chat"],
     model_options: dict | None = ...,
     plugins: list[Any] | None = ...,
-    allow_context_type_change: bool = ...,
+    allow_context_type_change: Literal[False] = ...,
     **backend_kwargs: Any,
 ) -> MelleaSession[ChatContext]: ...
+
+
+@overload
+def start_session(
+    backend_name: Literal["ollama", "hf", "openai", "watsonx", "litellm"] = ...,
+    model_id: str | ModelIdentifier = ...,
+    ctx: None = None,
+    *,
+    context_type: Literal["chat"],
+    model_options: dict | None = ...,
+    plugins: list[Any] | None = ...,
+    allow_context_type_change: Literal[True],
+    **backend_kwargs: Any,
+) -> MelleaSession[Context]: ...
+
+
+@overload
+def start_session(
+    backend_name: Literal["ollama", "hf", "openai", "watsonx", "litellm"] = ...,
+    model_id: str | ModelIdentifier = ...,
+    ctx: None = None,
+    *,
+    context_type: Literal["chat"],
+    model_options: dict | None = ...,
+    plugins: list[Any] | None = ...,
+    allow_context_type_change: bool,
+    **backend_kwargs: Any,
+) -> MelleaSession[Context]: ...
 
 
 @overload
@@ -205,9 +233,37 @@ def start_session(
     context_type: Literal["simple"] | None = None,
     model_options: dict | None = ...,
     plugins: list[Any] | None = ...,
-    allow_context_type_change: bool = ...,
+    allow_context_type_change: Literal[False] = ...,
     **backend_kwargs: Any,
 ) -> MelleaSession[SimpleContext]: ...
+
+
+@overload
+def start_session(
+    backend_name: Literal["ollama", "hf", "openai", "watsonx", "litellm"] = ...,
+    model_id: str | ModelIdentifier = ...,
+    ctx: None = None,
+    *,
+    context_type: Literal["simple"] | None = None,
+    model_options: dict | None = ...,
+    plugins: list[Any] | None = ...,
+    allow_context_type_change: Literal[True],
+    **backend_kwargs: Any,
+) -> MelleaSession[Context]: ...
+
+
+@overload
+def start_session(
+    backend_name: Literal["ollama", "hf", "openai", "watsonx", "litellm"] = ...,
+    model_id: str | ModelIdentifier = ...,
+    ctx: None = None,
+    *,
+    context_type: Literal["simple"] | None = None,
+    model_options: dict | None = ...,
+    plugins: list[Any] | None = ...,
+    allow_context_type_change: bool,
+    **backend_kwargs: Any,
+) -> MelleaSession[Context]: ...
 
 
 def start_session(

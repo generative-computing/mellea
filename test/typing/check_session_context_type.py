@@ -102,6 +102,49 @@ def check_start_session_runtime_bool_widens() -> None:
     assert_type(session.ctx, Context)
 
 
+# --- start_session context_type / default overloads also widen when switching ---
+#
+# A session built from `context_type=` (or the default context) that permits
+# switching cannot statically promise the concrete subtype either, so it must
+# widen to `MelleaSession[Context]` just like the `ctx=`-supplied forms above.
+
+
+def check_start_session_context_type_chat_literal_true_widens() -> None:
+    session = start_session(context_type="chat", allow_context_type_change=True)
+    assert_type(session, MelleaSession[Context])
+    assert_type(session.ctx, Context)
+
+
+def check_start_session_context_type_chat_runtime_bool_widens() -> None:
+    session = start_session(context_type="chat", allow_context_type_change=runtime_flag)
+    assert_type(session, MelleaSession[Context])
+    assert_type(session.ctx, Context)
+
+
+def check_start_session_context_type_chat_literal_false_preserves() -> None:
+    session = start_session(context_type="chat", allow_context_type_change=False)
+    assert_type(session, MelleaSession[ChatContext])
+    assert_type(session.ctx, ChatContext)
+
+
+def check_start_session_context_type_simple_literal_true_widens() -> None:
+    session = start_session(context_type="simple", allow_context_type_change=True)
+    assert_type(session, MelleaSession[Context])
+    assert_type(session.ctx, Context)
+
+
+def check_start_session_default_runtime_bool_widens() -> None:
+    session = start_session(allow_context_type_change=runtime_flag)
+    assert_type(session, MelleaSession[Context])
+    assert_type(session.ctx, Context)
+
+
+def check_start_session_default_literal_false_preserves_simple() -> None:
+    session = start_session(allow_context_type_change=False)
+    assert_type(session, MelleaSession[SimpleContext])
+    assert_type(session.ctx, SimpleContext)
+
+
 # --- clone preserves the context type parameter ---
 
 
