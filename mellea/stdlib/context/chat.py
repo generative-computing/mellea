@@ -86,12 +86,8 @@ class ChatContext(Context):
             are still the SAME messages, so any path (chat or intrinsic) can reuse a
             genuinely-unchanged prefix and refuse a changed one.
 
-    This state lives on the context, not the backend, because a prefix
-    of ids belongs to one conversation at one point in its immutable history: a
-    backend field would be one mutable slot shared across sessions and sampling
-    branches, silently subtracting against ids the server never saw for that branch.
-    The backend does not mutate the context -- it stashes ids on the thunk's `_meta`,
-    and `generate_from_chat_context` moves them onto the new node.
+    A backend does not mutate this state directly: it stashes ids on the thunk's
+    `_meta`, and `generate_from_chat_context` moves them onto the new node.
 
     Class Attributes:
         _propagated_fields: Instance-attribute names copied by `add()` and
