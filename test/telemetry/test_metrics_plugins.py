@@ -10,7 +10,7 @@ import pytest
 pytest.importorskip("cpex", reason="cpex not installed — install mellea[hooks]")
 
 from mellea.core.base import GenerationMetadata, ModelOutputThunk
-from mellea.core.requirement import PartialValidationResult
+from mellea.core.requirement import PartialValidationResult, PartialValidationSummary
 from mellea.plugins.hooks.adapter_function import (
     AdapterFunctionInvocationCompletePayload,
     AdapterFunctionPhaseCompletePayload,
@@ -1117,8 +1117,10 @@ async def test_requirement_metrics_records_per_requirement_type_on_quick_check(
         attempt=1,
         passed=False,
         results=[
-            PartialValidationResult("pass"),
-            PartialValidationResult("fail", reason="too short"),
+            PartialValidationSummary.from_results([PartialValidationResult("pass")]),
+            PartialValidationSummary.from_results(
+                [PartialValidationResult("fail", reason="too short")]
+            ),
         ],
     )
     payload = StreamingEventPayload(

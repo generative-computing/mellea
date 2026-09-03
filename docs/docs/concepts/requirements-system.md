@@ -330,9 +330,11 @@ issues in a single repair pass.
 once per semantic chunk as tokens arrive from the model, before the full output
 is available. Requirements that need to detect problems early — too many
 sentences, a prohibited keyword in the first paragraph, unexpected JSON
-structure mid-output — override `stream_validate()` to express that logic.
+structure mid-output — override `_stream_validate()` to express that logic. (The
+framework calls the public `stream_validate()` driver, which runs your
+`_stream_validate()` once per chunk.)
 
-`stream_validate()` returns a `PartialValidationResult` with a tri-state `success`
+`_stream_validate()` returns a `PartialValidationResult` with a tri-state `success`
 field:
 
 - `"unknown"` — no conclusion yet; the chunk is passed to the consumer and
@@ -348,5 +350,26 @@ with `copy()` before generation starts, so the original objects are never
 mutated. Requirements that accumulate state across chunks (e.g. a running word
 count) should reassign mutable containers rather than mutate in place, since
 clones share the original's `__dict__` values at copy time.
+
+### Validation granularity
+
+By default a requirement validates the same chunks the stream produces: the
+`chunking=` passed to `stream()` sets the chunks both the consumer and the
+requirements see. A requirement can also set its own `chunking=` to validate at a
+different granularity, so a sentence-level check and a paragraph-level check can
+run on the same stream. The stream's `chunking=` controls what the consumer's
+`async for` receives; a requirement's `chunking=` controls only what that
+requirement validates, re-chunking whatever the stream hands it.
+
+The requirement's chunker is fed the stream's chunks, so a requirement that chunks
+*coarser* than the stream may not reach a chunk boundary mid-stream; it usually returns
+`"unknown"` until end of stream, when its chunker is flushed and the leftover is
+validated as one final chunk (whose result may still be `"unknown"`). A *finer*
+requirement composes only when the stream's chunker preserves the boundaries it needs:
+because the built-in strategies discard their separators, `paragraph` → `sentence` or
+`word` works (blank lines don't touch sentence or word boundaries), but `sentence` →
+`word` does not — sentence chunking consumes the space between sentences, which is the
+boundary `word` chunking relies on. When the strategies aren't compatible, set
+`chunking=None` on the stream so each requirement chunks the raw deltas independently.
 
 > **See also:** [Streaming with per-chunk validation](../how-to/use-async-and-streaming#streaming-with-per-chunk-validation)

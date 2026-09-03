@@ -29,12 +29,12 @@ import re
 
 from mellea.core.backend import Backend
 from mellea.core.base import Context
+from mellea.core.chunking import ChunkingStrategy
 from mellea.core.requirement import (
     PartialValidationResult,
     Requirement,
     ValidationResult,
 )
-from mellea.stdlib.chunking import ChunkingStrategy
 from mellea.stdlib.components import Instruction
 from mellea.stdlib.streaming import (
     ChunkEvent,
@@ -107,7 +107,7 @@ class NumberedLineReq(Requirement):
     def format_for_llm(self) -> str:
         return "Every line must begin with a number followed by a period (e.g. '1. ')."
 
-    async def stream_validate(
+    async def _stream_validate(
         self, chunk: str, *, backend: Backend, ctx: Context
     ) -> PartialValidationResult:
         if not _NUMBERED_LINE.match(chunk):
