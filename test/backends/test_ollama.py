@@ -358,7 +358,7 @@ async def test_thinking_suppressed_per_call(thinking_on_session) -> None:
     assert not mot.thinking, f"Expected no thinking trace, got: {mot.thinking!r}"
 
 
-@pytest.mark.slow
+@pytest.mark.slow  # generates a full think block, unlike its THINKING=False siblings
 async def test_thinking_enabled_mot_field_nonempty(session) -> None:
     """THINKING=True per call overrides a THINKING=False construction-time default,
     and mot.thinking should contain a non-empty reasoning trace.
