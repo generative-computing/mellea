@@ -1450,6 +1450,42 @@ def test_remove_adapter_unregistered_name_is_noop():
     backend.remove_adapter("never_registered_lora")  # must not raise
 
 
+def test_remove_adapter_deregisters_composed_embedded_adapter():
+    """remove_adapter() must deregister a composed Embedded adapter too.
+
+    Regression: a composed Embedded adapter lives only in _composed_adapters
+    (see add_adapter) — it never has a bare-binding entry in _added_adapters
+    to mutate .backend/.path on. remove_adapter's original early return on an
+    _added_adapters miss meant this case never reached the
+    _composed_adapters/_composed_adapter_configs cleanup below it.
+    """
+    from mellea.backends.adapters._core import (
+        Adapter as _AdapterCore,
+        EmbeddedBinding,
+        Identity,
+    )
+    from mellea.backends.adapters.io_contracts import get_io_contract
+
+    backend = _make_backend()
+    composed = _AdapterCore(
+        identity=Identity(
+            name="answerability", adapter_type="alora", capability="answerability"
+        ),
+        io_contract=get_io_contract("answerability"),
+        weights=EmbeddedBinding(),
+    )
+    backend.add_adapter(composed)
+    key = "answerability_alora"
+    assert key in backend.list_adapters()
+    backend._composed_adapter_configs[key] = {"parameters": {}}
+
+    backend.remove_adapter(key)
+
+    assert key not in backend.list_adapters()
+    assert key not in backend._composed_adapters
+    assert key not in backend._composed_adapter_configs
+
+
 def test_add_adapter_after_remove_adapter_allows_a_fresh_registration():
     """#1528: removing an adapter frees its qualified_name for a different
     adapter object to register under — the name is no longer burned for the

@@ -53,6 +53,7 @@ class Intrinsic(Component[str]):
         self,
         intrinsic_name: str,
         intrinsic_kwargs: dict | None = None,
+        *,
         adapter_types: tuple[AdapterType, ...] | None = None,
     ) -> None:
         """Initialize Intrinsic by fetching metadata for the named intrinsic from the catalog."""

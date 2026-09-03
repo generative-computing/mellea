@@ -1090,19 +1090,23 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 "EmbeddedIntrinsicAdapter.weights must be an EmbeddedBinding; "
                 f"got {type(adapter.weights).__name__}. Activation cannot proceed."
             )
-        adapter_is_embedded = isinstance(adapter.weights, EmbeddedBinding)
-        if isinstance(adapter.weights, EmbeddedBinding):
+        adapter_weights = adapter.weights
+        if isinstance(adapter_weights, EmbeddedBinding):
             extra_body = rewritten_request.setdefault("extra_body", {})
             if not isinstance(extra_body, dict):
                 raise TypeError(
                     "Embedded adapter generation requires extra_body to be a dict."
                 )
-            await adapter.weights.apply_activation(
+            await adapter_weights.apply_activation(
                 EmbeddedActivationRequest(
                     extra_body=extra_body, api_params=rewritten_request
                 ),
                 adapter.identity,
             )
+        # Reused below (generation-path dispatch, embedded_identity for
+        # post-processing) — computed once here rather than re-checked, since
+        # unlike the `if` above this isn't gating a narrowing-sensitive block.
+        adapter_is_embedded = isinstance(adapter_weights, EmbeddedBinding)
 
         generate_input, other_input = (
             granite_formatters.base.util.chat_completion_request_to_transformers_inputs(  # type: ignore
@@ -2939,9 +2943,12 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         """List the qualified names of all adapters registered with this backend.
 
         Returns:
-            list[str]: Qualified adapter names (i.e. `adapter.qualified_name`) for
-                all adapters that have been registered via `add_adapter`, whether
-                or not they have also been loaded via `load_peft_adapter`.
+            list[str]: Qualified adapter names for all adapters that have been
+                registered via `add_adapter`, whether or not they have also
+                been loaded via `load_peft_adapter`. For a shim or a bare
+                `LocalFileBinding`, this is `adapter.qualified_name`; for a
+                composed `Adapter`, it's the equivalent
+                `_composed_adapter_key()` format (the two formats agree).
         """
         # A composed Embedded adapter lives only in _composed_adapters (see
         # add_adapter); a composed LocalFile adapter's binding is also in

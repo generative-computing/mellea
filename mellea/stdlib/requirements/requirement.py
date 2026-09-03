@@ -96,6 +96,7 @@ class ALoraRequirement(Requirement, Intrinsic):
         self,
         description: str,
         intrinsic_name: str | None = None,
+        *,
         adapter_types: tuple[AdapterType, ...] | None = None,
     ):
         """Initialize ALoraRequirement with a description and optional intrinsic adapter name."""

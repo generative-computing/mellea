@@ -302,7 +302,16 @@ def _composed_adapter_key(adapter: "_AdapterCore") -> str:
     """Return the registry key for a composed `Adapter`, mirroring `qualified_name`.
 
     A composed `Adapter` (unlike the deprecated shims) has no `qualified_name`
-    of its own; backends key their registries on this instead.
+    of its own; backends key their registries on this instead. For a
+    LocalFile/PEFT composed adapter, this must produce the same string as
+    `adapter.weights.qualified_name` (`LocalFileBinding`'s own key) so a
+    backend's `_added_adapters` (keyed on the binding) and `_composed_adapters`
+    (keyed on this function) agree — which holds because `Identity.adapter_type`
+    is the `Literal["lora", "alora"]` string and `AdapterType.LORA.value`/
+    `AdapterType.ALORA.value` are those same two strings. Not enforced by any
+    runtime check (see the `NOTE(#1516)` on the `Adapter` dataclass) — a
+    composed `Adapter` whose `identity.adapter_type` disagrees with its own
+    `weights.adapter_type` produces two different keys instead of one.
 
     Args:
         adapter: The composed adapter to key.

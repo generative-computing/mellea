@@ -449,6 +449,13 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         Returns:
             list[str]: Names of the registered intrinsics.
+
+        Raises:
+            ImportError: If Hugging Face Hub support is not installed.
+            PermissionError: If the model repository is private or gated.
+            FileNotFoundError: If the source has no adapter index.
+            ValueError: If the source has no matching embedded adapter functions.
+            TypeError: If an adapter from the source has an unsupported binding.
         """
         # No lock here: both call sites (here, and this class's __init__) run
         # single-threaded during construction, before the backend is exposed to
