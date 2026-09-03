@@ -102,10 +102,10 @@ class CBlock:
 class PreTokenizedCBlock(CBlock):
     """A block of content already tokenized into model vocabulary ids.
 
-    Use this when the exact token ids matter and re-deriving them from text is not
-    acceptable -- for example when a prompt's ids must match a server's prefix cache
-    byte for byte. `value` is always `None`: there is no string form, because
-    `encode(decode(ids))` is not guaranteed to reproduce `ids`.
+    Use this when the exact ids matter and re-deriving them from text is not
+    acceptable -- e.g. a prompt whose ids must match a server's prefix cache byte
+    for byte. `value` is always `None`: there is no round-tripping string form,
+    because `encode(decode(ids))` is not the identity.
 
     Args:
         token_ids (list[int]): Vocabulary ids to send verbatim. A tuple is accepted.
