@@ -905,6 +905,11 @@ async def _await_embedded_generation(coro: Any, identity: Identity) -> Any:
     `granite_formatters_processing` fires later; if it raises, that closure
     never runs.
 
+    Catches `BaseException`, not `Exception`, so a cancellation
+    (`asyncio.CancelledError`) is also recorded as `outcome="error"` rather
+    than left unclassified — deliberate, matching `adapter.py`'s
+    `local_file`-binding sibling helper.
+
     Args:
         coro: The backend's generation call (e.g. the OpenAI SDK coroutine, or
             an `asyncio.to_thread` call wrapping local generation).
