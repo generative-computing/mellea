@@ -129,7 +129,7 @@ def process_text(text: str, max_length: int = 100) -> str:
 
 ### Docstrings
 
-**Docstrings are published in the public API reference** — be specific.
+**Public API docstrings are published in the public API reference** — be specific and accurate.
 
 Use **[Google-style docstrings](https://google.github.io/styleguide/pyguide.html#381-docstrings)**:
 
