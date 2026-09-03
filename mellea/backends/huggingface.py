@@ -274,6 +274,24 @@ _HF_INTERNAL_TEMPLATE_VARS: frozenset[str] = frozenset(
 
 _CHAT_TEMPLATE_THINKING_VARS: tuple[str, ...] = ("think", "thinking", "enable_thinking")
 
+_THINK_OPEN_TAG: str = "<think>"
+_THINK_CLOSE_TAG: str = "</think>"
+
+
+def _split_think_tags(text: str) -> tuple[str | None, str]:
+    """Split raw HF output into (thinking, answer) on the closing </think> tag.
+
+    Splits on </think> alone (not a <think>...</think> pair) because some chat
+    templates (e.g. granite-4.2 with enable_thinking) bake the opening tag into
+    the prompt, so it never appears in the model's own output. A fixed pattern
+    match for Granite's convention, not a general reasoning-parser; other
+    delimiters pass through unchanged. See #1604 for generalizing this.
+    """
+    if _THINK_CLOSE_TAG not in text:
+        return None, text
+    reasoning, _, answer = text.partition(_THINK_CLOSE_TAG)
+    return (reasoning.strip().removeprefix(_THINK_OPEN_TAG).strip(), answer.strip())
+
 
 def _compute_generate_kwargs_allowlist() -> frozenset[str]:
     """Names that `transformers`' `model.generate` accepts as keyword arguments.
@@ -1817,6 +1835,29 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 OrderedDict.__delitem__(hf_output, "logits")
             hf_output.logits = None
 
+        # Capture the raw text before any split below, for the stop-string check further down.
+        raw_value = mot.value
+
+        # Gate on the template exposing a thinking var (not ModelOption.THINKING) since some
+        # models think by default; otherwise an answer that just mentions "</think>" gets split.
+        # Skip for streaming: astream() assumes mot.value only grows, and shrinking it here
+        # would corrupt the final delta (see #1604 for proper incremental splitting later).
+        thinking_allowlist: frozenset[str] = getattr(
+            self, "_chat_template_allowlist", frozenset()
+        )
+        if not mot.generation.streaming and thinking_allowlist.intersection(
+            _CHAT_TEMPLATE_THINKING_VARS
+        ):
+            thinking, answer = _split_think_tags(raw_value)
+            if thinking is not None:
+                mot.thinking = thinking
+                mot.value = answer
+                MelleaLogger.get_logger().debug(
+                    "Split %d chars of thinking out of HF completion for %s.",
+                    len(thinking),
+                    self._model_id,
+                )
+
         # Only scan for tools if we are not doing structured output and tool calls were provided to the model.
         if _format is None and tool_calls:
             mot.tool_calls = to_tool_calls(tools, mot.value)
@@ -1867,8 +1908,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 stop_strings = (
                     mot._call.model_options.get(ModelOption.STOP_SEQUENCES) or []
                 )
-                ends_with_stop_string = isinstance(mot.value, str) and any(
-                    mot.value.endswith(s) for s in stop_strings
+                ends_with_stop_string = isinstance(raw_value, str) and any(
+                    raw_value.endswith(s) for s in stop_strings
                 )
                 if last_token in eos_set or ends_with_stop_string:
                     mot.generation.finish_reasons = ["stop"]
