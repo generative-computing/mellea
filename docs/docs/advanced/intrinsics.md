@@ -260,7 +260,7 @@ Output format is task-specific — `requirement-check` returns `{"requirement_ch
 
 For a fully custom, non-catalog adapter — your own trained LoRA/aLoRA weights,
 not one of the built-in adapter functions — see
-[Adding a custom adapter function in 20 lines](../tutorials/custom-adapter-function.md).
+[Adding a custom adapter function in 20 lines](../tutorials/07-custom-adapter-function.md).
 
 ## Composable adapter construction (advanced)
 
@@ -332,3 +332,8 @@ Safety and factuality checks use a separate set of Guardian-specific adapter fun
 `guardian_check()`, `policy_guardrails()`, `factuality_detection()`, and
 `factuality_correction()`. These are documented in the
 [Safety Guardrails](../how-to/safety-guardrails) how-to guide.
+
+**See also:**
+[Adding a custom adapter function in 20 lines](../tutorials/07-custom-adapter-function.md) |
+[Handling a breaking adapter schema change](../tutorials/08-adapter-schema-migrations.md) |
+[Reading adapter function telemetry](../tutorials/09-adapter-function-telemetry.md)
