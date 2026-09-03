@@ -73,21 +73,39 @@ def _ensure_model_warm() -> None:
         pass  # best-effort; per-test failures will be clearer than a fixture abort
 
 
-@pytest.fixture(scope="function")
-def session():
-    """Fresh Ollama session for each test.
+def _start_ollama_session(*, thinking: bool):
+    """Start an Ollama session with a fixed context window and THINKING default.
 
     The model size is driven by GRANITE42_MODEL (see _ollama_model_for_eval).
     """
-    session = start_session(
+    return start_session(
         model_id=_ollama_model_for_eval(),
         model_options={
             ModelOption.CONTEXT_WINDOW: TEST_CONTEXT_WINDOW,
-            ModelOption.THINKING: False,
+            ModelOption.THINKING: thinking,
         },
     )
+
+
+@pytest.fixture(scope="function")
+def session():
+    """Fresh Ollama session for each test, with THINKING off at construction."""
+    session = _start_ollama_session(thinking=False)
     yield session
     session.reset()
+
+
+@pytest.fixture(scope="function")
+def thinking_on_session():
+    """Fresh Ollama session with THINKING on at construction time.
+
+    Unlike the `session` fixture (THINKING=False at construction), this lets
+    tests verify that a per-call `THINKING: False` actually overrides the
+    construction-time default, rather than merely agreeing with it.
+    """
+    thinking_on_session = _start_ollama_session(thinking=True)
+    yield thinking_on_session
+    thinking_on_session.reset()
 
 
 @pytest.mark.qualitative
@@ -328,25 +346,6 @@ def test_stop_sequences(session) -> None:
     )
 
 
-@pytest.fixture(scope="function")
-def thinking_on_session():
-    """Fresh Ollama session with THINKING enabled at construction time.
-
-    Unlike the `session` fixture (THINKING=False at construction), this lets
-    tests verify that a per-call `THINKING: False` actually overrides the
-    construction-time default, rather than merely agreeing with it.
-    """
-    thinking_on_session = start_session(
-        model_id=_ollama_model_for_eval(),
-        model_options={
-            ModelOption.CONTEXT_WINDOW: TEST_CONTEXT_WINDOW,
-            ModelOption.THINKING: True,
-        },
-    )
-    yield thinking_on_session
-    thinking_on_session.reset()
-
-
 async def test_thinking_suppressed_per_call(thinking_on_session) -> None:
     """THINKING=False per call overrides a THINKING=True construction-time default."""
     mot, _ = await thinking_on_session.backend.generate_from_context(
@@ -358,16 +357,22 @@ async def test_thinking_suppressed_per_call(thinking_on_session) -> None:
     assert not mot.thinking, f"Expected no thinking trace, got: {mot.thinking!r}"
 
 
+# Runs only manually / in `-m slow` sweeps: PR CI (quality.yml) and the nightly
+# script both inherit pyproject.toml's default `-m "not slow"`, so this is the
+# only test in the module that would catch a regression in think-block capture
+# itself (the THINKING=False tests would pass vacuously in that case). A
+# regression in the merge/override plumbing is still caught by the other two.
 @pytest.mark.slow  # generates a full think block, unlike its THINKING=False siblings
 async def test_thinking_enabled_mot_field_nonempty(session) -> None:
-    """THINKING=True per call overrides a THINKING=False construction-time default,
-    and mot.thinking should contain a non-empty reasoning trace.
-    """
+    """THINKING=True per call overrides a THINKING=False construction-time default."""
     mot, _ = await session.backend.generate_from_context(
         CBlock("What is 1+1?"), session.ctx, model_options={ModelOption.THINKING: True}
     )
     await mot.avalue()
-    assert mot.thinking, "Expected a thinking trace but mot.thinking was empty/None"
+    assert mot.thinking, (
+        f"Expected a non-empty thinking trace from "
+        f"{_ollama_model_for_eval()!r} but mot.thinking was empty/None"
+    )
 
 
 async def test_construction_time_thinking_default_suppresses(session) -> None:
