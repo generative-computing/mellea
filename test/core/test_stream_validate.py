@@ -66,13 +66,13 @@ async def test_subclass_can_return_fail():
 async def test_does_not_mutate_requirement():
     req = Requirement(description="original description")
     original_description = req.description
-    original_output = req._output
+    original_target = req._validation_target
     original_validation_fn = req.validation_fn
 
     await req.stream_validate("some chunk", backend=None, ctx=None)  # type: ignore[arg-type]
 
     assert req.description == original_description
-    assert req._output == original_output
+    assert req._validation_target == original_target
     assert req.validation_fn == original_validation_fn
 
 
@@ -83,7 +83,7 @@ async def test_stream_validate_idempotent():
     result2 = await req.stream_validate("chunk two", backend=None, ctx=None)  # type: ignore[arg-type]
     assert result1.success == "unknown"
     assert result2.success == "unknown"
-    assert req._output is None
+    assert req._validation_target is None
 
 
 @pytest.mark.asyncio

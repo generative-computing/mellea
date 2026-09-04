@@ -13,6 +13,7 @@ from ...core import (
     MelleaLogger,
     ModelOutputThunk,
     Requirement,
+    TemplateRepresentation,
     ValidationResult,
 )
 from ..components.intrinsic import Intrinsic

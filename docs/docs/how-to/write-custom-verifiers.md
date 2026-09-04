@@ -77,6 +77,34 @@ result = m.instruct(
 print(str(result))
 ```
 
+### Which context your function receives
+
+The `ctx` argument is the **post-generation context**: the conversation the model just
+generated into, with the output under judgement as its last entry. So `ctx.last_output()`
+is the output to check, and `ctx.as_list()` gives you the turns that produced it — useful
+when a verdict depends on what was asked, not just what was answered:
+
+```python
+from mellea.core import Context, ValidationResult
+
+
+def validate_answers_the_question(ctx: Context) -> ValidationResult:
+    """Fail if the output repeats the user's question back instead of answering it."""
+    turns = ctx.as_list()
+    output = ctx.last_output()
+    text = output.value if output and output.value else ""
+
+    prior = [str(turn) for turn in turns[:-1]]
+    if prior and text.strip() in prior[-1]:
+        return ValidationResult(False, reason="The response echoes the question.")
+    return ValidationResult(True)
+```
+
+Under `instruct()` and `act()` this is always the post-generation context. Driving a
+sampling strategy's `sample()` directly lets you pass a `validation_ctx` to validate over
+something else instead — see
+[Overriding the validation context](../concepts/requirements-system.md#overriding-the-validation-context).
+
 ## Common validation patterns
 
 ### JSON validity

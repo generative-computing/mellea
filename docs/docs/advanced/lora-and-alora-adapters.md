@@ -191,6 +191,21 @@ directly (bypassing the normal `validate()` call), use `ALoraRequirement` from
 but still requires a matching adapter to actually be registered. If none is found,
 Mellea logs a warning and falls back to regular generation rather than erroring.
 
+### What the adapter sees
+
+The `requirement-check` adapter judges the last assistant turn of the conversation it is
+given, so the routing above only produces useful verdicts if that conversation actually
+reaches it. Mellea builds the adapter's message list from the validation context's
+`view_for_generation()`, and validation runs over the post-generation context — the same
+conversation the model generated into, with the generated output last. No extra setup is
+needed for that; it is the default.
+
+One consequence is worth knowing: a context whose generation view is empty gives the
+adapter nothing to judge. `SimpleContext` is the case to watch — it retains
+`last_output()` but its `view_for_generation()` is always empty by design. Adapter-backed
+requirements need a context that renders the assistant turn, such as `ChatContext`.
+See [What the validator sees](../concepts/requirements-system.md#what-the-validator-sees).
+
 ## Disable adapter validation
 
 To run without adapter validation (for benchmarking or debugging):

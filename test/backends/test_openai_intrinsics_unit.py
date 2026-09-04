@@ -13,6 +13,7 @@ Mocks the OpenAI async client to verify that `_generate_from_intrinsic` correctl
 """
 
 import json
+import logging
 import pathlib
 from copy import deepcopy
 from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
@@ -30,9 +31,11 @@ from openai.types.completion_usage import CompletionUsage
 from mellea.backends import ModelOption
 from mellea.backends.adapters.adapter import EmbeddedIntrinsicAdapter
 from mellea.backends.openai import OpenAIBackend
+from mellea.core import ModelOutputThunk, Requirement
 from mellea.stdlib import functional as mfuncs
 from mellea.stdlib.components import Intrinsic, Message
-from mellea.stdlib.context import ChatContext
+from mellea.stdlib.context import ChatContext, SimpleContext
+from mellea.stdlib.requirements import ALoraRequirement
 
 _TEST_DIR = pathlib.Path(__file__).parent
 _INTRINSICS_DATA = _TEST_DIR / "test_adapters" / "intrinsics-data"
@@ -748,3 +751,80 @@ async def test_tools_passed_to_api():
     assert tools is not None
     assert len(tools) == 1
     assert tools[0]["function"]["name"] == "get_temperature"
+
+
+# ---------------------------------------------------------------------------
+# Requirement rerouting requires a context the adapter can actually judge
+# ---------------------------------------------------------------------------
+
+
+def _make_backend_with_requirement_adapter() -> OpenAIBackend:
+    """Return a backend whose `requirement-check` aLoRA would capture Requirements."""
+    backend = OpenAIBackend(
+        model_id="granite-switch",
+        api_key="fake-key",
+        base_url="http://localhost:9999/v1",
+    )
+    backend.add_adapter(
+        EmbeddedIntrinsicAdapter(
+            intrinsic_name="requirement-check",
+            config=deepcopy(_SIMPLE_CONFIG),
+            technology="alora",
+        )
+    )
+    return backend
+
+
+async def test_alora_requirement_over_a_context_that_renders_nothing_raises():
+    """An explicit `ALoraRequirement` cannot be honoured over an empty generation view.
+
+    The `requirement-check` adapter judges the last assistant turn of the conversation it
+    is handed, and this path never renders the requirement template, so there is no inlined
+    output to fall back on. Asking for the adapter anyway is a caller error, not something
+    to silently downgrade.
+    """
+    backend = _make_backend_with_requirement_adapter()
+    ctx = SimpleContext().add(ModelOutputThunk("The capital of France is Paris."))
+
+    with pytest.raises(ValueError, match="renders no conversation"):
+        await ALoraRequirement("must mention Paris").validate(backend, ctx)
+
+
+async def test_plain_requirement_over_empty_view_falls_back_to_llmaj(caplog):
+    """Auto-rerouting is an optimisation, so a plain `Requirement` degrades instead.
+
+    The reroute is mellea's choice rather than the caller's, so an unusable adapter must
+    not break validation: it falls through to LLM-as-a-judge, whose template inlines the
+    output and therefore still works over a context that renders nothing.
+    """
+    backend = _make_backend_with_requirement_adapter()
+    ctx = SimpleContext().add(ModelOutputThunk("The capital of France is Paris."))
+
+    mock_create = AsyncMock(return_value=_simple_chat_completion("yes"))
+    mock_client = MagicMock()
+    mock_client.chat.completions.create = mock_create
+
+    with (
+        patch.object(
+            OpenAIBackend,
+            "_async_client",
+            new_callable=PropertyMock,
+            return_value=mock_client,
+        ),
+        patch.object(
+            OpenAIBackend, "_generate_from_intrinsic", new_callable=AsyncMock
+        ) as mock_intrinsic,
+        caplog.at_level(logging.WARNING),
+    ):
+        await Requirement("must mention Paris").validate(backend, ctx)
+
+    mock_intrinsic.assert_not_called()
+    assert mock_create.await_count == 1, (
+        "should fall through to ordinary chat generation"
+    )
+    sent = mock_create.await_args.kwargs["messages"]
+    assert any("The capital of France is Paris." in str(m) for m in sent), (
+        "the LLMaJ template must inline the output, which is what makes validation still"
+        " work over a context that renders no history"
+    )
+    assert "not rerouting requirements" in caplog.text

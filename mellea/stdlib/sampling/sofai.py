@@ -520,6 +520,7 @@ class SOFAISamplingStrategy(SamplingStrategy):
         format: type[BaseModelSubclass] | None,
         model_options: dict | None,
         tool_calls: bool,
+        validation_ctx: Context | None = None,
     ) -> tuple[
         ComputedModelOutputThunk, Context, list[tuple[Requirement, ValidationResult]]
     ]:
@@ -534,6 +535,8 @@ class SOFAISamplingStrategy(SamplingStrategy):
             format: Output format for structured outputs.
             model_options: Model options for generation.
             tool_calls: Whether to use tool calls.
+            validation_ctx: Optional context to validate over. If None, validation runs over
+                the post-generation context.
 
         Returns:
             Tuple of (result, result_context, validation_scores).
@@ -560,7 +563,7 @@ class SOFAISamplingStrategy(SamplingStrategy):
         )
         val_scores = await mfuncs.avalidate(
             reqs=reqs_for_validation,
-            context=result_ctx,
+            context=validation_ctx if validation_ctx is not None else result_ctx,
             backend=session_backend,
             output=computed_result,
             format=None,
@@ -610,7 +613,8 @@ class SOFAISamplingStrategy(SamplingStrategy):
             context: The session context (must be ChatContext).
             backend: Session backend (used for validation fallback).
             requirements: Requirements to validate against.
-            validation_ctx: Optional separate validation context (unused).
+            validation_ctx: Optional context to validate over. If None, each sample is validated
+                over its own post-generation context.
             format: Output format for structured outputs.
             model_options: Model options to pass to backends.
             tool_calls: True if tool calls should be used.
@@ -683,6 +687,7 @@ class SOFAISamplingStrategy(SamplingStrategy):
                     format=format,
                     model_options=model_options,
                     tool_calls=tool_calls,
+                    validation_ctx=validation_ctx,
                 )
 
                 # Store attempt
@@ -771,6 +776,7 @@ class SOFAISamplingStrategy(SamplingStrategy):
                 format=format,
                 model_options=model_options,
                 tool_calls=tool_calls,
+                validation_ctx=validation_ctx,
             )
 
             # Store S2 attempt

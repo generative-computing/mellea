@@ -8,12 +8,22 @@ Covers image preprocessing plus chat()/instruct() forwarding of multimodal input
 
 import base64
 import io
+import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from PIL import Image as PILImage
 
-from mellea.core import AudioBlock, Context, ImageBlock, ModelToolCall
+from mellea.core import (
+    AudioBlock,
+    CBlock,
+    Context,
+    ImageBlock,
+    ModelOutputThunk,
+    ModelToolCall,
+    Requirement,
+    ValidationResult,
+)
 from mellea.stdlib.components import (
     Document,
     Instruction,
@@ -27,6 +37,7 @@ from mellea.stdlib.functional import (
     aact,
     achat,
     ainstruct,
+    avalidate,
     chat,
     instruct,
 )
@@ -490,6 +501,114 @@ async def test_atransform_persists_chosen_tool_message_in_context(
     _, new_ctx = await atransform(MObject(), "transform it", ctx, MagicMock())
 
     _assert_tool_message_persisted_after(ctx, new_ctx, [prior_message], tool_message)
+
+
+# --- avalidate context handling (issue #426) ---
+
+
+def _ctx_capturing_requirement() -> tuple[Requirement, list[Context]]:
+    """A passing requirement that records every context it is validated over."""
+    seen: list[Context] = []
+
+    def capture(ctx: Context) -> ValidationResult:
+        seen.append(ctx)
+        return ValidationResult(result=True)
+
+    return Requirement("capture", validation_fn=capture), seen
+
+
+async def test_avalidate_validates_over_the_callers_context():
+    """Validation runs over the caller's own context, not a throwaway `SimpleContext`.
+
+    Before #426 was fixed, `avalidate` built a fresh `SimpleContext` whose
+    `view_for_generation()` is always empty, so nothing the caller passed ever reached
+    the model.
+    """
+    req, seen = _ctx_capturing_requirement()
+    caller_ctx = ChatContext().add(Message("user", "hello")).add(ModelOutputThunk("hi"))
+
+    await avalidate(reqs=[req], context=caller_ctx, backend=MagicMock())
+
+    assert seen == [caller_ctx], (
+        "the caller's context object must be handed to the requirement untouched"
+    )
+    assert isinstance(seen[0], ChatContext), (
+        "validation must run in the caller's context type"
+    )
+
+
+async def test_avalidate_appends_output_when_not_already_last():
+    """`output` designates the validation target and is appended when it is not last."""
+    req, seen = _ctx_capturing_requirement()
+    caller_ctx = ChatContext().add(Message("user", "hello"))
+    target = ModelOutputThunk("the output under judgement")
+
+    await avalidate(reqs=[req], context=caller_ctx, backend=MagicMock(), output=target)
+
+    assert seen[0] is not caller_ctx
+    assert seen[0].last_output() is target
+    assert target in seen[0].view_for_generation()  # type: ignore[operator]
+    assert any("hello" in str(node) for node in seen[0].as_list()), (
+        "appending the target must not discard the caller's history"
+    )
+
+
+async def test_avalidate_does_not_double_add_the_context_last_output():
+    """Passing the context's own last output as `output` is a no-op.
+
+    This is the sampling path: `ComputedModelOutputThunk` reassigns `__class__` in
+    place, so the thunk handed to `avalidate` *is* the one already in the context.
+    """
+    req, seen = _ctx_capturing_requirement()
+    target = ModelOutputThunk("already in the context")
+    caller_ctx = ChatContext().add(Message("user", "hello")).add(target)
+
+    await avalidate(reqs=[req], context=caller_ctx, backend=MagicMock(), output=target)
+
+    assert seen == [caller_ctx]
+    assert len(seen[0].as_list()) == 2, "the target must not be appended twice"
+
+
+async def test_avalidate_input_reaches_the_judges_view():
+    """`input` is supported: it lands in the context the judge actually sees."""
+    req, seen = _ctx_capturing_requirement()
+    caller_ctx = ChatContext().add(ModelOutputThunk("hi"))
+
+    await avalidate(
+        reqs=[req],
+        context=caller_ctx,
+        backend=MagicMock(),
+        input=CBlock("the specific input"),
+    )
+
+    view = seen[0].view_for_generation()
+    assert view is not None and any(
+        "the specific input" in str(node) for node in view
+    ), (
+        "`input` must reach view_for_generation(), not merely as_list() -- only the"
+        " generation view is sent to the model"
+    )
+
+
+async def test_avalidate_warns_when_the_context_renders_nothing(caplog):
+    """A context with an empty generation view must not fail silently."""
+    req, _seen = _ctx_capturing_requirement()
+    # SimpleContext retains as_list()/last_output() but renders no history.
+    caller_ctx = SimpleContext().add(ModelOutputThunk("hi"))
+
+    with caplog.at_level(logging.WARNING):
+        await avalidate(
+            reqs=[req],
+            context=caller_ctx,
+            backend=MagicMock(),
+            input=CBlock("invisible to the judge"),
+        )
+
+    assert "view_for_generation() is empty" in caplog.text, (
+        "validating over a context that renders nothing should warn, since `input` and the"
+        " conversation are dropped without any other signal"
+    )
+    assert "SimpleContext" in caplog.text, "the warning should name the context type"
 
 
 if __name__ == "__main__":

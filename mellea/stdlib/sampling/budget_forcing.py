@@ -117,7 +117,8 @@ class BudgetForcingSamplingStrategy(RejectionSamplingStrategy):
             context: The context to be passed to the sampling strategy.
             backend: The backend used for generating samples.
             requirements: List of requirements to test against (merged with global requirements).
-            validation_ctx: Optional context to use for validation. If None, validation_ctx = ctx.
+            validation_ctx: Optional context to validate over. If None, each sample is validated
+                over its own post-generation context.
             format: output format for structured outputs.
             model_options: model options to pass to the backend during generation / validation.
             tool_calls: True if tool calls should be used during this sampling strategy.
@@ -129,8 +130,6 @@ class BudgetForcingSamplingStrategy(RejectionSamplingStrategy):
         Raises:
             AssertionError: Asserts that all required components (repair, select_from_failure, validate, and generate) are provided before proceeding with the sampling.
         """
-        validation_ctx = validation_ctx if validation_ctx is not None else context
-
         flog = MelleaLogger.get_logger()
 
         with log_context(strategy=type(self).__name__, loop_budget=self.loop_budget):
@@ -211,10 +210,13 @@ class BudgetForcingSamplingStrategy(RejectionSamplingStrategy):
                     else result.value
                 )
 
-                # validation pass
+                # validation pass; validate over the caller's validation context if they
+                # supplied one, otherwise over this attempt's post-generation context.
                 val_scores_co = mfuncs.avalidate(
                     reqs=reqs,
-                    context=result_ctx,
+                    context=validation_ctx
+                    if validation_ctx is not None
+                    else result_ctx,
                     backend=backend,
                     output=result,
                     format=format,

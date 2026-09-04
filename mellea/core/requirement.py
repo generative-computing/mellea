@@ -270,8 +270,25 @@ class Requirement(Component[str]):
         self.validation_fn = validation_fn
         self.check_only = check_only
 
-        # Used for validation. Do not manually populate.
-        self._output: str | None = None
+        # The span under judgement. Bound only on the transient copy created inside
+        # `validate` (see `_bind_validation_target`). Do not manually populate.
+        self._validation_target: Span | None = None
+
+    def _bind_validation_target(self, target: Span) -> "Requirement":
+        """Return a shallow copy of this requirement bound to the span under judgement.
+
+        Binding happens on a copy so that a `Requirement` object can be reused across
+        validation calls (and across sampling iterations) without accumulating state.
+
+        Args:
+            target: The `Component`, `CBlock`, or `ModelOutputThunk` being validated.
+
+        Returns:
+            Requirement: A copy of this requirement whose `_validation_target` is `target`.
+        """
+        bound = copy(self)
+        bound._validation_target = target
+        return bound
 
     async def validate(
         self,
@@ -315,10 +332,10 @@ class Requirement(Component[str]):
                 " Context has no appropriate last output"
             )
 
-            # Create a copy of the requirement that holds the output
-            # and its template gets populated with the output correctly.
-            req_copy = copy(self)
-            req_copy._output = last_output.value
+            # Bind the output being judged to a copy of this requirement, so that the
+            # judgement request carries the output itself -- not a detached string copy
+            # of it -- and so that `self` is left unmodified.
+            req_copy = self._bind_validation_target(last_output)
             llm_as_a_judge_result, val_ctx = await backend.generate_from_context(
                 req_copy, ctx, format=format, model_options=model_options
             )
@@ -418,29 +435,43 @@ class Requirement(Component[str]):
     def parts(self) -> list[Span]:
         """Returns all of the constituent parts of a Requirement.
 
+        Once a validation target has been bound (inside a `validate` call), that target is
+        the requirement's sole part. Exposing it here is what allows `generate_walk` to
+        await it if it has not been computed yet.
+
         Returns:
-            List of constituent components. Empty by default; subclasses override
-            to expose their internal structure.
+            List of constituent components. Empty unless a validation target is bound.
         """
-        return []
+        return [] if self._validation_target is None else [self._validation_target]
 
     def format_for_llm(self) -> TemplateRepresentation | str:
         """Returns a `TemplateRepresentation` for LLM-as-a-Judge evaluation of this requirement.
 
-        Populates the template with the requirement's `description` and the stored model
-        `_output`. Must only be called from within a `validate` call for this same requirement,
-        after `_output` has been set.
+        Populates the template with the requirement's `description` and the bound validation
+        target. Must only be called from within a `validate` call for this same requirement,
+        after the target has been bound by `_bind_validation_target`.
+
+        When the target is a `ModelOutputThunk` with a `Component` `parsed_repr`, the parsed
+        representation is used so that the judge sees the structured output rather than the
+        raw generated string.
 
         Returns:
             TemplateRepresentation | str: A `TemplateRepresentation` containing the description
             and the model output to be judged.
         """
-        assert self._output is not None, (
+        assert self._validation_target is not None, (
             "Object protocol error: should never try to templatize a Requirement except inside of a validate call for that same requirement."
         )
+
+        target: Span = self._validation_target
+        if isinstance(target, ModelOutputThunk) and isinstance(
+            target.parsed_repr, Component
+        ):
+            target = target.parsed_repr
+
         return TemplateRepresentation(
             obj=self,
-            args={"description": self.description, "output": self._output},
+            args={"description": self.description, "output": target},
             tools=None,
             template_order=["*", "Requirement"],
         )

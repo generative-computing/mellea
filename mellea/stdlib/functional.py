@@ -343,24 +343,30 @@ def validate(
     context: Context,
     backend: Backend,
     *,
-    output: CBlock | ModelOutputThunk | None = None,
+    output: ModelOutputThunk | None = None,
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     generate_logs: list[GenerateLog]
     | None = None,  # TODO: Can we get rid of gen logs here and in act?
     input: CBlock | ModelOutputThunk | None = None,
 ) -> list[ValidationResult]:
-    """Validates a set of requirements over the output (if provided) or the current context (if the output is not provided).
+    """Validates a set of requirements over the given context.
+
+    Validation always runs over `context`, in the caller's own context type. `output`
+    designates *which* output is under judgement; see `avalidate` for details.
 
     Args:
         reqs: A single `Requirement` or a list of them to validate.
-        context: The current conversation context.
+        context: The context to validate over.
         backend: The backend used for LLM-as-a-judge requirements.
-        output: Optional model output to validate against instead of the context.
+        output: Optional model output designating the validation target. When `None`, the
+            context's last output is validated.
         format: Optional Pydantic model for constrained decoding.
         model_options: Additional model options to merge with backend defaults.
         generate_logs: Optional list to append generation logs to.
-        input: Optional input to include alongside `output` when validating.
+        input: Optional input to prepend to the validation context, for judging an output
+            against a specific input rather than the whole conversation. See `avalidate`
+            for the visibility caveat on contexts that render no history.
 
     Returns:
         List of `ValidationResult` objects, one per requirement.
@@ -1023,23 +1029,33 @@ async def avalidate(
     context: Context,
     backend: Backend,
     *,
-    output: CBlock | ModelOutputThunk | None = None,
+    output: ModelOutputThunk | None = None,
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     generate_logs: list[GenerateLog] | None = None,
     input: CBlock | ModelOutputThunk | None = None,
 ) -> list[ValidationResult]:
-    """Asynchronous version of .validate; validates a set of requirements over the output (if provided) or the current context (if the output is not provided).
+    """Asynchronous version of .validate; validates a set of requirements over the given context.
+
+    Validation always runs over `context`, in the caller's own context type, so requirements
+    (including adapter-backed ones) see the same conversation the model saw. `output`
+    designates *which* output is under judgement: it is appended to `context` when it is not
+    already the context's last output, and the requirement then validates that output.
 
     Args:
         reqs: A single `Requirement` or a list of them to validate.
-        context: The current conversation context.
+        context: The context to validate over.
         backend: The backend used for LLM-as-a-judge requirements.
-        output: Optional model output to validate against instead of the context.
+        output: Optional model output designating the validation target. When `None`, the
+            context's last output is validated.
         format: Optional Pydantic model for constrained decoding.
         model_options: Additional model options to merge with backend defaults.
         generate_logs: Optional list to append generation logs to.
-        input: Optional input to include alongside `output` when validating.
+        input: Optional input to prepend to the validation context, for judging an output
+            against a specific input rather than the whole conversation. It is added ahead
+            of `output`, so the judge sees the pair in order. It only reaches the model if
+            the context renders history: on a context whose `view_for_generation()` is empty
+            (`SimpleContext`), nothing added here is visible to the judge.
 
     Returns:
         List of `ValidationResult` objects, one per requirement.
@@ -1050,15 +1066,31 @@ async def avalidate(
 
     validation_id = str(uuid.uuid4())
 
-    if output is None:
-        validation_target_ctx = context
-    else:
-        validation_target_ctx = SimpleContext()
+    validation_target_ctx = context
 
-        # Add the input/output to the validation context
-        if input is not None:
-            validation_target_ctx = validation_target_ctx.add(input)
+    if input is not None:
+        validation_target_ctx = validation_target_ctx.add(input)
+
+    # `output` designates the validation target rather than replacing the context. Adding it
+    # is a no-op for the sampling path: ComputedModelOutputThunk reassigns __class__ in place,
+    # so the thunk passed here *is* the one already in the context.
+    if output is not None and validation_target_ctx.last_output() is not output:
         validation_target_ctx = validation_target_ctx.add(output)
+
+    # A context that renders no history hands the judge nothing but the requirement and the
+    # inlined output, so anything conversational -- `input`, earlier turns, and the whole
+    # premise of adapter-backed requirement checking -- is silently dropped. Say so rather
+    # than letting the caller infer working validation from a plausible-looking verdict.
+    if (
+        not validation_target_ctx.view_for_generation()
+        and validation_target_ctx.as_list()
+    ):
+        MelleaLogger.get_logger().warning(
+            f"validating over a {type(validation_target_ctx).__name__} whose"
+            " view_for_generation() is empty: the judge sees only the requirement and the"
+            " inlined output, not the conversation that produced it. Pass a context that"
+            " renders history (e.g. ChatContext) to validate against the input."
+        )
 
     # --- validation_pre_check hook ---
     if has_plugins(HookType.VALIDATION_PRE_CHECK):

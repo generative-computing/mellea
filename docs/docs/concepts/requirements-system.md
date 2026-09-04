@@ -297,6 +297,49 @@ reserve LLM-based requirements for subjective criteria that cannot be coded dire
 
 For a full walkthrough of using LLM-as-a-judge for output quality evaluation, see [Evaluate with LLM-as-a-Judge](../how-to/evaluate-with-llm-as-a-judge).
 
+## What the validator sees
+
+Validation runs over the **post-generation context** — the same conversation the model
+just generated into, with the generated output as its last entry. This matters for all
+three validation approaches:
+
+- A `validation_fn` receives that context, so `ctx.last_output()` is the output under
+  judgement and `ctx.as_list()` is the conversation that produced it.
+- An LLM-as-a-judge requirement sends that conversation to the model, followed by the
+  specific output to judge. The judge prompt scopes the verdict to that output, while
+  telling the model the conversation is there to help it interpret the requirement —
+  which is what makes conversation-dependent requirements ("must answer the question
+  that was asked") judgeable at all.
+- An `ALoraRequirement` needs the conversation to reach the adapter at all — the
+  `requirement-check` adapter judges the last assistant turn of the conversation it is
+  given. See [LoRA and aLoRA Adapters](../advanced/lora-and-alora-adapters.md).
+
+The output under judgement is passed as the `ModelOutputThunk` itself, not a detached
+string copy, so its `parsed_repr` and any structured representation survive into the
+judge prompt.
+
+### Overriding the validation context
+
+`SamplingStrategy.sample()` takes an optional `validation_ctx` for validating over
+something other than the post-generation context — for example, a trimmed context that
+excludes long retrieved documents. When it is given, the sampled output is appended to it
+so it is still the validation target; when it is `None`, each attempt is validated over its
+own post-generation context.
+
+`instruct()`, `act()`, and their async counterparts always pass `None`, so the
+post-generation context is what you get unless you drive a strategy's `sample()` directly.
+
+`validate()` and `avalidate()` follow the same rule at a lower level: they validate over
+the `context` you hand them, in your own context type. Their `output` argument designates
+*which* output is under judgement rather than replacing the context — it is appended only
+when it is not already the context's last output.
+
+> **Deprecated:** the `input` parameter of `validate()` / `avalidate()` is deprecated and
+> will be removed in a future release. Pass a context that already contains the input.
+
+Preconditions are the one case that never sees the conversation: `precondition_requirements`
+are judged over the function arguments alone, in a fresh context.
+
 ## Composing requirements
 
 Requirements are composable: mix strings, `req()`, `check()`, and `Requirement`

@@ -258,6 +258,103 @@ async def test_multi_turn_strategy_with_concurrency(mocked_context_backend):
     )
 
 
+# --- validation_ctx is actually used (issues #426, #668) ---
+
+
+def _ctx_capturing_requirement() -> tuple[Requirement, list[Context]]:
+    """A passing requirement that records every context it is validated over."""
+    seen: list[Context] = []
+
+    def capture(ctx: Context) -> ValidationResult:
+        seen.append(ctx)
+        return ValidationResult(result=True)
+
+    return Requirement("capture", validation_fn=capture), seen
+
+
+async def test_explicit_validation_ctx_is_used_for_validation(mocked_context_backend):
+    """An explicit `validation_ctx` — not the generation context — is validated over.
+
+    Regression test for #668: `validation_ctx` was accepted, defaulted, and threaded
+    through the strategy, then never passed to `avalidate`.
+    """
+    req, seen = _ctx_capturing_requirement()
+    validation_ctx = ChatContext().add(Message("user", "VALIDATION MARKER"))
+
+    await RejectionSamplingStrategy(loop_budget=1).sample(
+        action=Instruction(description="write something"),
+        context=ChatContext().add(Message("user", "GENERATION MARKER")),
+        backend=mocked_context_backend,
+        requirements=[req],
+        validation_ctx=validation_ctx,
+    )
+
+    assert len(seen) == 1
+    rendered = [str(node) for node in seen[0].as_list()]
+    assert any("VALIDATION MARKER" in r for r in rendered), (
+        "the caller's validation context must reach the requirement"
+    )
+    assert not any("GENERATION MARKER" in r for r in rendered), (
+        "the generation context must not leak into an explicit validation context"
+    )
+    assert seen[0].last_output() is not None, (
+        "the sampled output is appended so it is the validation target"
+    )
+
+
+async def test_validation_ctx_defaults_to_post_generation_context(
+    mocked_context_backend,
+):
+    """Without `validation_ctx`, each attempt validates over its own post-generation context."""
+    req, seen = _ctx_capturing_requirement()
+
+    result = await RejectionSamplingStrategy(loop_budget=1).sample(
+        action=Instruction(description="write something"),
+        context=ChatContext().add(Message("user", "GENERATION MARKER")),
+        backend=mocked_context_backend,
+        requirements=[req],
+    )
+
+    assert len(seen) == 1
+    # ComputedModelOutputThunk reassigns __class__ in place, so the sampled result *is*
+    # the thunk already in the post-generation context -- `avalidate` appends nothing.
+    assert seen[0] is result.sample_contexts[0], (
+        "validation should run over the attempt's post-generation context unchanged"
+    )
+    assert seen[0].last_output() is result.result, (
+        "the validation target is the generation under judgement"
+    )
+    rendered = [str(node) for node in seen[0].as_list()]
+    assert any("GENERATION MARKER" in r for r in rendered)
+
+
+async def test_validation_ctx_sees_the_output_in_its_generation_view(
+    mocked_context_backend,
+):
+    """The judged output must be visible to the model, not just present in `as_list()`.
+
+    This is what makes adapter-backed requirement checking work: `_generate_from_intrinsic`
+    builds its conversation from `view_for_generation()`, which was empty under the old
+    throwaway `SimpleContext`.
+    """
+    req, seen = _ctx_capturing_requirement()
+
+    result = await RejectionSamplingStrategy(loop_budget=1).sample(
+        action=Instruction(description="write something"),
+        context=ChatContext(),
+        backend=mocked_context_backend,
+        requirements=[req],
+    )
+
+    view = seen[0].view_for_generation()
+    assert view is not None and len(view) > 0, (
+        "the validation context must render something for the model"
+    )
+    assert result.result in view, (
+        "the generation under judgement must appear in the validation context's generation view"
+    )
+
+
 # --- Constructor validation ---
 
 
