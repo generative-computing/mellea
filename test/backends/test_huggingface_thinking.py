@@ -76,10 +76,12 @@ def test_split_think_tags_leading_whitespace_before_open_tag() -> None:
 def test_split_think_tags_multiple_close_tags_uses_first() -> None:
     """Multiple </think> occurrences: only the first is treated as the boundary.
 
-    Pins current behavior, not a settled design choice: Granite's own chat
-    template splits replayed history on the *last* </think> occurrence
-    (chat_template.jinja, e.g. `c.split('</think>')[-1]`), the opposite rule.
-    Whether to match the model's own convention is an open question — see PR #1616.
+    Deliberate: Granite's own template uses the *last* occurrence when
+    truncating old reasoning out of replayed history, where dropping too much
+    is the safe direction. Here we're extracting a clean answer from a fresh
+    completion, where the safe direction is the opposite: if the model's
+    answer itself mentions the literal text "</think>", splitting on the
+    first occurrence keeps the answer intact instead of corrupting it.
     """
     thinking, answer = _split_think_tags("<think>a</think>b</think>c")
     assert thinking == "a"
@@ -267,6 +269,37 @@ async def test_post_processing_splits_when_thinking_unset() -> None:
     assert mot.value == "the answer"
 
 
+async def test_post_processing_preserves_answer_mentioning_think_tag() -> None:
+    """False-positive risk test: thinking genuinely on, and the model's answer
+    itself explains what the </think> tag does. The gate correctly fires (a
+    real reasoning block exists), and first-occurrence splitting keeps the
+    full answer intact rather than truncating it at the second, unrelated
+    occurrence — the risk jakelorocco raised in the original PR review.
+    """
+    backend = _make_backend(thinking_template_var="think")
+    mot = ModelOutputThunk(
+        value=(
+            "<think>the user wants an explanation</think>"
+            "The </think> tag marks the end of a reasoning block."
+        )
+    )
+    mot._call.action = CBlock("What does the </think> tag do?")
+    mot._call.model_options = {}
+
+    await backend.post_processing(
+        mot,
+        conversation=[],
+        _format=None,
+        tool_calls=False,
+        tools={},
+        seed=None,
+        input_ids=None,
+    )
+
+    assert mot.thinking == "the user wants an explanation"
+    assert mot.value == "The </think> tag marks the end of a reasoning block."
+
+
 async def test_post_processing_cache_key_findable_after_split() -> None:
     """Regression test: the LRU cache key computed in post_processing must be
     derived from mot.value *after* the split has run, so a later cache_get() call
@@ -322,11 +355,10 @@ def _render_history(messages: list) -> str:
 
 @pytest.mark.integration
 def test_rendered_prompt_preserves_reasoning_on_tool_call_turn() -> None:
-    """Regression/contract test against the real template (not a synthetic one):
-    on a tool-call turn, the unconditional `reasoning_content` forward in
-    `to_chat()` restores reasoning to the rendered prompt, matching pre-#1610
-    behavior for this shape. The other shape (plain multi-turn, next test) is
-    NOT restored by the same fix — see PR #1616.
+    """On a tool-call turn, the `reasoning_content` forward in `to_chat()`
+    restores reasoning to the rendered prompt against the real template
+    (not a synthetic one). The plain multi-turn shape (next test) isn't
+    restored the same way.
     """
     messages = [
         {"role": "user", "content": "What's the weather in Boston?"},
@@ -356,22 +388,13 @@ def test_rendered_prompt_preserves_reasoning_on_tool_call_turn() -> None:
 
 @pytest.mark.integration
 def test_rendered_prompt_drops_reasoning_on_plain_multi_turn() -> None:
-    """Documents a known, currently-accepted gap: on a plain multi-turn shape
-    (assistant turn with no tool call, followed by another user turn), the
-    template's own `truncate_history_thinking` gate strips reasoning even
-    though D4's forward attaches `reasoning_content` — because the
-    reconstructed content now carries both <think> and </think>, which is
-    exactly what that gate matches on. Before #1610, the raw inline form
-    (opening tag prompt-baked, never present in mot.value) only ever carried
-    the closing tag, so it was invisible to this same gate and reasoning
-    passed through by accident.
-
-    This is a known limitation, not an oversight: it is the direct effect of
-    aligning HF's replay with the #1201 cross-backend consensus (replay only
-    on tool-call turns), left open for maintainer decision in PR #1616 rather
-    than resolved silently. If this test starts failing (reasoning present),
-    a reviewer changed that policy — update this test deliberately, don't
-    just delete the assertion.
+    """Deliberate limitation: on a plain multi-turn shape (assistant turn
+    with no tool call, followed by another user turn), Granite's own
+    `truncate_history_thinking` gate strips reasoning even though `to_chat()`
+    attaches `reasoning_content` — the reconstructed content carries both
+    tags, which is exactly what that gate matches on. Decided: keep HF
+    consistent with the #1201 cross-backend consensus (replay on tool-call
+    turns only) rather than extend replay to plain turns.
     """
     messages = [
         {"role": "user", "content": "What is 2 + 2?"},
