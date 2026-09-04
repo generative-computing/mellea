@@ -235,9 +235,7 @@ async def test_ollama_token_metrics_integration(
 
     # Verify latency metrics
     duration_dp = _find_histogram_data_point(
-        metrics_data,
-        "gen_ai.client.operation.duration",
-        {"gen_ai.request.stream": stream},
+        metrics_data, "mellea.llm.request.duration", {"gen_ai.request.stream": stream}
     )
     assert duration_dp is not None, "Request duration should be recorded"
     assert duration_dp.sum > 0, "Request duration should be > 0"
@@ -331,9 +329,7 @@ async def test_openai_token_metrics_integration(enable_metrics, metric_reader, s
 
     # Verify latency metrics
     duration_dp = _find_histogram_data_point(
-        metrics_data,
-        "gen_ai.client.operation.duration",
-        {"gen_ai.request.stream": stream},
+        metrics_data, "mellea.llm.request.duration", {"gen_ai.request.stream": stream}
     )
     assert duration_dp is not None, "Request duration should be recorded"
     assert duration_dp.sum > 0, "Request duration should be > 0"
@@ -391,9 +387,7 @@ async def test_watsonx_token_metrics_integration(enable_metrics, metric_reader):
 
     # Verify latency metrics (watsonx is non-streaming only)
     duration_dp = _find_histogram_data_point(
-        metrics_data,
-        "gen_ai.client.operation.duration",
-        {"gen_ai.request.stream": False},
+        metrics_data, "mellea.llm.request.duration", {"gen_ai.request.stream": False}
     )
     assert duration_dp is not None, "Request duration should be recorded"
     assert duration_dp.sum > 0, "Request duration should be > 0"
@@ -489,9 +483,7 @@ async def test_litellm_token_metrics_integration(
 
     # Verify latency metrics
     duration_dp = _find_histogram_data_point(
-        metrics_data,
-        "gen_ai.client.operation.duration",
-        {"gen_ai.request.stream": stream},
+        metrics_data, "mellea.llm.request.duration", {"gen_ai.request.stream": stream}
     )
     assert duration_dp is not None, "Request duration should be recorded"
     assert duration_dp.sum > 0, "Request duration should be > 0"
@@ -691,7 +683,7 @@ async def test_ollama_generate_from_raw_metrics_integration(
 
     duration_dp = _find_histogram_data_point(
         metrics_data,
-        "gen_ai.client.operation.duration",
+        "mellea.llm.request.duration",
         {"gen_ai.provider.name": "ollama", "gen_ai.request.stream": False},
     )
     assert duration_dp is not None, "Request duration should be recorded for batch"

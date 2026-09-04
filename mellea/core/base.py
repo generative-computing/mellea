@@ -25,7 +25,7 @@ import enum
 import logging
 import os
 import threading
-from collections import OrderedDict
+from collections import OrderedDict, deque
 from collections.abc import Callable, Coroutine, Iterable, Mapping
 from copy import copy, deepcopy
 from dataclasses import dataclass, field
@@ -770,9 +770,9 @@ class _GenerationState:
         post_process: Backend coroutine run once after the value is complete.
         on_computed: Coroutine run when the thunk becomes computed.
         start: Wall-clock start time of generation, for latency metrics.
-        last_chunk_time: Wall-clock time the previous streamed chunk was
-            processed, for per-chunk inter-arrival timing. `None` until the
-            first chunk is processed.
+        chunk_intervals: Per-chunk receipt intervals in milliseconds (`None` for
+            the first chunk), captured in `send_to_queue` and drained by `astream`
+            for the `time_per_output_chunk` metric.
     """
 
     queue: asyncio.Queue = field(default_factory=lambda: asyncio.Queue(maxsize=20))
@@ -787,7 +787,7 @@ class _GenerationState:
     post_process: Callable[[ModelOutputThunk], Coroutine] | None = None
     on_computed: Callable[[ModelOutputThunk], Coroutine] | None = None
     start: datetime.datetime | None = None
-    last_chunk_time: datetime.datetime | None = None
+    chunk_intervals: deque[float | None] = field(default_factory=deque)
 
 
 class ModelOutputThunk(Generic[S]):
@@ -860,12 +860,8 @@ class ModelOutputThunk(Generic[S]):
         return (datetime.datetime.now() - self._gen.start).total_seconds() * 1000
 
     def _record_ttfb(self) -> None:
-        """Record time-to-first-byte if streaming and not yet recorded."""
-        if (
-            self.generation.streaming
-            and not self._gen.first_chunk_received
-            and self._gen.start is not None
-        ):
+        """Record time-to-first-byte if not yet recorded."""
+        if not self._gen.first_chunk_received and self._gen.start is not None:
             self.generation.ttfb_ms = self._elapsed_ms()
             self._gen.first_chunk_received = True
 
@@ -1137,7 +1133,6 @@ class ModelOutputThunk(Generic[S]):
             try:
                 item = self._gen.queue.get_nowait()
                 chunks.append(item)
-                self._record_ttfb()
             except asyncio.QueueEmpty:
                 # We've exhausted the current items in the queue.
                 break
@@ -1153,7 +1148,6 @@ class ModelOutputThunk(Generic[S]):
 
             item = await self._gen.queue.get()
             chunks.append(item)
-            self._record_ttfb()
 
         # Process the sentinel value if it's there.
         if chunks[-1] is None:
@@ -1193,19 +1187,19 @@ class ModelOutputThunk(Generic[S]):
             assert self._gen.process is not None
             prev_len = len(str(self._underlying_value or ""))
             await self._gen.process(self, chunk)
+            # Drain this chunk's receipt interval (from send_to_queue) 1:1 with
+            # processed chunks, even when events are off, to keep it bounded.
+            interval_ms = (
+                self._gen.chunk_intervals.popleft()
+                if self._gen.chunk_intervals
+                else None
+            )
             if emit_chunk_events:
-                now = datetime.datetime.now()
-                time_since_last_chunk_ms = (
-                    (now - self._gen.last_chunk_time).total_seconds() * 1000
-                    if self._gen.last_chunk_time is not None
-                    else None
-                )
-                self._gen.last_chunk_time = now
                 await self._emit_event(
                     "chunk_processed",
                     chunk_index=self._gen.processed_chunk_index,
                     chunk_text_length=len(str(self._underlying_value or "")) - prev_len,
-                    time_since_last_chunk_ms=time_since_last_chunk_ms,
+                    time_since_last_chunk_ms=interval_ms,
                 )
             self._gen.processed_chunk_index += 1
 
