@@ -14,6 +14,7 @@ that operate in async contexts.
 from __future__ import annotations
 
 import asyncio
+import time
 from collections import OrderedDict
 from collections.abc import AsyncIterator, Callable, Coroutine
 from typing import TYPE_CHECKING, Any
@@ -38,19 +39,22 @@ object bypass the per-chunk loop entirely and are unaffected by this value.
 
 async def send_to_queue(
     co: Coroutine[Any, Any, AsyncIterator | Any] | AsyncIterator,
-    aqueue: asyncio.Queue,
+    mot: ModelOutputThunk,
     *,
     chunk_timeout: float | None = DEFAULT_CHUNK_TIMEOUT,
     on_timeout: Callable[[], None] | None = None,
 ) -> None:
-    """Processes the output of an async chat request by sending the output to an async queue.
+    """Processes the output of an async chat request by sending the output to the thunk's queue.
 
     Args:
         co: A coroutine or async iterator producing the backend response.
-        aqueue: The async queue to send results to. A sentinel `None` is appended on
-            normal completion; an exception instance (including `TimeoutError`) is
-            appended on error. A timeout does **not** append a trailing sentinel — the
-            exception item is the stream terminator.
+        mot: The `ModelOutputThunk` this stream feeds. Its `_gen.queue` receives the
+            results: a sentinel `None` is appended on normal completion; an exception
+            instance (including `TimeoutError`) is appended on error (a timeout does
+            **not** append a trailing sentinel — the exception item is the stream
+            terminator). Time-to-first-byte is stamped on the thunk at first-chunk
+            receipt via its `_record_ttfb()`, and per-chunk receipt intervals are
+            recorded on `_gen.chunk_intervals`.
         chunk_timeout: Maximum seconds to wait for each chunk from the backend iterator,
             including the first (time-to-first-token). Only applies when the backend
             response is an `AsyncIterator`; non-streaming coroutines are unaffected.
@@ -66,8 +70,9 @@ async def send_to_queue(
     Raises:
         TimeoutError: Re-raised verbatim when the backend itself raises `TimeoutError`
             (i.e. the timeout did not originate from *this* function's per-chunk guard).
-            Stream-guard timeouts are forwarded into *aqueue* rather than raised.
+            Stream-guard timeouts are forwarded into the queue rather than raised.
     """
+    aqueue = mot._gen.queue
     try:
         if isinstance(co, Coroutine):
             aresponse = await co
@@ -78,6 +83,7 @@ async def send_to_queue(
 
         if isinstance(aresponse, AsyncIterator):
             ait = aiter(aresponse)
+            prev_receipt: float | None = None
             while True:
                 cm: asyncio.Timeout | None = None
                 try:
@@ -117,6 +123,12 @@ async def send_to_queue(
                                 f"Failed to close stalled stream iterator: {e}"
                             )
                     return
+                mot._record_ttfb()  # idempotent: only the first chunk records TTFB
+                now = time.perf_counter()
+                mot._gen.chunk_intervals.append(
+                    (now - prev_receipt) * 1000 if prev_receipt is not None else None
+                )
+                prev_receipt = now
                 await aqueue.put(item)
         else:
             await aqueue.put(aresponse)
