@@ -14,6 +14,7 @@ synthetic-string test can verify.
 """
 
 import os
+import re
 
 import pytest
 
@@ -80,7 +81,9 @@ def test_thinking_enabled_populates_mot_thinking(session):
     # output never contains it — checking for its absence here would be vacuous.
     # </think> is the tag that actually appears in raw output and must be split out.
     assert "</think>" not in output.value
-    assert "4" in output.value
+    assert re.search(r"\b4\b", output.value), (
+        f"Expected the digit 4 as its own token, got: {output.value!r}"
+    )
 
 
 @pytest.mark.qualitative
@@ -93,4 +96,6 @@ def test_thinking_disabled_leaves_mot_thinking_falsy(session):
     )
     assert not output.thinking, f"Expected no reasoning trace, got: {output.thinking!r}"
     assert "</think>" not in output.value
-    assert "4" in output.value
+    assert re.search(r"\b4\b", output.value), (
+        f"Expected the digit 4 as its own token, got: {output.value!r}"
+    )

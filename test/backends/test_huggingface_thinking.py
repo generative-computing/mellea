@@ -17,6 +17,10 @@ import mellea.backends.huggingface as hf_backend
 from mellea.backends import ModelOption
 from mellea.backends.huggingface import LocalHFBackend, _split_think_tags
 from mellea.core.base import CBlock, ModelOutputThunk
+from test.backends.test_huggingface_filter_options import (
+    _GRANITE_THINKING_MODEL_ID,
+    _try_load_granite_tokenizer,
+)
 
 
 def test_split_think_tags_with_both_tags() -> None:
@@ -75,8 +79,7 @@ def test_split_think_tags_multiple_close_tags_uses_first() -> None:
     Pins current behavior, not a settled design choice: Granite's own chat
     template splits replayed history on the *last* </think> occurrence
     (chat_template.jinja, e.g. `c.split('</think>')[-1]`), the opposite rule.
-    Whether to match the model's own convention is an open question — see
-    docs/dev/proposals/1604-hf-output-parsing.md, Q2.
+    Whether to match the model's own convention is an open question — see PR #1616.
     """
     thinking, answer = _split_think_tags("<think>a</think>b</think>c")
     assert thinking == "a"
@@ -298,3 +301,130 @@ async def test_post_processing_cache_key_findable_after_split() -> None:
     assert mot.value == "the answer"
     cached = backend.cache_get(id(mot.value))
     assert cached is not None
+
+
+def _render_history(messages: list) -> str:
+    """Render a message list through the real granite-4.2-3b chat template.
+
+    Loads the template only (no GPU, no model weights) via
+    `_try_load_granite_tokenizer`; skips if not locally cached.
+    """
+    tok = _try_load_granite_tokenizer(_GRANITE_THINKING_MODEL_ID)
+    if tok is None:
+        pytest.skip(
+            f"{_GRANITE_THINKING_MODEL_ID} not in local HF cache — "
+            "run qualitative tests first"
+        )
+    return tok.apply_chat_template(
+        messages, tokenize=False, add_generation_prompt=False
+    )
+
+
+@pytest.mark.integration
+@pytest.mark.huggingface
+def test_rendered_prompt_preserves_reasoning_on_tool_call_turn() -> None:
+    """Regression/contract test against the real template (not a synthetic one):
+    on a tool-call turn, the unconditional `reasoning_content` forward in
+    `to_chat()` restores reasoning to the rendered prompt, matching pre-#1610
+    behavior for this shape. The other shape (plain multi-turn, next test) is
+    NOT restored by the same fix — see PR #1616.
+    """
+    messages = [
+        {"role": "user", "content": "What's the weather in Boston?"},
+        {
+            "role": "assistant",
+            "content": "",
+            "reasoning_content": "I should call the weather tool.",
+            "tool_calls": [
+                {
+                    "id": "1",
+                    "type": "function",
+                    "function": {
+                        "name": "get_weather",
+                        "arguments": {"city": "Boston"},
+                    },
+                }
+            ],
+        },
+        {"role": "tool", "content": "72F, sunny", "tool_call_id": "1"},
+    ]
+    rendered = _render_history(messages)
+    assert "I should call the weather tool." in rendered
+    # The empty <think></think> pair is what a dropped/truncated reasoning_content
+    # would leave behind; its absence here is the direct evidence reasoning survived.
+    assert "<think></think>" not in rendered
+
+
+@pytest.mark.integration
+@pytest.mark.huggingface
+def test_rendered_prompt_drops_reasoning_on_plain_multi_turn() -> None:
+    """Documents a known, currently-accepted gap: on a plain multi-turn shape
+    (assistant turn with no tool call, followed by another user turn), the
+    template's own `truncate_history_thinking` gate strips reasoning even
+    though D4's forward attaches `reasoning_content` — because the
+    reconstructed content now carries both <think> and </think>, which is
+    exactly what that gate matches on. Before #1610, the raw inline form
+    (opening tag prompt-baked, never present in mot.value) only ever carried
+    the closing tag, so it was invisible to this same gate and reasoning
+    passed through by accident.
+
+    This is a known limitation, not an oversight: it is the direct effect of
+    aligning HF's replay with the #1201 cross-backend consensus (replay only
+    on tool-call turns), left open for maintainer decision in PR #1616 rather
+    than resolved silently. If this test starts failing (reasoning present),
+    a reviewer changed that policy — update this test deliberately, don't
+    just delete the assertion.
+    """
+    messages = [
+        {"role": "user", "content": "What is 2 + 2?"},
+        {
+            "role": "assistant",
+            "content": "4",
+            "reasoning_content": "Two plus two equals four.",
+        },
+        {"role": "user", "content": "And 3 + 3?"},
+    ]
+    rendered = _render_history(messages)
+    assert "Two plus two equals four." not in rendered
+
+
+@pytest.mark.parametrize("with_tool_call", [True, False])
+def test_parse_then_to_chat_round_trips_thinking_for_hf(with_tool_call: bool) -> None:
+    """Seam test: HF's `Message._parse()` (chat.py) carries `.thinking` onto the
+    parsed assistant Message in both branches (tool-call and plain), and that
+    Message then round-trips through `to_chat()` (utils.py) as `reasoning_content`.
+
+    Closes the gap between the e2e tests (stop at `output.thinking`) and the
+    `to_chat` unit tests (hand-build `Message(..., thinking=...)` directly,
+    never exercising `_parse`) — this is the only test proving the link between
+    them for HF specifically.
+    """
+    from typing import cast
+
+    from mellea.backends.utils import to_chat
+    from mellea.core import ModelToolCall
+    from mellea.formatters.template_formatter import TemplateFormatter as ChatFormatter
+    from mellea.stdlib.components import Message
+    from mellea.stdlib.context import ChatContext
+
+    mot = ModelOutputThunk(value="the answer")
+    mot.thinking = "reasoning trace"
+    mot.raw.provider = "huggingface"
+    mot.raw.response = None
+    if with_tool_call:
+        # Only non-None matters for _parse's branch selection; the placeholder is
+        # never read as a real ModelToolCall.
+        mot.tool_calls = [cast(ModelToolCall, None)]
+
+    parsed = Message(role="assistant", content="placeholder")._parse(mot)
+    assert parsed.thinking == "reasoning trace"
+
+    ctx = ChatContext()
+    ctx = ctx.add(Message("user", "hello"))
+    ctx = ctx.add(parsed)
+    action = Message("user", "next question")
+    formatter = ChatFormatter(model_id="test")
+
+    result = to_chat(action, ctx, formatter, system_prompt=None)
+    assistant_msg = next(m for m in result if m["role"] == "assistant")
+    assert assistant_msg["reasoning_content"] == "reasoning trace"

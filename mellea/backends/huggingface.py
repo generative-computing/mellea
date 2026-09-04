@@ -283,10 +283,10 @@ def _split_think_tags(text: str) -> tuple[str | None, str]:
 
     A string-level fallback for `transformers.PreTrainedTokenizerBase.parse_response()`
     (schema-driven, token-decode-then-parse), used because no tokenizer available to
-    this backend today declares a `response_schema` — see the design proposal at
-    docs/dev/proposals/1604-hf-output-parsing.md §10 for why even that upstream
-    mechanism is text-level, not token-level, and can't disambiguate a genuine
-    end-of-reasoning token from literal `</think>` text for Granite either.
+    this backend today declares a `response_schema`. Even that upstream mechanism is
+    text-level, not token-level, and can't disambiguate a genuine end-of-reasoning
+    token from literal `</think>` text for Granite either — its own `</think>` token
+    is registered non-special.
 
     Splits on </think> alone (not a <think>...</think> pair) because some chat
     templates (e.g. granite-4.2 with enable_thinking) bake the opening tag into
@@ -295,10 +295,13 @@ def _split_think_tags(text: str) -> tuple[str | None, str]:
     delimiters pass through unchanged. See #1604 for generalizing this.
 
     Deliberately strips leading/trailing whitespace from both `thinking` and
-    `answer`: the whitespace immediately around the tags is delimiter framing
-    (Granite's template emits `<think>\n...\n</think>\n`), not meaningful
-    content, so the user-visible completion loses that framing whitespace as
-    part of this split, not incidentally.
+    `answer`: the whitespace immediately around the tags is delimiter framing,
+    not meaningful content, so the user-visible completion loses that framing
+    whitespace as part of this split, not incidentally. This framing comes
+    from the *generation-prompt* path (chat_template.jinja:178-182, e.g.
+    `<|im_start|>assistant\n<think>\n`), not the replay-reconstruction path
+    (chat_template.jinja:83-84) — this function only ever sees freshly
+    generated text, never a replayed history turn.
     """
     if _THINK_CLOSE_TAG not in text:
         return None, text

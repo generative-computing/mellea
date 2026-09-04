@@ -101,15 +101,24 @@ def to_chat(
     # to print `Message`s to correctly serialize any documents with the message. Do the printing here.
     # NOTE: reasoning replay here is an interim, unconditional forward — every non-empty
     # `Message.thinking` is attached as `reasoning_content` regardless of `should_replay_reasoning`
-    # (unlike OpenAI/LiteLLM/Watsonx/Ollama, which gate replay on that policy). This exists to
-    # restore the parity the HF think-tag capture fix (#1610) removed: before that fix, raw
-    # `<think>...</think>` text sat inline in `content` on every turn, so Granite's chat template
-    # (chat_template.jinja:83-90) always saw prior reasoning; after the fix, `content` is tag-free
-    # and the template silently prepends an empty `<think></think>` instead, dropping reasoning the
-    # model previously saw. Attaching `reasoning_content` unconditionally restores that prior
-    # behavior without deciding the real design question (whether HF should follow the
-    # tool-call-only consensus rule from #1201 on plain turns too) — see the design proposal at
-    # docs/dev/proposals/1604-hf-output-parsing.md, D5/Q3, for the full replay-policy decision.
+    # (unlike OpenAI/LiteLLM/Watsonx/Ollama, which gate replay on that policy). This exists because
+    # the HF think-tag capture fix (#1610) alone removed reasoning that Granite's chat template
+    # previously saw on every turn: before that fix, raw `<think>...</think>` text sat inline in
+    # `content`, and after it, `content` is tag-free and the template prepends an empty
+    # `<think></think>` instead (chat_template.jinja:83-90).
+    #
+    # Restores parity ONLY for tool-call turns (a turn after the last user message, or one the
+    # template's `truncate_history_thinking` gate otherwise doesn't touch) — those match the
+    # #1201 cross-backend consensus (replay on tool-call turns only) and the reconstructed
+    # `<think>...</think>` survives unmodified. Does NOT restore parity for plain multi-turn
+    # (an assistant turn with no tool call, before the last user message): the template's
+    # truncation branch strips reasoning whenever content carries BOTH tags
+    # (chat_template.jinja:99,137-145), and the reconstructed form always does — whereas the
+    # pre-#1610 inline form only ever carried the closing tag (the opening tag is prompt-baked,
+    # never present in `mot.value`), so it was invisible to that same gate and passed through by
+    # accident. This is a real, measured functional gap: whether HF should replay reasoning on
+    # plain turns too (diverging from the #1201 consensus) is open — see PR #1616 and the two
+    # rendered-prompt tests in test/backends/test_huggingface_thinking.py that pin both shapes.
     ctx_as_conversation: list = []
     for m in ctx_as_message_list:
         msg_dict: dict = {"role": m.role, "content": formatter.print(m)}
@@ -120,7 +129,7 @@ def to_chat(
             msg_dict["tool_calls"] = m.tool_calls
         if m.tool_call_id:
             msg_dict["tool_call_id"] = m.tool_call_id
-        if m.thinking:
+        if m.role == "assistant" and m.thinking:
             msg_dict["reasoning_content"] = m.thinking
         # Merge any author-declared provider fields (Mellea's known fields win;
         # a mismatched target raises). Must run after the known fields are set.

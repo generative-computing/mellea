@@ -155,7 +155,7 @@ def test_to_chat_attaches_reasoning_content_for_assistant_thinking():
     """Regression test: an assistant Message carrying `.thinking` must have it
     forwarded as `reasoning_content` on the wire dict. Before this fix, `to_chat`
     read only `m.role`/`m.content` and silently dropped `.thinking` on every
-    HF replay — see docs/dev/proposals/1604-hf-output-parsing.md, D4.
+    HF replay — see PR #1616.
     """
     from mellea.backends.utils import to_chat
     from mellea.formatters.template_formatter import TemplateFormatter as ChatFormatter
@@ -178,7 +178,7 @@ def test_to_chat_known_reasoning_content_wins_over_provider_fields():
     before `merge_provider_fields` runs (same known-fields-first pattern as
     `tool_calls`/`tool_call_id`), so an author-declared `provider_fields`
     collision on the same key is silently dropped (debug-logged, not raised) —
-    Mellea's own value always wins. See docs/dev/proposals/1604-hf-output-parsing.md, D4.
+    Mellea's own value always wins.
     """
     from mellea.backends.utils import to_chat
     from mellea.formatters.template_formatter import TemplateFormatter as ChatFormatter
@@ -220,6 +220,26 @@ def test_to_chat_omits_reasoning_content_when_no_thinking():
     result = to_chat(action, ctx, formatter, system_prompt=None)
     assistant_msg = next(m for m in result if m["role"] == "assistant")
     assert "reasoning_content" not in assistant_msg
+
+
+def test_to_chat_ignores_thinking_on_non_assistant_message():
+    """`.thinking` on a non-assistant Message (never set by real code paths, but
+    not type-guarded against) must not be forwarded as `reasoning_content` — the
+    Granite template only consumes that key on the assistant branch, so this is
+    otherwise inert, but the wire dict should not carry stray, unconsumed keys."""
+    from mellea.backends.utils import to_chat
+    from mellea.formatters.template_formatter import TemplateFormatter as ChatFormatter
+    from mellea.stdlib.components import Message
+    from mellea.stdlib.context import ChatContext
+
+    ctx = ChatContext()
+    ctx = ctx.add(Message("user", "hello", thinking="stray thinking"))
+    action = Message("user", "next question")
+    formatter = ChatFormatter(model_id="test")
+
+    result = to_chat(action, ctx, formatter, system_prompt=None)
+    user_msg = next(m for m in result if m["content"] == "hello")
+    assert "reasoning_content" not in user_msg
 
 
 def test_to_chat_with_system_prompt():
