@@ -298,6 +298,87 @@ class IntrinsicAdapter(LocalHFAdapter, _AdapterCore):
 T = TypeVar("T")
 
 
+def _composed_adapter_key(adapter: "_AdapterCore") -> str:
+    """Return the registry key for a composed `Adapter`, mirroring `qualified_name`.
+
+    A composed `Adapter` (unlike the deprecated shims) has no `qualified_name`
+    of its own; backends key their registries on this instead. For a
+    LocalFile/PEFT composed adapter, this must produce the same string as
+    `adapter.weights.qualified_name` (`LocalFileBinding`'s own key) so a
+    backend's `_added_adapters` (keyed on the binding) and `_composed_adapters`
+    (keyed on this function) agree — which holds because `Identity.adapter_type`
+    is the `Literal["lora", "alora"]` string and `AdapterType.LORA.value`/
+    `AdapterType.ALORA.value` are those same two strings. `LocalHFBackend.add_adapter`
+    enforces this at registration time for a `LocalFileBinding` (see the
+    `NOTE(#1516)` on the `Adapter` dataclass); a composed `Adapter` whose
+    `identity.adapter_type` disagrees with its own `weights.adapter_type`
+    otherwise produces two different keys instead of one.
+
+    Args:
+        adapter: The composed adapter to key.
+
+    Returns:
+        str: `"<identity.name>_<identity.adapter_type>"`.
+    """
+    return f"{adapter.identity.name}_{adapter.identity.adapter_type}"
+
+
+def _discover_embedded_adapters(
+    source: str,
+    *,
+    revision: str = "main",
+    cache_dir: str | None = None,
+    intrinsic_name: str | None = None,
+) -> list[tuple["_AdapterCore", dict]]:
+    """Discover embedded adapter functions from a Granite Switch source.
+
+    Non-shim equivalent of `EmbeddedIntrinsicAdapter.from_source()`: returns
+    composed `Adapter` instances instead of the deprecated shim (Epic #929,
+    issue #1144). Reuses the shim's discovery, `adapter_index.json`/`io.yaml`
+    parsing, and hub-snapshot materialization internally — including its
+    path-escape guard — rather than duplicating that logic, and lifts out the
+    already-correct `identity`/`io_contract`/`weights` triple each shim
+    instance built.
+
+    The raw parsed `io.yaml` config is returned alongside each adapter because
+    a composed `Adapter` has no field for it (that's shim-only state) and it
+    cannot be cheaply re-derived later — callers that need it at generation
+    time (see `LocalHFBackend`/`OpenAIBackend`'s `_generate_from_intrinsic`)
+    must cache it themselves, keyed by `_composed_adapter_key`.
+
+    Args:
+        source (str): Local path to a model directory, or a Hugging Face Hub
+            repo ID (e.g. `"ibm-granite/granite-switch-micro"`).
+        revision (str): Git revision (only used for Hub downloads).
+        cache_dir (str | None): Cache directory (only used for Hub downloads).
+        intrinsic_name (str | None): If provided, only load the adapter
+            matching this adapter function name. `None` loads all adapters.
+
+    Returns:
+        list[tuple[_AdapterCore, dict]]: One `(adapter, io_yaml_config)` pair
+            per entry in the index.
+    """
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        shims = EmbeddedIntrinsicAdapter.from_source(
+            source,
+            revision=revision,
+            cache_dir=cache_dir,
+            intrinsic_name=intrinsic_name,
+        )
+    return [
+        (
+            _AdapterCore(
+                identity=shim.identity,
+                io_contract=shim.io_contract,
+                weights=shim.weights,
+            ),
+            shim.config,
+        )
+        for shim in shims
+    ]
+
+
 def get_adapter_for_intrinsic(
     intrinsic_name: str,
     intrinsic_adapter_types: list[AdapterType] | tuple[AdapterType, ...],
@@ -459,7 +540,7 @@ class AdapterMixin(Backend, abc.ABC):
         """
 
     @abc.abstractmethod
-    def add_adapter(self, adapter: AdapterInput) -> None:
+    def add_adapter(self, adapter: AdapterInput, *, config: dict | None = None) -> None:
         """Register an adapter with this backend so it can be loaded later.
 
         The adapter must not already have been added to a different backend.
@@ -468,12 +549,25 @@ class AdapterMixin(Backend, abc.ABC):
         backend rejects an embedded adapter), so a statically valid call may
         still be rejected at runtime.
 
+        `config` is the raw io.yaml mapping for a composed `Adapter`/
+        `_AdapterCore` whose `weights` is an `EmbeddedBinding` — that reality's
+        config cannot be cheaply re-derived later, so it must be supplied here
+        (see `_discover_embedded_adapters`/`resolve_adapter`), rather than
+        being fetched lazily the way a `LocalFileBinding`'s io.yaml is.
+
         Args:
             adapter (AdapterInput): The adapter to register with this backend.
+            config (dict | None): Raw io.yaml config for a composed
+                `EmbeddedBinding` adapter. Ignored (and rejected) for every
+                other adapter reality.
 
         Raises:
             TypeError: If `adapter` belongs to a reality this backend does not
-                support.
+                support, or `config` is given for a reality other than a
+                composed `EmbeddedBinding` adapter.
+            ValueError: If `adapter.weights` is an `EmbeddedBinding` and
+                `config` is not given — registering it without a config would
+                make it discoverable but permanently unable to generate.
         """
 
     @abc.abstractmethod
@@ -672,21 +766,43 @@ class AdapterMixin(Backend, abc.ABC):
                     or getattr(self, "_model_id", None)
                     or base
                 )
-                for a in EmbeddedIntrinsicAdapter.from_source(
+                # Composed Adapter, not the deprecated EmbeddedIntrinsicAdapter
+                # shim (Epic #929, issue #1144). Valid only for backends whose
+                # add_adapter supports the Embedded/Granite Switch reality
+                # (currently OpenAIBackend and LocalHFBackend when configured
+                # with load_embedded_adapters=True).
+                #
+                # Passing config= lets add_adapter() cache it atomically with
+                # registration, gated behind its own duplicate-key guard — a
+                # refused duplicate (a different object already holds the
+                # key) therefore never reaches the config write, so this
+                # can't clobber a live adapter's cached config the way a
+                # register-then-separately-cache sequence could.
+                for a, config in _discover_embedded_adapters(
                     repo_id, intrinsic_name=name
                 ):
-                    # EmbeddedIntrinsicAdapter is valid only for backends whose
-                    # add_adapter supports the Embedded/Granite Switch reality
-                    # (currently OpenAIBackend and LocalHFBackend when configured
-                    # with load_embedded_adapters=True).
-                    self.add_adapter(a)
+                    self.add_adapter(a, config=config)
             else:
                 # AdapterType.LORA is the pre-Phase-1 default (mirrors old _util.py).
                 # Every current catalog entry supports LORA.  Phase 2 (see epic #929)
                 # will select the type from catalog availability instead of hardcoding.
+                # Composed Adapter, not the deprecated IntrinsicAdapter shim
+                # (Epic #929, issue #1144).
+                metadata = fetch_intrinsic_metadata(name)
                 self.add_adapter(
-                    IntrinsicAdapter(
-                        name, adapter_type=AdapterType.LORA, base_model_name=base
+                    _AdapterCore(
+                        identity=Identity(
+                            name=name,
+                            adapter_type="lora",
+                            capability=metadata.effective_capability,
+                        ),
+                        io_contract=get_io_contract(name),
+                        weights=LocalFileBinding(
+                            name=name,
+                            adapter_type=AdapterType.LORA,
+                            repo_id=metadata.repo_id,
+                            revision=metadata.revision,
+                        ),
                     )
                 )
 
@@ -930,6 +1046,16 @@ class AdapterMixin(Backend, abc.ABC):
         # or binding — can be popped: re-check that invariant when #1465 moves
         # generation inside `adapter_scope`.
         adapters = list(getattr(self, "_added_adapters", {}).values())
+        # LocalFile/PEFT composed Adapters (Epic #929, issue #1144) don't live
+        # in _added_adapters — that dict holds their LocalFileBinding, keyed
+        # for the PEFT lifecycle (see LocalHFBackend.add_adapter); only
+        # _composed_adapters carries the _AdapterCore object this method
+        # matches on. Embedded composed adapters may live in either, per
+        # backend (LocalHFBackend uses _composed_adapters; OpenAIBackend
+        # stores them directly in _added_adapters), so checking both here
+        # keeps this method backend-agnostic without either backend needing
+        # to override it.
+        adapters += list(getattr(self, "_composed_adapters", {}).values())
         if adapter_types is None:
             for a in adapters:
                 if isinstance(a, _AdapterCore) and (

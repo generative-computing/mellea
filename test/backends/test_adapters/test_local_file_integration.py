@@ -13,7 +13,7 @@ fires hooks and deliberately opens no spans (#1464 documents the rule, #1466 add
 the spans from a plugin).
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, mock_open, patch
 
 import pytest
 
@@ -159,6 +159,115 @@ def test_deactivate_runs_even_when_generation_body_raises():
     assert len(invocations) == 1
     assert invocations[0].outcome == "error"
     assert isinstance(invocations[0].error, RuntimeError)
+
+
+def test_add_adapter_registers_composed_adapter_via_backend():
+    """`backend.add_adapter(composed_adapter)` drives the binding lifecycle
+    itself (Epic #929, issue #1144) — a caller no longer has to call
+    `binding.bind_backend()`/`binding.prepare()` separately before the
+    composed `Adapter` becomes resolvable by capability name.
+    """
+    backend = _make_backend()
+    binding = _make_binding()
+    adapter = _make_adapter(binding)
+
+    with (
+        patch(
+            "mellea.formatters.granite.intrinsics.obtain_lora",
+            return_value="/fake/local/adapter/path",
+        ),
+        patch(
+            "mellea.formatters.granite.intrinsics.obtain_io_yaml",
+            return_value="/fake/adapter.yaml",
+        ),
+        patch("builtins.open", mock_open(read_data="key: value")),
+        patch("yaml.safe_load", return_value={"parameters": {}}),
+    ):
+        backend.add_adapter(adapter)
+
+        assert binding.backend is backend
+        assert binding.qualified_name in backend.list_adapters()
+        # add_adapter also makes the composed Adapter itself discoverable by
+        # capability, unlike registering a bare LocalFileBinding directly.
+        found = backend._find_adapter("answerability")
+        assert found is adapter
+
+        with capture_adapter_hooks() as mock_invoke:
+            with backend.adapter_scope(adapter):
+                backend._model.set_adapter.assert_called_with(binding.qualified_name)  # type: ignore[union-attr]
+            backend._model.set_adapter.assert_called_with([])  # type: ignore[union-attr]
+
+    invocations = [p for p in hook_payloads(mock_invoke) if hasattr(p, "outcome")]
+    assert len(invocations) == 1
+    assert invocations[0].outcome == "success"
+
+
+def test_add_adapter_rejects_second_composed_registration_for_same_capability():
+    """A second `add_adapter` for the same capability is refused, not silently
+    overwritten — mirrors the shim's duplicate-registration guard."""
+    backend = _make_backend()
+    binding = _make_binding()
+    adapter = _make_adapter(binding)
+    other_binding = _make_binding()
+    other_adapter = _make_adapter(other_binding)
+
+    with (
+        patch(
+            "mellea.formatters.granite.intrinsics.obtain_lora",
+            return_value="/fake/local/adapter/path",
+        ),
+        patch(
+            "mellea.formatters.granite.intrinsics.obtain_io_yaml",
+            return_value="/fake/adapter.yaml",
+        ),
+        patch("builtins.open", mock_open(read_data="key: value")),
+        patch("yaml.safe_load", return_value={"parameters": {}}),
+    ):
+        backend.add_adapter(adapter)
+        backend.add_adapter(other_adapter)
+
+    assert backend._find_adapter("answerability") is adapter
+    assert other_binding.backend is None
+
+
+def test_add_adapter_rejects_binding_already_bound_to_a_different_backend():
+    """Registering a composed Adapter whose LocalFileBinding is already bound
+    to a *different* backend must raise, not silently misroute.
+
+    Regression: `add_adapter`'s composed-LocalFileBinding branch used to skip
+    `bind_backend()` — the only call that raises for this — whenever
+    `binding.backend` was already set, then called the now-no-op `prepare()`
+    and registered the adapter on the *new* backend anyway. A later
+    `adapter_scope()`/`activate()` on the new backend would then activate
+    PEFT state on the *original* backend's model instead, with no error at
+    any point.
+    """
+    backend_a = _make_backend()
+    backend_b = _make_backend()
+    binding = _make_binding()
+    adapter = _make_adapter(binding)
+
+    with (
+        patch(
+            "mellea.formatters.granite.intrinsics.obtain_lora",
+            return_value="/fake/local/adapter/path",
+        ),
+        patch(
+            "mellea.formatters.granite.intrinsics.obtain_io_yaml",
+            return_value="/fake/adapter.yaml",
+        ),
+        patch("builtins.open", mock_open(read_data="key: value")),
+        patch("yaml.safe_load", return_value={"parameters": {}}),
+    ):
+        backend_a.add_adapter(adapter)
+        assert binding.backend is backend_a
+
+        with pytest.raises(RuntimeError, match="cannot change the backend"):
+            backend_b.add_adapter(adapter)
+
+    # The failed registration attempt must not have touched backend_a's claim.
+    assert binding.backend is backend_a
+    assert backend_b._find_adapter("answerability") is None
 
 
 if __name__ == "__main__":

@@ -88,21 +88,31 @@ The generator will display the README and ask for confirmation before uploading 
 
 ## Using Adapter Functions
 
-You can now create a new adapter class for this model somewhere in your python project:
+Compose the adapter directly from an `Identity`, an output contract, and a
+weights binding — no dedicated adapter class needed:
 
 ```python
-from mellea.backends.adapters.adapter import CustomIntrinsicAdapter
+from mellea.backends.adapters import Adapter, Identity, LocalFileBinding, get_io_contract
+from mellea.backends.adapters.catalog import AdapterType
 
-class StemboltAdapter(CustomIntrinsicAdapter):
-    def __init__(self, base_model_name:str="granite-4.1-3b"):
-        super().__init__(
-            model_id="$USERNAME/stembolts", # REPLACE $USERNAME WITH YOUR HUGGING FACE USERNAME
-            intrinsic_name="stembolts",
-            base_model_name=base_model_name,
-        )
+def stembolt_adapter(base_model_name: str = "granite-4.1-3b") -> Adapter:
+    return Adapter(
+        identity=Identity(name="stembolts", adapter_type="alora"),
+        # get_io_contract falls back to a permissive dict contract for names
+        # outside the built-in catalog.
+        io_contract=get_io_contract("stembolts"),
+        weights=LocalFileBinding(
+            name="stembolts",
+            adapter_type=AdapterType.ALORA,
+            repo_id="$USERNAME/stembolts",  # REPLACE $USERNAME WITH YOUR HUGGING FACE USERNAME
+            # A custom, non-catalog adapter has no catalog entry to resolve
+            # revision=None from — pin it explicitly.
+            revision="main",
+        ),
+    )
 ```
 
-Using this adapter requires adding it to a backend:
+Registering it with a backend downloads and loads the weights:
 
 ```python
 from mellea.backends.cache import SimpleLRUCache
@@ -112,7 +122,7 @@ backend = LocalHFBackend(
     model_id="ibm-granite/granite-4.1-3b", cache=SimpleLRUCache(5)
 )
 
-backend.add_adapter(StemboltAdapter(base_model_name="granite-4.1-3b"))
+backend.add_adapter(stembolt_adapter(base_model_name="granite-4.1-3b"))
 ```
 
 ## Example Files

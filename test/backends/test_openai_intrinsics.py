@@ -223,7 +223,7 @@ def _registered_intrinsic_names(backend: OpenAIBackend) -> set[str]:
     """Return the set of intrinsic names that have registered adapters."""
     names = set()
     for adapter in backend._added_adapters.values():
-        names.add(adapter.intrinsic_name)
+        names.add(adapter.identity.name)
     return names
 
 

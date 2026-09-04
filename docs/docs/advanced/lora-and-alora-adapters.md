@@ -117,34 +117,41 @@ m alora upload ./checkpoints/my_adapter \
 
 ## Use the adapter in Mellea
 
-Load the trained adapter into a `LocalHFBackend` using `CustomIntrinsicAdapter`.
-
-> **Note:** `CustomIntrinsicAdapter` is deprecated in favor of the `Adapter` /
-> `WeightsBinding` model, but is still the only working way to load a
-> locally-trained custom adapter — `Adapter`'s weight-loading is not yet
-> implemented. This example will move to `Adapter` once that lands; see #1144.
+Load the trained adapter into a `LocalHFBackend` by composing an `Adapter`
+directly — `LocalFileBinding` accepts an arbitrary `repo_id`, so a locally
+trained, non-catalog adapter does not need a dedicated shim class.
 
 ```python
 from mellea.backends.huggingface import LocalHFBackend
-from mellea.backends.adapters.adapter import CustomIntrinsicAdapter
+from mellea.backends.adapters import Adapter, Identity, LocalFileBinding, get_io_contract
+from mellea.backends.adapters.catalog import AdapterType
 from mellea.stdlib.context import ChatContext
 from mellea import MelleaSession
 from mellea.stdlib.requirements import ALoraRequirement
 
 backend = LocalHFBackend(model_id="ibm-granite/granite-3.2-8b-instruct")
 
-adapter = CustomIntrinsicAdapter(
-    model_id="your-org/my-adapter",  # HF repo ID or local checkpoint path
-    base_model_name="granite-3.2-8b-instruct",
-    intrinsic_name="custom-failure-check",
+adapter = Adapter(
+    identity=Identity(name="custom-failure-check", adapter_type="alora"),
+    # get_io_contract falls back to a permissive dict contract for names
+    # outside the built-in catalog, so this works for a custom adapter too.
+    io_contract=get_io_contract("custom-failure-check"),
+    weights=LocalFileBinding(
+        name="custom-failure-check",
+        adapter_type=AdapterType.ALORA,
+        repo_id="your-org/my-adapter",  # HF repo ID or local checkpoint path
+        revision="main",  # a custom adapter has no catalog entry to resolve this from
+    ),
 )
-backend.add_adapter(adapter)
+backend.add_adapter(adapter)  # downloads and loads the weights
 
 m = MelleaSession(backend, ctx=ChatContext())
 
 failure_check = ALoraRequirement(
     "The failure mode must not be 'no_failure'.",
     intrinsic_name="custom-failure-check",
+    # Required for a name outside the intrinsics catalog — see Intrinsic.
+    adapter_types=(AdapterType.ALORA,),
 )
 result = m.instruct(
     "Write a triage summary based on this technician note: {{note}}",
@@ -155,17 +162,13 @@ print(str(result))
 # Output will vary — LLM responses depend on model and temperature.
 ```
 
-> **Note:** `CustomIntrinsicAdapter` emits an advisory `UserWarning` because
-> custom capability names are not part of Mellea's built-in capability registry.
-> The adapter is still registered for routing.
-
 `ALoraRequirement` routes validation through the adapter with the matching
-`intrinsic_name`. Create `CustomIntrinsicAdapter` before the requirement: its
-compatibility shim registers the custom name, which lets `ALoraRequirement`
-resolve it. The adapter runs at the `check_requirement` prompt position. Its
-`io.yaml` must transform the output into the
-`{"requirement_check": {"score": <float>}}` response schema; label-only
-adapter output is not compatible with `ALoraRequirement`.
+`intrinsic_name`. Call `backend.add_adapter(adapter)` before the requirement
+runs — it registers the custom name so `ALoraRequirement` can resolve it. The
+adapter runs at the `check_requirement` prompt position. Its `io.yaml` must
+transform the output into the `{"requirement_check": {"score": <float>}}`
+response schema; label-only adapter output is not compatible with
+`ALoraRequirement`.
 
 ## How automatic routing works
 

@@ -58,7 +58,7 @@ Demonstrates `rag.flag_hallucinated_content()` using `OpenAIBackend` with
 ### manual_adapter_loading.py
 
 Shows how to manually load embedded adapters using
-`EmbeddedIntrinsicAdapter.from_hub()` and `backend.add_adapter()`. Useful when
+`backend.register_embedded_adapter_model(intrinsic_name=...)`. Useful when
 you only need a subset of adapters or want more control over adapter
 registration.
 
