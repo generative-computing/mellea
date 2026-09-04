@@ -495,8 +495,8 @@ def test_parse_batch_support_output():
 def test_parse_batch_support_output_normalises_string_span_id():
     """Quoted numeric span IDs must map to the integer result key.
 
-    Without this normalisation, a valid model judgment is stored under ``"0"``
-    and the caller falls back to NOT_SUPPORTED when looking up integer key 0.
+    Without this normalisation, a valid model judgment is stored under `"0"`
+    and the caller falls back to NOT_SUPPORTED when looking up integer key `0`.
     """
     req = GroundednessRequirement()
 
