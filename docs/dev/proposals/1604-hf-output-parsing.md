@@ -1,8 +1,10 @@
 # HF backend reasoning (`<think>` tag) handling — design proposal
 
-> **Status:** Draft proposal, not agreed. Do not implement beyond the
-> narrow slice already merging in PR [#1616](https://github.com/generative-computing/mellea/pull/1616)
-> until the decisions in Part I §5 are settled.
+> **Status:** Draft proposal, not agreed. D1, D3, D6, and D4's *interim
+> unconditional* forward are implemented in PR
+> [#1616](https://github.com/generative-computing/mellea/pull/1616)
+> (still open as a draft). D2, D4's final gated form, and D5 remain
+> unimplemented pending the decisions in Part I §5.
 >
 > **Addresses:** [#1604](https://github.com/generative-computing/mellea/issues/1604)
 > (umbrella: "implement better hugging face output parsing" — this doc is the
@@ -177,7 +179,16 @@ original reviewer's suggestion at `huggingface.py:1853`): saving a raw
 unsplit copy and re-inlining `<think>...</think>` directly into `content`
 on replay — contradicts the wire-format convention every other backend
 follows, and is unnecessary now that `reasoning_content` is confirmed to
-be a real, consumed template variable (Part II §11).
+be a real, consumed template variable (Part II §11). **Conflict policy
+(shipped):** `to_chat()` sets `reasoning_content` on the wire dict before
+`merge_provider_fields()` runs — the same known-fields-first ordering
+`tool_calls`/`tool_call_id` already use — so an author-declared
+`Message.provider_fields` entry that also targets `reasoning_content` for
+`"huggingface"` is silently dropped in favour of Mellea's own value (debug-
+logged by `merge_provider_fields`, not raised), rather than either
+colliding unpredictably or raising. Covered by
+`test_to_chat_known_reasoning_content_wins_over_provider_fields`
+(Part II §15 item 11).
 
 **D5 — Whose replay policy governs: Mellea's or the template's own.**
 *Open — this is what the interim D4 forward deliberately left undecided.*
@@ -385,7 +396,7 @@ earlier draft of this doc mistakenly said. As of D4's interim forward
 the comment there now cites this doc and #1604 for the remaining,
 still-open gated-replay design (D5/Q3).
 
-**`Message._parse()`** (`mellea/stdlib/components/chat.py:207-292`): the HF
+**`Message._parse()`** (`mellea/stdlib/components/chat.py:212-292`): the HF
 fallback branch (there is no HF-specific provider branch — HF's raw
 response has no role/content structure to parse, so it falls through to a
 generic path) *does* correctly carry `thinking` forward: `Message(role="assistant",
@@ -643,19 +654,26 @@ plainly rather than imply universality:
 
 ### §15 Docs and tests
 
-All items below currently have zero coverage — required, not optional,
-before the design's full recommendations (D4/D2/D5) ship:
+Items 1, 2, 3, 9, and 11 are shipped alongside the code fixes in §16; the
+rest wait on this doc's remaining open questions (D4's final gated form,
+D2, Q2, Q4, Q5, Q7):
 
-1. Gate honours explicit `ModelOption.THINKING=False` with synthetic text
-   containing a literal `</think>` — asserts no split (the case F3/D3 fixes).
-2. Gate still splits when `THINKING` is unset (`None`) on a template that
-   thinks by default — guards against over-correcting D3.
-3. `to_chat()` with a non-empty `Message.thinking`: asserts `reasoning_content`
-   present on the assistant wire dict for a tool-call turn, absent for a
-   plain turn (existing `test/backends/test_utils.py` `to_chat` tests don't
-   set `.thinking` at all today).
+1. **Shipped.** Gate honours explicit `ModelOption.THINKING=False` with
+   synthetic text containing a literal `</think>` — asserts no split (F3/D3).
+   `test_post_processing_does_not_split_when_thinking_explicitly_false`.
+2. **Shipped.** Gate still splits when `THINKING` is unset (`None`) on a
+   template that thinks by default — guards against over-correcting D3.
+   `test_post_processing_splits_when_thinking_unset`.
+3. **Shipped, for the interim unconditional forward only.** `to_chat()`
+   with a non-empty `Message.thinking`: asserts `reasoning_content` present
+   on the assistant wire dict (`test_to_chat_attaches_reasoning_content_for_assistant_thinking`)
+   and absent when there is no captured reasoning
+   (`test_to_chat_omits_reasoning_content_when_no_thinking`). **Still
+   needed once D5 ships:** a version of this test asserting presence only
+   on a tool-call turn and absence on a plain turn, replacing the
+   unconditional assertion above.
 4. HF rows added to `test/backends/test_reasoning_replay.py` (currently
-   covers OpenAI/Ollama/WatsonX only).
+   covers OpenAI/Ollama/WatsonX only) — waits on D5.
 5. A rendered-prompt assertion: run `apply_chat_template` over a two-turn
    conversation and assert reasoning appears in the rendered string — the
    only test that catches Q4's silent-key-drop failure mode.
@@ -666,21 +684,31 @@ before the design's full recommendations (D4/D2/D5) ship:
    answer).
 7. Occurrence-rule test updated or explicitly justified if Q2 resolves
    toward last-occurrence (currently pinned first-occurrence at
-   `test/backends/test_huggingface_thinking.py:77-79`).
+   `test/backends/test_huggingface_thinking.py`, unchanged by this round).
 8. An intrinsic-level test pinning that adapter functions receive
    reasoning-free response text on HF (G4/Q7).
-9. A cache test: assert the key computed in `post_processing()` is
-   retrievable via `cache_get()` after the split (F1/D6) — would be the
-   first in-tree caller of `cache_get()`.
+9. **Shipped.** A cache test: the key computed in `post_processing()` is
+   retrievable via `cache_get()` after the split (F1/D6) — the first
+   in-tree caller of `cache_get()`.
+   `test_post_processing_cache_key_findable_after_split`.
 10. A guard test confirming a model whose template declares no thinking
-    variable never attempts a split.
+    variable never attempts a split — pre-existing, unchanged by this round
+    (`test_post_processing_does_not_split_without_thinking_template_var`).
+11. **Shipped.** Collision test, per D4's conflict policy: a
+    `Message.provider_fields` entry author-declaring `reasoning_content`
+    for `"huggingface"` is silently overridden by Mellea's own value,
+    confirming `to_chat()` sets `reasoning_content` before
+    `merge_provider_fields` runs, the same known-fields-first ordering
+    `tool_calls`/`tool_call_id` already use.
+    `test_to_chat_known_reasoning_content_wins_over_provider_fields`.
 
 ### §16 Migration / sequencing
 
 **Shipped in PR #1616, independent of this doc's remaining open questions
 (Q8):** D6 (cache-key reorder, with the test at §15 item 9 — the first
 in-tree `cache_get()` caller), D3 (resolved-value gate, with the tests at
-§15 items 1-2), G3 (`GenerateLog` reasoning), G5 (pin the `raw_value`
+§15 items 1-2), D4's conflict policy against `merge_provider_fields`
+(§15 item 11), G3 (`GenerateLog` reasoning), G5 (pin the `raw_value`
 intent with a comment), relabelling `_split_think_tags()`'s docstring as a
 `response_schema` fallback (§10), and — moved up from "waits for D5"
 because leaving it unaddressed would have shipped a silent multi-turn
