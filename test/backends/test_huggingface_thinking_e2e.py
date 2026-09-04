@@ -13,7 +13,6 @@ but that is a property of this specific model/tokenizer, not something a
 synthetic-string test can verify.
 """
 
-import os
 import re
 
 import pytest
@@ -22,15 +21,7 @@ from test.predicates import require_gpu
 
 torch = pytest.importorskip("torch", reason="torch not installed — install mellea[hf]")
 
-pytestmark = [
-    pytest.mark.huggingface,
-    pytest.mark.e2e,
-    require_gpu(min_vram_gb=8),
-    pytest.mark.skipif(
-        int(os.environ.get("CICD", 0)) == 1,
-        reason="Skipping HuggingFace thinking e2e tests in CI - qualitative test",
-    ),
-]
+pytestmark = [pytest.mark.huggingface, pytest.mark.e2e, require_gpu(min_vram_gb=8)]
 
 import mellea.backends.model_ids as model_ids
 from mellea import MelleaSession

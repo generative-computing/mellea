@@ -321,7 +321,6 @@ def _render_history(messages: list) -> str:
 
 
 @pytest.mark.integration
-@pytest.mark.huggingface
 def test_rendered_prompt_preserves_reasoning_on_tool_call_turn() -> None:
     """Regression/contract test against the real template (not a synthetic one):
     on a tool-call turn, the unconditional `reasoning_content` forward in
@@ -356,7 +355,6 @@ def test_rendered_prompt_preserves_reasoning_on_tool_call_turn() -> None:
 
 
 @pytest.mark.integration
-@pytest.mark.huggingface
 def test_rendered_prompt_drops_reasoning_on_plain_multi_turn() -> None:
     """Documents a known, currently-accepted gap: on a plain multi-turn shape
     (assistant turn with no tool call, followed by another user turn), the
