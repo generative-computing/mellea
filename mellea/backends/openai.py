@@ -497,30 +497,37 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             ValueError: If the source has no matching embedded adapter functions.
             TypeError: If an adapter from the source has an unsupported binding.
         """
-        # No lock here: both call sites (here, and this class's __init__) run
-        # single-threaded during construction, before the backend is exposed to
-        # any other thread — see the matching note on LocalHFBackend's twin.
-        discovered = _discover_embedded_adapters(
-            source,
-            revision=revision,
-            cache_dir=cache_dir,
-            intrinsic_name=intrinsic_name,
-        )
-        names = []
-        for adapter, config in discovered:
-            key = _composed_adapter_key(adapter)
-            # add_adapter() caches config atomically with registration now, so
-            # a refused duplicate (a different object already holding `key`)
-            # never reaches that write — no separate clobber guard needed for
-            # the config. The identity check below is still required, though:
-            # add_adapter() returns None on both success and silent refusal,
-            # so this is the only way to know whether *this* adapter is the
-            # one that actually ended up registered, for the `names` result.
-            self.add_adapter(adapter, config=config)
-            if self._added_adapters.get(key) is not adapter:
-                continue
-            names.append(adapter.identity.name)
-        return names
+        # Locked (unlike __init__'s call to this, which still runs
+        # single-threaded during construction, before the backend is exposed
+        # to any other thread): this method is now also the documented
+        # post-construction replacement for `EmbeddedIntrinsicAdapter.from_hub()`
+        # on a live backend, so a caller here can race another thread's
+        # `add_adapter`/`resolve_adapter` — both `add_adapter`'s
+        # read-then-write across `_added_adapters` and `_discover_embedded_adapters`'
+        # mutation of global `warnings` filter state need the same lock
+        # `add_adapter` itself would take via `resolve_adapter`.
+        with self._adapter_activation_lock():
+            discovered = _discover_embedded_adapters(
+                source,
+                revision=revision,
+                cache_dir=cache_dir,
+                intrinsic_name=intrinsic_name,
+            )
+            names = []
+            for adapter, config in discovered:
+                key = _composed_adapter_key(adapter)
+                # add_adapter() caches config atomically with registration now, so
+                # a refused duplicate (a different object already holding `key`)
+                # never reaches that write — no separate clobber guard needed for
+                # the config. The identity check below is still required, though:
+                # add_adapter() returns None on both success and silent refusal,
+                # so this is the only way to know whether *this* adapter is the
+                # one that actually ended up registered, for the `names` result.
+                self.add_adapter(adapter, config=config)
+                if self._added_adapters.get(key) is not adapter:
+                    continue
+                names.append(adapter.identity.name)
+            return names
 
     @property
     def _async_client(self) -> openai.AsyncOpenAI:

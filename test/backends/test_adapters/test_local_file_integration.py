@@ -13,7 +13,7 @@ fires hooks and deliberately opens no spans (#1464 documents the rule, #1466 add
 the spans from a plugin).
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, mock_open, patch
 
 import pytest
 
@@ -171,9 +171,17 @@ def test_add_adapter_registers_composed_adapter_via_backend():
     binding = _make_binding()
     adapter = _make_adapter(binding)
 
-    with patch(
-        "mellea.formatters.granite.intrinsics.obtain_lora",
-        return_value="/fake/local/adapter/path",
+    with (
+        patch(
+            "mellea.formatters.granite.intrinsics.obtain_lora",
+            return_value="/fake/local/adapter/path",
+        ),
+        patch(
+            "mellea.formatters.granite.intrinsics.obtain_io_yaml",
+            return_value="/fake/adapter.yaml",
+        ),
+        patch("builtins.open", mock_open(read_data="key: value")),
+        patch("yaml.safe_load", return_value={"parameters": {}}),
     ):
         backend.add_adapter(adapter)
 
@@ -203,9 +211,17 @@ def test_add_adapter_rejects_second_composed_registration_for_same_capability():
     other_binding = _make_binding()
     other_adapter = _make_adapter(other_binding)
 
-    with patch(
-        "mellea.formatters.granite.intrinsics.obtain_lora",
-        return_value="/fake/local/adapter/path",
+    with (
+        patch(
+            "mellea.formatters.granite.intrinsics.obtain_lora",
+            return_value="/fake/local/adapter/path",
+        ),
+        patch(
+            "mellea.formatters.granite.intrinsics.obtain_io_yaml",
+            return_value="/fake/adapter.yaml",
+        ),
+        patch("builtins.open", mock_open(read_data="key: value")),
+        patch("yaml.safe_load", return_value={"parameters": {}}),
     ):
         backend.add_adapter(adapter)
         backend.add_adapter(other_adapter)
@@ -231,9 +247,17 @@ def test_add_adapter_rejects_binding_already_bound_to_a_different_backend():
     binding = _make_binding()
     adapter = _make_adapter(binding)
 
-    with patch(
-        "mellea.formatters.granite.intrinsics.obtain_lora",
-        return_value="/fake/local/adapter/path",
+    with (
+        patch(
+            "mellea.formatters.granite.intrinsics.obtain_lora",
+            return_value="/fake/local/adapter/path",
+        ),
+        patch(
+            "mellea.formatters.granite.intrinsics.obtain_io_yaml",
+            return_value="/fake/adapter.yaml",
+        ),
+        patch("builtins.open", mock_open(read_data="key: value")),
+        patch("yaml.safe_load", return_value={"parameters": {}}),
     ):
         backend_a.add_adapter(adapter)
         assert binding.backend is backend_a

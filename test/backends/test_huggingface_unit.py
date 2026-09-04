@@ -862,6 +862,7 @@ async def test_composed_adapter_drives_generate_from_intrinsic(stub_backend):
     )
     backend._added_adapters = {}
     backend._composed_adapters = {"answerability_alora": composed}
+    backend._composed_adapter_configs = {"answerability_alora": {"parameters": {}}}
     backend.base_model_name = "granite-4.1-3b"
 
     def fake_transformers_inputs(request, tokenizer, model, ll_tokenizer=None):
@@ -920,15 +921,16 @@ async def test_composed_adapter_drives_generate_from_intrinsic(stub_backend):
         assert processed, "the composed local-file path must produce a response"
 
 
-def test_composed_local_file_config_is_cached_after_first_derivation():
-    """`_intrinsic_adapter_name_and_config` must not re-derive (re-download,
-    re-parse) a composed LocalFile adapter's io.yaml on every call.
+def test_composed_local_file_config_is_derived_once_at_registration_not_on_the_loop():
+    """A composed LocalFile adapter's io.yaml must be fetched once, synchronously,
+    during `add_adapter` — never lazily from `_intrinsic_adapter_name_and_config`.
 
-    Regression: the first version of this helper called
-    `intrinsics.obtain_io_yaml` (a Hugging Face Hub round trip) and re-parsed
-    the file on *every* invocation, unlike the shim it replaces (which loads
-    once in `IntrinsicAdapter.__init__`). Every composed-LocalFile intrinsic
-    call — the default path via `resolve_adapter` — paid that cost.
+    Regression: an earlier version derived io.yaml lazily, inline inside the
+    async `_generate_from_intrinsic` (via `_intrinsic_adapter_name_and_config`),
+    unlike the shim it replaces (`IntrinsicAdapter.__init__`, which loads once
+    at sync construction time). That put a blocking Hugging Face Hub round
+    trip on the asyncio event loop on first use of every composed-LocalFile
+    intrinsic — including the default path via `resolve_adapter`.
     """
     from mellea.backends.adapters._core import (
         Adapter as _AdapterCore,
@@ -939,7 +941,6 @@ def test_composed_local_file_config_is_cached_after_first_derivation():
     from mellea.backends.adapters.io_contracts import get_io_contract
 
     backend = _make_backend()
-    backend._composed_adapter_configs = {}
     binding = LocalFileBinding(
         name="answerability",
         adapter_type=AdapterType.ALORA,
@@ -956,18 +957,26 @@ def test_composed_local_file_config_is_cached_after_first_derivation():
 
     with (
         patch(
+            "mellea.formatters.granite.intrinsics.obtain_lora",
+            return_value="/fake/local/adapter/path",
+        ),
+        patch(
             "mellea.formatters.granite.intrinsics.obtain_io_yaml",
             return_value="/fake/adapter.yaml",
         ) as mock_obtain,
         patch("builtins.open", mock_open(read_data="key: value")),
         patch("yaml.safe_load", return_value={"parameters": {}}),
     ):
+        backend.add_adapter(composed)
+
+        mock_obtain.assert_called_once()
+
+        # A pure cache read from here on: no further obtain_io_yaml calls,
+        # even off the event loop.
         name1, config1 = backend._intrinsic_adapter_name_and_config(composed)
         name2, config2 = backend._intrinsic_adapter_name_and_config(composed)
 
-    assert mock_obtain.call_count == 1, (
-        "obtain_io_yaml must only run once; the second call should hit the cache"
-    )
+    mock_obtain.assert_called_once()
     assert name1 == name2 == "answerability"
     assert config1 is config2
 
@@ -1602,10 +1611,56 @@ def test_add_adapter_allows_composed_wrapper_of_a_standalone_registered_binding(
         io_contract=get_io_contract("answerability"),
         weights=binding,
     )
-    backend.add_adapter(composed)
+    with (
+        patch(
+            "mellea.formatters.granite.intrinsics.obtain_io_yaml",
+            return_value="/fake/adapter.yaml",
+        ),
+        patch("builtins.open", mock_open(read_data="key: value")),
+        patch("yaml.safe_load", return_value={"parameters": {}}),
+    ):
+        backend.add_adapter(composed)
 
     assert backend._composed_adapters["answerability_alora"] is composed
     assert backend._find_adapter("answerability") is composed
+
+
+def test_add_adapter_rejects_composed_adapter_with_mismatched_identity_and_weights_type():
+    """A composed Adapter whose `identity.adapter_type` disagrees with its
+    own `weights.adapter_type` must be refused at registration, not silently
+    accepted (NOTE(#1516)).
+
+    Regression: `_composed_adapter_key` (registration/lookup) keys on
+    `identity.adapter_type`, but the PEFT lifecycle keys on
+    `weights.qualified_name` (`weights.adapter_type`). A mismatch used to
+    register a real binding whose weights don't match the adapter variant a
+    caller asked for by name — silent wrong-variant activation, a duplicate
+    `list_adapters()` entry, and a registry leak on `remove_adapter`.
+    """
+    from mellea.backends.adapters._core import (
+        Adapter as _AdapterCore,
+        Identity,
+        LocalFileBinding,
+    )
+    from mellea.backends.adapters.io_contracts import get_io_contract
+
+    backend = _make_backend()
+    binding = LocalFileBinding(
+        name="answerability", adapter_type=AdapterType.LORA, repo_id="fake/repo"
+    )
+    mismatched = _AdapterCore(
+        identity=Identity(
+            name="answerability", adapter_type="alora", capability="answerability"
+        ),
+        io_contract=get_io_contract("answerability"),
+        weights=binding,
+    )
+
+    with pytest.raises(ValueError, match="must agree"):
+        backend.add_adapter(mismatched)
+
+    assert backend._find_adapter("answerability") is None
+    assert binding.backend is None
 
 
 def test_add_adapter_shim_refuses_name_already_claimed_by_composed_adapter():

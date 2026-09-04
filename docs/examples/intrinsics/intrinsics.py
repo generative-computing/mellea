@@ -56,7 +56,7 @@ ctx = ctx.add(Message("user", "Hi, can you help me?"))
 ctx = ctx.add(Message("assistant", "Hello; yes! What can I help with?"))
 
 # Generate from an intrinsic with the same name as the adapter. By default, it will look for
-# ALORA and then LORA adapters.
+# LORA and then ALORA adapters.
 out, new_ctx = mfuncs.act(
     Intrinsic(
         "requirement-check",

@@ -979,8 +979,11 @@ class Adapter:
     # right invariant — the two feed different lookup paths (registration and the
     # verbs key on the binding's `qualified_name`; `_find_adapter` scans on the
     # identity) and both return `None` on a miss, so a disagreement surfaces as
-    # "adapter not found" far from its cause. But it cannot be enforced yet:
-    # the deprecated shims carry a `_ShimWeightsBinding` with no `adapter_type`
-    # to compare at all (their identity tracks the configured type). Enforce
-    # the check once those constructions carry real, typed bindings (the shims
-    # retire in #1144).
+    # "adapter not found" far from its cause. It could not be enforced here
+    # because the deprecated shims carry a `_ShimWeightsBinding` with no
+    # `adapter_type` to compare at all (their identity tracks the configured
+    # type) — that no longer blocks the LocalFile/PEFT reality now that the
+    # shims retire in #1144, so `LocalHFBackend.add_adapter` enforces it there
+    # instead, at registration time. `EmbeddedBinding` has no `adapter_type` of
+    # its own, so the Embedded/Granite Switch reality still has nothing to
+    # cross-check against.

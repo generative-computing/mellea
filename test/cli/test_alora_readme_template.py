@@ -100,13 +100,15 @@ async def test_readme_template_async_wrapper_constructs_intrinsic_correctly():
 
     backend = MagicMock()
     backend.list_adapters.return_value = ["stembolts_alora"]
-    backend.generate_from_context = AsyncMock(return_value="mocked output")
+    fake_ctx = MagicMock()
+    backend.generate_from_context = AsyncMock(return_value=("mocked output", fake_ctx))
 
-    result = await namespace["async_stembolts"](
+    result, result_ctx = await namespace["async_stembolts"](
         description="a cracked stembolt", ctx=MagicMock(), backend=backend
     )
 
     assert result == "mocked output"
+    assert result_ctx is fake_ctx
     backend.generate_from_context.assert_awaited_once()
     action = backend.generate_from_context.await_args.args[0]
     assert isinstance(action, namespace["StemboltsIntrinsic"])

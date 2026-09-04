@@ -314,7 +314,7 @@ hooks fired by `AdapterMixin.adapter_scope()` and
 | ----------- | ---- | ---------- | ----------- |
 | `mellea.adapter_function.invocations` | Counter | `name`, `revision`, `binding_type`, `adapter_type`, `outcome` | Calls, split by outcome (`success`, `schema_error`, `error`) |
 | `mellea.adapter_function.phase_duration` | Histogram | `name`, `phase` | Lifecycle phase duration, in seconds |
-| `mellea.adapter_function.parse_failures` | Counter | `name`, `revision` | Calls that raised `AdapterSchemaMismatchError` *while still inside* `adapter_scope()` — see the known gap below |
+| `mellea.adapter_function.parse_failures` | Counter | `name`, `revision` | LocalFile/PEFT: calls that raised `AdapterSchemaMismatchError` *while still inside* `adapter_scope()` — see the known gap below. Embedded/Granite Switch: not subject to that gap — a malformed (non-JSON) response fires `outcome="schema_error"` directly, with no `adapter_scope()` involved |
 
 `revision` reports the *resolved* revision actually used, not the raw value
 passed in: for a `LocalFileBinding` constructed with `revision=None` (the
@@ -325,7 +325,11 @@ The `"unpinned"` label only appears when no revision could be resolved at
 all — for a `LocalFileBinding`, that means resolution itself failed (a
 non-catalog adapter with no explicit `revision` — see
 [Adding a custom adapter function](../tutorials/07-custom-adapter-function.md)).
-It is not a general filter for "running without a pinned revision."
+It is not a general filter for "running without a pinned revision." The
+Embedded/Granite Switch reality is the exception: weights are already baked
+into the served model, so there is no revision to resolve at all, and every
+Embedded invocation reports `revision="unpinned"` regardless of resolution
+success.
 
 `phase` is one of `"prepare"`, `"activate"`, `"generate"`, `"parse"`, or
 `"deactivate"` — though as of this writing only three are actually emitted:
@@ -337,15 +341,22 @@ reality (`EmbeddedBinding.apply_activation()`, which has no lifecycle to
 deactivate). `"generate"`/`"parse"` phase timing is tracked as future work in
 issue #1466.
 
-> **Known gap:** every production caller (`core.requirement_check()`,
-> `call_intrinsic()`, `ALoraRequirement`) parses the model's output *after*
-> `adapter_scope()` has already exited and fired `outcome="success"` — so a
-> real `AdapterSchemaMismatchError` from one of those call paths is correctly
-> raised to your code, but is not yet reflected in `parse_failures` or in
-> `invocations{outcome="schema_error"}`. Tracked in issue #1611. Until that's
-> fixed, catch `AdapterSchemaMismatchError` in application code (see
+> **Known gap (LocalFile/PEFT only):** every production caller
+> (`core.requirement_check()`, `call_intrinsic()`, `ALoraRequirement`) parses
+> the model's output *after* `adapter_scope()` has already exited and fired
+> `outcome="success"` — so a real `AdapterSchemaMismatchError` from one of
+> those call paths is correctly raised to your code, but is not yet reflected
+> in `parse_failures` or in `invocations{outcome="schema_error"}`. Tracked in
+> issue #1611. Until that's fixed, catch `AdapterSchemaMismatchError` in
+> application code (see
 > [Adapter schema migrations](../tutorials/08-adapter-schema-migrations.md))
-> rather than relying on these metrics to surface schema drift.
+> rather than relying on these metrics to surface schema drift for that
+> reality.
+>
+> This gap does not apply to the Embedded/Granite Switch reality: a malformed
+> response there fires `outcome="schema_error"` (and increments
+> `parse_failures`) directly from the response-processing code, with no
+> `adapter_scope()` in that path to have already exited.
 
 ### Adapter function dashboard queries
 
