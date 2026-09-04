@@ -530,7 +530,7 @@ def test_parse_batch_support_output_ignores_non_string_nested_support_level(
     assert result == {0: "NOT_SUPPORTED"}
 
 
-@pytest.mark.parametrize("span_id", [True, -1, 1.5, "not-an-index", "2"])
+@pytest.mark.parametrize("span_id", [True, -1, 1.5, "not-an-index", "2", "²"])
 def test_parse_batch_support_output_ignores_invalid_span_id(span_id: object):
     """Invalid model-returned span IDs must not become result keys."""
     req = GroundednessRequirement()
@@ -543,7 +543,7 @@ def test_parse_batch_support_output_ignores_invalid_span_id(span_id: object):
 
 
 def test_parse_necessity_output_normalises_model_types():
-    """Necessity parsing must tolerate quoted IDs and non-string labels."""
+    """Necessity parsing must tolerate quoted IDs and default invalid labels safely."""
     req = GroundednessRequirement()
     spans = [
         {"begin": 0, "end": 5, "text": "Fact."},
@@ -556,7 +556,65 @@ def test_parse_necessity_output_normalises_model_types():
         spans,
     )
 
-    assert result == {(0, 5): True, (7, 13): False}
+    assert result == {(0, 5): True, (7, 13): True}
+
+
+@pytest.mark.parametrize(
+    "output_text",
+    [
+        (
+            '[{"span_id": 0, "needs_citation": "no"}, '
+            '{"span_id": "0", "needs_citation": "yes"}]'
+        ),
+        (
+            '[{"span_id": "0", "needs_citation": "yes"}, '
+            '{"span_id": 0, "needs_citation": "no"}]'
+        ),
+    ],
+)
+def test_parse_necessity_output_duplicate_ids_require_citations(output_text: str):
+    """Duplicate span judgments must retain the conservative result."""
+    req = GroundednessRequirement()
+    spans = [{"begin": 0, "end": 5, "text": "Fact."}]
+
+    result = req._parse_necessity_output(output_text, spans)
+
+    assert result == {(0, 5): True}
+
+
+@pytest.mark.parametrize(
+    "output_text",
+    [
+        (
+            '[{"span_id": 0, "support_level": "NOT_SUPPORTED"}, '
+            '{"span_id": "0", "support_level": "FULLY_SUPPORTED"}]'
+        ),
+        (
+            '[{"span_id": "0", "support_level": "FULLY_SUPPORTED"}, '
+            '{"span_id": 0, "support_level": "NOT_SUPPORTED"}]'
+        ),
+    ],
+)
+def test_parse_batch_support_output_duplicate_ids_are_pessimistic(output_text: str):
+    """Duplicate span judgments must retain the least-supported result."""
+    req = GroundednessRequirement()
+
+    result = req._parse_batch_support_output(output_text, 1)
+
+    assert result == {0: "NOT_SUPPORTED"}
+
+
+def test_malformed_necessity_label_keeps_span_subject_to_groundedness():
+    """Malformed necessity output must not let an unsupported span pass."""
+    req = GroundednessRequirement()
+    spans = [{"begin": 0, "end": 5, "text": "Fact."}]
+    necessity = req._parse_necessity_output(
+        '[{"span_id": 0, "needs_citation": 1}]', spans
+    )
+
+    passed, _ = req._build_groundedness_result("Fact.", [], necessity, {})
+
+    assert not passed
 
 
 def test_parse_batch_support_output_nested_citations():

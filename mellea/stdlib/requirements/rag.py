@@ -21,6 +21,12 @@ from ..context import ChatContext
 
 logger = MelleaLogger.get_logger()
 
+_SUPPORT_LEVEL_RANK: dict[str, int] = {
+    "FULLY_SUPPORTED": 0,
+    "PARTIALLY_SUPPORTED": 1,
+    "NOT_SUPPORTED": 2,
+}
+
 
 def _normalise_span_id(raw: object, expected_count: int) -> int | None:
     """Normalise a model-returned span identifier."""
@@ -28,8 +34,11 @@ def _normalise_span_id(raw: object, expected_count: int) -> int | None:
         return None
     if isinstance(raw, int):
         span_id = raw
-    elif isinstance(raw, str) and raw.strip().isdigit():
-        span_id = int(raw.strip())
+    elif isinstance(raw, str):
+        try:
+            span_id = int(raw.strip())
+        except ValueError:
+            return None
     else:
         return None
 
@@ -39,6 +48,19 @@ def _normalise_span_id(raw: object, expected_count: int) -> int | None:
 def _normalise_label(raw: object) -> str:
     """Normalise a model-returned string label."""
     return raw.strip() if isinstance(raw, str) else ""
+
+
+def _normalise_needs_citation(raw: object) -> bool:
+    """Normalise a model-returned citation-necessity label."""
+    if not isinstance(raw, str):
+        return True
+
+    label = raw.strip().lower()
+    if label in ("yes", "true", "1"):
+        return True
+    if label in ("no", "false", "0"):
+        return False
+    return True
 
 
 class GroundednessRequirement(Requirement):
@@ -720,7 +742,7 @@ class GroundednessRequirement(Requirement):
                 # Handle nested format: {"span_id": 0, "evidence": [{"support_level": "..."}]}
                 # Checks both "evidence" and "citations" (prior key, kept defensively).
                 if not support_level_raw:
-                    nested_source: list = []
+                    nested_source: list[object] = []
                     for nested_key in ("evidence", "citations"):
                         nested_value = judgment.get(nested_key)
                         if isinstance(nested_value, list):
@@ -761,7 +783,13 @@ class GroundednessRequirement(Requirement):
                 else:
                     support_level = "NOT_SUPPORTED"
 
-                result[span_id] = support_level
+                existing_support = result.get(span_id)
+                if (
+                    existing_support is None
+                    or _SUPPORT_LEVEL_RANK[support_level]
+                    > _SUPPORT_LEVEL_RANK[existing_support]
+                ):
+                    result[span_id] = support_level
 
             # Ensure all expected spans have results (default to NOT_SUPPORTED if missing)
             for i in range(expected_count):
@@ -807,22 +835,19 @@ class GroundednessRequirement(Requirement):
                     continue
 
                 span_id = _normalise_span_id(judgment.get("span_id"), len(spans))
-                needs_citation_flag = _normalise_label(
+                needs_citation = _normalise_needs_citation(
                     judgment.get("needs_citation")
-                ).lower()
+                )
 
                 logger.debug(
-                    f"  Judgment: span_id={span_id}, needs_citation={needs_citation_flag}"
+                    f"  Judgment: span_id={span_id}, needs_citation={needs_citation}"
                 )
 
                 if span_id is not None:
                     span = spans[span_id]
                     span_key = (span["begin"], span["end"])
-                    # Handle variations: "yes", "true", "1" -> True
-                    span_necessity[span_key] = needs_citation_flag in (
-                        "yes",
-                        "true",
-                        "1",
+                    span_necessity[span_key] = (
+                        span_necessity.get(span_key, False) or needs_citation
                     )
 
             # Ensure all spans are in the result
