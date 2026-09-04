@@ -99,10 +99,12 @@ def to_chat(
 
     # NOTE: `self.formatter.to_chat_messages` explicitly skips `Message` objects. However, we need
     # to print `Message`s to correctly serialize any documents with the message. Do the printing here.
-    # NOTE: reasoning is never replayed on the HF chat path — we serialize only `content` and never
-    # consult `should_replay_reasoning` (unlike the OpenAI/LiteLLM/Watsonx/Ollama chat paths). This is
-    # acceptable today because HF has a capture gap (per #1201) and never populates `Message.thinking`
-    # to begin with; when that gap is closed, replay must be wired in here.
+    # NOTE: `Message.thinking` is forwarded as `reasoning_content` (the key Granite/Qwen3
+    # templates consume) whenever the message is an assistant turn with captured reasoning.
+    # This effectively restores replay only on tool-call turns: Granite's own
+    # `truncate_history_thinking` gate strips reasoning on plain turns regardless, matching
+    # the #1201 cross-backend consensus (replay on tool-call turns only) rather than
+    # extending it. See test_rendered_prompt_*_turn in test_huggingface_thinking.py.
     ctx_as_conversation: list = []
     for m in ctx_as_message_list:
         msg_dict: dict = {"role": m.role, "content": formatter.print(m)}
@@ -113,6 +115,8 @@ def to_chat(
             msg_dict["tool_calls"] = m.tool_calls
         if m.tool_call_id:
             msg_dict["tool_call_id"] = m.tool_call_id
+        if m.role == "assistant" and m.thinking:
+            msg_dict["reasoning_content"] = m.thinking
         # Merge any author-declared provider fields (Mellea's known fields win;
         # a mismatched target raises). Must run after the known fields are set.
         msg_dict = merge_provider_fields(msg_dict, m.provider_fields, "huggingface")
