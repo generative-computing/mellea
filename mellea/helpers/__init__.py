@@ -27,6 +27,7 @@ from .openai_compatible_helpers import (
     merge_provider_fields,
     message_to_openai_message,
     messages_to_docs,
+    prefetch_audio_urls,
     should_replay_reasoning,
 )
 from .server_type import (
@@ -49,6 +50,7 @@ __all__ = [
     "merge_provider_fields",
     "message_to_openai_message",
     "messages_to_docs",
+    "prefetch_audio_urls",
     "send_to_queue",
     "should_replay_reasoning",
     "wait_for_all_mots",

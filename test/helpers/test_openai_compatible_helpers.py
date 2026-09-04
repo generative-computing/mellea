@@ -7,6 +7,7 @@ import base64
 import json
 from datetime import datetime
 from decimal import Decimal
+from unittest.mock import patch
 
 import pytest
 
@@ -25,6 +26,7 @@ from mellea.helpers.openai_compatible_helpers import (
     extract_model_tool_requests,
     message_to_openai_message,
     messages_to_docs,
+    prefetch_audio_urls,
 )
 from mellea.stdlib.components import Document, Message, ToolMessage
 
@@ -533,12 +535,52 @@ class TestMessageToOpenaiMessageAudio:
         assert result["content"][0]["type"] == "text"
         assert result["content"][1]["type"] == "input_audio"
 
-    def test_audio_url_block_raises(self):
-        """AudioUrlBlock cannot be serialised to the OpenAI schema and must raise."""
+    def test_audio_url_block_resolved_to_inline_base64(self):
+        """AudioUrlBlock is downloaded and inlined, mirroring ImageUrlBlock for Ollama.
+
+        OpenAI Chat Completions has no audio-by-URL content part, so the URL is resolved
+        rather than rejected. The download is patched out: this asserts the wiring, not
+        the network.
+        """
         audio_url = AudioUrlBlock("https://example.com/audio.wav", format="wav")
         msg = Message(role="user", content="listen", audio=[audio_url])
-        with pytest.raises(ValueError, match="AudioUrlBlock"):
-            message_to_openai_message(msg)
+
+        with patch.object(
+            AudioUrlBlock, "resolve_base64", return_value=_B64_WAV
+        ) as mock_resolve:
+            result = message_to_openai_message(msg)
+
+        mock_resolve.assert_called_once()
+        part = result["content"][1]
+        assert part["type"] == "input_audio"
+        assert part["input_audio"] == {"data": _B64_WAV, "format": "wav"}
+
+    async def test_prefetch_audio_urls_warms_cache_off_thread(self):
+        """prefetch_audio_urls resolves every URL block so the sync serializer is a hit."""
+        blocks = [
+            AudioUrlBlock("https://example.com/a.wav", format="wav"),
+            AudioUrlBlock("https://example.com/b.mp3", format="mp3"),
+        ]
+        msgs = [Message(role="user", content="x", audio=blocks)]
+
+        with patch.object(
+            AudioUrlBlock, "resolve_base64", return_value=_B64_WAV
+        ) as mock_resolve:
+            await prefetch_audio_urls(msgs)
+
+        assert mock_resolve.call_count == 2
+
+    async def test_prefetch_audio_urls_noop_without_url_blocks(self):
+        """Nothing to fetch must not touch resolve_base64 at all."""
+        msgs = [
+            Message(
+                role="user", content="x", audio=[AudioBlock(_B64_WAV, format="wav")]
+            ),
+            Message(role="user", content="y"),
+        ]
+        with patch.object(AudioUrlBlock, "resolve_base64") as mock_resolve:
+            await prefetch_audio_urls(msgs)
+        mock_resolve.assert_not_called()
 
     def test_empty_audio_list(self):
         """Empty audio list triggers multimodal content format (unlike None)."""

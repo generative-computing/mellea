@@ -48,6 +48,7 @@ from ..helpers import (
     is_vllm_server_with_structured_output,
     message_to_openai_message,
     messages_to_docs,
+    prefetch_audio_urls,
     send_to_queue,
     should_replay_reasoning,
 )
@@ -810,6 +811,27 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         #       Intrinsics modify the context through their rewriters.
         messages: list[Message] = self.formatter.to_chat_messages(linearized_context)
 
+        # Intrinsics render through IntrinsicsRewriter, which validates the conversation
+        # against a strict ChatCompletion whose message `content` must be a plain string.
+        # Any multimodal content list fails that with a dozen pydantic errors naming
+        # message variants the caller never chose, so reject it here with something
+        # actionable. Mirrors LocalHFBackend, which guards its intrinsic path the same way
+        # (see `_check_no_multimodal_blocks`). Checked before the prefetch below so a URL
+        # block is not downloaded only to be rejected.
+        if any(m.audio for m in messages):
+            raise ValueError(
+                "OpenAIBackend does not support audio on the intrinsic path: intrinsics "
+                "are evaluated over a text-only conversation. Remove audio from the "
+                "context before calling an intrinsic, or transcribe it and pass the "
+                "transcript as text."
+            )
+
+        # Same off-thread resolution as the chat path below. The shared cache makes this
+        # a hit whenever a prior generation touched the URL, but an intrinsic run against
+        # a hand-built ChatContext (the documented pattern for the intrinsic helpers)
+        # would otherwise download it inline and block the event loop.
+        await prefetch_audio_urls(messages)
+
         # Extract system prompt and prepend to conversation.
         system_prompt = model_options.get(ModelOption.SYSTEM_PROMPT, "")
         conversation: list[dict] = []
@@ -1077,6 +1099,10 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         # _generate is responsible for logging a warning in that case.
 
         conversation: list[dict] = []
+
+        # Resolve any audio URLs off-thread so the sync serializer below hits the cache
+        # instead of blocking the event loop on a download.
+        await prefetch_audio_urls(messages)
 
         system_prompt = model_opts.get(ModelOption.SYSTEM_PROMPT, "")
         if system_prompt != "":

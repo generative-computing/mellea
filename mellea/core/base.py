@@ -22,6 +22,7 @@ import base64
 import binascii
 import datetime
 import enum
+import errno
 import logging
 import os
 import threading
@@ -246,6 +247,29 @@ class ImageUrlBlock(CBlock):
         return f"ImageUrlBlock({self.value}, {self._meta.__repr__()})"
 
 
+_ERROR_ECHO_MAX_CHARS: int = 120
+"""Longest prefix of a caller-supplied string echoed back in an error message."""
+
+
+def _truncate_for_error(s: str) -> str:
+    """Quote a caller-supplied string for an error message, bounding its length.
+
+    Audio helpers accept paths and URLs, so a caller who passes a base64 payload by
+    mistake would otherwise put an entire clip into an exception -- and from there into
+    logs. Truncating at the point of formatting keeps that bounded.
+
+    Args:
+        s (str): The caller-supplied string to echo.
+
+    Returns:
+        str: A repr-quoted value, suffixed with an elision marker and the original
+            length when it was truncated.
+    """
+    if len(s) <= _ERROR_ECHO_MAX_CHARS:
+        return repr(s)
+    return f"{s[:_ERROR_ECHO_MAX_CHARS]!r}... ({len(s)} chars total)"
+
+
 class AudioBlock(CBlock):
     """An `AudioBlock` represents audio as base64 data.
 
@@ -331,6 +355,178 @@ class AudioBlock(CBlock):
         except (binascii.Error, ValueError):
             return False
 
+    @staticmethod
+    def detect_format(data: bytes) -> str | None:
+        """Identify an audio format from the magic bytes of raw (decoded) audio data.
+
+        Detection is by content, not by file extension, so a mislabelled file is
+        reported accurately. Formats other than `wav` and `mp3` are still reported —
+        OpenAI-compatible endpoints accept only those two, but other backends may
+        accept more, matching the pass-through behaviour of the data-URI path.
+
+        Args:
+            data (bytes): The raw, already-decoded audio bytes to inspect.
+
+        Returns:
+            str | None: The detected format (e.g. `"wav"`), or `None` if the bytes
+                do not match a format this function recognises.
+        """
+        # WAV / RIFF: form type must be WAVE, so a RIFF-wrapped AVI is not mistaken for audio.
+        if data[:4] == b"RIFF" and data[8:12] == b"WAVE":
+            return "wav"
+        if data[:4] == b"fLaC":
+            return "flac"
+        if data[:4] == b"OggS":
+            return "ogg"
+        # MP3: an ID3v2 tag, or a bare MPEG audio frame header.
+        if data[:3] == b"ID3":
+            return "mp3"
+        if (
+            len(data) >= 2
+            and data[0] == 0xFF
+            and (data[1] & 0xE0) == 0xE0
+            # The 11-bit sync word alone also matches ADTS AAC, whose sync is 12 bits
+            # (0xFFF...) — so 0xF1 passes the check above and AAC would be reported as
+            # mp3. The 2-bit layer field separates them: MPEG audio uses Layer I/II/III
+            # (0b11/0b10/0b01) while ADTS always encodes 0b00.
+            and (data[1] & 0x06) != 0
+        ):
+            return "mp3"
+        return None
+
+    @classmethod
+    def from_bytes(
+        cls, data: bytes, format: str | None = None, meta: dict[str, Any] | None = None
+    ) -> AudioBlock:
+        """Creates an `AudioBlock` from raw audio bytes, base64-encoding them.
+
+        Args:
+            data (bytes): The raw audio bytes.
+            format (str | None): The audio format. When `None`, it is detected from
+                the data's magic bytes via `detect_format`.
+            meta (dict[str, Any] | None): Optional metadata to associate with the block.
+
+        Returns:
+            AudioBlock: A new `AudioBlock` wrapping the base64-encoded audio.
+
+        Raises:
+            ValueError: If `format` is `None` and the format cannot be detected from
+                the data.
+        """
+        if format is None:
+            detected = cls.detect_format(data)
+            if detected is None:
+                raise ValueError(
+                    "Could not detect the audio format from the data. "
+                    "Pass format explicitly (e.g. format='wav') if you know it."
+                )
+            format = detected
+        return cls(base64.b64encode(data).decode("utf-8"), format, meta)
+
+    @classmethod
+    def from_file(
+        cls,
+        path: str | os.PathLike[str],
+        format: str | None = None,
+        meta: dict[str, Any] | None = None,
+    ) -> AudioBlock:
+        """Creates an `AudioBlock` by reading an audio file from disk.
+
+        This saves callers from base64-encoding the file by hand. The format is
+        detected from the file's contents rather than its extension.
+
+        Args:
+            path (str | os.PathLike[str]): Path to an audio file.
+            format (str | None): The audio format. When `None`, it is detected from
+                the file's magic bytes via `detect_format`.
+            meta (dict[str, Any] | None): Optional metadata to associate with the block.
+
+        Returns:
+            AudioBlock: A new `AudioBlock` wrapping the base64-encoded file contents.
+
+        Raises:
+            ValueError: If `path` cannot be opened (reported as a bad path rather than
+                surfacing the raw OS error, whose text would repeat the whole argument),
+                or if `format` is `None` and the format cannot be detected from the
+                file's contents.
+        """
+        # Callers reach here with a mistaken URL or base64 payload, so anything echoed
+        # back must be truncated -- a full clip's base64 in an exception ends up in logs.
+        shown = _truncate_for_error(os.fspath(path))
+        try:
+            with open(path, "rb") as f:
+                data = f.read()
+        except OSError as e:
+            # Deliberately not interpolating `e`: OSError's str() repeats the untruncated
+            # filename, which defeats the truncation above. The type and errno are the
+            # actionable parts.
+            code = errno.errorcode.get(e.errno, e.errno) if e.errno is not None else "?"
+            raise ValueError(
+                f"Could not read audio file {shown}: expected a path to an audio file "
+                f"on disk ({type(e).__name__}: {code}). To load remote audio use "
+                "AudioBlock.from_url() or AudioUrlBlock; for raw bytes use "
+                "AudioBlock.from_bytes(); for base64 data use "
+                "AudioBlock(value, format=...)."
+            ) from e
+        if format is None:
+            # Detect once here so the error can name the path, then hand the result to
+            # from_bytes rather than making it sniff the same bytes again.
+            format = cls.detect_format(data)
+            if format is None:
+                raise ValueError(
+                    f"Could not identify the audio format of {shown}. "
+                    "Pass format explicitly (e.g. format='wav') if you know it."
+                )
+        return cls.from_bytes(data, format, meta)
+
+    @classmethod
+    def from_url(
+        cls, url: str, format: str | None = None, meta: dict[str, Any] | None = None
+    ) -> AudioBlock:
+        """Creates an `AudioBlock` by downloading audio from a URL.
+
+        Use this when you want the fetch to happen now and to fail here if it cannot.
+        Passing an `AudioUrlBlock` instead defers the same download to send time, where
+        it is memoized per URL — prefer that when the clip is reused across turns.
+
+        Args:
+            url (str): An `http://` or `https://` URL pointing to an audio file.
+            format (str | None): The audio format. When `None`, it is detected from the
+                downloaded bytes' magic bytes via `detect_format`.
+            meta (dict[str, Any] | None): Optional metadata to associate with the block.
+
+        Returns:
+            AudioBlock: A new `AudioBlock` wrapping the base64-encoded audio.
+
+        Raises:
+            ValueError: If `url` is not an `http://`/`https://` URL, the download fails
+                or exceeds the size cap, or `format` is `None` and the format cannot be
+                detected from the downloaded bytes.
+        """
+        if not url.startswith(("http://", "https://")):
+            raise ValueError(
+                f"AudioBlock.from_url requires an http:// or https:// URL; got: "
+                f"{_truncate_for_error(url)}. For a local file use "
+                "AudioBlock.from_file()."
+            )
+        encoded = _cached_download_audio_as_base64(url)
+        if format is None:
+            format = cls.detect_format(base64.b64decode(encoded))
+            if format is None:
+                # The download is already cached at this point. A URL that transiently
+                # served a non-audio 200 would otherwise stay cached, so every retry
+                # would replay the bad body instead of re-fetching. Drop it.
+                # A concurrent reader can still observe the entry between insert and
+                # eviction; closing that window means holding the cache lock across the
+                # download, which is not worth it for a transient error path.
+                _evict_audio_url_from_cache(url)
+                raise ValueError(
+                    f"Could not identify the audio format of the data at "
+                    f"{_truncate_for_error(url)}. Pass format explicitly "
+                    "(e.g. format='wav') if you know it."
+                )
+        return cls(encoded, format, meta)
+
     def __repr__(self) -> str:
         """Provides a python-parsable representation of the block (usually)."""
         return f"AudioBlock({self.value}, {self.format}, {self._meta.__repr__()})"
@@ -338,6 +534,12 @@ class AudioBlock(CBlock):
 
 class AudioUrlBlock(CBlock):
     """An `AudioUrlBlock` represents audio as a URL.
+
+    OpenAI Chat Completions has no audio-by-URL content part, so backends resolve the
+    URL to base64 on your behalf via
+    `resolve_base64`, mirroring how `ImageUrlBlock` is handled for backends that
+    require inline images. The download is memoized per URL, so re-sending the same
+    clip across conversation turns fetches it once.
 
     Args:
         value (str): A URL string pointing to the audio.
@@ -362,9 +564,139 @@ class AudioUrlBlock(CBlock):
         super().__init__(value, meta)
         self.format = format
 
+    def resolve_base64(self) -> str:
+        """Return the audio as raw base64, downloading it once per URL.
+
+        Providers require audio inline, so this is how an `AudioUrlBlock` reaches a
+        backend. The result is memoized in a process-wide, URL-keyed cache, so reusing
+        the URL across conversation turns does not re-fetch it. This call is blocking;
+        async callers should offload it with `asyncio.to_thread`.
+
+        Returns:
+            str: The base64-encoded audio at the URL, with no data URI prefix.
+
+        Raises:
+            ValueError: If the response exceeds the size cap, or the audio cannot be
+                downloaded.
+        """
+        return _cached_download_audio_as_base64(str(self.value))
+
     def __repr__(self) -> str:
         """Provides a python-parsable representation of the block (usually)."""
         return f"AudioUrlBlock({self.value}, {self.format}, {self._meta.__repr__()})"
+
+
+_AUDIO_DOWNLOAD_TIMEOUT_S: float = 30.0
+"""Socket timeout (seconds) applied to audio URL downloads.
+
+Longer than the image timeout: audio bodies are typically far larger.
+"""
+
+_AUDIO_DOWNLOAD_MAX_BYTES: int = 50 * 1024 * 1024
+"""Maximum accepted size (bytes) of a downloaded audio body."""
+
+_AUDIO_CACHE_MAX_ENTRIES: int = 32
+"""Maximum number of URL -> base64 entries retained by the audio download cache.
+
+Smaller than the image cache because audio payloads are much larger per entry.
+"""
+
+_audio_base64_cache: OrderedDict[str, str] = OrderedDict()
+"""Process-wide LRU cache mapping audio URLs to their base64-encoded payload."""
+
+_audio_base64_cache_lock = threading.Lock()
+
+
+def _evict_audio_url_from_cache(url: str) -> None:
+    """Drop a URL's cached payload so the next request re-downloads it.
+
+    Used when a download succeeded at the HTTP level but the body turned out not to be
+    usable audio: keeping it would make every retry replay the bad response.
+
+    Args:
+        url: The URL whose cache entry to remove. A no-op if absent.
+    """
+    with _audio_base64_cache_lock:
+        _audio_base64_cache.pop(url, None)
+
+
+def _cached_download_audio_as_base64(url: str) -> str:
+    """Download audio as base64, memoizing the result per URL.
+
+    Mirrors `_cached_download_image_as_base64`: the download runs outside the lock so
+    concurrent fetches of distinct URLs proceed in parallel, and only the small cache
+    read/write is serialized. Consequently two callers racing on a cold URL may both
+    fetch it — the result is identical and the last writer simply wins, so the duplicate
+    work is the only cost.
+
+    Args:
+        url: An `http://` or `https://` URL pointing to an audio file.
+
+    Returns:
+        str: The base64-encoded audio at the URL.
+
+    Raises:
+        ValueError: If the response exceeds the size cap or the audio cannot be
+            downloaded.
+    """
+    with _audio_base64_cache_lock:
+        cached = _audio_base64_cache.get(url)
+        if cached is not None:
+            _audio_base64_cache.move_to_end(url)  # mark as most-recently used
+            return cached
+
+    encoded = _download_audio_as_base64(url)
+
+    with _audio_base64_cache_lock:
+        _audio_base64_cache[url] = encoded
+        _audio_base64_cache.move_to_end(url)
+        while len(_audio_base64_cache) > _AUDIO_CACHE_MAX_ENTRIES:
+            _audio_base64_cache.popitem(last=False)  # evict least-recently used
+    return encoded
+
+
+def _download_audio_as_base64(url: str) -> str:
+    """Download audio from a URL and return it base64-encoded.
+
+    Unlike the image equivalent there is no decode/re-encode step: audio bytes are
+    passed through as-is, so the caller's declared format stays authoritative and no
+    transcoding is implied.
+
+    A timeout bounds slow responses and the body is streamed with a size cap to guard
+    against memory exhaustion. This function is blocking; async callers should offload
+    it with `asyncio.to_thread`.
+
+    Args:
+        url: An `http://` or `https://` URL pointing to an audio file.
+
+    Returns:
+        str: The base64-encoded audio bytes.
+
+    Raises:
+        ValueError: If the response exceeds the size cap or the audio cannot be
+            downloaded.
+    """
+    try:
+        with requests.get(  # scheme validated by caller
+            url, timeout=_AUDIO_DOWNLOAD_TIMEOUT_S, stream=True
+        ) as response:
+            response.raise_for_status()
+            declared = response.headers.get("Content-Length")
+            if declared is not None and int(declared) > _AUDIO_DOWNLOAD_MAX_BYTES:
+                raise ValueError(
+                    f"Audio at {url!r} exceeds the {_AUDIO_DOWNLOAD_MAX_BYTES}-byte limit"
+                )
+            # Stream so an undeclared/lying Content-Length can't exhaust memory.
+            raw = response.raw.read(_AUDIO_DOWNLOAD_MAX_BYTES + 1, decode_content=True)
+        if len(raw) > _AUDIO_DOWNLOAD_MAX_BYTES:
+            raise ValueError(
+                f"Audio at {url!r} exceeds the {_AUDIO_DOWNLOAD_MAX_BYTES}-byte limit"
+            )
+        if not raw:
+            raise ValueError(f"Audio at {url!r} was empty")
+    except (requests.RequestException, OSError, ValueError) as e:
+        raise ValueError(f"Failed to download audio from URL {url!r}: {e}") from e
+    return base64.b64encode(raw).decode("utf-8")
 
 
 _IMAGE_DOWNLOAD_TIMEOUT_S: float = 10.0
@@ -2087,57 +2419,129 @@ def blockify(s: str | Span) -> Span:
             raise Exception("Type Error")
 
 
+def _attachments_from_representation(
+    c: Component, field: str, expected: tuple[type, ...]
+) -> None | list:
+    """Read an attachment list off a component's `TemplateRepresentation`.
+
+    A component can carry attachments two ways: as an attribute (`Message.audio`,
+    `Instruction.images`) or purely by declaring them on the `TemplateRepresentation`
+    its `format_for_llm` returns. Attribute-less components are invisible to the
+    attribute check, so backends that reject unsupported modalities would drop their
+    attachments silently — the failure this fallback exists to prevent.
+
+    Only called when the attribute is absent, so components that expose one (every
+    built-in carrier does) never pay for the extra `format_for_llm` call.
+
+    Args:
+        c: The `Component` whose representation is inspected.
+        field: The `TemplateRepresentation` field to read — `"images"` or `"audio"`.
+        expected: The block types every element must be an instance of. Validated here
+            so the declared return type is not a lie the backend discovers later.
+
+    Returns:
+        The non-empty attachment list declared on the representation, or `None` when
+        the component declares none, does not return a `TemplateRepresentation`, or
+        raises while building one.
+
+    Raises:
+        AssertionError: If the declared attachments are not a list, or any element is
+            not an instance of one of `expected`.
+    """
+    try:
+        tr = c.format_for_llm()
+    except Exception as e:
+        # A guard must not become a new source of failure; treat an unrenderable
+        # component as carrying nothing and let the real render surface the error.
+        # Logged so a genuinely broken format_for_llm is not silently invisible.
+        logging.getLogger(__name__).debug(
+            f"could not read {field} from {type(c).__name__}.format_for_llm(); "
+            f"treating it as carrying no {field}: {e!r}"
+        )
+        return None
+    if not isinstance(tr, TemplateRepresentation):
+        return None
+    attachments = getattr(tr, field, None)
+    if not attachments:
+        return None
+    assert isinstance(attachments, list), (
+        f"TemplateRepresentation.{field} must be a list."
+    )
+    assert all(isinstance(a, expected) for a in attachments), (
+        f"all elements of TemplateRepresentation.{field} must be one of: "
+        f"{', '.join(t.__name__ for t in expected)}."
+    )
+    return list(attachments)
+
+
 def get_images_from_component(c: Component) -> None | list[ImageBlock | ImageUrlBlock]:
     """Return the images attached to a `Component`, or `None` if absent or empty.
+
+    Checks the component's `images` attribute first. When it has none, falls back to
+    the `images` declared on the `TemplateRepresentation` returned by
+    `format_for_llm`, so components that only declare attachments there are still
+    visible to backend capability checks.
+
+    The fallback fires only when the attribute is *absent*, not when it is present and
+    empty. A component that exposes `images = None` while declaring images on its
+    representation is therefore invisible here, yet the formatter still copies them onto
+    the `Message` — a backend that cannot carry them would drop them silently. That
+    combination is unsupported: a component's attribute must agree with its
+    representation. The alternative, falling back whenever the attribute yields nothing,
+    would add a `format_for_llm()` call for every attachment-free component on every
+    capability scan, which is why this is a deliberate trade rather than an oversight.
 
     Args:
         c: The `Component` whose `images` attribute is inspected.
 
     Returns:
         A non-empty list of `ImageBlock` or `ImageUrlBlock` objects if the
-        component has an `images` attribute with at least one element;
-        `None` otherwise.
+        component has an `images` attribute with at least one element, or declares
+        images on its `TemplateRepresentation`; `None` otherwise.
     """
-    if hasattr(c, "images"):
-        imgs = c.images  # type: ignore
-        if imgs is not None:
-            assert isinstance(imgs, list), "images field must be a list."
-            assert all(isinstance(im, (ImageBlock, ImageUrlBlock)) for im in imgs), (
-                "all elements of images list must be ImageBlock or ImageUrlBlock."
-            )
-            if len(imgs) == 0:
-                return None
-            else:
-                return imgs
-        else:
-            return None
-    else:
+    if not hasattr(c, "images"):
+        return _attachments_from_representation(
+            c, "images", (ImageBlock, ImageUrlBlock)
+        )
+
+    imgs = c.images  # type: ignore
+    if imgs is None:
         return None
+    assert isinstance(imgs, list), "images field must be a list."
+    assert all(isinstance(im, (ImageBlock, ImageUrlBlock)) for im in imgs), (
+        "all elements of images list must be ImageBlock or ImageUrlBlock."
+    )
+    return imgs if len(imgs) > 0 else None
 
 
 def get_audio_from_component(c: Component) -> None | list[AudioBlock | AudioUrlBlock]:
     """Return the audio attached to a `Component`, or `None` if absent or empty.
+
+    Checks the component's `audio` attribute first. When it has none, falls back to
+    the `audio` declared on the `TemplateRepresentation` returned by `format_for_llm`,
+    so components that only declare attachments there are still visible to backend
+    capability checks.
+
+    The fallback fires only when the attribute is *absent*, not when it is present and
+    empty — see `get_images_from_component` for why that is deliberate. A component's
+    `audio` attribute must agree with the `audio` on its representation.
 
     Args:
         c: The `Component` whose `audio` attribute is inspected.
 
     Returns:
         A non-empty list of `AudioBlock` or `AudioUrlBlock` objects if the
-        component has an `audio` attribute with at least one element;
-        `None` otherwise.
+        component has an `audio` attribute with at least one element, or declares
+        audio on its `TemplateRepresentation`; `None` otherwise.
     """
-    if hasattr(c, "audio"):
-        audio = c.audio  # type: ignore
-        if audio is not None:
-            assert isinstance(audio, list), "audio field must be a list."
-            assert all(isinstance(a, (AudioBlock, AudioUrlBlock)) for a in audio), (
-                "all elements of audio list must be AudioBlock or AudioUrlBlock."
-            )
-            if len(audio) == 0:
-                return None
-            else:
-                return audio
-        else:
-            return None
-    else:
+    if not hasattr(c, "audio"):
+        return _attachments_from_representation(c, "audio", (AudioBlock, AudioUrlBlock))
+
+    audio = c.audio  # type: ignore
+    if audio is None:
         return None
+    assert isinstance(audio, list), "audio field must be a list."
+    assert all(isinstance(a, (AudioBlock, AudioUrlBlock)) for a in audio), (
+        "all elements of audio list must be AudioBlock or AudioUrlBlock."
+    )
+    return audio if len(audio) > 0 else None
