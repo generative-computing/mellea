@@ -22,6 +22,25 @@ from ..context import ChatContext
 logger = MelleaLogger.get_logger()
 
 
+def _normalise_span_id(raw: object, expected_count: int) -> int | None:
+    """Normalise a model-returned span identifier."""
+    if isinstance(raw, bool):
+        return None
+    if isinstance(raw, int):
+        span_id = raw
+    elif isinstance(raw, str) and raw.strip().isdigit():
+        span_id = int(raw.strip())
+    else:
+        return None
+
+    return span_id if 0 <= span_id < expected_count else None
+
+
+def _normalise_label(raw: object) -> str:
+    """Normalise a model-returned string label."""
+    return raw.strip() if isinstance(raw, str) else ""
+
+
 class GroundednessRequirement(Requirement):
     """Requirement that validates LLM responses are grounded by citations.
 
@@ -680,8 +699,8 @@ class GroundednessRequirement(Requirement):
             # Normalize each nested citation through the same substring
             # logic the flat path uses below, so near-miss labels like
             # "FULLY SUPPORTED" (space) aren't silently downgraded.
-            def _norm(raw: str | None) -> str:
-                raw = (raw or "").upper().strip()
+            def _norm(raw: object) -> str:
+                raw = _normalise_label(raw).upper()
                 if "FULLY" in raw and "SUPPORTED" in raw:
                     return "FULLY_SUPPORTED"
                 if "PARTIALLY" in raw and "SUPPORTED" in raw:
@@ -694,10 +713,10 @@ class GroundednessRequirement(Requirement):
                     logger.debug(f"Skipping non-dict judgment: {judgment}")
                     continue
 
-                span_id = judgment.get("span_id")
-                support_level_raw = (
-                    (judgment.get("support_level") or "").upper().strip()
-                )
+                span_id = _normalise_span_id(judgment.get("span_id"), expected_count)
+                support_level_raw = _normalise_label(
+                    judgment.get("support_level")
+                ).upper()
                 # Handle nested format: {"span_id": 0, "evidence": [{"support_level": "..."}]}
                 # Checks both "evidence" and "citations" (prior key, kept defensively).
                 if not support_level_raw:
@@ -787,16 +806,16 @@ class GroundednessRequirement(Requirement):
                 if not isinstance(judgment, dict):
                     continue
 
-                span_id = judgment.get("span_id")
-                needs_citation_flag = (
-                    (judgment.get("needs_citation") or "").lower().strip()
-                )
+                span_id = _normalise_span_id(judgment.get("span_id"), len(spans))
+                needs_citation_flag = _normalise_label(
+                    judgment.get("needs_citation")
+                ).lower()
 
                 logger.debug(
                     f"  Judgment: span_id={span_id}, needs_citation={needs_citation_flag}"
                 )
 
-                if span_id is not None and 0 <= span_id < len(spans):
+                if span_id is not None:
                     span = spans[span_id]
                     span_key = (span["begin"], span["end"])
                     # Handle variations: "yes", "true", "1" -> True

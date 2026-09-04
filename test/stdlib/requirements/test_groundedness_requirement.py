@@ -492,6 +492,47 @@ def test_parse_batch_support_output():
     assert result[1] == "PARTIALLY_SUPPORTED"
 
 
+def test_parse_batch_support_output_normalises_string_span_id():
+    """Quoted numeric span IDs must map to the integer result key.
+
+    Without this normalisation, a valid model judgment is stored under ``"0"``
+    and the caller falls back to NOT_SUPPORTED when looking up integer key 0.
+    """
+    req = GroundednessRequirement()
+
+    result = req._parse_batch_support_output(
+        '[{"span_id": "0", "support_level": "FULLY_SUPPORTED"}]', 1
+    )
+
+    assert result == {0: "FULLY_SUPPORTED"}
+
+
+def test_parse_batch_support_output_ignores_non_string_support_level():
+    """Unexpected support-level types must degrade conservatively."""
+    req = GroundednessRequirement()
+
+    result = req._parse_batch_support_output('[{"span_id": 0, "support_level": 5}]', 1)
+
+    assert result == {0: "NOT_SUPPORTED"}
+
+
+def test_parse_necessity_output_normalises_model_types():
+    """Necessity parsing must tolerate quoted IDs and non-string labels."""
+    req = GroundednessRequirement()
+    spans = [
+        {"begin": 0, "end": 5, "text": "Fact."},
+        {"begin": 7, "end": 13, "text": "Other."},
+    ]
+
+    result = req._parse_necessity_output(
+        '[{"span_id": "0", "needs_citation": "yes"}, '
+        '{"span_id": 1, "needs_citation": 1}]',
+        spans,
+    )
+
+    assert result == {(0, 5): True, (7, 13): False}
+
+
 def test_parse_batch_support_output_nested_citations():
     """Test parsing batch support output when model nests support_level inside citations.
 
