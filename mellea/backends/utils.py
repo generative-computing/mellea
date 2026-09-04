@@ -99,9 +99,17 @@ def to_chat(
 
     # NOTE: `self.formatter.to_chat_messages` explicitly skips `Message` objects. However, we need
     # to print `Message`s to correctly serialize any documents with the message. Do the printing here.
-    # NOTE: reasoning is never replayed on the HF chat path — we serialize only `content` and never
-    # consult `should_replay_reasoning` (unlike OpenAI/LiteLLM/Watsonx/Ollama). `Message.thinking`
-    # is now captured for HF's Granite <think> convention, but replay isn't wired in yet; #1604.
+    # NOTE: reasoning replay here is an interim, unconditional forward — every non-empty
+    # `Message.thinking` is attached as `reasoning_content` regardless of `should_replay_reasoning`
+    # (unlike OpenAI/LiteLLM/Watsonx/Ollama, which gate replay on that policy). This exists to
+    # restore the parity the HF think-tag capture fix (#1610) removed: before that fix, raw
+    # `<think>...</think>` text sat inline in `content` on every turn, so Granite's chat template
+    # (chat_template.jinja:83-90) always saw prior reasoning; after the fix, `content` is tag-free
+    # and the template silently prepends an empty `<think></think>` instead, dropping reasoning the
+    # model previously saw. Attaching `reasoning_content` unconditionally restores that prior
+    # behavior without deciding the real design question (whether HF should follow the
+    # tool-call-only consensus rule from #1201 on plain turns too) — see the design proposal at
+    # docs/dev/proposals/1604-hf-output-parsing.md, D5/Q3, for the full replay-policy decision.
     ctx_as_conversation: list = []
     for m in ctx_as_message_list:
         msg_dict: dict = {"role": m.role, "content": formatter.print(m)}
@@ -112,6 +120,8 @@ def to_chat(
             msg_dict["tool_calls"] = m.tool_calls
         if m.tool_call_id:
             msg_dict["tool_call_id"] = m.tool_call_id
+        if m.thinking:
+            msg_dict["reasoning_content"] = m.thinking
         # Merge any author-declared provider fields (Mellea's known fields win;
         # a mismatched target raises). Must run after the known fields are set.
         msg_dict = merge_provider_fields(msg_dict, m.provider_fields, "huggingface")

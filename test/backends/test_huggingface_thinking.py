@@ -14,6 +14,7 @@ import pytest
 torch = pytest.importorskip("torch", reason="torch not installed — install mellea[hf]")
 
 import mellea.backends.huggingface as hf_backend
+from mellea.backends import ModelOption
 from mellea.backends.huggingface import LocalHFBackend, _split_think_tags
 from mellea.core.base import CBlock, ModelOutputThunk
 
@@ -71,29 +72,42 @@ def test_split_think_tags_leading_whitespace_before_open_tag() -> None:
 def test_split_think_tags_multiple_close_tags_uses_first() -> None:
     """Multiple </think> occurrences: only the first is treated as the boundary.
 
-    Matches the first-match-wins convention used by transformers' own serving
-    utilities (cli/serving/utils.py) for the same start/end tag pattern.
+    Pins current behavior, not a settled design choice: Granite's own chat
+    template splits replayed history on the *last* </think> occurrence
+    (chat_template.jinja, e.g. `c.split('</think>')[-1]`), the opposite rule.
+    Whether to match the model's own convention is an open question — see
+    docs/dev/proposals/1604-hf-output-parsing.md, Q2.
     """
     thinking, answer = _split_think_tags("<think>a</think>b</think>c")
     assert thinking == "a"
     assert answer == "b</think>c"
 
 
-def _make_backend(*, thinking_template_var: str | None = "think") -> LocalHFBackend:
+def _make_backend(
+    *, thinking_template_var: str | None = "think", use_caches: bool = False
+) -> LocalHFBackend:
     """Return a LocalHFBackend with __init__ bypassed, wired with the minimum
     state post_processing needs when there is no real GenerateDecoderOnlyOutput
-    (i.e. every isinstance(hf_output, GenerateDecoderOnlyOutput) branch is skipped).
+    (i.e. every isinstance(hf_output, GenerateDecoderOnlyOutput) branch is skipped
+    unless use_caches=True and the caller also sets mot.raw.response).
 
     Args:
         thinking_template_var: name of a thinking-related Jinja variable to bake
             into the fake chat template (gates the think-split in post_processing),
             or None for a template that does not reference any of them.
+        use_caches: whether to wire up a real `SimpleLRUCache` so the KV-cache
+            branch in post_processing actually runs.
     """
     b: LocalHFBackend = LocalHFBackend.__new__(LocalHFBackend)
     b._model_id = "test-org/test-model"
     b.model_id = "test-org/test-model"
     b._provider = "huggingface"
-    b._use_caches = False
+    b._use_caches = use_caches
+    if use_caches:
+        from mellea.backends.cache import SimpleLRUCache
+
+        object.__setattr__(b, "_cache", SimpleLRUCache(5))
+        object.__setattr__(b, "_device", torch.device("cpu"))
 
     template = (
         f"{{{{ {thinking_template_var} }}}}"
@@ -197,3 +211,90 @@ async def test_post_processing_does_not_split_without_thinking_template_var() ->
 
     assert mot.thinking is None
     assert mot.value == "Use the </think> tag to close a reasoning block."
+
+
+async def test_post_processing_does_not_split_when_thinking_explicitly_false() -> None:
+    """Regression test: a template declaring a thinking var is not proof thinking
+    was requested on this specific call. With ModelOption.THINKING explicitly
+    False, a literal "</think>" in the answer must survive untouched, even though
+    the template declares "think" (the gate must check the resolved per-call value,
+    not just whether the template mentions the variable name at all).
+    """
+    backend = _make_backend(thinking_template_var="think")
+    mot = ModelOutputThunk(value="Use the </think> tag to close a reasoning block.")
+    mot._call.action = CBlock("How do reasoning tags work?")
+    mot._call.model_options = {ModelOption.THINKING: False}
+
+    await backend.post_processing(
+        mot,
+        conversation=[],
+        _format=None,
+        tool_calls=False,
+        tools={},
+        seed=None,
+        input_ids=None,
+    )
+
+    assert mot.thinking is None
+    assert mot.value == "Use the </think> tag to close a reasoning block."
+
+
+async def test_post_processing_splits_when_thinking_unset() -> None:
+    """Regression test: an unset/None ModelOption.THINKING must still allow the
+    split when the template declares a thinking var, since Granite and Qwen3 both
+    default thinking to True in their own template source — treating "unset" as
+    "off" would under-split the common case.
+    """
+    backend = _make_backend(thinking_template_var="think")
+    mot = ModelOutputThunk(value="<think>reasoning here</think>the answer")
+    mot._call.action = CBlock("test")
+    mot._call.model_options = {}
+
+    await backend.post_processing(
+        mot,
+        conversation=[],
+        _format=None,
+        tool_calls=False,
+        tools={},
+        seed=None,
+        input_ids=None,
+    )
+
+    assert mot.thinking == "reasoning here"
+    assert mot.value == "the answer"
+
+
+async def test_post_processing_cache_key_findable_after_split() -> None:
+    """Regression test: the LRU cache key computed in post_processing must be
+    derived from mot.value *after* the split has run, so a later cache_get() call
+    against the same (now-split) thunk's value can find the entry. Before the
+    fix, the key was computed from the pre-split string's object identity, then
+    mot.value was reassigned to a new string a few lines later — orphaning the
+    cache entry under a key nothing would ever look up again.
+    """
+    from transformers.generation.utils import GenerateDecoderOnlyOutput
+
+    backend = _make_backend(thinking_template_var="think", use_caches=True)
+    sequences = torch.tensor([[1, 2, 3, 4]])
+    hf_output = GenerateDecoderOnlyOutput(
+        sequences=sequences, scores=(torch.zeros(1, 10),)
+    )
+    mot = ModelOutputThunk(value="<think>reasoning here</think>the answer")
+    mot.raw.response = hf_output
+    mot._call.action = CBlock("test")
+    mot._call.model_options = {}
+
+    await backend.post_processing(
+        mot,
+        conversation=[],
+        _format=None,
+        tool_calls=False,
+        tools={},
+        seed=None,
+        input_ids=torch.tensor([[1, 2]]),
+    )
+
+    assert mot.thinking == "reasoning here"
+    assert mot.value == "the answer"
+    cached = backend.cache_get(id(mot.value))
+    assert cached is not None

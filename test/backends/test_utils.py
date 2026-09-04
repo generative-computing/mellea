@@ -151,6 +151,47 @@ def test_to_chat_basic_message():
     assert result[1]["content"] == "next question"
 
 
+def test_to_chat_attaches_reasoning_content_for_assistant_thinking():
+    """Regression test: an assistant Message carrying `.thinking` must have it
+    forwarded as `reasoning_content` on the wire dict. Before this fix, `to_chat`
+    read only `m.role`/`m.content` and silently dropped `.thinking` on every
+    HF replay — see docs/dev/proposals/1604-hf-output-parsing.md, D4.
+    """
+    from mellea.backends.utils import to_chat
+    from mellea.formatters.template_formatter import TemplateFormatter as ChatFormatter
+    from mellea.stdlib.components import Message
+    from mellea.stdlib.context import ChatContext
+
+    ctx = ChatContext()
+    ctx = ctx.add(Message("user", "hello"))
+    ctx = ctx.add(Message("assistant", "the answer", thinking="reasoning trace"))
+    action = Message("user", "next question")
+    formatter = ChatFormatter(model_id="test")
+
+    result = to_chat(action, ctx, formatter, system_prompt=None)
+    assistant_msg = next(m for m in result if m["role"] == "assistant")
+    assert assistant_msg["reasoning_content"] == "reasoning trace"
+
+
+def test_to_chat_omits_reasoning_content_when_no_thinking():
+    """An assistant Message with no captured reasoning must not get a
+    `reasoning_content` key at all (not even an empty string)."""
+    from mellea.backends.utils import to_chat
+    from mellea.formatters.template_formatter import TemplateFormatter as ChatFormatter
+    from mellea.stdlib.components import Message
+    from mellea.stdlib.context import ChatContext
+
+    ctx = ChatContext()
+    ctx = ctx.add(Message("user", "hello"))
+    ctx = ctx.add(Message("assistant", "the answer"))
+    action = Message("user", "next question")
+    formatter = ChatFormatter(model_id="test")
+
+    result = to_chat(action, ctx, formatter, system_prompt=None)
+    assistant_msg = next(m for m in result if m["role"] == "assistant")
+    assert "reasoning_content" not in assistant_msg
+
+
 def test_to_chat_with_system_prompt():
     from mellea.backends.utils import to_chat
     from mellea.formatters.template_formatter import TemplateFormatter as ChatFormatter

@@ -279,13 +279,26 @@ _THINK_CLOSE_TAG: str = "</think>"
 
 
 def _split_think_tags(text: str) -> tuple[str | None, str]:
-    """Split raw HF output into (thinking, answer) on the closing </think> tag.
+    r"""Split raw HF output into (thinking, answer) on the closing </think> tag.
+
+    A string-level fallback for `transformers.PreTrainedTokenizerBase.parse_response()`
+    (schema-driven, token-decode-then-parse), used because no tokenizer available to
+    this backend today declares a `response_schema` — see the design proposal at
+    docs/dev/proposals/1604-hf-output-parsing.md §10 for why even that upstream
+    mechanism is text-level, not token-level, and can't disambiguate a genuine
+    end-of-reasoning token from literal `</think>` text for Granite either.
 
     Splits on </think> alone (not a <think>...</think> pair) because some chat
     templates (e.g. granite-4.2 with enable_thinking) bake the opening tag into
     the prompt, so it never appears in the model's own output. A fixed pattern
     match for Granite's convention, not a general reasoning-parser; other
     delimiters pass through unchanged. See #1604 for generalizing this.
+
+    Deliberately strips leading/trailing whitespace from both `thinking` and
+    `answer`: the whitespace immediately around the tags is delimiter framing
+    (Granite's template emits `<think>\n...\n</think>\n`), not meaningful
+    content, so the user-visible completion loses that framing whitespace as
+    part of this split, not incidentally.
     """
     if _THINK_CLOSE_TAG not in text:
         return None, text
@@ -1797,6 +1810,10 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         if isinstance(hf_output, GenerateDecoderOnlyOutput) and mot._call.model_options:
             self._surface_logits(mot, hf_output)
 
+        # Built here (before the split below) because it needs `hf_output`'s KV cache/scores
+        # fields, which are cleared immediately after; cached under a key derived from
+        # `mot.value` further down, once the split has settled on the final string object.
+        cache_info: HFAloraCacheInfo | None = None
         if (
             self._use_caches
             and isinstance(hf_output, GenerateDecoderOnlyOutput)
@@ -1817,9 +1834,6 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 scores=hf_output.scores,
             )
 
-            cache_key = id(mot.value)
-            self.cache_put(cache_key, cache_info)
-
             # Clear KV cache and scores from HF output; retained via LRU cache above.
             # `ModelOutput` (`OrderedDict` subclass) does not sync `None` writes back
             # to the mapping, so plain attribute assignment leaves the dict entry — and
@@ -1835,18 +1849,36 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 OrderedDict.__delitem__(hf_output, "logits")
             hf_output.logits = None
 
-        # Capture the raw text before any split below, for the stop-string check further down.
+        # Capture the raw text before any split below. Used for the stop-string check
+        # further down (a stop string could itself be think-tag-adjacent, so that check
+        # must stay on the pre-split text) and as the input to the split itself. Do not
+        # repoint this at `mot.value` after the split runs.
         raw_value = mot.value
 
-        # Gate on the template exposing a thinking var (not ModelOption.THINKING) since some
-        # models think by default; otherwise an answer that just mentions "</think>" gets split.
+        # Gate on the template exposing a thinking var (some models think by default, so
+        # declaring the var isn't itself proof thinking is on) AND the resolved per-call
+        # value not being explicitly False (an answer that merely mentions "</think>" on a
+        # template with thinking off must not be split). `None`/unset must still allow the
+        # split: Granite and Qwen3 both default `enable_thinking` to True in their own
+        # template source, so treating "unset" as "off" would under-split for the common case.
+        # Read from `mot._call.model_options` directly (not a value already filtered for the
+        # template) — it's the same dict `_filter_for_chat_template` resolves
+        # `ModelOption.THINKING` from when building the generation-time template kwargs, so
+        # this mirrors what the model was actually asked to do on this call.
         # Skip for streaming: astream() assumes mot.value only grows, and shrinking it here
         # would corrupt the final delta (see #1604 for proper incremental splitting later).
         thinking_allowlist: frozenset[str] = getattr(
             self, "_chat_template_allowlist", frozenset()
         )
-        if not mot.generation.streaming and thinking_allowlist.intersection(
-            _CHAT_TEMPLATE_THINKING_VARS
+        resolved_thinking = (
+            mot._call.model_options.get(ModelOption.THINKING)
+            if mot._call.model_options
+            else None
+        )
+        if (
+            not mot.generation.streaming
+            and resolved_thinking is not False
+            and thinking_allowlist.intersection(_CHAT_TEMPLATE_THINKING_VARS)
         ):
             thinking, answer = _split_think_tags(raw_value)
             if thinking is not None:
@@ -1857,6 +1889,12 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                     len(thinking),
                     self._model_id,
                 )
+
+        if cache_info is not None:
+            # Keyed after the split above has settled on the final `mot.value` object, so a
+            # later lookup by the same key against the same (now-split) thunk can find it.
+            cache_key = id(mot.value)
+            self.cache_put(cache_key, cache_info)
 
         # Only scan for tools if we are not doing structured output and tool calls were provided to the model.
         if _format is None and tool_calls:
@@ -1965,6 +2003,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             "tools_available": tools,
             "tools_called": mot.tool_calls,
             "seed": seed,
+            "thinking": mot.thinking,
         }
         generate_log.action = mot._call.action
         generate_log.result = mot

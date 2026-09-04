@@ -24,7 +24,6 @@ torch = pytest.importorskip("torch", reason="torch not installed — install mel
 pytestmark = [
     pytest.mark.huggingface,
     pytest.mark.e2e,
-    pytest.mark.qualitative,
     require_gpu(min_vram_gb=8),
     pytest.mark.skipif(
         int(os.environ.get("CICD", 0)) == 1,
@@ -63,6 +62,7 @@ def session(backend):
     session.reset()
 
 
+@pytest.mark.qualitative
 def test_thinking_enabled_populates_mot_thinking(session):
     """ModelOption.THINKING=True: mot.thinking holds the real reasoning trace,
     mot.value is the clean answer with no leftover </think> tag, and the answer
@@ -83,7 +83,8 @@ def test_thinking_enabled_populates_mot_thinking(session):
     assert "4" in output.value
 
 
-def test_thinking_disabled_leaves_mot_thinking_none(session):
+@pytest.mark.qualitative
+def test_thinking_disabled_leaves_mot_thinking_falsy(session):
     """ModelOption.THINKING=False: no think block is generated, so mot.thinking
     is falsy (None or empty string — both mean "no reasoning trace captured")."""
     output = session.instruct(
