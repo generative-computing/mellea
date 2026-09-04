@@ -8,7 +8,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from mellea.backends.huggingface import LocalHFBackend
 from mellea.core.base import ModelOutputThunk
 from mellea.stdlib.components import Document, Message
 from mellea.stdlib.context import ChatContext
@@ -20,6 +19,11 @@ from test.predicates import require_gpu
 @pytest.fixture
 def backend():
     """Provide HuggingFace backend for tests."""
+    try:
+        from mellea.backends.huggingface import LocalHFBackend
+    except ImportError as exc:
+        pytest.skip(str(exc))
+
     with hf_skip():
         return LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
 
@@ -530,7 +534,9 @@ def test_parse_batch_support_output_ignores_non_string_nested_support_level(
     assert result == {0: "NOT_SUPPORTED"}
 
 
-@pytest.mark.parametrize("span_id", [True, -1, 1.5, "not-an-index", "2", "²"])
+@pytest.mark.parametrize(
+    "span_id", [True, -1, 1.5, "not-an-index", "2", "²", "1_0", "+1", "３"]
+)
 def test_parse_batch_support_output_ignores_invalid_span_id(span_id: object):
     """Invalid model-returned span IDs must not become result keys."""
     req = GroundednessRequirement()
@@ -540,6 +546,18 @@ def test_parse_batch_support_output_ignores_invalid_span_id(span_id: object):
     )
 
     assert result == {0: "NOT_SUPPORTED"}
+
+
+@pytest.mark.parametrize("span_id", [0.0, "0"])
+def test_parse_batch_support_output_accepts_integral_span_id(span_id: object):
+    """Integral numeric span IDs must resolve to the integer result key."""
+    req = GroundednessRequirement()
+
+    result = req._parse_batch_support_output(
+        json.dumps([{"span_id": span_id, "support_level": "FULLY_SUPPORTED"}]), 1
+    )
+
+    assert result == {0: "FULLY_SUPPORTED"}
 
 
 def test_parse_necessity_output_normalises_model_types():
@@ -557,6 +575,19 @@ def test_parse_necessity_output_normalises_model_types():
     )
 
     assert result == {(0, 5): True, (7, 13): True}
+
+
+@pytest.mark.parametrize("needs_citation", [False, 0, "false", "0", "no"])
+def test_parse_necessity_output_preserves_false_labels(needs_citation: object):
+    """False model-returned necessity labels must remain false."""
+    req = GroundednessRequirement()
+    spans = [{"begin": 0, "end": 5, "text": "Fact."}]
+
+    result = req._parse_necessity_output(
+        json.dumps([{"span_id": 0, "needs_citation": needs_citation}]), spans
+    )
+
+    assert result == {(0, 5): False}
 
 
 @pytest.mark.parametrize(
@@ -586,6 +617,28 @@ def test_parse_necessity_output_duplicate_ids_require_citations(output_text: str
     "output_text",
     [
         (
+            '[{"span_id": 0, "citations": [{"support_level": "NOT_SUPPORTED"}]}, '
+            '{"span_id": "0", "citations": [{"support_level": "FULLY_SUPPORTED"}]}]'
+        ),
+        (
+            '[{"span_id": "0", "citations": [{"support_level": "FULLY_SUPPORTED"}]}, '
+            '{"span_id": 0, "citations": [{"support_level": "NOT_SUPPORTED"}]}]'
+        ),
+    ],
+)
+def test_parse_batch_support_output_duplicate_ids_are_pessimistic(output_text: str):
+    """Nested duplicate span judgments must retain the least-supported result."""
+    req = GroundednessRequirement()
+
+    result = req._parse_batch_support_output(output_text, 1)
+
+    assert result == {0: "NOT_SUPPORTED"}
+
+
+@pytest.mark.parametrize(
+    "output_text",
+    [
+        (
             '[{"span_id": 0, "support_level": "NOT_SUPPORTED"}, '
             '{"span_id": "0", "support_level": "FULLY_SUPPORTED"}]'
         ),
@@ -595,11 +648,73 @@ def test_parse_necessity_output_duplicate_ids_require_citations(output_text: str
         ),
     ],
 )
-def test_parse_batch_support_output_duplicate_ids_are_pessimistic(output_text: str):
-    """Duplicate span judgments must retain the least-supported result."""
+def test_parse_batch_support_output_duplicate_flat_ids_are_pessimistic(
+    output_text: str,
+):
+    """Duplicate flat rows must retain the least-supported result."""
     req = GroundednessRequirement()
 
     result = req._parse_batch_support_output(output_text, 1)
+
+    assert result == {0: "NOT_SUPPORTED"}
+
+
+@pytest.mark.parametrize(
+    "output_text",
+    [
+        (
+            '[{"span_id": 0, "support_level": "FULLY_SUPPORTED"}, '
+            '{"span_id": 0, "evidence": [{"support_level": "NOT_SUPPORTED"}]}]'
+        ),
+        (
+            '[{"span_id": 0, "evidence": [{"support_level": "NOT_SUPPORTED"}]}, '
+            '{"span_id": 0, "support_level": "FULLY_SUPPORTED"}]'
+        ),
+    ],
+)
+def test_parse_batch_support_output_mixed_duplicate_ids_are_pessimistic(
+    output_text: str,
+):
+    """Mixed output shapes must retain the least-supported result."""
+    req = GroundednessRequirement()
+
+    result = req._parse_batch_support_output(output_text, 1)
+
+    assert result == {0: "NOT_SUPPORTED"}
+
+
+@pytest.mark.parametrize("support_level", ["NOT FULLY SUPPORTED", "FULLY UNSUPPORTED"])
+def test_parse_batch_support_output_negated_labels_are_not_supported(
+    support_level: str,
+):
+    """Negated support labels must not be classified as fully supported."""
+    req = GroundednessRequirement()
+
+    result = req._parse_batch_support_output(
+        json.dumps([{"span_id": 0, "support_level": support_level}]), 1
+    )
+
+    assert result == {0: "NOT_SUPPORTED"}
+
+
+def test_parse_batch_support_output_positive_unambiguous_label_is_supported():
+    """Positive labels containing unrelated `UN` text must remain supported."""
+    req = GroundednessRequirement()
+
+    result = req._parse_batch_support_output(
+        '[{"span_id": 0, "support_level": "FULLY SUPPORTED (UNAMBIGUOUS)"}]', 1
+    )
+
+    assert result == {0: "FULLY_SUPPORTED"}
+
+
+def test_parse_batch_support_output_nested_negated_label_is_not_supported():
+    """Negated nested support labels must not be classified as fully supported."""
+    req = GroundednessRequirement()
+
+    result = req._parse_batch_support_output(
+        '[{"span_id": 0, "evidence": [{"support_level": "not fully supported"}]}]', 1
+    )
 
     assert result == {0: "NOT_SUPPORTED"}
 

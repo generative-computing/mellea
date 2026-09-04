@@ -34,11 +34,13 @@ def _normalise_span_id(raw: object, expected_count: int) -> int | None:
         return None
     if isinstance(raw, int):
         span_id = raw
+    elif isinstance(raw, float) and raw.is_integer():
+        span_id = int(raw)
     elif isinstance(raw, str):
-        try:
-            span_id = int(raw.strip())
-        except ValueError:
+        match = re.fullmatch(r"[0-9]+", raw.strip())
+        if match is None:
             return None
+        span_id = int(match.group())
     else:
         return None
 
@@ -52,6 +54,10 @@ def _normalise_label(raw: object) -> str:
 
 def _normalise_needs_citation(raw: object) -> bool:
     """Normalise a model-returned citation-necessity label."""
+    if isinstance(raw, bool):
+        return raw
+    if isinstance(raw, int):
+        return bool(raw)
     if not isinstance(raw, str):
         return True
 
@@ -723,6 +729,8 @@ class GroundednessRequirement(Requirement):
             # "FULLY SUPPORTED" (space) aren't silently downgraded.
             def _norm(raw: object) -> str:
                 raw = _normalise_label(raw).upper()
+                if re.search(r"\b(?:NOT|UNSUPPORTED)\b", raw):
+                    return "NOT_SUPPORTED"
                 if "FULLY" in raw and "SUPPORTED" in raw:
                     return "FULLY_SUPPORTED"
                 if "PARTIALLY" in raw and "SUPPORTED" in raw:
@@ -736,6 +744,7 @@ class GroundednessRequirement(Requirement):
                     continue
 
                 span_id = _normalise_span_id(judgment.get("span_id"), expected_count)
+                nested_levels: set[str] = set()
                 support_level_raw = _normalise_label(
                     judgment.get("support_level")
                 ).upper()
@@ -772,18 +781,11 @@ class GroundednessRequirement(Requirement):
                     logger.debug("Skipping judgment with no span_id")
                     continue
 
-                # Normalize support level
-                if "FULLY" in support_level_raw and "SUPPORTED" in support_level_raw:
-                    support_level = "FULLY_SUPPORTED"
-                elif (
-                    "PARTIALLY" in support_level_raw
-                    and "SUPPORTED" in support_level_raw
-                ):
-                    support_level = "PARTIALLY_SUPPORTED"
-                else:
-                    support_level = "NOT_SUPPORTED"
+                support_level = _norm(support_level_raw) or "NOT_SUPPORTED"
 
                 existing_support = result.get(span_id)
+                # Duplicate judgments must remain conservative regardless of
+                # whether the model used flat or nested output.
                 if (
                     existing_support is None
                     or _SUPPORT_LEVEL_RANK[support_level]
@@ -834,13 +836,15 @@ class GroundednessRequirement(Requirement):
                 if not isinstance(judgment, dict):
                     continue
 
+                needs_citation_raw = judgment.get("needs_citation")
                 span_id = _normalise_span_id(judgment.get("span_id"), len(spans))
                 needs_citation = _normalise_needs_citation(
                     judgment.get("needs_citation")
                 )
 
                 logger.debug(
-                    f"  Judgment: span_id={span_id}, needs_citation={needs_citation}"
+                    f"  Judgment: span_id={span_id}, needs_citation_raw={needs_citation_raw!r}, "
+                    f"needs_citation={needs_citation}"
                 )
 
                 if span_id is not None:
