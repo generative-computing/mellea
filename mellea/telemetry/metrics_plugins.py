@@ -531,13 +531,13 @@ class ToolMetricsPlugin(Plugin, name="tool_metrics", priority=1056):
         """Record one tool invocation after it completes.
 
         Args:
-            payload: Contains model_tool_call (with name) and success flag.
+            payload: Contains model_tool_call (with func.name) and success flag.
             context: Plugin context (unused).
         """
         from mellea.telemetry.metrics import record_tool_call
 
         tool_name = (
-            payload.model_tool_call.name
+            payload.model_tool_call.func.name
             if payload.model_tool_call is not None
             else "unknown"
         )
