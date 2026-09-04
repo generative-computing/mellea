@@ -29,6 +29,7 @@ updated.
 | `result.streaming_failures` | `streamer.streaming_failures` | Same |
 | `result.final_validations` | `streamer.final_validations` | Same |
 | `result.as_thunk` | `streamer.mot` | Set on natural completion |
+| `QuickCheckEvent.results` items | `PartialValidationSummary` | Was `PartialValidationResult`; `.success` reads the same, but `.reason` is only the failing chunk's reason (`None` if none failed) — read `.results` for non-failure reasons |
 | `SentenceChunker` | `SentenceChunking` | Strategy classes renamed |
 | `WordChunker` | `WordChunking` | |
 | `ParagraphChunker` | `ParagraphChunking` | |
@@ -37,17 +38,18 @@ Wrap consumption in `async with` so the generation is cancelled on every exit
 path — an early `break` or an exception — instead of leaking an abandoned
 background stream.
 
-## Chunking strategy renames
+## Chunking strategy renames and module move
 
 The three built-in strategy classes were renamed from `...Chunker` to
-`...Chunking`, freeing the `Chunker` name for the new stateful driver:
+`...Chunking`, freeing the `Chunker` name for the new stateful driver, and the
+chunking module moved from `mellea.stdlib.chunking` to `mellea.core.chunking`:
 
 ```python
 # v0.7
 from mellea.stdlib.chunking import SentenceChunker, WordChunker, ParagraphChunker
 
 # v0.8
-from mellea.stdlib.chunking import SentenceChunking, WordChunking, ParagraphChunking
+from mellea.core.chunking import SentenceChunking, WordChunking, ParagraphChunking
 ```
 
 This only affects code that imports a strategy class by name (for example, to

@@ -30,10 +30,15 @@ from typing import Any, Literal, overload
 from ..backends.model_options import ModelOption
 from ..core.backend import Backend
 from ..core.base import CBlock, Component, Context, ModelOutputThunk
-from ..core.requirement import PartialValidationResult, Requirement, ValidationResult
+from ..core.chunking import Chunker, ChunkingStrategy, resolve_chunking_strategy
+from ..core.requirement import (
+    PartialValidationResult,
+    PartialValidationSummary,
+    Requirement,
+    ValidationResult,
+)
 from ..plugins.manager import has_plugins, invoke_hook
 from ..plugins.types import HookType
-from .chunking import Chunker, ChunkingStrategy, resolve_chunking_strategy
 
 # ---------------------------------------------------------------------------
 # Streaming event types
@@ -79,22 +84,26 @@ class ChunkEvent(StreamEvent):
 class QuickCheckEvent(StreamEvent):
     """Emitted after each per-chunk streaming validation batch.
 
-    One event per chunk, covering all active requirements in parallel.
+    Usually one event per chunk, covering all active requirements in parallel.
     Not emitted when there are no `requirements`.
+
+    At end of stream a final event may validate residuals from requirements'
+    own `chunking=`: its `chunk_index` has no matching `ChunkEvent`, and
+    `chunking=None` requirements report `"unknown"` in it.
 
     Args:
         chunk_index: Zero-based position of the chunk that was validated.
         attempt: Sampling attempt number; currently always `1`.
         passed: `True` if all active requirements returned non-`"fail"`
             for this chunk.
-        results: `PartialValidationResult` from each active requirement, in the
+        results: `PartialValidationSummary` from each active requirement, in the
             same order as the active slice of `requirements`.
     """
 
     chunk_index: int
     attempt: int
     passed: bool
-    results: list[PartialValidationResult]
+    results: list[PartialValidationSummary]
 
 
 @dataclass
@@ -574,18 +583,23 @@ async def _validate_chunk(
     results = list(
         await asyncio.gather(
             *[
-                req.stream_validate(chunk, backend=validation_backend, ctx=ctx)
+                req.stream_validate(
+                    chunk, backend=validation_backend, ctx=ctx, flush=on_flush
+                )
                 for req in requirements
             ]
         )
     )
+    summaries = [PartialValidationSummary.from_results(r) for r in results]
     failures = [
-        (req, r) for req, r in zip(requirements, results) if r.success == "fail"
+        (req, failure)
+        for req, summary in zip(requirements, summaries)
+        if (failure := summary.failure) is not None
     ]
     await _emit_event(
         streamer.streaming_id,
         QuickCheckEvent(
-            chunk_index=chunk_index, attempt=1, passed=not failures, results=results
+            chunk_index=chunk_index, attempt=1, passed=not failures, results=summaries
         ),
         requirements=requirements,
         event_queue=streamer._event_queue,
@@ -670,8 +684,10 @@ async def _drive(
                 chunk_index += 1
 
         # Flush the trailing fragment the chunker withheld (skipped in raw mode).
+        reqs_flushed = False
         if chunker is not None:
             for c in chunker.flush():
+                reqs_flushed = True
                 if not await _validate_chunk(
                     streamer,
                     c,
@@ -690,6 +706,18 @@ async def _drive(
                 )
                 yield c
                 chunk_index += 1
+
+        if not reqs_flushed and any(r.chunking is not None for r in requirements):
+            if not await _validate_chunk(
+                streamer,
+                "",
+                chunk_index,
+                requirements,
+                validation_backend,
+                ctx,
+                on_flush=True,
+            ):
+                return
 
         streamer.full_text = accumulated
         streamer.mot = mot
