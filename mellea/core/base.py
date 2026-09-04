@@ -1679,6 +1679,32 @@ class ContextTurn:
 ContextT = TypeVar("ContextT", bound="Context")
 
 
+class ContextTypeMismatchError(TypeError):
+    """Raised when a function returns a different `Context` subtype than it was given.
+
+    Mellea's convention is that the context type flowing out of a function equals
+    the context type flowing in (see issue #1522). This error enforces that
+    invariant. It is raised by the functional layer when a backend or sampling
+    strategy produces a context whose type differs from the input context's type,
+    unless the caller opted in to a deliberate type change via
+    `allow_context_type_change=True`.
+
+    Args:
+        input_type (type): The type of the context passed into the function.
+        output_type (type): The type of the context the function produced.
+    """
+
+    def __init__(self, input_type: type, output_type: type) -> None:
+        """Build the error message from the mismatched input and output context types."""
+        super().__init__(
+            f"Context type changed during generation: input was "
+            f"{input_type.__name__!r} but output is {output_type.__name__!r}. "
+            "Mellea functions must return the same Context subtype they were "
+            "given. If this change is deliberate (e.g. switching the context type "
+            "associated with a session), pass allow_context_type_change=True."
+        )
+
+
 class Context(abc.ABC):
     """A `Context` is used to track the state of a `MelleaSession`.
 
@@ -1691,12 +1717,23 @@ class Context(abc.ABC):
         node_data (Span | None): The data associated with this context node,
             or `None` for the root node.
         is_chat_context (bool): Whether this context operates in chat (multi-turn) mode.
+
+    Class Attributes:
+        _propagated_fields: Instance-attribute names copied from the source node
+            onto every node built by `from_previous()` (and, for `ChatContext`,
+            `_make_root()` / `_rebuild_chat_context()`). Because those factories
+            build via `cls.__new__(cls)` and never re-run `__init__`, a subclass
+            that stores state in its constructor must register the attribute here
+            or it is lost on the next `add()`. Empty on the base `Context`;
+            subclasses override with their own tuple (extend the parent's rather
+            than replacing it, e.g. `(*Context._propagated_fields, "my_field")`).
     """
 
     _previous: Context | None
     _data: Span | None
     _is_root: bool
     _is_chat_context: bool = True
+    _propagated_fields: tuple[str, ...] = ()
 
     def __init__(self) -> None:
         """Constructs a new root context with no content."""
@@ -1710,23 +1747,41 @@ class Context(abc.ABC):
     def from_previous(cls: type[ContextT], previous: Context, data: Span) -> ContextT:
         """Constructs a new context node linked to an existing context node.
 
+        The node is built with `cls.__new__(cls)` and its linked-list fields are
+        set directly, rather than by calling `cls()`. This deliberately does not
+        re-run the subclass `__init__`, so a subclass with required constructor
+        arguments (e.g. `def __init__(self, tag: str)`) still works when `add()`
+        reaches this factory — calling `cls()` would raise `TypeError`. Because
+        `__init__` is skipped, any subclass state that would otherwise be set
+        there must be registered in `_propagated_fields`; every such attribute is
+        copied from `previous` onto the new node here, so subclasses that carry
+        configuration keep it across `add()` without relying on `__init__`
+        re-running.
+
         Args:
             previous (Context): The existing context to extend.
             data (Span): The component, content block, or model output to associate with the new node.
 
         Returns:
             ContextT: A new context instance whose `previous_node` is `previous`.
+
+        Raises:
+            AssertionError: If `previous` is not a `Context`, or if `data` is `None`.
         """
         assert isinstance(previous, Context), (
             "Cannot create a new context from a non-Context object."
         )
         assert data is not None, "Cannot create a new context from None data."
 
-        x = cls()
+        x = cls.__new__(cls)
         x._previous = previous
         x._data = data
         x._is_root = False
         x._is_chat_context = previous._is_chat_context
+        # Skipping `__init__` (above) means subclass-owned state would be lost;
+        # copy every registered field from the source node so it survives.
+        for field_name in cls._propagated_fields:
+            setattr(x, field_name, getattr(previous, field_name))
         return x
 
     @classmethod
@@ -1746,8 +1801,16 @@ class Context(abc.ABC):
         configuration (e.g. `ChatContext` with `model_id` and `window_size`)
         should override this to propagate their config into the fresh instance.
 
+        The base signature returns `Context` (not `Self`) so that existing typed
+        third-party subclasses whose override is annotated `-> Context` — the
+        previous base contract, which the docstring invites — continue to satisfy
+        mypy's override check. Built-in contexts narrow the return to their own
+        type on their concrete overrides (e.g. `ChatContext.new_instance` returns
+        `ChatContext`), preserving subtype inference for callers.
+
         Returns:
-            Context: A freshly initialised root context of the same type.
+            Context: A freshly initialised root context of the same runtime type.
+            Concrete built-in subclasses narrow this to their own type.
         """
         return self.reset_to_new()
 
@@ -1880,11 +1943,20 @@ class Context(abc.ABC):
     def add(self, c: Span) -> Context:
         """Returns a new context obtained by appending `c` to this context.
 
+        The abstract signature returns the base `Context` so that existing typed
+        third-party subclasses whose override is annotated `-> Context` continue
+        to satisfy mypy's override check (changing this to `Self` would be a
+        breaking API change for them). Built-in contexts narrow the return to
+        `Self` on their concrete overrides, so `ChatContext.add(...)` statically
+        yields a `ChatContext` and a subclass yields its own type.
+
         Args:
             c (Span): The component, content block, or model output to add to the context.
 
         Returns:
-            Context: A new context node with `c` as its data and this context as its previous node.
+            Context: A new context node of the same runtime type with `c` as its
+            data and this context as its previous node. Concrete built-in
+            subclasses narrow this to `Self`.
         """
         # something along ....from_previous(self, c)
         ...

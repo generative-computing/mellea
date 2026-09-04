@@ -30,6 +30,10 @@ def _make_session() -> MagicMock:
     session = MagicMock(spec=MelleaSession)
     session.ctx = SimpleContext()
     session.backend = MagicMock()
+    # Real session methods read this instance attribute when forwarding to
+    # mfuncs; a spec'd mock doesn't provide it automatically (it's set in
+    # _init_fields, not on the class).
+    session.allow_context_type_change = False
     return session
 
 

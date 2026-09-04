@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Self, cast
 
 from mellea.backends.context_lengths import get_context_length
 from mellea.backends.model_ids import ModelIdentifier
@@ -67,12 +67,14 @@ class ChatContext(Context):
             and uses it as the token budget.
 
     Class Attributes:
-        _propagated_fields: Instance-attribute names copied by `add()` and
-            `_make_root()` into every descendant node. Add new `ChatContext`
-            fields here so they propagate automatically.
+        _propagated_fields: Instance-attribute names copied into every descendant
+            node built via `__new__` (by `Context.from_previous`, `_make_root()`,
+            and `_rebuild_chat_context()`). Extends the base `Context` tuple; add
+            new `ChatContext` fields here so they propagate automatically.
     """
 
     _propagated_fields: tuple[str, ...] = (
+        *Context._propagated_fields,
         "_compactor",
         "_token_context_length_limit",
         "_model_id",
@@ -117,8 +119,17 @@ class ChatContext(Context):
         return self._model_id
 
     def _make_root(self, model_id: str | ModelIdentifier | None) -> ChatContext:
-        """Return a new empty root `ChatContext`, propagating all `_propagated_fields` then binding `model_id`."""
-        new = ChatContext()
+        """Return a new empty root `ChatContext`, propagating all `_propagated_fields` then binding `model_id`.
+
+        Builds via `type(self).__new__(...)` (not `type(self)()`), so a subclass
+        gets an instance of itself back rather than being demoted to
+        `ChatContext`, and a subclass with required constructor arguments does not
+        raise `TypeError` here (the subclass `__init__` is deliberately not
+        re-run). Subclass configuration travels via `_propagated_fields`.
+        """
+        cls = type(self)
+        new = cls.__new__(cls)
+        Context.__init__(new)
         for field in self._propagated_fields:
             setattr(new, field, getattr(self, field))
         # Override whatever _propagated_fields copied for _model_id: the caller
@@ -153,21 +164,26 @@ class ChatContext(Context):
             )
         return self._make_root(model_id)
 
-    def new_instance(self) -> ChatContext:
+    def new_instance(self) -> Self:
         """Return a new empty root `ChatContext`, preserving compactor, token budget, and `model_id`.
 
         Use this instead of `reset_to_new()` when you need to preserve the
         configuration of an existing instance. `reset_to_new()` is a classmethod
         that returns a bare `ChatContext()` with no configuration.
 
-        Returns:
-            ChatContext: A fresh root context with the same compactor,
-            `token_context_length_limit`, and `model_id` as this instance, but
-            no history.
-        """
-        return self._make_root(self._model_id)
+        Narrows the base `Context.new_instance()` return (`Context`) to `Self`, so
+        a subclass gets an instance of its own type back. `_make_root` builds via
+        `type(self).__new__(...)`, so the runtime guarantee matches this static
+        type.
 
-    def add(self, c: Span) -> ChatContext:
+        Returns:
+            Self: A fresh root context of the same concrete subtype with the same
+            compactor, `token_context_length_limit`, and `model_id` as this
+            instance, but no history.
+        """
+        return cast("Self", self._make_root(self._model_id))
+
+    def add(self, c: Span) -> Self:
         """Append `c` and run the compactor; return the resulting context.
 
         Args:
@@ -175,14 +191,32 @@ class ChatContext(Context):
                 block, or model output to append.
 
         Returns:
-            ChatContext: A new `ChatContext` carrying the same configuration.
+            Self: A new context of the same concrete subtype carrying the same
+            configuration. Returning `Self` (not the hard-coded `ChatContext`)
+            keeps a subclass statically its own type, matching the runtime
+            `type(self)` construction below.
         """
-        new = ChatContext.from_previous(self, c)
-        for field in self._propagated_fields:
-            setattr(new, field, getattr(self, field))
+        # `type(self)`, not `ChatContext`, so a subclass gets an instance of
+        # itself back rather than being silently demoted to `ChatContext`.
+        # Typed as `ChatContext` (not `Self`) because `compact()` below returns
+        # `ChatContext`; the final `cast` re-narrows to `Self` for the return.
+        # `from_previous` already copies `_propagated_fields` from `self` onto the
+        # new node, so no explicit copy is needed here.
+        new: ChatContext = type(self).from_previous(self, c)
         if self._compactor is not None:
             new = self._compactor.compact(new)
-        return new
+            # The built-in compactors rebuild via `type(ctx)`, so they preserve
+            # the concrete subtype. A *custom* `InlineCompactor` need not — its
+            # `compact()` may return a plain `ChatContext`, which would make the
+            # `Self` cast below unsound (issue #1522). If the returned type was
+            # demoted, rebuild the compacted history back into `type(self)`,
+            # re-copying `_propagated_fields` so subclass-owned state survives.
+            if type(new) is not type(self):
+                new = _rebuild_chat_context(new.as_list(), source=self)
+        # `new` is now guaranteed to be a `type(self)` instance (either the
+        # compactor preserved it, or the rebuild above restored it), so the cast
+        # informs the checker of what the runtime guarantees.
+        return cast("Self", new)
 
     def view_for_generation(self) -> list[Span] | None:
         """Return the components to forward to the model.
@@ -275,9 +309,11 @@ class ChatContext(Context):
 def _rebuild_chat_context(
     components: list[Span],
     *,
+    source: ChatContext,
     compactor: InlineCompactor | None = None,
     token_context_length_limit: int | None = None,
     model_id: str | ModelIdentifier | None = None,
+    cls: type[ChatContext] | None = None,
 ) -> ChatContext:
     """Build a fresh `ChatContext` linked-list without triggering compaction.
 
@@ -286,26 +322,72 @@ def _rebuild_chat_context(
     given the same configuration so the rebuilt context behaves identically to
     its source (e.g. token-budget views still apply).
 
+    Subclass state is preserved: every attribute named in the concrete class's
+    `_propagated_fields` is copied from `source` onto each rebuilt node — not
+    just the three built-in `ChatContext` fields — so a subclass that registers
+    its own field there keeps it across compaction rather than losing it (and
+    then raising `AttributeError` on the next `add`). The three built-in fields
+    can be overridden via the explicit `compactor` / `token_context_length_limit`
+    / `model_id` arguments; any that is left `None` falls back to `source`'s
+    value.
+
+    Note:
+        Nodes are constructed via `cls.__new__(cls)` and configured by copying
+        fields, so the subclass initializer is deliberately not re-run. A
+        subclass whose invariants live only in `__init__` (rather than in
+        `_propagated_fields`) will not have them re-established here; register
+        such state in `_propagated_fields` so it propagates.
+
+    Migration:
+        `source` is now a **required** keyword argument (it was absent before the
+        subclass-preservation change). Custom compactors that call this helper —
+        including the documented `custom_compactor` recipe — must pass
+        `source=ctx` so the rebuilt nodes inherit `type(ctx)` and its
+        `_propagated_fields`. It is required rather than optional because a
+        missing `source` would silently discard subclass identity and state (the
+        exact regression this argument fixes). The `compactor` /
+        `token_context_length_limit` / `model_id` arguments still default to
+        `None`; a `None` now inherits the corresponding value from `source`
+        rather than clearing the field.
+
     Args:
         components: Components to materialise as the new context, in order.
-        compactor: Compactor to attach to every node of the rebuilt context.
-        token_context_length_limit: Token budget to attach to every node.
-        model_id: Model identifier to attach to every node.
+        source: The context being rebuilt. Its `_propagated_fields` values are
+            copied onto every node so subclass-owned state survives.
+        compactor: Compactor to attach to every node; when `None`, `source`'s
+            compactor is used.
+        token_context_length_limit: Token budget to attach to every node; when
+            `None`, `source`'s value is used.
+        model_id: Model identifier to attach to every node; when `None`,
+            `source`'s value is used.
+        cls: The concrete `ChatContext` subtype to construct. Defaults to
+            `type(source)` so a subclassed context is rebuilt as its own type
+            rather than being demoted to `ChatContext`.
 
     Returns:
-        A new `ChatContext` whose linear history is exactly `components`.
+        A new context of type `cls` whose linear history is exactly `components`.
     """
+    target_cls = cls if cls is not None else type(source)
+    overrides = {
+        "_compactor": compactor,
+        "_token_context_length_limit": token_context_length_limit,
+        "_model_id": model_id,
+    }
 
     def _configure(node: ChatContext) -> None:
-        node._compactor = compactor
-        node._token_context_length_limit = token_context_length_limit
-        node._model_id = model_id
+        # Copy every propagated field from the source so subclass-owned state
+        # survives compaction; explicit non-None overrides take precedence.
+        for field in source._propagated_fields:
+            setattr(node, field, getattr(source, field))
+        for field, value in overrides.items():
+            if value is not None:
+                setattr(node, field, value)
 
-    ctx: ChatContext = ChatContext.__new__(ChatContext)
+    ctx: ChatContext = target_cls.__new__(target_cls)
     Context.__init__(ctx)
     _configure(ctx)
     for c in components:
-        new: ChatContext = ChatContext.__new__(ChatContext)
+        new: ChatContext = target_cls.__new__(target_cls)
         new._previous = ctx
         new._data = c
         new._is_root = False

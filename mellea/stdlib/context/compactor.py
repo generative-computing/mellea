@@ -270,9 +270,11 @@ class WindowCompactor(InlineCompactor):
         compacted = full[:pin_end] + keep_body
         return _rebuild_chat_context(
             compacted,
+            source=ctx,
             compactor=ctx._compactor,
             token_context_length_limit=ctx._token_context_length_limit,
             model_id=ctx._model_id,
+            cls=type(ctx),
         )
 
 
@@ -616,7 +618,9 @@ class LLMSummarizeCompactor:
         compacted = [*prefix, summary_message, *recent]
         return _rebuild_chat_context(
             compacted,
+            source=ctx,
             compactor=ctx._compactor,
             token_context_length_limit=ctx._token_context_length_limit,
             model_id=ctx._model_id,
+            cls=type(ctx),
         )
