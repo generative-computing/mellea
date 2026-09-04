@@ -152,10 +152,8 @@ def test_to_chat_basic_message():
 
 
 def test_to_chat_attaches_reasoning_content_for_assistant_thinking():
-    """Regression test: an assistant Message carrying `.thinking` must have it
-    forwarded as `reasoning_content` on the wire dict. Before this fix, `to_chat`
-    read only `m.role`/`m.content` and silently dropped `.thinking` on every
-    HF replay — see PR #1616.
+    """An assistant Message carrying `.thinking` must have it forwarded as
+    `reasoning_content` on the wire dict.
     """
     from mellea.backends.utils import to_chat
     from mellea.formatters.template_formatter import TemplateFormatter as ChatFormatter

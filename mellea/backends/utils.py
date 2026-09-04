@@ -99,26 +99,12 @@ def to_chat(
 
     # NOTE: `self.formatter.to_chat_messages` explicitly skips `Message` objects. However, we need
     # to print `Message`s to correctly serialize any documents with the message. Do the printing here.
-    # NOTE: reasoning replay here is an interim, unconditional forward — every non-empty
-    # `Message.thinking` is attached as `reasoning_content` regardless of `should_replay_reasoning`
-    # (unlike OpenAI/LiteLLM/Watsonx/Ollama, which gate replay on that policy). This exists because
-    # the HF think-tag capture fix (#1610) alone removed reasoning that Granite's chat template
-    # previously saw on every turn: before that fix, raw `<think>...</think>` text sat inline in
-    # `content`, and after it, `content` is tag-free and the template prepends an empty
-    # `<think></think>` instead (chat_template.jinja:83-90).
-    #
-    # Restores parity ONLY for tool-call turns (a turn after the last user message, or one the
-    # template's `truncate_history_thinking` gate otherwise doesn't touch) — those match the
-    # #1201 cross-backend consensus (replay on tool-call turns only) and the reconstructed
-    # `<think>...</think>` survives unmodified. Does NOT restore parity for plain multi-turn
-    # (an assistant turn with no tool call, before the last user message): the template's
-    # truncation branch strips reasoning whenever content carries BOTH tags
-    # (chat_template.jinja:99,137-145), and the reconstructed form always does — whereas the
-    # pre-#1610 inline form only ever carried the closing tag (the opening tag is prompt-baked,
-    # never present in `mot.value`), so it was invisible to that same gate and passed through by
-    # accident. This is a real, measured functional gap: whether HF should replay reasoning on
-    # plain turns too (diverging from the #1201 consensus) is open — see PR #1616 and the two
-    # rendered-prompt tests in test/backends/test_huggingface_thinking.py that pin both shapes.
+    # NOTE: `Message.thinking` is forwarded as `reasoning_content` (the key Granite/Qwen3
+    # templates consume) whenever the message is an assistant turn with captured reasoning.
+    # This effectively restores replay only on tool-call turns: Granite's own
+    # `truncate_history_thinking` gate strips reasoning on plain turns regardless, matching
+    # the #1201 cross-backend consensus (replay on tool-call turns only) rather than
+    # extending it. See test_rendered_prompt_*_turn in test_huggingface_thinking.py.
     ctx_as_conversation: list = []
     for m in ctx_as_message_list:
         msg_dict: dict = {"role": m.role, "content": formatter.print(m)}
