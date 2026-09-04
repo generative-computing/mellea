@@ -16,7 +16,9 @@ Apple Silicon Mac with sufficient VRAM for the chosen base model. Uploading requ
 Hugging Face account.
 
 > **Backend note:** Custom-trained adapters can only be loaded into `LocalHFBackend`.
-> They do not work with Ollama, OpenAI, or other remote backends.
+> They do not work with OpenAI or other remote backends. To use one with Ollama,
+> convert it to GGUF and bundle it into an Ollama model with a Modelfile `ADAPTER`
+> line, then pass that model tag via `OllamaModelBackend(adapter_models=...)`.
 >
 > Granite Switch models ship with pre-trained adapter functions embedded in the
 > model weights. Use them through `OpenAIBackend` with a served checkpoint, or
