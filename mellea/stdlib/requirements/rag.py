@@ -556,32 +556,26 @@ class GroundednessRequirement(Requirement):
         Returns:
             Formatted prompt for LLM expecting JSON array output
         """
-        # Build structured list of spans with their citations
-        span_assessments = []
+        # json.dumps keeps this valid JSON even if text contains quotes/newlines.
+        spans_payload = []
         for i, span_info in enumerate(spans_to_assess):
             span_text = span_info["text"]
             span_citations = span_info["citations"]
 
-            # Format citations for this span
-            citations_lines = []
+            evidence_entries = []
             for j, citation in enumerate(span_citations):
                 citation_text = citation.get("citation_text", "")
                 doc_id = citation.get("citation_doc_id", "unknown")
-                citations_lines.append(
-                    f'    Citation {j} (from doc {doc_id}): "{citation_text}"'
+                evidence_entries.append(
+                    f'Evidence {j} (from doc {doc_id}): "{citation_text}"'
                 )
 
-            citations_formatted = "\n".join(citations_lines)
-
-            # Build span entry
-            span_entry = (
-                f'  {{"span_id": {i}, '
-                f'"text": "{span_text}", '
-                f'"citations": [\n{citations_formatted}\n  ]}}'
+            # "evidence" (not "citations") avoids echoing the output key name (#1316).
+            spans_payload.append(
+                {"span_id": i, "text": span_text, "evidence": evidence_entries}
             )
-            span_assessments.append(span_entry)
 
-        spans_formatted = ",\n".join(span_assessments)
+        spans_formatted = json.dumps(spans_payload, indent=2)
 
         # Build source documents section for context
         documents_section = ""
@@ -594,17 +588,17 @@ class GroundednessRequirement(Requirement):
             documents_section = "Source Documents:\n" + "\n\n".join(doc_lines) + "\n\n"
 
         prompt = (
-            "Assess the level of support for each response span based on provided citations "
-            "and source documents.\n\n"
-            "For each span, determine if the citations fully support, partially support, "
-            "or do not support the span. Consider the full context from the source documents "
-            "where the citations appear.\n\n"
+            "Assess the level of support for each response span based on its provided evidence "
+            "and the source documents.\n\n"
+            "For each span, determine if the evidence fully supports, partially supports, "
+            "or does not support the span. Consider the full context from the source documents "
+            "where the evidence appears.\n\n"
             "Respond with a flat JSON array (no nested arrays), with one object for each span. Example output:\n"
             '[{"span_id": 0, "support_level": "FULLY_SUPPORTED"}]\n\n'
             "Support levels must be ONLY one of: FULLY_SUPPORTED, PARTIALLY_SUPPORTED, or NOT_SUPPORTED.\n\n"
             f"{documents_section}"
             f"Response context:\n{response}\n\n"
-            f"Spans to assess:\n[\n{spans_formatted}\n]\n\n"
+            f"Spans to assess:\n{spans_formatted}\n\n"
             "JSON Output:\n"
         )
         return prompt
@@ -704,14 +698,17 @@ class GroundednessRequirement(Requirement):
                 support_level_raw = (
                     (judgment.get("support_level") or "").upper().strip()
                 )
-                # Handle nested format: {"span_id": 0, "citations": [{"support_level": "..."}]}
-                # This format appears when the model mirrors the input span structure from the prompt.
-                # Aggregate using pessimistic ordering (NOT_SUPPORTED beats PARTIALLY, etc.)
-                # so the result is deterministic regardless of citation order.
+                # Handle nested format: {"span_id": 0, "evidence": [{"support_level": "..."}]}
+                # Checks both "evidence" and "citations" (prior key, kept defensively).
                 if not support_level_raw:
+                    nested_source: list = []
+                    for nested_key in ("evidence", "citations"):
+                        nested_value = judgment.get(nested_key)
+                        if isinstance(nested_value, list):
+                            nested_source.extend(nested_value)
                     nested_levels = {
                         _norm(cit.get("support_level"))
-                        for cit in (judgment.get("citations") or [])
+                        for cit in nested_source
                         if isinstance(cit, dict)
                     }
                     nested_levels.discard("")

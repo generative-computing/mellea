@@ -232,6 +232,19 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         self.default_to_constraint_checking_alora = default_to_constraint_checking_alora
         self._default_extra_body: dict = default_extra_body or {}
 
+        # Construction-time `extra_body` passed via the generic `model_options`
+        # dict (as opposed to the dedicated `default_extra_body` param) must not
+        # outrank a per-call `ModelOption.THINKING` the way `default_extra_body`
+        # doesn't. Fold it into `_default_extra_body`'s tier now and exclude it
+        # from `self.model_options` in `_simplify_and_merge`, so it can no longer
+        # re-enter the per-call precedence chain as if it were caller-supplied
+        # `extra_body` (#1617).
+        construction_extra_body = self.model_options.get("extra_body")
+        if isinstance(construction_extra_body, dict):
+            self._default_extra_body = ModelOption._merge_extra_body(
+                construction_extra_body, self._default_extra_body
+            )
+
         self._provider: str = "openai"
 
         self._adapter_source = adapter_source
@@ -604,7 +617,13 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             remap_dict = self.to_mellea_model_opts_map_completions
 
         resolved_options = resolve_model_options(
-            backend_defaults=self.model_options,
+            # `extra_body` is excluded here: it was already folded into
+            # `_default_extra_body` at construction time (see `__init__`), so
+            # merging it again would let it re-enter the per-call precedence
+            # chain and outrank a per-call `ModelOption.THINKING`.
+            backend_defaults={
+                k: v for k, v in self.model_options.items() if k != "extra_body"
+            },
             remap=remap_dict,
             call_options=model_options,
         )

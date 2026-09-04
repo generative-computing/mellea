@@ -3,6 +3,7 @@
 
 """Tests for GroundednessRequirement."""
 
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -435,6 +436,42 @@ def test_build_batch_support_prompt(sample_docs):
     assert "The sky is blue" in prompt
     assert "Grass is green" in prompt
 
+    # Input spans are keyed "evidence", not "citations" (issue #1316).
+    assert '"evidence": [' in prompt
+    assert '"citations": [' not in prompt
+    assert "Evidence 0" in prompt
+
+
+def test_build_batch_support_prompt_escapes_special_characters(sample_docs):
+    """Text with quotes/newlines must not break the prompt's JSON structure."""
+    req = GroundednessRequirement()
+
+    response = 'He said "hello" to me.'
+    spans_to_assess = [
+        {
+            "text": 'He said "hello" to me',
+            "citations": [
+                {
+                    "citation_text": 'The greeting was "hello".\nA second line.',
+                    "citation_doc_id": "0",
+                }
+            ],
+        }
+    ]
+
+    prompt = req._build_batch_support_prompt(response, spans_to_assess, sample_docs)
+
+    spans_section = prompt[
+        prompt.index("Spans to assess:\n") + len("Spans to assess:\n") : prompt.index(
+            "\n\nJSON Output:"
+        )
+    ]
+    parsed = json.loads(spans_section)
+
+    assert parsed[0]["span_id"] == 0
+    assert parsed[0]["text"] == 'He said "hello" to me'
+    assert 'The greeting was "hello".\nA second line.' in parsed[0]["evidence"][0]
+
 
 def test_parse_batch_support_output():
     """Test parsing batch support output."""
@@ -495,6 +532,83 @@ def test_parse_batch_support_output_nested_citations():
 
     assert len(result) == 2
     assert result[0] == "FULLY_SUPPORTED"
+    assert result[1] == "NOT_SUPPORTED"
+
+
+def test_parse_batch_support_output_nested_evidence():
+    """Same as the 'citations' nesting test, but for the current 'evidence' key."""
+    req = GroundednessRequirement()
+
+    output_text = """
+    [
+        {
+            "span_id": 0,
+            "text": "The Eiffel Tower is located in Paris, France.",
+            "evidence": [
+                {
+                    "citation_id": 0,
+                    "source_document": 0,
+                    "support_level": "FULLY_SUPPORTED"
+                }
+            ]
+        },
+        {
+            "span_id": 1,
+            "text": "Another span.",
+            "evidence": [
+                {
+                    "citation_id": 0,
+                    "source_document": 0,
+                    "support_level": "NOT_SUPPORTED"
+                }
+            ]
+        }
+    ]
+    """
+
+    result = req._parse_batch_support_output(output_text, 2)
+
+    assert len(result) == 2
+    assert result[0] == "FULLY_SUPPORTED"
+    assert result[1] == "NOT_SUPPORTED"
+
+
+def test_parse_batch_support_output_nested_both_keys_union():
+    """Both keys present at once must union, not pick one and drop the other."""
+    req = GroundednessRequirement()
+
+    output_text = """
+    [
+        {
+            "span_id": 0,
+            "evidence": [{"support_level": "FULLY_SUPPORTED"}],
+            "citations": [{"support_level": "NOT_SUPPORTED"}]
+        }
+    ]
+    """
+
+    result = req._parse_batch_support_output(output_text, 1)
+
+    assert len(result) == 1
+    # pessimistic: NOT_SUPPORTED wins over FULLY_SUPPORTED from the other key
+    assert result[0] == "NOT_SUPPORTED"
+
+
+def test_parse_batch_support_output_nested_non_list_value():
+    """A non-list value must not raise - degrade to NOT_SUPPORTED instead."""
+    req = GroundednessRequirement()
+
+    output_text = """
+    [
+        {"span_id": 0, "evidence": 5},
+        {"span_id": 1, "citations": "not a list"}
+    ]
+    """
+
+    result = req._parse_batch_support_output(output_text, 2)
+
+    assert len(result) == 2
+    assert result[0] == "NOT_SUPPORTED"
     assert result[1] == "NOT_SUPPORTED"
 
 

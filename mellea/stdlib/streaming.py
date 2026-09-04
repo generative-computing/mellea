@@ -12,7 +12,9 @@ task, and leaving the block — normally, on early `break`, or on exception —
 cancels the generation and fires the `STREAMING_END` hook.
 
 Typed `StreamEvent` objects are emitted via the `STREAMING_EVENT` hook; subscribe a
-plugin to observe them (see `docs/examples/streaming/`).
+plugin to observe them (see `docs/examples/streaming/`). To iterate them directly
+instead, `stream(as_events=True)` returns an `EventStreamer` that yields events in
+place of chunks.
 """
 
 from __future__ import annotations
@@ -23,7 +25,7 @@ import uuid
 from collections.abc import AsyncGenerator, AsyncIterator, Sequence
 from copy import copy
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal, overload
 
 from ..backends.model_options import ModelOption
 from ..core.backend import Backend
@@ -203,6 +205,8 @@ class Streamer:
         chunking: Resolved chunking strategy, or `None` for raw deltas.
         requirements: Requirements to validate against; pre-copied by `stream`.
         validation_backend: Backend used for validation calls.
+        event_queue: Optional queue; when set, every emitted `StreamEvent` is
+            also pushed onto it. `None` for the plain chunk-iterating path.
 
     Attributes:
         failed_early: `True` if a requirement returned `"fail"` during streaming
@@ -231,6 +235,7 @@ class Streamer:
         requirements: list[Requirement],
         validation_backend: Backend,
         streaming_id: str,
+        event_queue: asyncio.Queue[StreamEvent | None] | None = None,
     ) -> None:
         """Wrap an in-flight generation; iterating the `Streamer` drives it."""
         self.failed_early: bool = False
@@ -243,6 +248,7 @@ class Streamer:
         # Correlates this stream's START/EVENT/END hooks; created in `stream()`
         # so START can fire before generation opens the backend span.
         self.streaming_id: str = streaming_id
+        self._event_queue = event_queue
         # The in-flight thunk, for teardown. Held separately from the public `mot`,
         # which is only set once the stream completes.
         self._mot = mot
@@ -286,6 +292,7 @@ class Streamer:
                     CompletedEvent(
                         success=success, full_text=self.full_text, attempts_used=1
                     ),
+                    event_queue=self._event_queue,
                 )
             finally:
                 if has_plugins(HookType.STREAMING_END):
@@ -331,14 +338,181 @@ class Streamer:
 
 
 # ---------------------------------------------------------------------------
+# EventStreamer handle
+# ---------------------------------------------------------------------------
+
+
+class EventStreamer:
+    """Async-iterator handle over a stream's `StreamEvent` objects.
+
+    Returned by `stream(..., as_events=True)`; iterate with `async for` inside
+    `async with`. It is its own iterator, so `break` then iterating again
+    resumes from the next queued event. Events are produced eagerly, independent
+    of consumption, so the stream can run ahead of iteration; outcome attributes
+    (`full_text`, `completed_normally`, …) mirror the wrapped `Streamer`. Do not
+    instantiate directly.
+    """
+
+    def __init__(self) -> None:
+        """Create an idle handle; `stream()` spawns the pump task."""
+        self._queue: asyncio.Queue[StreamEvent | None] = asyncio.Queue()
+        self._streamer: Streamer | None = None
+        self._pump_task: asyncio.Task[None] | None = None
+        self._ready: asyncio.Future[None] = asyncio.get_running_loop().create_future()
+        self._exhausted: bool = False  # set when the terminating None is drained
+
+    async def _pump(
+        self,
+        action: Component[Any] | CBlock,
+        backend: Backend,
+        ctx: Context,
+        *,
+        chunking: str | ChunkingStrategy | None,
+        requirements: Sequence[Requirement] | None,
+        validation_backend: Backend | None,
+    ) -> None:
+        """Drive the stream to completion, funnelling its events into the queue."""
+        try:
+            self._streamer = await _stream(
+                action,
+                backend,
+                ctx,
+                chunking=chunking,
+                requirements=requirements,
+                validation_backend=validation_backend,
+                event_queue=self._queue,
+            )
+        except BaseException as exc:
+            # Resolve _ready on every setup exit so `await _ready` can't hang.
+            if isinstance(exc, asyncio.CancelledError):
+                self._ready.cancel()
+                self._queue.put_nowait(None)
+                raise
+            self._ready.set_exception(exc)
+            self._queue.put_nowait(None)
+            return
+        self._ready.set_result(None)
+        try:
+            async for _ in self._streamer:
+                pass
+        finally:
+            self._queue.put_nowait(None)
+
+    def __aiter__(self) -> AsyncIterator[StreamEvent]:
+        """Return this handle as its own event iterator."""
+        return self
+
+    async def __anext__(self) -> StreamEvent:
+        """Return the next queued event, stopping once the queue is drained.
+
+        Returns:
+            StreamEvent: The next event from the queue.
+
+        Raises:
+            StopAsyncIteration: Once the terminating `None` has been drained.
+        """
+        if self._exhausted:
+            raise StopAsyncIteration
+        item = await self._queue.get()
+        if item is None:
+            self._exhausted = True
+            assert self._pump_task is not None
+            # A faulted pump re-raises here; skip our own aclose() cancellation.
+            if not self._pump_task.cancelled():
+                await self._pump_task
+            raise StopAsyncIteration
+        return item
+
+    async def __aenter__(self) -> EventStreamer:
+        """Enter the async context manager, returning this `EventStreamer`."""
+        return self
+
+    async def __aexit__(self, *exc_info: object) -> None:
+        """Exit the context manager, releasing the stream via `aclose()`."""
+        await self.aclose()
+
+    async def aclose(self) -> None:
+        """Cancel the pump and release the underlying stream, idempotently.
+
+        Prefer `async with stream(..., as_events=True) as s:` so this runs
+        automatically on every exit path.
+        """
+        if self._pump_task is not None:
+            if not self._pump_task.done():
+                self._pump_task.cancel()
+                try:
+                    await self._pump_task
+                except asyncio.CancelledError:
+                    # Consume the pump's own cancellation; propagate an external
+                    # cancel of this task (cancelling() > 0).
+                    cur = asyncio.current_task()
+                    if cur is not None and cur.cancelling() > 0:
+                        raise
+            elif not self._pump_task.cancelled():
+                # Retrieve the stored exception so it isn't "never retrieved" at GC.
+                self._pump_task.exception()
+        if self._streamer is not None:
+            await self._streamer.aclose()
+
+    # Outcome properties delegate to the wrapped Streamer, falling back to its
+    # pre-iteration defaults until the pump has created it.
+
+    @property
+    def failed_early(self) -> bool:
+        """`True` if a requirement failed during streaming and stopped it early."""
+        return self._streamer.failed_early if self._streamer is not None else False
+
+    @property
+    def completed_normally(self) -> bool:
+        """`True` only if the stream reached its natural end, prior to final validation."""
+        return (
+            self._streamer.completed_normally if self._streamer is not None else False
+        )
+
+    @property
+    def failure_reason(self) -> str | None:
+        """Human-readable reason when `failed_early` is `True`; else `None`."""
+        return self._streamer.failure_reason if self._streamer is not None else None
+
+    @property
+    def streaming_failures(self) -> list[tuple[Requirement, PartialValidationResult]]:
+        """`(Requirement, PartialValidationResult)` pairs for each failing requirement."""
+        return self._streamer.streaming_failures if self._streamer is not None else []
+
+    @property
+    def full_text(self) -> str:
+        """Validated-and-emitted output; the full text on natural completion."""
+        return self._streamer.full_text if self._streamer is not None else ""
+
+    @property
+    def mot(self) -> ModelOutputThunk | None:
+        """The computed thunk, set on natural completion; `None` otherwise."""
+        return self._streamer.mot if self._streamer is not None else None
+
+    @property
+    def final_validations(self) -> list[ValidationResult]:
+        """`ValidationResult` objects from the stream-end `validate()` calls."""
+        return self._streamer.final_validations if self._streamer is not None else []
+
+    @property
+    def streaming_id(self) -> str | None:
+        """UUID correlating this stream's START/EVENT/END hooks; `None` pre-start."""
+        return self._streamer.streaming_id if self._streamer is not None else None
+
+
+# ---------------------------------------------------------------------------
 # Driver
 # ---------------------------------------------------------------------------
 
 
 async def _emit_event(
-    streaming_id: str, ev: StreamEvent, *, requirements: list[Requirement] | None = None
+    streaming_id: str,
+    ev: StreamEvent,
+    *,
+    requirements: list[Requirement] | None = None,
+    event_queue: asyncio.Queue[StreamEvent | None] | None = None,
 ) -> None:
-    """Fire the STREAMING_EVENT hook for `ev`.
+    """Fire the STREAMING_EVENT hook for `ev`, also pushing it onto `event_queue` if set.
 
     For a `QuickCheckEvent`, `requirements` carries the active requirement
     instances in result order so a subscriber can attribute each result.
@@ -348,7 +522,11 @@ async def _emit_event(
         ev: The event to emit.
         requirements: Active requirements for a `QuickCheckEvent`, in result
             order; `None` for other event types.
+        event_queue: Optional queue; when set, `ev` is also pushed onto it.
+            `None` for the plain chunk-iterating path.
     """
+    if event_queue is not None:
+        event_queue.put_nowait(ev)
     if has_plugins(HookType.STREAMING_EVENT):
         from ..plugins.hooks.streaming import StreamingEventPayload
 
@@ -410,6 +588,7 @@ async def _validate_chunk(
             chunk_index=chunk_index, attempt=1, passed=not failures, results=results
         ),
         requirements=requirements,
+        event_queue=streamer._event_queue,
     )
     if not failures:
         return True
@@ -485,6 +664,7 @@ async def _drive(
                 await _emit_event(
                     streamer.streaming_id,
                     ChunkEvent(text=c, chunk_index=chunk_index, attempt=1),
+                    event_queue=streamer._event_queue,
                 )
                 yield c
                 chunk_index += 1
@@ -506,6 +686,7 @@ async def _drive(
                 await _emit_event(
                     streamer.streaming_id,
                     ChunkEvent(text=c, chunk_index=chunk_index, attempt=1),
+                    event_queue=streamer._event_queue,
                 )
                 yield c
                 chunk_index += 1
@@ -514,7 +695,9 @@ async def _drive(
         streamer.mot = mot
         streamer.completed_normally = True
         await _emit_event(
-            streamer.streaming_id, StreamingDoneEvent(attempt=1, full_text=accumulated)
+            streamer.streaming_id,
+            StreamingDoneEvent(attempt=1, full_text=accumulated),
+            event_queue=streamer._event_queue,
         )
 
         # Reached only on natural completion, so every requirement is still
@@ -532,6 +715,7 @@ async def _drive(
                     passed=all(v.as_bool() for v in streamer.final_validations),
                     results=streamer.final_validations,
                 ),
+                event_queue=streamer._event_queue,
             )
         success = True
     except Exception as exc:
@@ -541,6 +725,7 @@ async def _drive(
         await _emit_event(
             streamer.streaming_id,
             ErrorEvent(exception_type=type(exc).__name__, detail=str(exc)),
+            event_queue=streamer._event_queue,
         )
         raise
     finally:
@@ -555,7 +740,7 @@ async def _drive(
 # ---------------------------------------------------------------------------
 
 
-async def stream(
+async def _stream(
     action: Component[Any] | CBlock,
     backend: Backend,
     ctx: Context,
@@ -563,24 +748,12 @@ async def stream(
     chunking: str | ChunkingStrategy | None = None,
     requirements: Sequence[Requirement] | None = None,
     validation_backend: Backend | None = None,
+    event_queue: asyncio.Queue[StreamEvent | None] | None = None,
 ) -> Streamer:
-    """Start a streaming generation.
+    """Start a streaming generation and return its `Streamer`.
 
-    Generation begins eagerly, before this call returns. Consume the returned
-    `Streamer` inside `async with` so the stream is always released. On early
-    exit or `break`, `async with` cancels the in-flight generation:
-
-    ```python
-    async with await stream(action, backend, ctx) as s:
-        async for chunk in s:
-            ...
-    ```
-
-    Each iteration yields a chunk — a unit produced by the `chunking` strategy,
-    or the raw model delta when `chunking` is `None`. A chunk is delivered once it
-    has passed every requirement's `stream_validate`; a `"fail"` stops the stream
-    early and cancels the backend. On natural completion, `validate()` runs on the
-    full output. With no `requirements`, chunks are yielded without validation.
+    The implementation behind the public `stream()`; see it for the full
+    contract.
 
     Args:
         action: The component or content block to generate from.
@@ -593,6 +766,8 @@ async def stream(
             streaming and against the full output at stream end. `None` yields
             chunks without validation.
         validation_backend: Backend for validation calls; defaults to `backend`.
+        event_queue: Optional queue; when set, every emitted `StreamEvent` is
+            also pushed onto it. `None` for the plain chunk-iterating path.
 
     Returns:
         Streamer: An async-iterable handle over the validated chunks.
@@ -649,4 +824,133 @@ async def stream(
             )
         raise
 
-    return Streamer(mot, gen_ctx, strategy, cloned_reqs, resolved_backend, streaming_id)
+    return Streamer(
+        mot, gen_ctx, strategy, cloned_reqs, resolved_backend, streaming_id, event_queue
+    )
+
+
+@overload
+async def stream(
+    action: Component[Any] | CBlock,
+    backend: Backend,
+    ctx: Context,
+    *,
+    chunking: str | ChunkingStrategy | None = ...,
+    requirements: Sequence[Requirement] | None = ...,
+    validation_backend: Backend | None = ...,
+    as_events: Literal[False] = ...,
+) -> Streamer: ...
+
+
+@overload
+async def stream(
+    action: Component[Any] | CBlock,
+    backend: Backend,
+    ctx: Context,
+    *,
+    chunking: str | ChunkingStrategy | None = ...,
+    requirements: Sequence[Requirement] | None = ...,
+    validation_backend: Backend | None = ...,
+    as_events: Literal[True],
+) -> EventStreamer: ...
+
+
+@overload
+async def stream(
+    action: Component[Any] | CBlock,
+    backend: Backend,
+    ctx: Context,
+    *,
+    chunking: str | ChunkingStrategy | None = ...,
+    requirements: Sequence[Requirement] | None = ...,
+    validation_backend: Backend | None = ...,
+    as_events: bool,
+) -> Streamer | EventStreamer: ...
+
+
+async def stream(
+    action: Component[Any] | CBlock,
+    backend: Backend,
+    ctx: Context,
+    *,
+    chunking: str | ChunkingStrategy | None = None,
+    requirements: Sequence[Requirement] | None = None,
+    validation_backend: Backend | None = None,
+    as_events: bool = False,
+) -> Streamer | EventStreamer:
+    """Start a streaming generation.
+
+    Generation begins eagerly, before this call returns. Consume the returned
+    handle inside `async with` so the stream is always released. On early exit or
+    `break`, `async with` cancels the in-flight generation:
+
+    ```python
+    async with await stream(action, backend, ctx) as s:
+        async for chunk in s:
+            ...
+    ```
+
+    By default this yields validated `str` chunks. Each iteration yields a chunk —
+    a unit produced by the `chunking` strategy, or the raw model delta when
+    `chunking` is `None`. A chunk is delivered once it has passed every
+    requirement's `stream_validate`; a `"fail"` stops the stream early and cancels
+    the backend. On natural completion, `validate()` runs on the full output. With
+    no `requirements`, chunks are yielded without validation.
+
+    With `as_events=True`, this returns an `EventStreamer` instead: iterating it
+    yields the stream's typed `StreamEvent` objects (the same events otherwise seen
+    only via the `STREAMING_EVENT` hook). The terminal `CompletedEvent`/`ErrorEvent`
+    come through the iterator too; an early `break` leaves them queued, so iterating
+    again drains them. Each `ChunkEvent` carries its text, so no output is lost.
+
+    Args:
+        action: The component or content block to generate from.
+        backend: Backend used for generation and, unless `validation_backend`
+            is set, validation.
+        ctx: The generation context.
+        chunking: A `ChunkingStrategy`, a recognized alias string, or `None`
+            (default) to yield raw deltas unchunked.
+        requirements: Requirements validated against each chunk during
+            streaming and against the full output at stream end. `None` yields
+            chunks without validation.
+        validation_backend: Backend for validation calls; defaults to `backend`.
+        as_events: When `True`, return an `EventStreamer` that iterates typed
+            `StreamEvent` objects; when `False` (default), return a `Streamer`
+            that iterates validated `str` chunks.
+
+    Returns:
+        Streamer | EventStreamer: A `Streamer` over validated chunks, or — when
+            `as_events=True` — an `EventStreamer` over the stream's events.
+
+    Raises:
+        ValueError: If `chunking` is a string that is not a known alias.
+        RuntimeError: If the backend returns an already-computed thunk instead
+            of a streaming one — i.e. it is not honouring `ModelOption.STREAM`.
+    """
+    if as_events:
+        event_streamer = EventStreamer()
+        event_streamer._pump_task = asyncio.create_task(
+            event_streamer._pump(
+                action,
+                backend,
+                ctx,
+                chunking=chunking,
+                requirements=requirements,
+                validation_backend=validation_backend,
+            )
+        )
+        try:
+            await event_streamer._ready
+        except BaseException:
+            await event_streamer.aclose()
+            raise
+        return event_streamer
+
+    return await _stream(
+        action,
+        backend,
+        ctx,
+        chunking=chunking,
+        requirements=requirements,
+        validation_backend=validation_backend,
+    )

@@ -310,9 +310,44 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-To observe the run through typed `StreamEvent` objects instead, register a
-plugin on the `streaming_event` hook — see the
-[streaming validation tutorial](../tutorials/06-streaming-validation.md).
+### Consuming events with `EventStreamer`
+
+The `Streamer` above yields validated chunks. To consume the run's typed events
+instead, pass `as_events=True` to `stream()`: it returns an `EventStreamer` you
+iterate the same way, each step yielding an event rather than a chunk:
+
+```python
+from mellea.stdlib.streaming import (
+    ChunkEvent,
+    CompletedEvent,
+    FullValidationEvent,
+    QuickCheckEvent,
+    StreamingDoneEvent,
+)
+
+async with await stream(
+    action, m.backend, m.ctx, requirements=[req], chunking="sentence", as_events=True
+) as streamer:
+    async for event in streamer:
+        match event:
+            case ChunkEvent():
+                print(f"  chunk[{event.chunk_index}]: {event.text!r}")
+            case QuickCheckEvent(passed=False):
+                print(f"  quick-check[{event.chunk_index}]: FAIL")
+            case StreamingDoneEvent():
+                print(f"  done — {len(event.full_text)} chars")
+            case FullValidationEvent():
+                print(f"  final validation: {'pass' if event.passed else 'fail'}")
+            case CompletedEvent():
+                print(f"  completed — success={event.success}")
+            case _:
+                pass  # ErrorEvent
+
+print(f"Completed normally: {streamer.completed_normally}")
+```
+
+See the [Streaming Validation tutorial](../tutorials/06-streaming-validation.md)
+for a full walkthrough.
 
 ### The `stream_validate` tri-state
 

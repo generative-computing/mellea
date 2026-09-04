@@ -5,14 +5,13 @@
 Demonstrates:
 - Subclassing Requirement to override stream_validate() for early-exit checks
 - Calling stream() with sentence-level chunking
-- Observing the typed StreamEvents via the STREAMING_EVENT hook as they arrive
+- Iterating the typed StreamEvents from an EventStreamer (stream(as_events=True))
 - Driving the stream with `async with` + `async for` for safe cleanup
 - Reading terminal state (failed_early, full_text, final_validations) after the loop
 """
 
 import asyncio
 import re
-from typing import Any
 
 from mellea.core.backend import Backend
 from mellea.core.base import Context
@@ -21,7 +20,6 @@ from mellea.core.requirement import (
     Requirement,
     ValidationResult,
 )
-from mellea.plugins import hook, register
 from mellea.stdlib.components import Instruction
 from mellea.stdlib.streaming import (
     ChunkEvent,
@@ -95,37 +93,29 @@ async def main() -> None:
     )
     req = MaxSentencesReq(limit=3)
 
-    @hook("streaming_event")
-    async def print_events(payload: Any, ctx: Any) -> None:
-        event = payload.event
-        match event:
-            case ChunkEvent():
-                print(f"  CHUNK[{event.chunk_index}]: {event.text!r}")
-            case QuickCheckEvent(passed=False):
-                print(
-                    f"  QUICK_CHECK[{event.chunk_index}]: FAIL — "
-                    f"{event.results[0].reason if event.results else 'unknown reason'}"
-                )
-            case QuickCheckEvent():
-                print(f"  QUICK_CHECK[{event.chunk_index}]: pass")
-            case StreamingDoneEvent():
-                print(f"  STREAMING_DONE: {len(event.full_text)} chars accumulated")
-            case FullValidationEvent():
-                print(f"  FULL_VALIDATION: {'PASS' if event.passed else 'FAIL'}")
-            case CompletedEvent():
-                print(f"  COMPLETED: success={event.success}")
-            case _:
-                pass  # RetryEvent and any future event types
-
-    register(print_events)
-
     print("Stream events as they arrive:")
     async with await stream(
-        action, backend, ctx, requirements=[req], chunking="sentence"
+        action, backend, ctx, requirements=[req], chunking="sentence", as_events=True
     ) as streamer:
-        # Draining the stream fires the events; the hook does the printing.
-        async for _chunk in streamer:
-            pass
+        async for event in streamer:
+            match event:
+                case ChunkEvent():
+                    print(f"  CHUNK[{event.chunk_index}]: {event.text!r}")
+                case QuickCheckEvent(passed=False):
+                    print(
+                        f"  QUICK_CHECK[{event.chunk_index}]: FAIL — "
+                        f"{event.results[0].reason if event.results else 'unknown reason'}"
+                    )
+                case QuickCheckEvent():
+                    print(f"  QUICK_CHECK[{event.chunk_index}]: pass")
+                case StreamingDoneEvent():
+                    print(f"  STREAMING_DONE: {len(event.full_text)} chars accumulated")
+                case FullValidationEvent():
+                    print(f"  FULL_VALIDATION: {'PASS' if event.passed else 'FAIL'}")
+                case CompletedEvent():
+                    print(f"  COMPLETED: success={event.success}")
+                case _:
+                    pass  # RetryEvent and any future event types
 
     print(f"\nCompleted normally: {streamer.completed_normally}")
     print(f"Full text: {streamer.full_text!r}")

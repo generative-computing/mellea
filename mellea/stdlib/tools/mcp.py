@@ -57,6 +57,12 @@ class MCPToolSpec:
     Holds everything needed to inspect or instantiate a `MelleaTool` without
     keeping a live session open.
 
+    Reassign `name` and `description` before calling `as_mellea_tool` to
+    disambiguate tools that share a name across multiple servers, or to give the
+    model better selection hints. Reassigning `name` only changes the name shown
+    to the model; the original server-side name is preserved and used for the
+    actual tool invocation.
+
     Args:
         name (str): Tool name as registered on the server.
         description (str): Human-readable description from the server.
@@ -75,6 +81,7 @@ class MCPToolSpec:
     ) -> None:
         """Store the spec fields and the transport config."""
         self.name = name
+        self._server_tool_name = name
         self.description = description
         self.input_schema = input_schema
         self._connection = connection
@@ -93,7 +100,7 @@ class MCPToolSpec:
         """
         return MelleaTool(
             self.name,
-            _make_sync_call(self._connection, self.name),
+            _make_sync_call(self._connection, self._server_tool_name),
             {
                 "type": "function",
                 "function": {

@@ -836,6 +836,71 @@ async def test_thinking_false_sends_reasoning_effort_none_and_disable():
     assert call_kwargs["extra_body"]["chat_template_kwargs"]["enable_thinking"] is False
 
 
+async def test_construction_time_extra_body_thinking_does_not_outrank_per_call_thinking():
+    """Regression for #1617 review: a construction-time `enable_thinking` set via
+    the generic `model_options["extra_body"]` (as opposed to `default_extra_body`)
+    must not silently override a per-call `ModelOption.THINKING`.
+
+    Before the fix, `_simplify_and_merge` merged this construction-time
+    `extra_body` together with any per-call `extra_body` via `merge_model_options`,
+    and the combined blob was then treated as highest-priority in
+    `_merge_user_extra_body` — beating the correctly-resolved per-call THINKING
+    value computed by `_map_thinking_option`.
+    """
+    from mellea.core.base import CBlock
+    from mellea.stdlib.context import ChatContext
+
+    backend = OpenAIBackend(
+        model_id="gpt-4o",
+        base_url="http://localhost:9999/v1",
+        api_key="test-key",
+        model_options={
+            "extra_body": {"chat_template_kwargs": {"enable_thinking": True}}
+        },
+    )
+
+    with patch.object(
+        backend._async_client.chat.completions, "create", new_callable=AsyncMock
+    ) as mock_create:
+        mock_create.return_value = ChatCompletion(
+            id="test",
+            choices=[
+                Choice(
+                    finish_reason="stop",
+                    index=0,
+                    message=ChatCompletionMessage(role="assistant", content="ok"),
+                )
+            ],
+            created=0,
+            model="gpt-4o",
+            object="chat.completion",
+        )
+        mot, _ = await backend.generate_from_chat_context(
+            CBlock(value="hello"),
+            ChatContext(),
+            model_options={ModelOption.THINKING: False},
+        )
+        await mot.avalue()
+
+    call_kwargs = mock_create.call_args.kwargs
+    assert call_kwargs["extra_body"]["chat_template_kwargs"]["enable_thinking"] is False
+
+
+def test_simplify_and_merge_excludes_construction_extra_body():
+    """Construction-time `extra_body` must not reappear in `_simplify_and_merge`'s
+    output — it is folded into `_default_extra_body` at `__init__` time instead,
+    so it can't re-enter the per-call precedence chain as `user_extra_body`."""
+    backend = OpenAIBackend(
+        model_id="gpt-4o",
+        base_url="http://localhost:9999/v1",
+        api_key="test-key",
+        model_options={"extra_body": {"chat_template_kwargs": {"foo": "bar"}}},
+    )
+    result = backend._simplify_and_merge({}, is_chat_context=True)
+    assert "extra_body" not in result
+    assert backend._default_extra_body == {"chat_template_kwargs": {"foo": "bar"}}
+
+
 async def test_thinking_false_omits_reasoning_effort_against_real_openai():
     """THINKING=False must NOT send reasoning_effort="none" to api.openai.com.
 

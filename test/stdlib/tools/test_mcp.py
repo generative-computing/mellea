@@ -76,6 +76,31 @@ class TestAsMelleaTool:
         assert tool.name == "get_me"
 
     @pytest.mark.asyncio
+    async def test_reassigned_name_calls_original_server_name(self, connection):
+        """Renaming a spec to disambiguate still invokes the server-side name."""
+        called_with: list[str] = []
+
+        async def _capture(tool_name, *, arguments):
+            called_with.append(tool_name)
+            return _call_result()
+
+        session = _make_session(_make_mcp_tool("get_me"))
+        session.call_tool = _capture
+
+        with _mock_open_session(session):
+            specs = await discover_mcp_tools(connection)
+
+        # A user reassigns name to avoid a collision with another server's tool.
+        specs[0].name = "github_get_me"
+
+        with _mock_open_session(session):
+            tool = specs[0].as_mellea_tool()
+            assert tool.name == "github_get_me"
+            tool.run()
+
+        assert called_with == ["get_me"]
+
+    @pytest.mark.asyncio
     async def test_json_schema_structure(self, connection):
         schema = {"type": "object", "properties": {"q": {"type": "string"}}}
         session = _make_session(_make_mcp_tool("search", "Search", schema))
