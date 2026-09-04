@@ -516,6 +516,32 @@ def test_parse_batch_support_output_ignores_non_string_support_level():
     assert result == {0: "NOT_SUPPORTED"}
 
 
+@pytest.mark.parametrize("nested_key", ["evidence", "citations"])
+def test_parse_batch_support_output_ignores_non_string_nested_support_level(
+    nested_key: str,
+):
+    """Unexpected nested support-level types must not crash validation."""
+    req = GroundednessRequirement()
+
+    result = req._parse_batch_support_output(
+        f'[{{"span_id": 0, "{nested_key}": [{{"support_level": 5}}]}}]', 1
+    )
+
+    assert result == {0: "NOT_SUPPORTED"}
+
+
+@pytest.mark.parametrize("span_id", [True, -1, 1.5, "not-an-index", "2"])
+def test_parse_batch_support_output_ignores_invalid_span_id(span_id: object):
+    """Invalid model-returned span IDs must not become result keys."""
+    req = GroundednessRequirement()
+
+    result = req._parse_batch_support_output(
+        json.dumps([{"span_id": span_id, "support_level": "FULLY_SUPPORTED"}]), 1
+    )
+
+    assert result == {0: "NOT_SUPPORTED"}
+
+
 def test_parse_necessity_output_normalises_model_types():
     """Necessity parsing must tolerate quoted IDs and non-string labels."""
     req = GroundednessRequirement()
