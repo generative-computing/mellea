@@ -59,3 +59,19 @@ def test_resolve_model_options_unrelated_keys_are_preserved():
         call_options={"call_only": 3},
     )
     assert resolved == {"backend_only": 1, "helper_only": 2, "call_only": 3}
+
+
+def test_resolve_model_options_extra_body_default_survives_unrelated_call_extra_body():
+    """A backend-level extra_body default must survive an unrelated per-call
+    extra_body (e.g. an intrinsic/adapter routing call)."""
+    resolved = resolve_model_options(
+        backend_defaults={
+            "extra_body": {"chat_template_kwargs": {"enable_thinking": False}}
+        },
+        remap={},
+        call_options={"extra_body": {"some_unrelated_field": 123}},
+    )
+    assert resolved["extra_body"] == {
+        "chat_template_kwargs": {"enable_thinking": False},
+        "some_unrelated_field": 123,
+    }

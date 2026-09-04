@@ -148,6 +148,18 @@ class LiteLLMBackend(FormatterBackend):
 
         self._past_event_loops: set[int] = set()
 
+        # Construction-time `extra_body` in the generic `model_options` dict must
+        # not outrank a per-call `ModelOption.THINKING`. Fold it into a dedicated
+        # lowest-priority tier now and exclude it from `self.model_options` in
+        # `_simplify_and_merge`, so it can no longer re-enter the per-call
+        # precedence chain as if it were caller-supplied `extra_body` (#1617).
+        construction_extra_body = self.model_options.get("extra_body")
+        self._default_extra_body: dict = (
+            dict(construction_extra_body)
+            if isinstance(construction_extra_body, dict)
+            else {}
+        )
+
     def __repr__(self) -> str:
         """Return a useful string representation for debugging."""
         base_url_repr = self._base_url if self._explicit_base_url else None
@@ -224,8 +236,13 @@ class LiteLLMBackend(FormatterBackend):
         Returns:
             a new dict
         """
+        # `extra_body` is excluded here: it was already folded into
+        # `_default_extra_body` at construction time (see `__init__`), so
+        # merging it again would let it re-enter the per-call precedence
+        # chain and outrank a per-call `ModelOption.THINKING`.
         backend_model_opts = ModelOption.replace_keys(
-            self.model_options, self.to_mellea_model_opts_map
+            {k: v for k, v in self.model_options.items() if k != "extra_body"},
+            self.to_mellea_model_opts_map,
         )
 
         if model_options is None:
@@ -373,6 +390,14 @@ class LiteLLMBackend(FormatterBackend):
         )
 
         extra_params: dict[str, Any] = {}
+        if self._default_extra_body:
+            # Seed from the construction-time tier (below the per-call
+            # THINKING resolution below, and below caller-supplied extra_body
+            # further down); `_merge_extra_body` gives back a fresh dict (and
+            # a fresh `chat_template_kwargs` sub-dict) safe to mutate below.
+            extra_params["extra_body"] = ModelOption._merge_extra_body(
+                {}, self._default_extra_body
+            )
         if _format is not None:
             extra_params["response_format"] = {
                 "type": "json_schema",
