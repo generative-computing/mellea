@@ -494,6 +494,30 @@ class OllamaModelBackend(FormatterBackend):
                 )
             case _:
                 messages.extend(self.formatter.to_chat_messages([action]))
+
+        # Issue #1597: refuse to send an empty user prompt. `SimpleContext`
+        # intentionally discards recorded turns from `view_for_generation()`,
+        # so a caller who chains `.add(...)` and then passes an empty action
+        # would otherwise hit the model with no user-role content at all.
+        # Some chat models (e.g. Granite 4.2, see #1587) spin on empty prompts
+        # and burn tokens silently. Fail fast instead.
+        if not any(
+            m.role == "user"
+            and (
+                (m.content and m.content.strip())
+                or m.images
+                or m.audio
+                or getattr(m, "_docs", None)
+            )
+            for m in messages
+        ):
+            raise ValueError(
+                "Refusing to call the model: no user-role content in the assembled "
+                "conversation. This usually means a stateless context (e.g. "
+                "SimpleContext) was combined with an empty or whitespace-only "
+                "action; recorded turns are not forwarded to the model. See "
+                "issue #1597."
+            )
         # construct the conversation from our messages, adding a system prompt at the first message if one was provided.
         conversation: list[dict] = []
         # We use system prompt None/empty-string semantics in a way that is consistent with Hugging Face and other libraries.
