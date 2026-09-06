@@ -882,25 +882,41 @@ class AdapterMixin(Backend, abc.ABC):
                 # AdapterType.LORA is the pre-Phase-1 default (mirrors old _util.py).
                 # Every current catalog entry supports LORA.  Phase 2 (see epic #929)
                 # will select the type from catalog availability instead of hardcoding.
-                # Composed Adapter, not the deprecated IntrinsicAdapter shim
-                # (Epic #929, issue #1144).
                 metadata = fetch_intrinsic_metadata(name)
-                self.add_adapter(
-                    _AdapterCore(
-                        identity=Identity(
-                            name=name,
-                            adapter_type="lora",
-                            capability=metadata.effective_capability,
-                        ),
-                        io_contract=get_io_contract(name),
-                        weights=LocalFileBinding(
-                            name=name,
-                            adapter_type=AdapterType.LORA,
-                            repo_id=metadata.repo_id,
-                            revision=metadata.revision,
-                        ),
+                if self._supports_composed_adapters:
+                    # Composed Adapter, not the deprecated IntrinsicAdapter shim
+                    # (Epic #929, issue #1144).
+                    self.add_adapter(
+                        _AdapterCore(
+                            identity=Identity(
+                                name=name,
+                                adapter_type="lora",
+                                capability=metadata.effective_capability,
+                            ),
+                            io_contract=get_io_contract(name),
+                            weights=LocalFileBinding(
+                                name=name,
+                                adapter_type=AdapterType.LORA,
+                                repo_id=metadata.repo_id,
+                                revision=metadata.revision,
+                            ),
+                        )
                     )
-                )
+                else:
+                    # Legacy subclass predating the composed-Adapter contract
+                    # (same reasoning as _add_embedded_adapter_compat): its
+                    # add_adapter only knows the deprecated IntrinsicAdapter
+                    # shim's attribute shape, not a composed Adapter's. This
+                    # is exactly what this branch passed before Epic #929,
+                    # issue #1144 — IntrinsicAdapter is dual-shaped (both
+                    # LocalHFAdapter, for `.qualified_name`/`.backend`/`.path`,
+                    # and _AdapterCore, so `_find_adapter` below and this
+                    # method's own `-> _AdapterCore` return type still hold).
+                    self.add_adapter(
+                        IntrinsicAdapter(
+                            name, adapter_type=AdapterType.LORA, base_model_name=base
+                        )
+                    )
 
         found = self._find_adapter(name)
         if found is not None:

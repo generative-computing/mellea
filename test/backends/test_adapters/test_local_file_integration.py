@@ -13,6 +13,7 @@ fires hooks and deliberately opens no spans (#1464 documents the rule, #1466 add
 the spans from a plugin).
 """
 
+import threading
 from unittest.mock import MagicMock, mock_open, patch
 
 import pytest
@@ -312,6 +313,108 @@ def test_add_adapter_does_not_hold_activation_lock_during_prepare():
     )
     # The registration itself must still have succeeded normally.
     assert backend._find_adapter("answerability") is adapter
+
+
+def test_concurrent_resolve_waits_for_in_progress_direct_registration():
+    """A concurrent `resolve_adapter()` racing an in-progress direct
+    `add_adapter()` for the same capability must wait for it, not fail.
+
+    Regression: an earlier design used a `_composed_registrations_in_flight`
+    claim-set to guard the unlocked window between claiming a key and
+    committing it. A concurrent caller for the same key saw the claim as a
+    permanent refusal — `add_adapter` returned silently, and the caller
+    (`resolve_adapter`, checking `_find_adapter` afterwards) raised
+    `KeyError`, even though the in-progress registration succeeded a moment
+    later and would have satisfied the request. Holding
+    `_adapter_resolve_lock()` across the whole registration (not just a
+    claim-set) makes a concurrent caller block until it commits, instead of
+    observing a "claimed but not yet found" state at all.
+    """
+    backend = _make_backend()
+    binding = _make_binding()
+    adapter = _make_adapter(binding)
+
+    reached_slow_section = threading.Event()
+    release_thread_a = threading.Event()
+
+    def slow_obtain_io_yaml(*args, **kwargs):
+        reached_slow_section.set()
+        assert release_thread_a.wait(timeout=5), "thread B never released thread A"
+        return "/fake/adapter.yaml"
+
+    errors: list[tuple[str, Exception]] = []
+    resolved: dict[str, object] = {}
+
+    def thread_a_direct_add_adapter():
+        try:
+            with (
+                patch(
+                    "mellea.formatters.granite.intrinsics.obtain_lora",
+                    return_value="/fake/local/adapter/path",
+                ),
+                patch(
+                    "mellea.formatters.granite.intrinsics.obtain_io_yaml",
+                    side_effect=slow_obtain_io_yaml,
+                ),
+                patch("builtins.open", mock_open(read_data="key: value")),
+                patch("yaml.safe_load", return_value={"parameters": {}}),
+            ):
+                backend.add_adapter(adapter)
+        except Exception as e:  # pragma: no cover - surfaced via errors list
+            errors.append(("A", e))
+
+    def thread_b_resolve():
+        assert reached_slow_section.wait(timeout=5), (
+            "thread A never reached the locked slow section"
+        )
+        release_thread_a.set()
+        try:
+            resolved["b"] = backend.resolve_adapter("answerability")
+        except Exception as e:  # pragma: no cover - surfaced via errors list
+            errors.append(("B", e))
+
+    t_a = threading.Thread(target=thread_a_direct_add_adapter, daemon=True)
+    t_b = threading.Thread(target=thread_b_resolve, daemon=True)
+    t_a.start()
+    t_b.start()
+    t_a.join(timeout=10)
+    t_b.join(timeout=10)
+
+    assert not t_a.is_alive(), "thread A did not finish within the join timeout"
+    assert not t_b.is_alive(), "thread B did not finish within the join timeout"
+    assert not errors, f"resolve_adapter/add_adapter raised under concurrency: {errors}"
+    assert resolved["b"] is adapter, (
+        "the concurrent resolve must return the in-progress registration's "
+        "own adapter, not fail or construct a competing one"
+    )
+
+
+def test_hold_prepared_raises_if_binding_released_before_publish():
+    """`LocalFileBinding.hold_prepared()` must refuse to let a caller publish
+    a composed Adapter around a binding a concurrent `release()` has already
+    made terminal.
+
+    Regression: `add_adapter`'s composed-`LocalFileBinding` branch used to
+    have an unguarded window between `prepare()` returning and the commit of
+    `_composed_adapters[key] = adapter` — nothing prevented a concurrent
+    `binding.release()` from running in that gap. `_find_adapter()` would
+    then report the published adapter as registered, but `activate()` on it
+    would raise, since the binding backing it was already released.
+    """
+    backend = _make_backend()
+    binding = _make_binding()
+
+    with patch(
+        "mellea.formatters.granite.intrinsics.obtain_lora",
+        return_value="/fake/local/adapter/path",
+    ):
+        binding.bind_backend(backend)
+        binding.prepare()
+        binding.release()
+
+    with pytest.raises(RuntimeError, match="no longer prepared"):
+        with binding.hold_prepared(backend):
+            pytest.fail("hold_prepared must raise before yielding")
 
 
 if __name__ == "__main__":

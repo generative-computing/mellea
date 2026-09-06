@@ -1960,6 +1960,39 @@ def test_remove_adapter_raises_if_still_loaded():
     assert adapter.qualified_name not in backend._added_adapters
 
 
+def test_load_peft_adapter_records_loaded_state_before_set_adapter_failure():
+    """`_loaded_adapters` must be recorded before `set_adapter([])`, not after.
+
+    Regression: `_loaded_adapters[...] = adapter` used to run *after*
+    `self._model.set_adapter([])`. If `self._model.load_adapter(...)`
+    succeeded (PEFT now holds the weights) but the subsequent
+    `set_adapter([])` call raised, `_loaded_adapters` was never updated —
+    which meant `remove_adapter()`'s still-loaded guard couldn't see the
+    load, `_rollback_registration()` could remove the registration cleanly,
+    and PEFT was left holding the adapter's weights under a name Mellea's
+    own bookkeeping no longer tracked. The *next* registration under that
+    name then hit PEFT's own "already exists" error — silently swallowed by
+    `load_peft_adapter()` — and appeared to succeed while actually serving
+    the old, orphaned weights.
+    """
+    backend = _make_backend()
+    adapter = _make_intrinsic_adapter_stub()
+    adapter.backend = None
+    adapter.get_local_hf_path = lambda base_model_name: "/fake/path"
+    backend.add_adapter(adapter)
+    backend._model.set_adapter.side_effect = RuntimeError("PEFT set_adapter failure")  # type: ignore[union-attr]
+
+    with pytest.raises(RuntimeError, match="PEFT set_adapter failure"):
+        backend.load_peft_adapter(adapter.qualified_name)
+
+    # The load itself succeeded (load_adapter was called); the bookkeeping
+    # must reflect that even though the call as a whole raised, so a later
+    # remove_adapter() correctly refuses to free a name PEFT still holds.
+    assert adapter.qualified_name in backend._loaded_adapters
+    with pytest.raises(ValueError, match="still loaded"):
+        backend.remove_adapter(adapter.qualified_name)
+
+
 def test_seed_forces_do_sample_true(stub_backend):
     """Issue #40: a seed alone must flip do_sample=True so it isn't ignored."""
     out = _call(stub_backend, {ModelOption.SEED: 42})

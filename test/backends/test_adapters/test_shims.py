@@ -1042,3 +1042,58 @@ def test_add_embedded_adapter_compat_passes_composed_adapter_when_supported():
     )
 
     assert calls == [(composed, {"parameters": {}})]
+
+
+def test_resolve_adapter_lora_branch_falls_back_to_shim_when_not_supported():
+    """resolve_adapter's LocalFile/LORA branch (the default, non-embedded
+    path — hit on every ordinary catalog resolution) must gate on
+    `_supports_composed_adapters` too, not just the embedded branch.
+
+    Regression: only `_add_embedded_adapter_compat` (the embedded branch)
+    checked `_supports_composed_adapters`. The LORA branch — the common
+    case, since it's what runs whenever `_uses_embedded_adapters` is unset —
+    called `self.add_adapter(_AdapterCore(...))` unconditionally. A
+    third-party AdapterMixin subclass predating composed Adapters, whose
+    add_adapter reads `.qualified_name`, breaks on essentially every
+    resolve_adapter() call, not just embedded discovery.
+    """
+    mock_catalog_entry = IntrinsicsCatalogEntry(
+        name="answerability",
+        repo_id="ibm-granite/granitelib-rag-r1.0",
+        revision="abc123",
+        adapter_types=(AdapterType.ALORA, AdapterType.LORA),
+    )
+    registered = []
+
+    def legacy_add_adapter(adapter):
+        registered.append(adapter)
+        adapter.backend = mock_backend
+        mock_backend._added_adapters[adapter.qualified_name] = adapter
+
+    mock_backend = MagicMock(spec=AdapterMixin)
+    mock_backend.base_model_name = "ibm-granite/granite-4.1-3b"
+    mock_backend._uses_embedded_adapters = False
+    mock_backend._supports_composed_adapters = False
+    mock_backend._added_adapters = {}
+    mock_backend.add_adapter = legacy_add_adapter
+    mock_backend._find_adapter.side_effect = lambda cap, types=None: (
+        AdapterMixin._find_adapter(mock_backend, cap, types)
+    )
+
+    with (
+        patch(
+            "mellea.backends.adapters.adapter.fetch_intrinsic_metadata",
+            return_value=mock_catalog_entry,
+        ),
+        patch(
+            "mellea.backends.adapters.adapter.intrinsics.obtain_io_yaml",
+            return_value="/fake/adapter.yaml",
+        ),
+        patch("builtins.open", mock_open(read_data="key: value")),
+    ):
+        result = AdapterMixin.resolve_adapter(mock_backend, "answerability")
+
+    assert len(registered) == 1
+    assert isinstance(registered[0], IntrinsicAdapter)
+    assert registered[0].qualified_name == "answerability_lora"
+    assert result is registered[0]

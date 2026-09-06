@@ -631,5 +631,39 @@ def test_release_does_not_fire_phase_complete_metric():
     mock_run.assert_not_called()
 
 
+def test_prepare_rollback_unloads_peft_before_removing():
+    """`_rollback_registration` must unload PEFT state before removing the
+    registration, mirroring `release()`'s own unload-then-remove order.
+
+    Regression: rollback previously called only `remove_adapter()`, never
+    `unload_peft_adapter()`. If PEFT itself ends up holding an adapter's
+    weights loaded (`load_adapter()` succeeded) even though the load as a
+    whole failed (a later step, e.g. `set_adapter([])`, raised), that left
+    PEFT holding weights under a name Mellea's own bookkeeping no longer
+    tracks — invisible until a later same-name registration's own load call
+    interacted with whatever state PEFT was actually in.
+    """
+    backend = _fake_backend()
+    backend.load_peft_adapter.side_effect = RuntimeError("load-adjacent failure")
+
+    calls: list[tuple[str, str]] = []
+    backend.unload_peft_adapter.side_effect = lambda name: calls.append(
+        ("unload", name)
+    )
+    backend.remove_adapter.side_effect = lambda name: calls.append(("remove", name))
+
+    binding = LocalFileBinding(name="answerability")
+    binding.bind_backend(backend)
+
+    with pytest.raises(RuntimeError, match="load-adjacent failure"):
+        binding.prepare()
+
+    assert calls == [
+        ("unload", binding.qualified_name),
+        ("remove", binding.qualified_name),
+    ], "rollback must unload before removing, not remove alone"
+    assert binding.backend is None
+
+
 if __name__ == "__main__":
     pytest.main([__file__])

@@ -33,10 +33,12 @@ Note:
 """
 
 import abc
+import contextlib
 import json
 import threading
 import time
 import warnings
+from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
@@ -570,6 +572,15 @@ class LocalFileBinding(WeightsBinding):
         assert backend is not None
         try:
             with backend._adapter_activation_lock():
+                # Unload before removing, mirroring release()'s own
+                # unload-then-remove sequence: `remove_adapter()` refuses a
+                # still-loaded name, and `load_peft_adapter()` now records the
+                # load before its own `set_adapter([])` call, so a
+                # `set_adapter([])` failure there leaves a real PEFT-level
+                # load for this to undo. Already a no-op (logs and returns)
+                # when nothing was actually loaded — the ordinary case, where
+                # `load_adapter()` itself is what failed.
+                backend.unload_peft_adapter(self.qualified_name)
                 backend.remove_adapter(self.qualified_name)
         except NotImplementedError:
             # State the observable fact, not the presumed cause: a real
@@ -585,6 +596,37 @@ class LocalFileBinding(WeightsBinding):
             return
         self.backend = None
         self.path = None
+
+    @contextlib.contextmanager
+    def hold_prepared(self, backend: "AdapterMixin") -> Iterator[None]:
+        """Holds this binding's lifecycle lock while a caller publishes it.
+
+        Used by a composed `Adapter`'s registration (`LocalHFBackend.add_adapter`)
+        to commit its registry entries only while this binding is still
+        genuinely prepared for `backend`. Blocks `prepare()`/`release()` for
+        the duration, so a composed `Adapter` can never be published wrapping
+        a binding that a concurrent `release()` — running in the gap after
+        `prepare()` returned but before the caller's commit — has already
+        made terminal.
+
+        Args:
+            backend: The backend the caller is about to publish this binding
+                as registered with. Must match `self.backend`.
+
+        Raises:
+            RuntimeError: This binding is no longer prepared for `backend`
+                (released, unloaded, or reassigned since the caller's own
+                `prepare()` call returned).
+        """
+        with self._lifecycle_lock:
+            if self._released or not self._loaded or self.backend is not backend:
+                raise RuntimeError(
+                    f"LocalFileBinding {self.qualified_name!r} is no longer "
+                    f"prepared for {type(backend).__name__} (concurrent "
+                    "release()?); refusing to publish a composed Adapter "
+                    "around it."
+                )
+            yield
 
     def activate(self) -> None:
         """Selects already-loaded adapter weights for generation.
