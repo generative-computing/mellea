@@ -68,8 +68,7 @@ class AdapterFunctionPhaseCompletePayload(MelleaBasePayload):
         handler that re-enters one of them from that thread deadlocks
         against the thread that's still waiting for the hook to return. See
         `AdapterMixin._adapter_resolve_lock()`'s docstring for the full
-        mechanism (tracked as a follow-up; not fixed as of Epic #929, issue
-        #1144).
+        mechanism.
     """
 
     name: str

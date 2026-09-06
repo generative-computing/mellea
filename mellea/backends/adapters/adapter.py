@@ -752,17 +752,16 @@ class AdapterMixin(Backend, abc.ABC):
         same same-thread-reentry reason `_adapter_activation_lock()`
         documents.
 
-        Known limitation (tracked in a follow-up issue, not fixed here): a
-        `HookType.ADAPTER_FUNCTION_PHASE_COMPLETE` subscriber must not
-        synchronously call `resolve_adapter()`, `register_embedded_adapter_model()`,
-        or `add_adapter()` with a composed `Adapter` on this same backend.
-        `LocalFileBinding.prepare()` fires that hook via
-        `_run_async_in_thread`, which blocks the calling thread on a
-        dedicated event-loop thread's result — if this lock is held at that
-        point (as it is for the whole body of the three methods above) and
-        the hook's handler re-enters one of them on the same backend, the
-        event-loop thread blocks on this lock while the original thread
-        blocks waiting for the event-loop thread: deadlock. No shipped
+        Known limitation: a `HookType.ADAPTER_FUNCTION_PHASE_COMPLETE`
+        subscriber must not synchronously call `resolve_adapter()`,
+        `register_embedded_adapter_model()`, or `add_adapter()` with a
+        composed `Adapter` on this same backend. `LocalFileBinding.prepare()`
+        fires that hook via `_run_async_in_thread`, which blocks the calling
+        thread on a dedicated event-loop thread's result — if this lock is
+        held at that point (as it is for the whole body of the three methods
+        above) and the hook's handler re-enters one of them on the same
+        backend, the event-loop thread blocks on this lock while the original
+        thread blocks waiting for the event-loop thread: deadlock. No shipped
         caller does this today.
         """
         return contextlib.nullcontext()
