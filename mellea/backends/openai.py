@@ -400,15 +400,24 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                     "register_embedded_adapter_model() or resolve_adapter()."
                 )
             key = _composed_adapter_key(adapter)
-            if key in self._added_adapters:
-                MelleaLogger.get_logger().warning(
-                    f"attempted to add adapter {key!r} but it is already "
-                    "registered; refusing to overwrite it."
-                )
-                return
-            adapter.weights.source = self.base_model_name
-            self._added_adapters[key] = adapter
-            self._composed_adapter_configs[key] = config
+            # Locked: a direct add_adapter() call (unlike resolve_adapter(),
+            # which already holds this lock around its own add_adapter()
+            # calls) is otherwise an unguarded check-then-write across
+            # _added_adapters/_composed_adapter_configs — two concurrent
+            # callers registering under the same key could each pass the
+            # duplicate check below before either writes, then pair one
+            # call's adapter with the other's config. Reentrant, so a caller
+            # already holding it (resolve_adapter()) is unaffected.
+            with self._adapter_activation_lock():
+                if key in self._added_adapters:
+                    MelleaLogger.get_logger().warning(
+                        f"attempted to add adapter {key!r} but it is already "
+                        "registered; refusing to overwrite it."
+                    )
+                    return
+                adapter.weights.source = self.base_model_name
+                self._added_adapters[key] = adapter
+                self._composed_adapter_configs[key] = config
             return
 
         raise TypeError(
@@ -832,7 +841,18 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                     )
                     alora_action = ALoraRequirement(action.description, adapter_name)
 
-                alora_req_adapter = self._find_adapter(adapter_name, ("alora",))
+                # An explicit adapter_types override (Epic #929, issue #1144)
+                # is honoured here — e.g. a custom, LoRA-only adapter would
+                # never be found by the ("alora",)-only default search,
+                # silently falling back to regular generation regardless of
+                # what the caller asked for.
+                explicit_types = getattr(alora_action, "_adapter_types", None)
+                search_types = (
+                    tuple(t.value for t in explicit_types)
+                    if explicit_types
+                    else ("alora",)
+                )
+                alora_req_adapter = self._find_adapter(adapter_name, search_types)
                 if alora_req_adapter is None:
                     if reroute_to_alora and isinstance(action, ALoraRequirement):
                         MelleaLogger.get_logger().warning(

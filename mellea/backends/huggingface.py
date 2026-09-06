@@ -651,8 +651,18 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                     alora_action = ALoraRequirement(action.description, adapter_name)
 
                 # Check if a requirement-check (or AloraRequirement specified) adapter
-                # exists.
-                alora_req_adapter = self._find_adapter(adapter_name, ("alora",))
+                # exists. An explicit adapter_types override (Epic #929, issue
+                # #1144) is honoured here — e.g. a custom, LoRA-only adapter
+                # would never be found by the ("alora",)-only default search,
+                # silently falling back to regular generation regardless of
+                # what the caller asked for.
+                explicit_types = getattr(alora_action, "_adapter_types", None)
+                search_types = (
+                    tuple(t.value for t in explicit_types)
+                    if explicit_types
+                    else ("alora",)
+                )
+                alora_req_adapter = self._find_adapter(adapter_name, search_types)
                 if alora_req_adapter is None:
                     # Log a warning if using an AloraRequirement but no adapter fit.
                     if reroute_to_alora and isinstance(action, ALoraRequirement):
@@ -919,9 +929,12 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         """Download and parse `binding`'s io.yaml, mirroring `IntrinsicAdapter.__init__`.
 
         Called synchronously from `add_adapter`'s composed-`LocalFileBinding`
-        branch, alongside the (larger) weights download `binding.prepare()`
-        already does there — so the Hugging Face Hub round trip this performs
-        never runs on the event loop inside `_generate_from_intrinsic`.
+        branch, before `binding.prepare()`'s (larger) weights download runs
+        there — so the Hugging Face Hub round trip this performs never runs
+        on the event loop inside `_generate_from_intrinsic`, and a failure
+        here leaves nothing registered (retryable), rather than leaving a
+        real, prepared `LocalFileBinding` with no matching composed-adapter
+        entry.
 
         Args:
             binding: The `LocalFileBinding` to load `io.yaml` for.
@@ -2660,67 +2673,85 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 )
 
             key = _composed_adapter_key(adapter)
-            # A LocalFileBinding registered standalone (bare add_adapter(binding))
-            # lands in _added_adapters under this same key — that's not a
-            # collision if it's the very binding this composed Adapter wraps,
-            # only if some *other* object already claimed the name.
-            existing_added = self._added_adapters.get(key)
-            if (
-                existing_added is not None and existing_added is not adapter.weights
-            ) or key in self._composed_adapters:
-                MelleaLogger.get_logger().warning(
-                    f"Client code attempted to add {adapter.identity.name} with type "
-                    f"{adapter.identity.adapter_type} but {key!r} is already "
-                    f"registered on {self.__class__.__name__}. The backend is "
-                    "refusing to do this, because adapter loading is not idempotent."
-                )
-                return
-            if isinstance(adapter.weights, EmbeddedBinding):
-                assert config is not None  # validated above
-                adapter.weights.source = self.base_model_name
-                self._composed_adapters[key] = adapter
-                self._composed_adapter_configs[key] = config
-                return
-            if isinstance(adapter.weights, LocalFileBinding):
-                binding = adapter.weights
-                if adapter.identity.adapter_type != binding.adapter_type.value:
-                    raise ValueError(
-                        f"Composed Adapter {adapter.identity.name!r} has "
-                        f"identity.adapter_type={adapter.identity.adapter_type!r} but "
-                        f"weights.adapter_type={binding.adapter_type.value!r}; the two "
-                        "must agree, or registration and lookup key on different "
-                        "strings for the same adapter (NOTE(#1516))."
+            # Locked: a direct add_adapter() call (unlike resolve_adapter(),
+            # which already holds this lock around its own add_adapter()
+            # calls) is otherwise an unguarded check-then-write across
+            # _added_adapters/_composed_adapters — two concurrent callers
+            # registering under the same key could each pass the duplicate
+            # check below before either writes, then pair one call's adapter
+            # with the other's config. Reentrant, so a caller already holding
+            # it (resolve_adapter()) is unaffected.
+            with self._adapter_activation_lock():
+                # A LocalFileBinding registered standalone (bare
+                # add_adapter(binding)) lands in _added_adapters under this
+                # same key — that's not a collision if it's the very binding
+                # this composed Adapter wraps, only if some *other* object
+                # already claimed the name.
+                existing_added = self._added_adapters.get(key)
+                if (
+                    existing_added is not None and existing_added is not adapter.weights
+                ) or key in self._composed_adapters:
+                    MelleaLogger.get_logger().warning(
+                        f"Client code attempted to add {adapter.identity.name} with "
+                        f"type {adapter.identity.adapter_type} but {key!r} is already "
+                        f"registered on {self.__class__.__name__}. The backend is "
+                        "refusing to do this, because adapter loading is not idempotent."
                     )
-                # bind_backend() itself raises if binding.backend is already
-                # a *different* backend, and no-ops if it's already self —
-                # calling it unconditionally (rather than guarding on
-                # `binding.backend is None`) is what makes that raise
-                # reachable; the guard used to skip straight to prepare()
-                # (a silent no-op once loaded), registering this adapter on
-                # `self` while the binding's weights stayed activated
-                # against whatever backend it was really bound to.
-                binding.bind_backend(self)
-                # Recurses into self.add_adapter(binding) below (the bare-
-                # LocalFileBinding branch further down this method) to
-                # populate `_added_adapters` for this binding — see
-                # `LocalFileBinding.prepare()`'s own docstring/comments for
-                # why that call is there.
-                binding.prepare()
-                # Fetched here, alongside the (far larger) weights download
-                # `prepare()` just did, rather than lazily on first generation
-                # call: `_intrinsic_adapter_name_and_config` runs inline inside
-                # the async `_generate_from_intrinsic`, and this Hugging Face
-                # Hub round trip must not happen on that event loop.
-                self._composed_adapter_configs[key] = (
-                    self._obtain_local_file_io_yaml_config(binding)
+                    return
+                if isinstance(adapter.weights, EmbeddedBinding):
+                    assert config is not None  # validated above
+                    adapter.weights.source = self.base_model_name
+                    self._composed_adapters[key] = adapter
+                    self._composed_adapter_configs[key] = config
+                    return
+                if isinstance(adapter.weights, LocalFileBinding):
+                    binding = adapter.weights
+                    if (
+                        adapter.identity.name != binding.name
+                        or adapter.identity.adapter_type != binding.adapter_type.value
+                    ):
+                        raise ValueError(
+                            f"Composed Adapter has identity.name={adapter.identity.name!r}/"
+                            f"adapter_type={adapter.identity.adapter_type!r} but "
+                            f"weights.name={binding.name!r}/"
+                            f"adapter_type={binding.adapter_type.value!r}; the two "
+                            "must agree on both, or registration and lookup key on "
+                            "different strings for the same adapter (NOTE(#1516))."
+                        )
+                    # Fetched before bind_backend()/prepare() below, not
+                    # after: a failed fetch here leaves nothing registered, so
+                    # the same composed Adapter can simply be retried.
+                    # Fetching it after prepare() (which this used to do)
+                    # left a real, registered LocalFileBinding with no
+                    # matching _composed_adapters entry on failure — a later
+                    # resolve_adapter()/add_adapter() for the same name then
+                    # hit the duplicate-key guard above and permanently
+                    # refused to (re)register the capability.
+                    io_yaml_config = self._obtain_local_file_io_yaml_config(binding)
+                    # bind_backend() itself raises if binding.backend is
+                    # already a *different* backend, and no-ops if it's
+                    # already self — calling it unconditionally (rather than
+                    # guarding on `binding.backend is None`) is what makes
+                    # that raise reachable; the guard used to skip straight
+                    # to prepare() (a silent no-op once loaded), registering
+                    # this adapter on `self` while the binding's weights
+                    # stayed activated against whatever backend it was
+                    # really bound to.
+                    binding.bind_backend(self)
+                    # Recurses into self.add_adapter(binding) below (the
+                    # bare-LocalFileBinding branch further down this method)
+                    # to populate `_added_adapters` for this binding — see
+                    # `LocalFileBinding.prepare()`'s own docstring/comments
+                    # for why that call is there.
+                    binding.prepare()
+                    self._composed_adapter_configs[key] = io_yaml_config
+                    self._composed_adapters[key] = adapter
+                    return
+                raise TypeError(
+                    "LocalHFBackend does not support the "
+                    f"{type(adapter.weights).__name__} weights reality for a "
+                    "composed Adapter."
                 )
-                self._composed_adapters[key] = adapter
-                return
-            raise TypeError(
-                "LocalHFBackend does not support the "
-                f"{type(adapter.weights).__name__} weights reality for a "
-                "composed Adapter."
-            )
 
         if adapter.backend is not None:
             if adapter.backend is self:

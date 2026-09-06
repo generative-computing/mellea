@@ -19,6 +19,7 @@ import pytest
 
 from mellea.backends.adapters import (
     Adapter,
+    EmbeddedBinding,
     EmbeddedIntrinsicAdapter,
     IntrinsicAdapter,
     get_io_contract,
@@ -836,6 +837,13 @@ def test_resolve_adapter_holds_activation_lock_once_across_embedded_loop():
     mock_backend._find_adapter.side_effect = lambda cap, types=None: (
         AdapterMixin._find_adapter(mock_backend, cap, types)
     )
+    # resolve_adapter() routes through this compat wrapper, not add_adapter()
+    # directly (Epic #929, issue #1144) — a MagicMock(spec=...) auto-mocks it
+    # too, so it must be wired to the real implementation to actually reach
+    # fake_add_adapter above.
+    mock_backend._add_embedded_adapter_compat.side_effect = lambda a, config: (
+        AdapterMixin._add_embedded_adapter_compat(mock_backend, a, config)
+    )
 
     with patch(
         "mellea.backends.adapters.adapter.EmbeddedIntrinsicAdapter.from_source",
@@ -950,3 +958,68 @@ def test_resolve_adapter_concurrent_first_use_does_not_double_register():
     assert results[0] is results[1] is registrations[0], (
         "both concurrent callers must resolve to the single registered adapter"
     )
+
+
+def test_add_embedded_adapter_compat_falls_back_to_shim_for_legacy_add_adapter():
+    """A third-party `AdapterMixin` subclass predating `config=` (Epic #929,
+    issue #1144) must not break when `resolve_adapter()`'s embedded branch
+    tries to register a discovered adapter.
+
+    Regression: `_uses_embedded_adapters` predates the `config` parameter
+    `add_adapter` gained in this PR — a legacy `add_adapter(self, adapter)`
+    override (no `config` parameter, no `**kwargs`) raised
+    `TypeError: add_adapter() got an unexpected keyword argument 'config'`
+    when `resolve_adapter()` called `self.add_adapter(a, config=config)`
+    directly.
+    """
+    registered = []
+
+    def legacy_add_adapter(adapter):
+        registered.append(adapter)
+
+    mock_backend = MagicMock(spec=AdapterMixin)
+    mock_backend.add_adapter = legacy_add_adapter
+
+    composed = Adapter(
+        identity=Identity(name="answerability", adapter_type="alora"),
+        io_contract=get_io_contract("answerability"),
+        weights=EmbeddedBinding(),
+    )
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        AdapterMixin._add_embedded_adapter_compat(
+            mock_backend, composed, {"parameters": {}}
+        )
+
+    assert len(registered) == 1
+    shim = registered[0]
+    assert isinstance(shim, EmbeddedIntrinsicAdapter)
+    assert shim.intrinsic_name == "answerability"
+    assert shim.technology == "alora"
+    assert shim.config == {"parameters": {}}
+
+
+def test_add_embedded_adapter_compat_passes_config_directly_for_modern_add_adapter():
+    """A backend whose `add_adapter` accepts `config=` gets the composed
+    `Adapter` directly — the deprecated-shim fallback is only for a legacy
+    override that cannot accept it."""
+    calls = []
+
+    def modern_add_adapter(adapter, *, config=None):
+        calls.append((adapter, config))
+
+    mock_backend = MagicMock(spec=AdapterMixin)
+    mock_backend.add_adapter = modern_add_adapter
+
+    composed = Adapter(
+        identity=Identity(name="answerability", adapter_type="alora"),
+        io_contract=get_io_contract("answerability"),
+        weights=EmbeddedBinding(),
+    )
+
+    AdapterMixin._add_embedded_adapter_compat(
+        mock_backend, composed, {"parameters": {}}
+    )
+
+    assert calls == [(composed, {"parameters": {}})]

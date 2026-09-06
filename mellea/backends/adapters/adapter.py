@@ -17,6 +17,7 @@ support runtime adapter loading and unloading.
 import abc
 import contextlib
 import hashlib
+import inspect
 import pathlib
 import re
 import shutil
@@ -703,6 +704,44 @@ class AdapterMixin(Backend, abc.ABC):
         """
         return contextlib.nullcontext()
 
+    def _add_embedded_adapter_compat(
+        self, adapter: "_AdapterCore", config: dict
+    ) -> None:
+        """Register a composed embedded Adapter, tolerating a pre-#1144 `add_adapter`.
+
+        `AdapterMixin.add_adapter` gained a `config` keyword-only parameter in
+        Epic #929, issue #1144 (needed because a composed `Adapter` has no
+        field to carry a shim's `.config`). `_uses_embedded_adapters` predates
+        that: a third-party `AdapterMixin` subclass written before this
+        parameter existed, but already supporting the Embedded reality, is
+        reachable here and would raise
+        `TypeError: add_adapter() got an unexpected keyword argument 'config'`.
+
+        Detected via signature inspection rather than `try`/`except TypeError`
+        around the call: a `TypeError` `add_adapter` itself legitimately
+        raises (e.g. an unsupported weights reality) must propagate, not be
+        misread as this compatibility gap.
+
+        Args:
+            adapter: The composed `Adapter` to register.
+            config: Raw io.yaml config for `adapter`.
+        """
+        params = inspect.signature(self.add_adapter).parameters
+        accepts_config = "config" in params or any(
+            p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values()
+        )
+        if accepts_config:
+            self.add_adapter(adapter, config=config)
+            return
+        # Legacy subclass predating the composed-Adapter contract: it only
+        # knows the deprecated EmbeddedIntrinsicAdapter shim, which carries
+        # its own .config and needs no config= parameter.
+        self.add_adapter(
+            EmbeddedIntrinsicAdapter(
+                adapter.identity.name, config, technology=adapter.identity.adapter_type
+            )
+        )
+
     def resolve_adapter(self, name: str) -> _AdapterCore:
         """Find or lazily register an adapter by capability name.
 
@@ -777,11 +816,14 @@ class AdapterMixin(Backend, abc.ABC):
                 # refused duplicate (a different object already holds the
                 # key) therefore never reaches the config write, so this
                 # can't clobber a live adapter's cached config the way a
-                # register-then-separately-cache sequence could.
+                # register-then-separately-cache sequence could. Routed
+                # through _add_embedded_adapter_compat, not called directly,
+                # for a third-party AdapterMixin subclass whose add_adapter
+                # predates config= (see that method's docstring).
                 for a, config in _discover_embedded_adapters(
                     repo_id, intrinsic_name=name
                 ):
-                    self.add_adapter(a, config=config)
+                    self._add_embedded_adapter_compat(a, config)
             else:
                 # AdapterType.LORA is the pre-Phase-1 default (mirrors old _util.py).
                 # Every current catalog entry supports LORA.  Phase 2 (see epic #929)

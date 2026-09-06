@@ -27,8 +27,9 @@ tags:
 
 ## How to Use
 
-To use this intrinsic adapter in your application, you need to define an adapter class
-and an intrinsic component. The adapter connects to the HuggingFace model repository
+To use this intrinsic adapter in your application, you need to compose an adapter
+(a factory function returning it, rather than a dedicated shim class) and an intrinsic
+component. The adapter connects to the HuggingFace model repository
 where the trained weights are stored, and the intrinsic wraps it as a composable Mellea
 component that can be used with any compatible backend.
 

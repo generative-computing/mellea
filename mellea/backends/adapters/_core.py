@@ -974,16 +974,17 @@ class Adapter:
     io_contract: IOContract
     weights: WeightsBinding | EmbeddedBinding
 
-    # NOTE(#1516): a construction-time cross-check that `weights.adapter_type`
-    # agrees with `identity.adapter_type` was tried here and backed out. It is the
-    # right invariant — the two feed different lookup paths (registration and the
-    # verbs key on the binding's `qualified_name`; `_find_adapter` scans on the
-    # identity) and both return `None` on a miss, so a disagreement surfaces as
-    # "adapter not found" far from its cause. It could not be enforced here
-    # because the deprecated shims carry a `_ShimWeightsBinding` with no
-    # `adapter_type` to compare at all (their identity tracks the configured
-    # type) — that no longer blocks the LocalFile/PEFT reality now that the
-    # shims retire in #1144, so `LocalHFBackend.add_adapter` enforces it there
-    # instead, at registration time. `EmbeddedBinding` has no `adapter_type` of
-    # its own, so the Embedded/Granite Switch reality still has nothing to
-    # cross-check against.
+    # NOTE(#1516): a construction-time cross-check that `weights` (`name` and
+    # `adapter_type`) agrees with `identity` was tried here and backed out. It
+    # is the right invariant — the two feed different lookup paths
+    # (registration and the verbs key on the binding's `qualified_name`;
+    # `_find_adapter` scans on the identity) and both return `None` on a miss,
+    # so a disagreement surfaces as "adapter not found" far from its cause. It
+    # could not be enforced here because the deprecated shims carry a
+    # `_ShimWeightsBinding` with no `name`/`adapter_type` to compare at all
+    # (their identity tracks the configured name/type) — that no longer
+    # blocks the LocalFile/PEFT reality now that the shims retire in #1144, so
+    # `LocalHFBackend.add_adapter` enforces it there instead, at registration
+    # time. `EmbeddedBinding` has no `name`/`adapter_type` of its own, so the
+    # Embedded/Granite Switch reality still has nothing to cross-check
+    # against.

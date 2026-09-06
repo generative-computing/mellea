@@ -161,7 +161,7 @@ Helper module for loading and calling the fully custom `stembolts` adapter
 (no standalone entry point — `102_example.py` consumes it).
 
 Demonstrates:
-- Custom adapter class definition (`StemboltAdapter`)
+- Custom adapter composition (`_stembolt_adapter()`) and intrinsic definition (`StemboltIntrinsic`)
 - Registering the adapter on a backend, guarded by qualified name
 - Calling the intrinsic directly via `mfuncs.act`
 

@@ -3458,3 +3458,43 @@ async def test_generate_from_raw_raw_response_none_for_beam_outputs():
         assert result.raw.response is None, (
             f"item {item_idx}: raw.response must stay None for beam-search outputs"
         )
+
+
+@pytest.mark.asyncio
+async def test_alora_requirement_dispatch_honors_explicit_adapter_types_override():
+    """A custom `ALoraRequirement`'s `adapter_types` override must reach
+    `_find_adapter`, not the hardcoded `("alora",)` default (Epic #929,
+    issue #1144).
+
+    Regression: the requirement-check dispatcher in `_generate_from_context`
+    hardcoded `self._find_adapter(adapter_name, ("alora",))` regardless of
+    what `adapter_types` the caller passed to `ALoraRequirement` — a custom,
+    LoRA-only adapter could never be found this way, silently falling back
+    to regular generation.
+    """
+    from mellea.stdlib.requirements.requirement import ALoraRequirement
+
+    backend = _make_backend()
+    action = ALoraRequirement(
+        "custom check", "my-custom-check", adapter_types=(AdapterType.LORA,)
+    )
+    ctx = ChatContext().add(Message("user", "hi"))
+
+    captured: dict[str, object] = {}
+
+    def fake_find_adapter(name, adapter_types=None):
+        captured["name"] = name
+        captured["adapter_types"] = adapter_types
+        return None  # not registered; falls back to regular generation below
+
+    with (
+        patch.object(backend, "_find_adapter", side_effect=fake_find_adapter),
+        patch.object(
+            LocalHFBackend, "_generate_from_context_standard", new_callable=AsyncMock
+        ) as mock_standard,
+    ):
+        mock_standard.return_value = (MagicMock(), ctx)
+        await backend._generate_from_context(action, ctx, model_options={})
+
+    assert captured["name"] == "my-custom-check"
+    assert captured["adapter_types"] == ("lora",)
