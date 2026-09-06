@@ -778,12 +778,19 @@ class _CallInfo:
         model_options: Model options passed to the originating generate call.
         generation_id: Mellea-side hook correlation ID; distinct from the
             provider-assigned `GenerationMetadata.response_id`.
+        fire_post_call_on_return: Set by a backend that returns an ALREADY-computed
+            thunk from `_generate_from_context`. Such a thunk short-circuits
+            `astream()`, so the `generation_post_call` hook astream normally fires
+            never runs even though `generation_pre_call` already did. This flag tells
+            the public `generate_from_context` wrapper to fire that hook itself once
+            the correlation id is assigned, keeping the PRE/POST pair balanced.
     """
 
     action: Span | None = None
     context: list[Span] | None = None
     model_options: dict[str, Any] | None = None
     generation_id: str | None = None
+    fire_post_call_on_return: bool = False
 
 
 @dataclass
