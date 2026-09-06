@@ -55,8 +55,6 @@ from ..helpers import (
     send_to_queue,
     should_replay_reasoning,
 )
-from ..plugins.manager import has_plugins, invoke_hook
-from ..plugins.types import HookType
 from ..stdlib.components import Intrinsic, Message
 from ..stdlib.context.chat import ChatContext
 from ..stdlib.requirements import LLMaJRequirement
@@ -2003,6 +2001,12 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         # the chat path's already-fired GENERATION_PRE/POST_CALL -- would double-count
         # metrics and nest a `text_completion` span in a `chat` span. It also returns
         # `tuple[list, dict | None]` rather than a bare list.
+        #
+        # Stamp the generation start BEFORE the request, matching the standard chat path
+        # (which sets `_gen.start` just before `chat.completions.create`). `_generate_from_raw`
+        # never sets it, so without this `_elapsed_ms()` returns -1 and LatencyMetricsPlugin
+        # records a negative duration for every retained turn.
+        gen_start = datetime.datetime.now()
         results, usage = await self._generate_from_raw(
             [PreTokenizedCBlock(prompt_ids)],
             ctx,
@@ -2010,6 +2014,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             model_options=forwarded,
         )
         output = results[0]
+        output._gen.start = gen_start
 
         # `_generate_from_raw` builds a thunk shaped for batch use; repair three things
         # for a chat turn.
@@ -2079,29 +2084,15 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             # count still covers it, and it is spliced verbatim from `retained` anyway.
             output._meta["retained_prompt_digest"] = _prompt_digest(conversation)
 
-        # The returned thunk is ALREADY computed, so `avalue()` short-circuits and the
-        # compute path's post-call block never runs -- but GENERATION_PRE_CALL fired for
-        # this turn, and GenerationTracingPlugin closes its span only on the post-call
-        # hook. Fire it here (last, so the payload sees the finished thunk) or the span
-        # and its OTel token leak and the metrics plugins record nothing.
-        if has_plugins(HookType.GENERATION_POST_CALL):
-            from ..plugins.hooks.generation import GenerationPostCallPayload
-
-            glog = output._generate_log
-            await invoke_hook(
-                HookType.GENERATION_POST_CALL,
-                GenerationPostCallPayload(
-                    prompt=glog.prompt if glog and glog.prompt else "",
-                    model_output=output,
-                    latency_ms=(
-                        (datetime.datetime.now() - output._gen.start).total_seconds()
-                        * 1000
-                        if output._gen.start
-                        else -1
-                    ),
-                    generation_id=output._call.generation_id,
-                ),
-            )
+        # This thunk is ALREADY computed (the reply had to be materialized to derive the
+        # retained ids), so `avalue()` short-circuits and the post-call hook astream
+        # normally fires never runs -- yet GENERATION_PRE_CALL already fired for this turn.
+        # This method cannot fire the matching post-call itself: `_call.generation_id` is
+        # assigned by the public `generate_from_context` wrapper only after this returns,
+        # so a hook fired here would carry `None` and no plugin could match the open span.
+        # Flag the thunk instead; the wrapper fires the post-call once the id is set. See
+        # `_CallInfo.fire_post_call_on_return`.
+        output._call.fire_post_call_on_return = True
         return output
 
     async def _generate_from_chat_context_standard(
