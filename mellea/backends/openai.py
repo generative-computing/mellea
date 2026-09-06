@@ -201,6 +201,45 @@ def _prompt_digest(messages: list[dict]) -> tuple[str, ...]:
     return tuple(digests)
 
 
+def _completion_choice_as_chat_response(
+    choice: dict[str, Any], usage: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    """Return a `/v1/completions` choice in chat-completion shape.
+
+    The id transport sends to the completions endpoint, whose reply is text-shaped
+    (`text`), while every consumer of `ModelOutputThunk.raw.response` on a chat turn
+    dispatches on `provider` rather than on shape -- `Message._parse` most of all,
+    which reads `response["choices"][0]["message"]` for provider `"openai"`. Without
+    this the two disagree and the read raises `KeyError`.
+
+    The target is the shape a real vLLM chat reply has when `return_token_ids` is on:
+    `message` and `token_ids` both sit on the CHOICE, not at top level. Producing
+    exactly that keeps the transport swap invisible to everything downstream,
+    including `_retained_ids`, instead of teaching each consumer a second shape.
+
+    Args:
+        choice (dict[str, Any]): One element of a completions response's `choices`.
+        usage (dict[str, Any] | None): Token usage for the request, if reported.
+
+    Returns:
+        dict[str, Any]: A chat-shaped response carrying the completion text as the
+            assistant message content, with `token_ids` preserved on the choice.
+    """
+    return {
+        "choices": [
+            {
+                "index": choice.get("index", 0),
+                "message": {"role": "assistant", "content": choice.get("text") or ""},
+                "finish_reason": choice.get("finish_reason") or "stop",
+                # Kept on the choice, where a genuine chat reply puts them, so
+                # `_retained_ids` reads one location for both transports.
+                "token_ids": choice.get("token_ids"),
+            }
+        ],
+        "usage": usage,
+    }
+
+
 class OpenAIBackend(FormatterBackend, AdapterMixin):
     """A generic OpenAI compatible backend.
 
@@ -1794,8 +1833,17 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         response = output.raw.response
         if not isinstance(response, dict):
             return None
+        # On the CHOICE, which is where vLLM puts them on a chat reply and where
+        # `_completion_choice_as_chat_response` therefore keeps them -- so this reads
+        # one location whichever endpoint served the turn.
+        choices = response.get("choices")
+        if not isinstance(choices, list) or not choices:
+            return None
+        choice = choices[0]
+        if not isinstance(choice, dict):
+            return None
         # `token_ids` is always a key but reads null without the flag; check the VALUE.
-        emitted = response.get("token_ids")
+        emitted = choice.get("token_ids")
         if not isinstance(emitted, list) or not emitted:
             return None
         # Two vLLM id-reporting shapes: the `return_token_ids` body flag yields plain
@@ -1963,8 +2011,18 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         )
         output = results[0]
 
-        # `_generate_from_raw` builds a thunk shaped for batch use; repair two things
+        # `_generate_from_raw` builds a thunk shaped for batch use; repair three things
         # for a chat turn.
+        #
+        # 0. Its `raw.response` is the completions CHOICE (`text`/`token_ids`, no
+        #    `message`), but consumers on a chat turn dispatch on provider and expect
+        #    chat shape -- `Message._parse` reads `["choices"][0]["message"]` and would
+        #    raise KeyError. Normalized FIRST, so the `_parse` below and
+        #    `_retained_ids` further down both see one shape.
+        if isinstance(output.raw.response, dict):
+            output.raw.response = _completion_choice_as_chat_response(
+                output.raw.response, usage
+            )
         #
         # 1. Its action is the synthetic `PreTokenizedCBlock`, so `parsed_repr` is the
         #    raw string. Callers depend on the real action's parse (e.g. `mfuncs.chat`
