@@ -432,6 +432,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
     """
 
     _cached_blocks: dict[str, DynamicCache] = dict()
+    _supports_composed_adapters = True
 
     def __init__(
         self,
@@ -579,6 +580,21 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         inside that section, on the same thread, via `_adapter_activation_lock()`.
         A plain `Lock` deadlocks on that same-thread re-acquisition (#1465).
         """
+
+        self._adapter_resolve_lock_obj = threading.RLock()
+        """Backs `_adapter_resolve_lock()`. Deliberately a separate lock from
+        `_generation_lock`/`_adapter_activation_lock()` — see that method's
+        docstring for the deadlock this avoids. Reentrant for the same
+        same-thread-reentry reason `_generation_lock` is.
+        """
+
+        # Keys claimed by an in-flight composed LocalFile registration in
+        # add_adapter(). The slow part (io.yaml fetch, weights download, PEFT
+        # load) must not run under `_adapter_activation_lock()` — see that
+        # method's lock-order note — so this set keeps the
+        # duplicate-registration guard exclusive across that unlocked window
+        # instead.
+        self._composed_registrations_in_flight: set[str] = set()
 
         if load_embedded_adapters:
             self.register_embedded_adapter_model(self._adapter_source or self._model_id)
@@ -2673,24 +2689,35 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 )
 
             key = _composed_adapter_key(adapter)
-            # Locked: a direct add_adapter() call (unlike resolve_adapter(),
-            # which already holds this lock around its own add_adapter()
-            # calls) is otherwise an unguarded check-then-write across
-            # _added_adapters/_composed_adapters — two concurrent callers
-            # registering under the same key could each pass the duplicate
-            # check below before either writes, then pair one call's adapter
-            # with the other's config. Reentrant, so a caller already holding
-            # it (resolve_adapter()) is unaffected.
+
+            # Phase 1: claim the key. Under the activation lock, but no I/O
+            # and no WeightsBinding lifecycle verb — see the lock-order note
+            # on `_adapter_activation_lock()`. Never held across `prepare()`:
+            # that method takes `binding._lifecycle_lock` then, internally,
+            # this same activation lock — holding the latter here across
+            # `prepare()` would acquire them in the opposite order and
+            # deadlock against a concurrent `prepare()`/`release()` on the
+            # same binding (from another thread, or via a direct call on the
+            # binding itself).
             with self._adapter_activation_lock():
                 # A LocalFileBinding registered standalone (bare
                 # add_adapter(binding)) lands in _added_adapters under this
                 # same key — that's not a collision if it's the very binding
                 # this composed Adapter wraps, only if some *other* object
-                # already claimed the name.
+                # already claimed the name. `_composed_registrations_in_flight`
+                # is the same guard for a LocalFileBinding registration
+                # that's between phases (its I/O/lifecycle work isn't done
+                # under this lock, so the dicts alone can't tell a concurrent
+                # caller "already claimed").
                 existing_added = self._added_adapters.get(key)
                 if (
-                    existing_added is not None and existing_added is not adapter.weights
-                ) or key in self._composed_adapters:
+                    (
+                        existing_added is not None
+                        and existing_added is not adapter.weights
+                    )
+                    or key in self._composed_adapters
+                    or key in self._composed_registrations_in_flight
+                ):
                     MelleaLogger.get_logger().warning(
                         f"Client code attempted to add {adapter.identity.name} with "
                         f"type {adapter.identity.adapter_type} but {key!r} is already "
@@ -2703,55 +2730,81 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                     adapter.weights.source = self.base_model_name
                     self._composed_adapters[key] = adapter
                     self._composed_adapter_configs[key] = config
-                    return
-                if isinstance(adapter.weights, LocalFileBinding):
-                    binding = adapter.weights
-                    if (
-                        adapter.identity.name != binding.name
-                        or adapter.identity.adapter_type != binding.adapter_type.value
-                    ):
-                        raise ValueError(
-                            f"Composed Adapter has identity.name={adapter.identity.name!r}/"
-                            f"adapter_type={adapter.identity.adapter_type!r} but "
-                            f"weights.name={binding.name!r}/"
-                            f"adapter_type={binding.adapter_type.value!r}; the two "
-                            "must agree on both, or registration and lookup key on "
-                            "different strings for the same adapter (NOTE(#1516))."
-                        )
-                    # Fetched before bind_backend()/prepare() below, not
-                    # after: a failed fetch here leaves nothing registered, so
-                    # the same composed Adapter can simply be retried.
-                    # Fetching it after prepare() (which this used to do)
-                    # left a real, registered LocalFileBinding with no
-                    # matching _composed_adapters entry on failure — a later
-                    # resolve_adapter()/add_adapter() for the same name then
-                    # hit the duplicate-key guard above and permanently
-                    # refused to (re)register the capability.
-                    io_yaml_config = self._obtain_local_file_io_yaml_config(binding)
-                    # bind_backend() itself raises if binding.backend is
-                    # already a *different* backend, and no-ops if it's
-                    # already self — calling it unconditionally (rather than
-                    # guarding on `binding.backend is None`) is what makes
-                    # that raise reachable; the guard used to skip straight
-                    # to prepare() (a silent no-op once loaded), registering
-                    # this adapter on `self` while the binding's weights
-                    # stayed activated against whatever backend it was
-                    # really bound to.
-                    binding.bind_backend(self)
-                    # Recurses into self.add_adapter(binding) below (the
-                    # bare-LocalFileBinding branch further down this method)
-                    # to populate `_added_adapters` for this binding — see
-                    # `LocalFileBinding.prepare()`'s own docstring/comments
-                    # for why that call is there.
-                    binding.prepare()
-                    self._composed_adapter_configs[key] = io_yaml_config
-                    self._composed_adapters[key] = adapter
-                    return
-                raise TypeError(
-                    "LocalHFBackend does not support the "
-                    f"{type(adapter.weights).__name__} weights reality for a "
-                    "composed Adapter."
-                )
+                    return  # atomic: no lifecycle verb, no I/O
+                if not isinstance(adapter.weights, LocalFileBinding):
+                    raise TypeError(
+                        "LocalHFBackend does not support the "
+                        f"{type(adapter.weights).__name__} weights reality for a "
+                        "composed Adapter."
+                    )
+                binding = adapter.weights
+                if (
+                    adapter.identity.name != binding.name
+                    or adapter.identity.adapter_type != binding.adapter_type.value
+                ):
+                    raise ValueError(
+                        f"Composed Adapter has identity.name={adapter.identity.name!r}/"
+                        f"adapter_type={adapter.identity.adapter_type!r} but "
+                        f"weights.name={binding.name!r}/"
+                        f"adapter_type={binding.adapter_type.value!r}; the two "
+                        "must agree on both, or registration and lookup key on "
+                        "different strings for the same adapter (NOTE(#1516))."
+                    )
+                self._composed_registrations_in_flight.add(key)
+
+            # Phase 2: do the slow, unlocked work. No backend lock held here —
+            # that's what makes the nested lifecycle-lock acquisitions inside
+            # `bind_backend()`/`prepare()` legal under the adapter lock order
+            # (resolve -> lifecycle -> activation). The two calls are
+            # sequential, not nested: `binding._lifecycle_lock` is a plain
+            # `threading.Lock`, not reentrant.
+            try:
+                # Fetched before bind_backend()/prepare() below, not after: a
+                # failed fetch here leaves nothing registered (the in-flight
+                # claim aside), so the same composed Adapter can simply be
+                # retried. Fetching it after prepare() (which this used to
+                # do) left a real, registered LocalFileBinding with no
+                # matching _composed_adapters entry on failure — a later
+                # resolve_adapter()/add_adapter() for the same name then hit
+                # the duplicate-key guard above and permanently refused to
+                # (re)register the capability. `prepare()` itself closes the
+                # equivalent gap for its own weights-load failure (see its
+                # docstring's rollback note) — this ordering only has to
+                # cover the fetch this method adds ahead of it.
+                io_yaml_config = self._obtain_local_file_io_yaml_config(binding)
+                # bind_backend() itself raises if binding.backend is already
+                # a *different* backend, and no-ops if it's already self —
+                # calling it unconditionally (rather than guarding on
+                # `binding.backend is None`) is what makes that raise
+                # reachable; the guard used to skip straight to prepare() (a
+                # silent no-op once loaded), registering this adapter on
+                # `self` while the binding's weights stayed activated against
+                # whatever backend it was really bound to.
+                binding.bind_backend(self)
+                # Recurses into self.add_adapter(binding) below (the
+                # bare-LocalFileBinding branch further down this method) to
+                # populate `_added_adapters` for this binding — see
+                # `LocalFileBinding.prepare()`'s own docstring/comments for
+                # why that call is there. On a weights-load failure inside
+                # `prepare()`, that same docstring's rollback note applies:
+                # the binding un-registers itself, so this method's own
+                # in-flight claim (released in the `except` below) is the
+                # only remaining state to clean up.
+                binding.prepare()
+            except BaseException:
+                with self._adapter_activation_lock():
+                    self._composed_registrations_in_flight.discard(key)
+                raise
+
+            # Phase 3: commit and release the claim in one acquisition. Not
+            # split into two: a gap between them would let another thread
+            # claim a key whose registration has already succeeded, then get
+            # refused at phase 1 against a half-visible state.
+            with self._adapter_activation_lock():
+                self._composed_adapter_configs[key] = io_yaml_config
+                self._composed_adapters[key] = adapter
+                self._composed_registrations_in_flight.discard(key)
+            return
 
         if adapter.backend is not None:
             if adapter.backend is self:
@@ -2830,8 +2883,12 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         # read-then-write across `_composed_adapters` and
         # `_discover_embedded_adapters`'s mutation of global `warnings` filter
         # state need the same lock `resolve_adapter` already takes around its
-        # own `add_adapter` calls.
-        with self._adapter_activation_lock():
+        # own `add_adapter` calls. `_adapter_resolve_lock()`, not
+        # `_adapter_activation_lock()`: see the lock-order note on the latter
+        # — this method's own I/O (this Hub discovery call) must not run
+        # under the lock `add_adapter()`'s composed-LocalFileBinding branch
+        # briefly takes around its dict writes.
+        with self._adapter_resolve_lock():
             discovered = _discover_embedded_adapters(
                 source,
                 revision=revision,
@@ -2849,7 +2906,14 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 # so this is the only way to know whether *this* adapter is the
                 # one that actually ended up registered, for the `names` result.
                 self.add_adapter(adapter, config=config)
-                if self._composed_adapters.get(key) is not adapter:
+                # Under the activation lock, not just the resolve lock this
+                # whole method holds: a concurrent release() pops
+                # _composed_adapters without taking the resolve lock (it isn't
+                # a resolve-orchestration caller), so this read needs its own
+                # protection against racing that pop.
+                with self._adapter_activation_lock():
+                    registered = self._composed_adapters.get(key) is adapter
+                if not registered:
                     continue
                 names.append(adapter.identity.name)
             return names
@@ -3066,8 +3130,11 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         the lock caller 1 (and, on the outer level, caller 3's driver) takes,
         it is the only thing satisfying the precondition on those paths.
 
-        A fourth consumer, unrelated to that precondition: `resolve_adapter()`
-        (base class) also takes this lock, to serialize registration.
+        A fourth consumer, unrelated to that precondition: `add_adapter()`'s
+        composed-`Adapter` branches also take this lock, briefly, around
+        their registration-dict writes — never across a `WeightsBinding`
+        lifecycle verb or I/O (see `_adapter_resolve_lock()` below and the
+        lock-order note on the base class's `_adapter_activation_lock()`).
 
         Caller 3's verb acquisitions therefore nest inside its driver's
         `_generation_lock` hold on the same thread (see
@@ -3077,6 +3144,21 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         (this was #1465's known lock-reentrancy issue).
         """
         return self._generation_lock
+
+    def _adapter_resolve_lock(self) -> contextlib.AbstractContextManager[bool | None]:
+        """A separate, reentrant lock for `resolve_adapter()`/registration orchestration.
+
+        Not `_generation_lock` (the lock `_adapter_activation_lock()`
+        returns): that lock is taken *inside* `add_adapter()`'s
+        composed-`LocalFileBinding` branch and inside every `LocalFileBinding`
+        lifecycle verb, so holding it across `resolve_adapter()`'s whole
+        discover-and-register loop — which calls `add_adapter()`, which can
+        call `binding.prepare()` — would invert the adapter lock order
+        (`_adapter_resolve_lock` -> `binding._lifecycle_lock` ->
+        `_adapter_activation_lock`) and deadlock against a concurrent
+        `prepare()`/`release()` on the same binding.
+        """
+        return self._adapter_resolve_lock_obj
 
     def list_adapters(self) -> list[str]:
         """List the qualified names of all adapters registered with this backend.

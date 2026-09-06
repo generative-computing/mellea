@@ -240,15 +240,26 @@ def test_prepare_ignores_phase_hook_dispatch_failure():
     backend.activate_peft_adapter.assert_called_once_with(binding.qualified_name)
 
 
-def test_prepare_retries_only_the_load_after_a_load_failure():
-    """A failed load must be retryable without re-registering.
+def test_prepare_rolls_back_registration_after_a_load_failure():
+    """A failed load must fully undo this call's own registration, then be retryable.
 
-    Regression guard: `add_adapter` sets `.backend` (registration) before
-    `prepare()` calls `load_peft_adapter` (the load). If the load raised,
-    `.backend` was already non-None, so the old idempotency guard
-    (`if self.backend is not None: return`) made every retry a silent no-op —
-    the caller got no error and no adapter, forever. The fix tracks the load
-    separately from registration so a retry redoes only the failed step.
+    Regression guard, in two parts:
+
+    1. `add_adapter` sets `.backend` (registration) before `prepare()` calls
+       `load_peft_adapter` (the load). If the load raised, `.backend` was
+       already non-None, so the old idempotency guard
+       (`if self.backend is not None: return`) made every retry a silent
+       no-op — the caller got no error and no adapter, forever.
+    2. An earlier fix tracked the load separately from registration so a
+       retry redid only the failed step — but that left a load failure's
+       *first* attempt as a registered binding with `._loaded` still False
+       forever if the caller gave up rather than retried, and — worse, for a
+       composed `Adapter` wrapping this binding — no way for
+       `LocalHFBackend.add_adapter`'s composed branch to tell "registered but
+       not usable" from "not registered", permanently orphaning the
+       qualified name. `prepare()` now rolls its own registration back on a
+       load failure, so a binding that never successfully prepares is never
+       left half-registered, and a retry re-registers cleanly.
     """
     backend = _fake_backend()
     backend.load_peft_adapter.side_effect = [
@@ -261,15 +272,16 @@ def test_prepare_retries_only_the_load_after_a_load_failure():
     with pytest.raises(RuntimeError, match="transient load failure"):
         binding.prepare()
 
-    # Registration succeeded (that's why .backend is set); the load did not.
-    # A binding in this state must not look "already prepared".
-    assert binding.backend is backend
+    # The failed load's own registration was rolled back: no half-registered
+    # state survives for a caller to mistake as usable.
+    assert binding.backend is None
+    backend.remove_adapter.assert_called_once_with(binding.qualified_name)
     with pytest.raises(RuntimeError, match="prepare"):
         binding.activate()
 
-    binding.prepare()  # retry: must not re-register, must retry the load
+    binding.prepare()  # retry: re-registers (rolled back above) and retries the load
 
-    backend.add_adapter.assert_called_once()
+    assert backend.add_adapter.call_count == 2
     assert backend.load_peft_adapter.call_count == 2
     binding.activate()
     backend.activate_peft_adapter.assert_called_once_with(binding.qualified_name)

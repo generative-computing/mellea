@@ -17,7 +17,6 @@ support runtime adapter loading and unloading.
 import abc
 import contextlib
 import hashlib
-import inspect
 import pathlib
 import re
 import shutil
@@ -25,7 +24,7 @@ import tempfile
 import time
 import warnings
 from collections.abc import Callable
-from typing import Literal, TypeAlias, TypeVar, cast
+from typing import ClassVar, Literal, TypeAlias, TypeVar, cast
 
 import yaml
 
@@ -529,6 +528,21 @@ class AdapterMixin(Backend, abc.ABC):
             `"ibm-granite/granite-3.3-8b-instruct"`).
     """
 
+    _supports_composed_adapters: ClassVar[bool] = False
+    """Whether this backend's `add_adapter` understands a composed `Adapter`.
+
+    Opt-in, defaulting to `False`: `_uses_embedded_adapters` predates the
+    composed `Adapter` contract (Epic #929, issue #1144), so a third-party
+    subclass can already be reachable from `resolve_adapter()`'s embedded
+    branch while its `add_adapter` only knows the deprecated
+    `EmbeddedIntrinsicAdapter` shim's attribute shape. Signature inspection
+    cannot distinguish "modern" from "legacy" here — a `**kwargs` catch-all
+    present for unrelated reasons, or a pre-existing `config` parameter
+    meaning something else entirely, both read as "accepts config=". Only an
+    explicit declaration can carry that fact; `LocalHFBackend` and
+    `OpenAIBackend` both set this to `True`.
+    """
+
     # ---- Universal verbs (every adapter reality) ----
 
     @property
@@ -683,24 +697,60 @@ class AdapterMixin(Backend, abc.ABC):
     def _adapter_activation_lock(
         self,
     ) -> contextlib.AbstractContextManager[bool | None]:
-        """Exclusivity lock to hold while calling activate/deactivate and registration verbs.
+        """Exclusivity lock to hold while calling activate/deactivate and dict writes.
 
         Default is a no-op (`contextlib.nullcontext()`). Backends whose
         activation verbs mutate shared, non-thread-safe state (e.g.
         `LocalHFBackend`'s underlying PEFT model) override this to return
         their own lock, so callers like `LocalFileBinding.activate()` get
         the same exclusivity `_generate_with_adapter_lock` relies on.
-        `resolve_adapter()` also holds it for its own registration path.
+        `add_adapter()`'s registration-dict writes also hold it, briefly.
+
+        Innermost in the adapter lock order
+        (`_adapter_resolve_lock` -> `binding._lifecycle_lock` ->
+        `_adapter_activation_lock`). Never hold this lock across a
+        `WeightsBinding` lifecycle verb (`prepare`/`activate`/`deactivate`/
+        `release`) or across any I/O — those take `_lifecycle_lock`, and
+        holding activation across them inverts the order and can deadlock
+        against a concurrent lifecycle call on the same binding.
 
         A code path already holding this lock can re-enter it: on
         `LocalHFBackend`, `_generate_intrinsic_with_adapter_scope` holds
         `_generation_lock` for the whole generation, and the
         `_IntrinsicPeftBinding` verbs it drives through `adapter_scope()`
-        take `_adapter_activation_lock()` again on the same thread. (No
-        production caller currently reaches `resolve_adapter()` this way, but
-        nothing prevents one.) An override must therefore return a reentrant
-        lock (`threading.RLock`, as `LocalHFBackend` does) — a plain
-        `threading.Lock` here is a real deadlock hazard.
+        take `_adapter_activation_lock()` again on the same thread. An
+        override must therefore return a reentrant lock (`threading.RLock`,
+        as `LocalHFBackend` does) — a plain `threading.Lock` here is a real
+        deadlock hazard.
+        """
+        return contextlib.nullcontext()
+
+    def _adapter_resolve_lock(self) -> contextlib.AbstractContextManager[bool | None]:
+        """Exclusivity lock for discovery-plus-registration orchestration.
+
+        Default is a no-op (`contextlib.nullcontext()`). Held by
+        `resolve_adapter()` and `register_embedded_adapter_model()` across
+        their catalogue/Hugging Face Hub discovery I/O and their
+        `add_adapter()` calls.
+
+        Outermost in the adapter lock order
+        (`_adapter_resolve_lock` -> `binding._lifecycle_lock` ->
+        `_adapter_activation_lock`). Deliberately a separate lock from
+        `_adapter_activation_lock`, not a reuse of it: the activation lock is
+        taken *inside* every `WeightsBinding` lifecycle verb, so holding it
+        across `add_adapter()` — which can call those verbs — would invert
+        the order and deadlock against a concurrent `prepare()`/`release()`
+        on the same binding.
+
+        Must not be acquired while already holding
+        `_adapter_activation_lock()` — that reverses the order. No
+        production caller does: `resolve_adapter()` runs before the backend
+        takes its generation lock, not after (see
+        `mellea/stdlib/components/intrinsic/_util.py`).
+
+        An override must return a reentrant lock (`threading.RLock`) for the
+        same same-thread-reentry reason `_adapter_activation_lock()`
+        documents.
         """
         return contextlib.nullcontext()
 
@@ -715,22 +765,20 @@ class AdapterMixin(Backend, abc.ABC):
         that: a third-party `AdapterMixin` subclass written before this
         parameter existed, but already supporting the Embedded reality, is
         reachable here and would raise
-        `TypeError: add_adapter() got an unexpected keyword argument 'config'`.
-
-        Detected via signature inspection rather than `try`/`except TypeError`
-        around the call: a `TypeError` `add_adapter` itself legitimately
-        raises (e.g. an unsupported weights reality) must propagate, not be
-        misread as this compatibility gap.
+        `TypeError: add_adapter() got an unexpected keyword argument 'config'`
+        — or worse, silently misbehave, if it happens to already accept a
+        `config=`/`**kwargs` for unrelated reasons and gets handed a composed
+        `Adapter` its body doesn't know how to read (it has no
+        `.qualified_name`/`.config`/`.technology`, unlike the shim). Gated on
+        `_supports_composed_adapters`, not signature inspection, for exactly
+        that reason: a parameter name can't tell you whether the method body
+        understands the new object shape.
 
         Args:
             adapter: The composed `Adapter` to register.
             config: Raw io.yaml config for `adapter`.
         """
-        params = inspect.signature(self.add_adapter).parameters
-        accepts_config = "config" in params or any(
-            p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values()
-        )
-        if accepts_config:
+        if self._supports_composed_adapters:
             self.add_adapter(adapter, config=config)
             return
         # Legacy subclass predating the composed-Adapter contract: it only
@@ -760,14 +808,16 @@ class AdapterMixin(Backend, abc.ABC):
             KeyError: If the adapter cannot be found after registration.
 
         Note:
-            On backends with a real `_adapter_activation_lock()` override
-            (e.g. `LocalHFBackend`), a cold first resolve holds that lock
-            across any Hugging Face Hub download it triggers, so it can stall
-            every other caller of the same lock (activation, generation,
-            other resolves) — including a resolve on the asyncio event-loop
-            thread inside a gathered set of coroutines. This is a deliberate
-            trade-off (reusing the existing lock rather than adding a second
-            one); a warm cache after the first resolve avoids the download.
+            A cold first resolve holds `_adapter_resolve_lock()` across any
+            Hugging Face Hub download it triggers, so it can stall every
+            other caller of *that* lock (other resolves,
+            `register_embedded_adapter_model()`) — including a resolve on
+            the asyncio event-loop thread inside a gathered set of
+            coroutines. It does **not** stall generation or activation:
+            `_adapter_resolve_lock` is a separate lock from
+            `_adapter_activation_lock`, deliberately (see the lock-order note
+            on `_adapter_activation_lock()`). A warm cache after the first
+            resolve avoids the download either way.
         """
         found = self._find_adapter(name)
         if found is not None:
@@ -782,14 +832,18 @@ class AdapterMixin(Backend, abc.ABC):
         # add_adapter()'s own duplicate check is an unguarded read-then-write on
         # _added_adapters, and catch_warnings() below mutates thread-unsafe global
         # filter state — both race under concurrent first-time resolves for the
-        # same name. `_adapter_activation_lock()` closes both: a no-op by default,
-        # LocalHFBackend's reentrant `_generation_lock` and OpenAIBackend's own
-        # lock otherwise. Not closed here: LocalFileBinding.prepare() (own
-        # `_lifecycle_lock`) and register_embedded_adapter_model() (no lock, but
-        # constructor-only today, so not currently reachable concurrently).
+        # same name. `_adapter_resolve_lock()` closes both: a no-op by default,
+        # and each concrete backend's reentrant lock otherwise. Deliberately not
+        # `_adapter_activation_lock()`: that lock is taken *inside*
+        # `add_adapter()`'s composed-LocalFileBinding branch around the dict
+        # writes only, and inside every `WeightsBinding` lifecycle verb — holding
+        # it here, across the whole discover-and-register loop below (which calls
+        # `add_adapter()`, which can call `binding.prepare()`), would invert the
+        # adapter lock order and deadlock against a concurrent
+        # `prepare()`/`release()` on the same binding.
         # Suppress DeprecationWarning: the shim constructors warn user-facing code,
         # not internal registration paths.
-        with self._adapter_activation_lock(), warnings.catch_warnings():
+        with self._adapter_resolve_lock(), warnings.catch_warnings():
             # Re-check now the lock is held: a concurrent resolve may have already
             # registered this name. Without this, the loser redundantly re-fetches
             # and then hits the backend's own duplicate guard, which logs a

@@ -758,12 +758,19 @@ def test_resolve_adapter_survives_reentrant_activation_lock():
     assert result.identity.name == "answerability"
 
 
-def test_resolve_adapter_holds_activation_lock_during_lora_registration():
-    """resolve_adapter's single-adapter (LORA) path must run inside `_adapter_activation_lock()`.
+def test_resolve_adapter_holds_resolve_lock_during_lora_registration():
+    """resolve_adapter's single-adapter (LORA) path must run inside `_adapter_resolve_lock()`.
 
     Issue #1562: `add_adapter()` is an unguarded read-then-write on
-    `_added_adapters`; every other verb that touches it already holds this
-    lock (#1465). Pin the lock's use here so it can't regress silently.
+    `_added_adapters`; every other verb that touches it already holds a lock
+    (#1465). Pin the lock's use here so it can't regress silently.
+
+    Not `_adapter_activation_lock()` (Epic #929, issue #1144): that lock is
+    taken *inside* `add_adapter()`'s composed-`LocalFileBinding` branch and
+    inside every `LocalFileBinding` lifecycle verb, so holding it across this
+    whole discover-and-register call would invert the adapter lock order and
+    risk deadlocking against a concurrent `prepare()`/`release()`. See
+    `_adapter_resolve_lock()`'s docstring for the full lock order.
     """
     mock_catalog_entry = IntrinsicsCatalogEntry(
         name="answerability",
@@ -777,11 +784,11 @@ def test_resolve_adapter_holds_activation_lock_during_lora_registration():
     mock_backend._added_adapters = {}
 
     tracking_lock = _TrackingLock()
-    mock_backend._adapter_activation_lock.return_value = tracking_lock
+    mock_backend._adapter_resolve_lock.return_value = tracking_lock
 
     def fake_add_adapter(a):
         assert tracking_lock.enter_count == 1 and tracking_lock.exit_count == 0, (
-            "add_adapter must run while the activation lock is held"
+            "add_adapter must run while the resolve lock is held"
         )
         mock_backend._added_adapters[_composed_adapter_key(a)] = a
 
@@ -799,20 +806,21 @@ def test_resolve_adapter_holds_activation_lock_during_lora_registration():
     assert tracking_lock.enter_count == 1
     assert tracking_lock.exit_count == 1
     assert tracking_lock.filter_restored_at_exit == [True], (
-        "warnings.catch_warnings() must be nested inside the activation lock "
+        "warnings.catch_warnings() must be nested inside the resolve lock "
         "(lock outermost) so its filter restoration runs before the lock "
         "releases — swapping the nesting order reopens the pre-existing "
         "filter-restoration race between concurrent first-time resolves"
     )
 
 
-def test_resolve_adapter_holds_activation_lock_once_across_embedded_loop():
-    """The embedded-adapter loop (#1018) must hold the lock across all iterations.
+def test_resolve_adapter_holds_resolve_lock_once_across_embedded_loop():
+    """The embedded-adapter loop (#1018) must hold the resolve lock across all iterations.
 
     `resolve_adapter()` calls `add_adapter()` once per adapter discovered by
     `EmbeddedIntrinsicAdapter.from_source()`. The lock must be acquired once
     for the whole loop, not re-acquired per adapter (that would reopen the
-    race between iterations).
+    race between iterations). `_adapter_resolve_lock()`, not
+    `_adapter_activation_lock()` — see the lock-order note on the latter.
     """
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", DeprecationWarning)
@@ -828,7 +836,8 @@ def test_resolve_adapter_holds_activation_lock_once_across_embedded_loop():
     mock_backend._added_adapters = {}
 
     tracking_lock = _TrackingLock()
-    mock_backend._adapter_activation_lock.return_value = tracking_lock
+    mock_backend._adapter_resolve_lock.return_value = tracking_lock
+    mock_backend._supports_composed_adapters = True
 
     def fake_add_adapter(a, config=None):
         mock_backend._added_adapters[_composed_adapter_key(a)] = a
@@ -867,7 +876,7 @@ def test_resolve_adapter_concurrent_first_use_does_not_double_register():
     check (`existing = registry.get(qualified_name); ...; registry[key] =
     adapter`) with an injected delay between the read and the write, which
     makes the unguarded race deterministic: without
-    `_adapter_activation_lock()` serializing the two threads, both would
+    `_adapter_resolve_lock()` serializing the two threads, both would
     read `existing is None` before either writes, and both would overwrite
     the registry entry independently rather than one of them reusing the
     other's registration.
@@ -887,7 +896,7 @@ def test_resolve_adapter_concurrent_first_use_does_not_double_register():
     mock_backend.base_model_name = "ibm-granite/granite-4.1-3b"
     mock_backend._uses_embedded_adapters = False
     mock_backend._added_adapters = registry
-    mock_backend._adapter_activation_lock.return_value = real_lock
+    mock_backend._adapter_resolve_lock.return_value = real_lock
     mock_backend._find_adapter.side_effect = lambda cap, types=None: (
         AdapterMixin._find_adapter(mock_backend, cap, types)
     )
@@ -960,24 +969,33 @@ def test_resolve_adapter_concurrent_first_use_does_not_double_register():
     )
 
 
-def test_add_embedded_adapter_compat_falls_back_to_shim_for_legacy_add_adapter():
-    """A third-party `AdapterMixin` subclass predating `config=` (Epic #929,
-    issue #1144) must not break when `resolve_adapter()`'s embedded branch
-    tries to register a discovered adapter.
+def test_add_embedded_adapter_compat_falls_back_to_shim_when_not_supported():
+    """A third-party `AdapterMixin` subclass predating composed Adapters
+    (Epic #929, issue #1144) must not break when `resolve_adapter()`'s
+    embedded branch tries to register a discovered adapter.
 
-    Regression: `_uses_embedded_adapters` predates the `config` parameter
-    `add_adapter` gained in this PR — a legacy `add_adapter(self, adapter)`
-    override (no `config` parameter, no `**kwargs`) raised
-    `TypeError: add_adapter() got an unexpected keyword argument 'config'`
-    when `resolve_adapter()` called `self.add_adapter(a, config=config)`
-    directly.
+    Regression: `_uses_embedded_adapters` predates the composed-`Adapter`
+    contract — a legacy `add_adapter` only knows the shim's attribute shape
+    (`.qualified_name`/`.config`/`.technology`), not a composed `Adapter`'s
+    (`.identity`/`.io_contract`/`.weights`). The compat method is gated on
+    the explicit `_supports_composed_adapters` opt-in, not on whether
+    `add_adapter` merely *accepts* a `config=` keyword — signature inspection
+    can't tell "accepts the keyword" apart from "understands the object
+    shape", and a subclass with an unrelated `**kwargs` catch-all would
+    otherwise be handed a composed `Adapter` its body can't read, raising
+    `AttributeError` rather than the more diagnosable `TypeError` a bare
+    signature mismatch would.
     """
     registered = []
 
-    def legacy_add_adapter(adapter):
+    def legacy_add_adapter(adapter, **kwargs):
+        # Even a **kwargs catch-all (unrelated to config=) must not fool the
+        # compat method into thinking this body understands a composed
+        # Adapter — only _supports_composed_adapters governs that.
         registered.append(adapter)
 
     mock_backend = MagicMock(spec=AdapterMixin)
+    mock_backend._supports_composed_adapters = False
     mock_backend.add_adapter = legacy_add_adapter
 
     composed = Adapter(
@@ -1000,16 +1018,17 @@ def test_add_embedded_adapter_compat_falls_back_to_shim_for_legacy_add_adapter()
     assert shim.config == {"parameters": {}}
 
 
-def test_add_embedded_adapter_compat_passes_config_directly_for_modern_add_adapter():
-    """A backend whose `add_adapter` accepts `config=` gets the composed
-    `Adapter` directly — the deprecated-shim fallback is only for a legacy
-    override that cannot accept it."""
+def test_add_embedded_adapter_compat_passes_composed_adapter_when_supported():
+    """A backend that declares `_supports_composed_adapters = True` gets the
+    composed `Adapter` directly — the deprecated-shim fallback is only for a
+    subclass that hasn't opted in."""
     calls = []
 
     def modern_add_adapter(adapter, *, config=None):
         calls.append((adapter, config))
 
     mock_backend = MagicMock(spec=AdapterMixin)
+    mock_backend._supports_composed_adapters = True
     mock_backend.add_adapter = modern_add_adapter
 
     composed = Adapter(

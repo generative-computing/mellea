@@ -270,5 +270,49 @@ def test_add_adapter_rejects_binding_already_bound_to_a_different_backend():
     assert backend_b._find_adapter("answerability") is None
 
 
+def test_add_adapter_does_not_hold_activation_lock_during_prepare():
+    """`add_adapter`'s composed-`LocalFileBinding` branch must not hold the
+    activation lock while `binding.prepare()` runs.
+
+    Regression: `prepare()` acquires `binding._lifecycle_lock` first, then
+    (internally, around the weights load) the backend's activation lock —
+    lifecycle-then-activation. If `add_adapter` held the activation lock
+    across the whole call to `prepare()`, that's activation-then-lifecycle,
+    the opposite order — a classic AB-BA deadlock against a concurrent
+    `prepare()`/`release()` call on the same binding from another thread.
+    """
+    backend = _make_backend()
+    binding = _make_binding()
+    adapter = _make_adapter(binding)
+
+    lock_held_during_prepare = []
+    orig_prepare = LocalFileBinding.prepare
+
+    def spying_prepare(self):
+        lock_held_during_prepare.append(backend._generation_lock._is_owned())
+        return orig_prepare(self)
+
+    with (
+        patch(
+            "mellea.formatters.granite.intrinsics.obtain_lora",
+            return_value="/fake/local/adapter/path",
+        ),
+        patch(
+            "mellea.formatters.granite.intrinsics.obtain_io_yaml",
+            return_value="/fake/adapter.yaml",
+        ),
+        patch("builtins.open", mock_open(read_data="key: value")),
+        patch("yaml.safe_load", return_value={"parameters": {}}),
+        patch.object(LocalFileBinding, "prepare", spying_prepare),
+    ):
+        backend.add_adapter(adapter)
+
+    assert lock_held_during_prepare == [False], (
+        "add_adapter must not hold the activation lock while prepare() runs"
+    )
+    # The registration itself must still have succeeded normally.
+    assert backend._find_adapter("answerability") is adapter
+
+
 if __name__ == "__main__":
     pytest.main([__file__])

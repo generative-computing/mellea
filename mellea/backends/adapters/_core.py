@@ -486,6 +486,7 @@ class LocalFileBinding(WeightsBinding):
                 the registration.
         """
         started_at = time.monotonic()
+        registered_here = False
         with self._lifecycle_lock:
             if self._released:
                 raise RuntimeError(
@@ -529,15 +530,61 @@ class LocalFileBinding(WeightsBinding):
                         "the backend's warning log — another adapter is already registered "
                         "under this qualified name."
                     )
-            # `load_peft_adapter` mutates the backend's underlying PEFT model, the
-            # same shared state `activate_peft_adapter`/`deactivate_peft_adapter`
-            # document "must be called while holding `_generation_lock`" for.
-            # `prepare()`/`release()` aren't driven through `adapter_scope`, so
-            # nothing else takes this lock on their behalf.
-            with self.backend._adapter_activation_lock():
-                self.backend.load_peft_adapter(self.qualified_name)
+                registered_here = True
+            try:
+                # `load_peft_adapter` mutates the backend's underlying PEFT model, the
+                # same shared state `activate_peft_adapter`/`deactivate_peft_adapter`
+                # document "must be called while holding `_generation_lock`" for.
+                # `prepare()`/`release()` aren't driven through `adapter_scope`, so
+                # nothing else takes this lock on their behalf.
+                with self.backend._adapter_activation_lock():
+                    self.backend.load_peft_adapter(self.qualified_name)
+            except BaseException:
+                # Keeps prepare() all-or-nothing for a call that did its own
+                # registration above: without this, a load failure leaves a
+                # registered binding with no way for the caller to distinguish
+                # it from a fully-prepared one, and the qualified name stays
+                # claimed — permanently refusing a *different* binding for
+                # the same capability (exactly what a fresh resolve_adapter()
+                # call constructs on retry). A call that instead retried an
+                # *already*-registered binding (registered_here False) isn't
+                # this call's registration to undo.
+                if registered_here:
+                    self._rollback_registration()
+                raise
             self._loaded = True
         self._fire_phase_complete("prepare", time.monotonic() - started_at)
+
+    def _rollback_registration(self) -> None:
+        """Undoes this call's own `add_adapter` after the weights load failed.
+
+        Called from `prepare()` with `_lifecycle_lock` already held, on the
+        failure path right after `self._staged_backend.add_adapter(self)`
+        succeeded but `load_peft_adapter` then raised. Takes only the
+        activation lock — re-entering `_lifecycle_lock` here would
+        self-deadlock, since it is a plain `threading.Lock`, not an `RLock`
+        (this is also why `release()`, which acquires `_lifecycle_lock`
+        itself, cannot be reused here).
+        """
+        backend = self.backend
+        assert backend is not None
+        try:
+            with backend._adapter_activation_lock():
+                backend.remove_adapter(self.qualified_name)
+        except NotImplementedError:
+            # State the observable fact, not the presumed cause: a real
+            # implementation can raise NotImplementedError internally for
+            # reasons unrelated to this rollback.
+            MelleaLogger.get_logger().warning(
+                f"{type(backend).__name__}.remove_adapter() raised "
+                f"NotImplementedError; {self.qualified_name!r} stays registered "
+                "after a failed load. Retrying prepare() on this same binding "
+                "still works; a different binding for the same capability "
+                "will be refused."
+            )
+            return
+        self.backend = None
+        self.path = None
 
     def activate(self) -> None:
         """Selects already-loaded adapter weights for generation.

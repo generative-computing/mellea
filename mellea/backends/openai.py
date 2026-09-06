@@ -130,6 +130,8 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             `OPENAI_API_KEY` is set, or if `model_id` is a `ModelIdentifier` with no `openai_name` set.
     """
 
+    _supports_composed_adapters = True
+
     def __init__(
         self,
         model_id: str | ModelIdentifier = model_ids.OPENAI_GPT_5_1,
@@ -308,6 +310,10 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         # _intrinsic_adapter_name_and_config.
         self._composed_adapter_configs: dict[str, dict] = {}
         self._adapter_lock = threading.RLock()
+        # Backs _adapter_resolve_lock() — deliberately separate from
+        # _adapter_lock (`_adapter_activation_lock()`); see that method's
+        # docstring for the deadlock a shared lock would risk.
+        self._adapter_resolve_lock_obj = threading.RLock()
 
         # Call once to create an async_client and populate the cache.
         _ = self._async_client
@@ -436,8 +442,18 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
     def _adapter_activation_lock(
         self,
     ) -> contextlib.AbstractContextManager[bool | None]:
-        """Serialize `add_adapter()` / registration for this backend."""
+        """Serialize `add_adapter()`'s registration-dict writes for this backend."""
         return self._adapter_lock
+
+    def _adapter_resolve_lock(self) -> contextlib.AbstractContextManager[bool | None]:
+        """A separate lock for `resolve_adapter()`/registration orchestration.
+
+        Not `_adapter_lock` (the lock `_adapter_activation_lock()` returns):
+        see that method's docstring, and the base class's
+        `_adapter_resolve_lock()` docstring, for the deadlock a shared lock
+        would risk.
+        """
+        return self._adapter_resolve_lock_obj
 
     # ------------------------------------------------------------------
     # Convenience registration helpers
@@ -515,7 +531,11 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         # read-then-write across `_added_adapters` and `_discover_embedded_adapters`'
         # mutation of global `warnings` filter state need the same lock
         # `add_adapter` itself would take via `resolve_adapter`.
-        with self._adapter_activation_lock():
+        # `_adapter_resolve_lock()`, not `_adapter_activation_lock()`: see the
+        # lock-order note on the latter — this method's own I/O (this Hub
+        # discovery call) must not run under the lock `add_adapter()` briefly
+        # takes around its dict writes.
+        with self._adapter_resolve_lock():
             discovered = _discover_embedded_adapters(
                 source,
                 revision=revision,
@@ -533,7 +553,9 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 # so this is the only way to know whether *this* adapter is the
                 # one that actually ended up registered, for the `names` result.
                 self.add_adapter(adapter, config=config)
-                if self._added_adapters.get(key) is not adapter:
+                with self._adapter_activation_lock():
+                    registered = self._added_adapters.get(key) is adapter
+                if not registered:
                     continue
                 names.append(adapter.identity.name)
             return names
