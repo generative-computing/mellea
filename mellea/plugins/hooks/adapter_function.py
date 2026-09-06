@@ -57,6 +57,19 @@ class AdapterFunctionPhaseCompletePayload(MelleaBasePayload):
         phase: Lifecycle phase (`"prepare"`, `"activate"`, `"generate"`,
             `"parse"`, or `"deactivate"`).
         duration_ms: Wall-clock duration of the phase in milliseconds.
+
+    Warning:
+        A subscriber to this hook must not synchronously call
+        `resolve_adapter()`, `register_embedded_adapter_model()`, or
+        `add_adapter()` with a composed `Adapter` on the same backend that
+        fired it. `LocalFileBinding.prepare()` dispatches this hook via a
+        blocking call onto a dedicated event-loop thread; those three
+        methods hold a backend-level lock across their whole body, so a
+        handler that re-enters one of them from that thread deadlocks
+        against the thread that's still waiting for the hook to return. See
+        `AdapterMixin._adapter_resolve_lock()`'s docstring for the full
+        mechanism (tracked as a follow-up; not fixed as of Epic #929, issue
+        #1144).
     """
 
     name: str
