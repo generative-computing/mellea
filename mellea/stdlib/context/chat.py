@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from mellea.backends.context_lengths import get_context_length
 from mellea.backends.model_ids import ModelIdentifier
@@ -81,6 +81,10 @@ class ChatContext(Context):
             portable across vocabularies, so a backend can refuse a mismatched prefix.
         sent_message_count (int): How many chat messages `sent_token_ids` covers, so
             a backend can re-render exactly the already-sent side to subtract against.
+        sent_template_kwargs (dict[str, Any]): Chat-template variables the retained
+            ids were rendered under, so a backend re-renders the already-sent side the
+            way it was actually sent. A kwarg introduced mid-conversation is refused
+            rather than silently cancelling out of the subtraction.
         sent_prompt_digest (tuple[str, ...]): Per-message fingerprint of the messages
             `sent_token_ids` covers. Count says WHICH messages; the digest proves they
             are still the SAME messages, so any path (chat or intrinsic) can reuse a
@@ -104,6 +108,7 @@ class ChatContext(Context):
         "_sent_model_id",
         "_sent_message_count",
         "_sent_prompt_digest",
+        "_sent_template_kwargs",
     )
 
     # Class-level defaults: `_rebuild_chat_context` builds nodes via `__new__`
@@ -114,6 +119,7 @@ class ChatContext(Context):
     _sent_model_id: str | None = None
     _sent_message_count: int = 0
     _sent_prompt_digest: tuple[str, ...] = ()
+    _sent_template_kwargs: dict[str, Any] = {}
 
     def __init__(
         self,
@@ -155,6 +161,7 @@ class ChatContext(Context):
         self._sent_model_id: str | None = None
         self._sent_message_count: int = 0
         self._sent_prompt_digest: tuple[str, ...] = ()
+        self._sent_template_kwargs: dict[str, Any] = {}
 
     @property
     def model_id(self) -> str | ModelIdentifier | None:
@@ -193,12 +200,30 @@ class ChatContext(Context):
         """
         return self._sent_prompt_digest
 
+    @property
+    def sent_template_kwargs(self) -> dict[str, Any]:
+        """Chat-template variables the retained ids were rendered under (a copy).
+
+        Empty if no ids are held. `adapter_name` is never included: it applies to the
+        turn being generated, not to the prefix, so keeping it would make every
+        adapter turn look like drift against the next one.
+
+        A backend re-renders the already-sent side under THESE kwargs, not the current
+        turn's. Using the current turn's puts a newly-introduced kwarg on both sides of
+        the subtraction, where it cancels out -- so a turn that first supplies
+        `documents=[...]` would send a prefix rendered without them and a delta that
+        does not contain them either, activating a RAG adapter against an empty context
+        with every other guard still passing.
+        """
+        return dict(self._sent_template_kwargs)
+
     def with_sent_token_ids(
         self,
         ids: list[int],
         model_id: str | None = None,
         message_count: int = 0,
         prompt_digest: tuple[str, ...] = (),
+        template_kwargs: dict[str, Any] | None = None,
     ) -> ChatContext:
         """Return a copy of this context at the same position, holding retained `ids`.
 
@@ -215,6 +240,9 @@ class ChatContext(Context):
             message_count (int): How many chat messages these ids cover.
             prompt_digest (tuple[str, ...]): Per-message fingerprint of those
                 messages; see `sent_prompt_digest`.
+            template_kwargs (dict[str, Any] | None): Chat-template variables the ids
+                were rendered under. `adapter_name` is stripped; see
+                `sent_template_kwargs`.
 
         Returns:
             ChatContext: A new context at the same position; this one is unchanged.
@@ -230,6 +258,9 @@ class ChatContext(Context):
         new._sent_model_id = model_id
         new._sent_message_count = message_count
         new._sent_prompt_digest = tuple(prompt_digest)
+        new._sent_template_kwargs = {
+            k: v for k, v in (template_kwargs or {}).items() if k != "adapter_name"
+        }
         return new
 
     def _make_root(self, model_id: str | ModelIdentifier | None) -> ChatContext:
@@ -247,6 +278,7 @@ class ChatContext(Context):
         new._sent_model_id = None
         new._sent_message_count = 0
         new._sent_prompt_digest = ()
+        new._sent_template_kwargs = {}
         return new
 
     def _bind_model(self, model_id: str | ModelIdentifier) -> ChatContext:

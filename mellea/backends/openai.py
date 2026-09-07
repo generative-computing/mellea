@@ -95,6 +95,24 @@ format: None = None  # typing this variable in order to shadow the global format
 # tokenizer.
 
 
+# The coded switch recovers a control token's write address from a 1/(1+n) attention
+# signal in the model dtype. In bf16 that inverts exactly only below this count; past
+# it, addresses alias and routing silently degrades. Retaining ids is what makes n grow,
+# so the ceiling belongs to whichever layer does the retaining.
+#
+# 188 is one below the functional cliff, not at it. In bf16 n=189 recovers as 190, but
+# the SAME recovered address writes the codeword and reads it back, so 189 still routes
+# correctly. n=190 is where 189 and 190 both recover as 190: two control tokens key one
+# codeword and the memory head returns the mean of their two expert ids -- an arbitrary
+# adapter after rounding, with no error in the output. 188 therefore leaves exactly one
+# token of headroom for a control token the model emits mid-answer, which joins the same
+# request during decode. That headroom is one token, not two.
+#
+# Both the re-baseline and the raise compare with `>`, so this count is legal and only
+# the next one is not.
+MAX_RETAINED_CONTROL_TOKENS = 188
+
+
 class TokenizeUnavailable(RuntimeError):
     """Raised when the server cannot tokenize: no route, or an unusable reply."""
 
@@ -288,10 +306,12 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
     _supports_composed_adapters = True
 
-    # Derived lazily by `_turn_terminator` and cached: the value is a property of the
-    # served chat template, so one probe serves every turn. `[]` records a failed
-    # probe so it is not retried on each turn.
-    _turn_terminator_ids: list[int] | None = None
+    # Class-level defaults only, so a subclass or a `__new__`-built instance reads
+    # something sane; `__init__` replaces both with per-instance containers. They must
+    # NOT be shared: a terminator is a property of one server's chat template, and a
+    # control-token id is a property of one served vocabulary.
+    _turn_terminator_ids: dict[str, list[int]] = {}
+    _control_token_id_set: set[int] = set()
 
     def __init__(
         self,
@@ -409,6 +429,18 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             )
 
         self._provider: str = "openai"
+
+        # Token-id retention caches, per instance (see the class-level defaults).
+        # `_turn_terminator_ids` is keyed by the canonicalized chat-template kwargs the
+        # probe ran under, because Granite 4.2 closes an assistant turn differently
+        # depending on `enable_thinking`; `[]` records a failed probe so it is not
+        # retried every turn. `_control_token_ids_by_adapter` caches one `/tokenize`
+        # diff per adapter name and feeds `_control_token_id_set`, the union used to
+        # count a prompt against `MAX_RETAINED_CONTROL_TOKENS`.
+        self._turn_terminator_ids: dict[str, list[int]] = {}
+        self._control_token_ids_by_adapter: dict[str, list[int]] = {}
+        self._control_token_id_set: set[int] = set()
+        self._token_id_reprefills: int = 0
 
         self._adapter_source = adapter_source
 
@@ -1564,6 +1596,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 model_id=mot._meta.get("retained_model_id"),
                 message_count=mot._meta.get("retained_message_count", 0),
                 prompt_digest=mot._meta.get("retained_prompt_digest", ()),
+                template_kwargs=mot._meta.get("retained_template_kwargs"),
             )
         return mot, new_ctx
 
@@ -1654,40 +1687,144 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             )
         return [int(t) for t in tokens]
 
-    async def _turn_terminator(self) -> list[int] | None:
+    @property
+    def token_id_reprefills(self) -> int:
+        """How many retained turns dropped their prefix to stay inside the switch's range.
+
+        Non-zero means at least one turn re-rendered from scratch, so the control tokens
+        of every earlier turn are gone from the prompt and those regions are interpreted
+        under base from that turn on. Nothing else distinguishes such a conversation from
+        one that never needed it, which is why it is counted as well as logged.
+        """
+        return self._token_id_reprefills
+
+    @staticmethod
+    def _kwargs_cache_key(chat_template_kwargs: dict[str, Any] | None) -> str:
+        """A stable cache key for a chat-template kwargs dict."""
+        return json.dumps(chat_template_kwargs or {}, sort_keys=True, default=repr)
+
+    async def _control_token_ids(self, adapter_name: str) -> list[int]:
+        """Return the control-token ids the chat template adds for `adapter_name`.
+
+        Learned rather than configured: unlike a local checkpoint, a served model exposes
+        no `adapter_token_ids`, so the ids are recovered by rendering one probe with and
+        without `adapter_name` and taking the positional difference. A control token
+        SUBSTITUTES for the role marker rather than being inserted (for
+        `ibm-granite/granite-switch-4.1-3b-preview`, `100356` in place of `100264`), so
+        the two renders are the same length and only a positional diff finds them.
+
+        Cached per adapter name and unioned into `_control_token_id_set`, which
+        `_control_count` reads. An adapter never used by this backend contributes nothing
+        to the set, so a control token the MODEL emits for such an adapter is not counted
+        -- the ceiling is a floor on the true count, never an overestimate.
+
+        Args:
+            adapter_name (str): The adapter as passed in `chat_template_kwargs`.
+
+        Returns:
+            list[int]: The ids that differ, or `[]` when the server cannot be asked or
+                the two renders disagree in length (nothing can be attributed then).
+        """
+        cached = self._control_token_ids_by_adapter.get(adapter_name)
+        if cached is not None:
+            return cached
+        probe = [{"role": "user", "content": "x"}]
+        try:
+            plain = await self._tokenize_chat(probe, add_generation_prompt=True)
+            adapted = await self._tokenize_chat(
+                probe,
+                add_generation_prompt=True,
+                chat_template_kwargs={"adapter_name": adapter_name},
+            )
+        except TokenizeUnavailable:
+            self._control_token_ids_by_adapter[adapter_name] = []
+            return []
+        if len(plain) != len(adapted):
+            # Not a substitution: the diff cannot be attributed to a control token, and
+            # guessing would make the count wrong in the direction that matters.
+            self._control_token_ids_by_adapter[adapter_name] = []
+            return []
+        found = [now for was, now in zip(plain, adapted, strict=True) if was != now]
+        self._control_token_ids_by_adapter[adapter_name] = found
+        self._control_token_id_set.update(found)
+        return found
+
+    async def _learn_control_tokens(self, adapter_name: object) -> None:
+        """Populate `_control_token_id_set` for `adapter_name`, if there is one.
+
+        Called only after every guard that can refuse a request without a round trip,
+        so a turn that will not reuse its prefix never pays for the probe.
+
+        Args:
+            adapter_name (object): The `adapter_name` template kwarg, or a falsy value
+                when this turn uses no adapter (nothing to learn).
+        """
+        if adapter_name:
+            await self._control_token_ids(str(adapter_name))
+
+    def _control_count(self, ids: list[int]) -> int:
+        """Control tokens in `ids`; `0` while none have been learned."""
+        if not self._control_token_id_set:
+            return 0
+        return sum(1 for t in ids if t in self._control_token_id_set)
+
+    async def _turn_terminator(
+        self, chat_template_kwargs: dict[str, Any] | None = None
+    ) -> list[int] | None:
         r"""Return the ids the chat template puts after an assistant turn.
 
         A model's reported ids stop at the end of its content; the template then adds
         a terminator (Granite: `<|end_of_text|>\n`). Those ids were in the prompt the
         server saw, so the retained sequence must include them, or the next turn runs
-        an answer straight into the following role marker. Derived once (it is a
-        property of the template) by subtracting an open render from a closed one.
+        an answer straight into the following role marker. Derived by subtracting an
+        open render from a closed one.
+
+        Probed under THIS turn's template kwargs and cached per kwargs, not once
+        globally: Granite 4.2 renders the assistant boundary differently depending on
+        `enable_thinking`, so a terminator derived under the template defaults would be
+        spliced into a sequence closed the other way -- one wrong id mid-conversation,
+        which `derive_delta` cannot catch because it compares two fresh renders and
+        never looks at the retained ids.
+
+        Args:
+            chat_template_kwargs (dict[str, Any] | None): Template variables for the
+                turn being closed. `adapter_name` is dropped: it applies to the turn's
+                own region, not to its terminator, and keying on it would re-probe for
+                every adapter.
 
         Returns:
             list[int] | None: The terminator ids, or `None` if the server could not
                 be asked or the probe produced nothing usable -- in which case this
                 turn cannot be retained.
         """
-        if self._turn_terminator_ids is not None:
-            return self._turn_terminator_ids or None
+        kwargs = {
+            k: v for k, v in (chat_template_kwargs or {}).items() if k != "adapter_name"
+        } or None
+        key = self._kwargs_cache_key(kwargs)
+        cached = self._turn_terminator_ids.get(key)
+        if cached is not None:
+            return cached or None
         probe = [{"role": "user", "content": "x"}]
         try:
-            open_ids = await self._tokenize_chat(probe, add_generation_prompt=True)
+            open_ids = await self._tokenize_chat(
+                probe, add_generation_prompt=True, chat_template_kwargs=kwargs
+            )
             closed_ids = await self._tokenize_chat(
                 [*probe, {"role": "assistant", "content": ""}],
                 add_generation_prompt=False,
+                chat_template_kwargs=kwargs,
             )
         except TokenizeUnavailable:
             # Cache the failure as empty: a server with no tokenize route will not
             # acquire one mid-session, so don't re-probe every turn.
-            self._turn_terminator_ids = []
+            self._turn_terminator_ids[key] = []
             return None
         if len(closed_ids) <= len(open_ids) or closed_ids[: len(open_ids)] != open_ids:
             # The closed render does not extend the open one; the probe told us nothing.
-            self._turn_terminator_ids = []
+            self._turn_terminator_ids[key] = []
             return None
-        self._turn_terminator_ids = closed_ids[len(open_ids) :]
-        return self._turn_terminator_ids
+        self._turn_terminator_ids[key] = closed_ids[len(open_ids) :]
+        return self._turn_terminator_ids[key]
 
     async def _build_prompt_ids(
         self,
@@ -1737,6 +1874,12 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         retained_count = ctx.sent_message_count
         retained_digest = ctx.sent_prompt_digest
         retained_model = ctx.sent_model_id
+        retained_kwargs = ctx.sent_template_kwargs
+        # `adapter_name` belongs to the turn being generated, never to the prefix.
+        turn_kwargs = {
+            k: v for k, v in (chat_template_kwargs or {}).items() if k != "adapter_name"
+        }
+        adapter_name = (chat_template_kwargs or {}).get("adapter_name")
 
         # Ids are not portable across models: reusing across vocabularies produces a
         # silently wrong prompt. Checked first, before any tokenize round trip.
@@ -1749,11 +1892,14 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         if not retained_ids or retained_count <= 0:
             # Nothing sent yet: the whole render is the prompt, no subtraction needed.
-            return await self._tokenize_chat(
+            await self._learn_control_tokens(adapter_name)
+            fresh = await self._tokenize_chat(
                 conversation,
                 add_generation_prompt=True,
                 chat_template_kwargs=chat_template_kwargs,
             )
+            self._assert_control_budget(fresh)
+            return fresh
 
         # The `conversation[:retained_count]` slice below CLAMPS rather than raises, so
         # a shrunken history would silently subtract the newest turn into the prefix and
@@ -1786,23 +1932,107 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 "as chat messages and only its prefix-cache hit is lost."
             )
 
+        # A kwarg that re-renders the already-sent region cannot be represented as a
+        # delta, and -- unlike a changed message -- it would not show up as one: it
+        # appears in BOTH renders of the subtraction and cancels out, so the server
+        # would receive a prompt containing it nowhere. Refused by name, before any
+        # round trip. Compared with `adapter_name` excluded on both sides, since that
+        # one legitimately differs per turn.
+        if turn_kwargs != retained_kwargs:
+            changed = sorted(
+                set(turn_kwargs) ^ set(retained_kwargs)
+                | {
+                    k
+                    for k in set(turn_kwargs) & set(retained_kwargs)
+                    if turn_kwargs[k] != retained_kwargs[k]
+                }
+            )
+            raise DeltaNotDerivable(
+                f"chat template kwargs changed mid-conversation "
+                f"({', '.join(changed)}), and the new values re-render turns whose ids "
+                "are already retained. Such a kwarg appears in both renders of the "
+                "subtraction and cancels out of the delta, so it would reach neither "
+                "the reused prefix nor the new turn -- a request that silently omits "
+                "it entirely. Pass the same chat_template_kwargs on every turn (supply "
+                "documents=[...] from the first turn, empty if there are none yet), or "
+                "use a context without `retain_token_ids`. This turn re-renders as chat "
+                "messages and only its prefix-cache hit is lost."
+            )
+
+        # Learned only now: every guard above refuses without a round trip, and probing
+        # for the ceiling before them would spend two on a request that is not sent.
+        await self._learn_control_tokens(adapter_name)
+
         full_ids = await self._tokenize_chat(
             conversation,
             add_generation_prompt=True,
             chat_template_kwargs=chat_template_kwargs,
         )
-        # The adapter goes on the NEW turn only. Rendering the already-sent side with
-        # this turn's adapter would put its control token inside the region being
-        # subtracted, so it would cancel out of the delta and never reach the server.
-        prev_kwargs = {
-            k: v for k, v in (chat_template_kwargs or {}).items() if k != "adapter_name"
-        } or None
+        # The already-sent side is rendered under the kwargs it was ACTUALLY sent with,
+        # and without this turn's adapter: its control token belongs to the new turn's
+        # region, and rendering it into the subtracted region would cancel it out.
         prev_ids = await self._tokenize_chat(
             conversation[:retained_count],
             add_generation_prompt=False,
-            chat_template_kwargs=prev_kwargs,
+            chat_template_kwargs=retained_kwargs or None,
         )
-        return list(retained_ids) + derive_delta(prev_ids, full_ids)
+        spliced = list(retained_ids) + derive_delta(prev_ids, full_ids)
+
+        # Retaining ids is what makes the control-token count grow, so the ceiling is
+        # enforced here. Over it, drop the prefix and re-render: earlier control tokens
+        # are lost and those regions fall back to base, which is strictly better than
+        # aliased write addresses silently routing to the mean of two experts.
+        count = self._control_count(spliced)
+        if count > MAX_RETAINED_CONTROL_TOKENS:
+            rebaselined = await self._tokenize_chat(
+                conversation,
+                add_generation_prompt=True,
+                chat_template_kwargs=chat_template_kwargs,
+            )
+            self._token_id_reprefills += 1
+            MelleaLogger.get_logger().warning(
+                "the retained prompt reached %d control tokens, past the %d the coded "
+                "switch can address exactly in bf16, so its prefix was dropped and the "
+                "transcript re-rendered (%d ids instead of %d). Earlier turns are "
+                "interpreted under base from now on, and this conversation's prefix "
+                "cache is recomputed once. Re-prefills so far: %d.",
+                count,
+                MAX_RETAINED_CONTROL_TOKENS,
+                len(rebaselined),
+                len(spliced),
+                self._token_id_reprefills,
+            )
+            self._assert_control_budget(rebaselined)
+            return rebaselined
+        return spliced
+
+    def _assert_control_budget(self, ids: list[int]) -> None:
+        """Raise when a FULL render is itself past the addressable control-token count.
+
+        Reached only for a prompt that is already a fresh render of the transcript, so
+        dropping a retained prefix cannot reduce it: the count is coming from the current
+        turn, or from control-token text recorded into a message.
+
+        Args:
+            ids (list[int]): The prompt about to be sent.
+
+        Raises:
+            RuntimeError: If `ids` holds more than `MAX_RETAINED_CONTROL_TOKENS`
+                control tokens.
+        """
+        count = self._control_count(ids)
+        if count > MAX_RETAINED_CONTROL_TOKENS:
+            raise RuntimeError(
+                f"{count} control tokens in one request exceeds "
+                f"{MAX_RETAINED_CONTROL_TOKENS}, the range over which the coded switch "
+                "recovers a write address exactly in bf16; past it addresses alias and "
+                "two control tokens key one codeword, so routing degrades with no error "
+                "in the output. This prompt is already a full render of the transcript, "
+                "so dropping the retained prefix cannot reduce it -- the count comes "
+                "from the current turn, or from control-token text recorded into a "
+                "message. Shorten the transcript, or send this turn without "
+                "`retain_token_ids`."
+            )
 
     def _retained_ids(
         self, prompt_ids: list[int], output: ModelOutputThunk, terminator: list[int]
@@ -1934,7 +2164,9 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         # hit the cache and resolve immediately. Started after the refusals so a refusal
         # never orphans it. Not `asyncio.gather` (it leaves siblings running on error) --
         # hence the try/except below cancels it explicitly.
-        terminator_task = asyncio.ensure_future(self._turn_terminator())
+        terminator_task = asyncio.ensure_future(
+            self._turn_terminator(chat_template_kwargs)
+        )
         try:
             return await self._generate_via_token_ids_inner(
                 ctx,
@@ -2083,6 +2315,10 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             # unchanged before splicing. The assistant reply has no dict form yet; the
             # count still covers it, and it is spliced verbatim from `retained` anyway.
             output._meta["retained_prompt_digest"] = _prompt_digest(conversation)
+            # The kwargs this prefix was rendered under, so the next turn can
+            # re-render the already-sent side the way it was actually sent and
+            # refuse a kwarg that would cancel out of the subtraction.
+            output._meta["retained_template_kwargs"] = dict(chat_template_kwargs or {})
 
         # This thunk is ALREADY computed (the reply had to be materialized to derive the
         # retained ids), so `avalue()` short-circuits and the post-call hook astream
@@ -2215,32 +2451,49 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         # it only reuses, via `_reuse_intrinsic_prefix_ids`. Both call the same
         # `_build_prompt_ids`; only the commit differs.
         if isinstance(ctx, ChatContext) and ctx.retains_token_ids:
-            try:
-                return await self._generate_via_token_ids(
-                    ctx,
-                    conversation,
-                    (extra_params.get("extra_body") or {}).get("chat_template_kwargs"),
-                    action=action,
-                    linearized_context=linearized_context,
-                    _format=_format,
-                    model_options=model_opts,
-                    has_tools=use_tools,
-                )
-            except DeltaNotDerivable as e:
-                # The retained prefix cannot describe this turn: earlier messages were
-                # re-rendered rather than extended, history shrank, or the digest no
-                # longer matches. Raised before any request, so falling through to the
-                # chat send below is a clean first attempt -- correct output, no reuse.
-                #
-                # Retained ids are left in place rather than cleared, so a later turn
-                # that lines up with the prefix again resumes reuse.
+            if (extra_params.get("extra_body") or {}).get("documents"):
+                # `documents` is rendered into the system block by the chat template but
+                # is not a `/tokenize` parameter, so pre-tokenized ids would omit it
+                # entirely -- a RAG request answered against no context, with no error.
+                # The intrinsic path declines for the same reason; this is the chat one.
                 MelleaLogger.get_logger().warning(
-                    "token-id history could not be extended for this turn, so it was "
-                    "sent as chat messages instead: %s The turn itself is unaffected; "
-                    "the server's prefix cache is re-primed from this render, and any "
-                    "control tokens in earlier turns are dropped from it.",
-                    e,
+                    "token-id history is not used for this turn because `documents` "
+                    "were supplied: they are rendered server-side by the chat template "
+                    "and cannot be tokenized into the prompt, so retained ids would "
+                    "omit them. The turn is sent as chat messages instead; only its "
+                    "prefix-cache hit is lost."
                 )
+            else:
+                try:
+                    return await self._generate_via_token_ids(
+                        ctx,
+                        conversation,
+                        (extra_params.get("extra_body") or {}).get(
+                            "chat_template_kwargs"
+                        ),
+                        action=action,
+                        linearized_context=linearized_context,
+                        _format=_format,
+                        model_options=model_opts,
+                        has_tools=use_tools,
+                    )
+                except DeltaNotDerivable as e:
+                    # The retained prefix cannot describe this turn: earlier messages
+                    # were re-rendered rather than extended, history shrank, the digest
+                    # no longer matches, or the template kwargs drifted. Raised before
+                    # any request, so falling through to the chat send below is a clean
+                    # first attempt -- correct output, no reuse.
+                    #
+                    # Retained ids are left in place rather than cleared, so a later
+                    # turn that lines up with the prefix again resumes reuse.
+                    MelleaLogger.get_logger().warning(
+                        "token-id history could not be extended for this turn, so it "
+                        "was sent as chat messages instead: %s The turn itself is "
+                        "unaffected; the server's prefix cache is re-primed from this "
+                        "render, and any control tokens in earlier turns are dropped "
+                        "from it.",
+                        e,
+                    )
 
         chat_response: Coroutine[
             Any, Any, ChatCompletion | openai.AsyncStream[ChatCompletionChunk]
