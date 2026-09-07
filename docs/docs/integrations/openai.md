@@ -348,7 +348,6 @@ The high-level adapter function wrappers (`rag.check_answerability`,
 For more control, load adapters manually with `load_embedded_adapters=False`:
 
 ```python
-from mellea.backends.adapters.adapter import EmbeddedIntrinsicAdapter
 from mellea.backends.openai import OpenAIBackend
 from mellea.backends.model_ids import IBM_GRANITE_SWITCH_4_1_3B_PREVIEW
 from mellea.formatters import TemplateFormatter
@@ -361,13 +360,13 @@ backend = OpenAIBackend(
     load_embedded_adapters=False,
 )
 
-# Load a single adapter from the model's Hugging Face repo
-adapters = EmbeddedIntrinsicAdapter.from_hub(
+# Discover and register a single adapter from the model's Hugging Face repo —
+# this composes an Adapter (Identity + IOContract + EmbeddedBinding) rather
+# than returning the deprecated EmbeddedIntrinsicAdapter shim.
+backend.register_embedded_adapter_model(
     IBM_GRANITE_SWITCH_4_1_3B_PREVIEW.hf_model_name,
     intrinsic_name="answerability",
 )
-for adapter in adapters:
-    backend.add_adapter(adapter)
 ```
 
 ## Troubleshooting

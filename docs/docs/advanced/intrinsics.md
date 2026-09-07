@@ -214,24 +214,41 @@ print(result)
 
 ## Direct adapter function usage
 
-> **Advanced:** For custom adapter tasks, use the `Intrinsic` component and
-> `CustomIntrinsicAdapter` directly.
+> **Advanced:** For custom adapter tasks, compose an `Adapter` directly from
+> an `Identity`, an output contract, and a weights binding.
 
 ```python
 # Requires: mellea[hf]
 # Returns: dict
 import mellea.stdlib.functional as mfuncs
-from mellea.backends.adapters.adapter import CustomIntrinsicAdapter
+from mellea.backends.adapters import Adapter, Identity, LocalFileBinding, get_io_contract
+from mellea.backends.adapters.catalog import AdapterType, fetch_intrinsic_metadata
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.stdlib.components import Intrinsic, Message
 from mellea.stdlib.context import ChatContext
 
 backend = LocalHFBackend(model_id="ibm-granite/granite-4.1-3b")
 
-# Register an adapter by task name
-req_adapter = CustomIntrinsicAdapter(
-    "requirement-check",
-    base_model_name=backend.base_model_name,
+# Compose an adapter by task name — get_io_contract returns the catalog's
+# declared contract (or a permissive fallback for a name outside it).
+# requirement-check's catalog entry lists LoRA before aLoRA, so
+# LocalFileBinding.from_catalog would pick LoRA — build the binding
+# explicitly instead when you want the aLoRA variant specifically; identity
+# and weights must agree, since nothing currently cross-checks them.
+_metadata = fetch_intrinsic_metadata("requirement-check")
+req_adapter = Adapter(
+    identity=Identity(
+        name="requirement-check",
+        adapter_type="alora",
+        capability=_metadata.effective_capability,
+    ),
+    io_contract=get_io_contract("requirement-check"),
+    weights=LocalFileBinding(
+        name="requirement-check",
+        adapter_type=AdapterType.ALORA,
+        repo_id=_metadata.repo_id,
+        revision=_metadata.revision,
+    ),
 )
 backend.add_adapter(req_adapter)
 
@@ -255,80 +272,82 @@ For OpenAI backends with Granite Switch, adapters are loaded from the model's
 Hugging Face repository configuration instead of the adapter function catalog.
 Output format is task-specific — `requirement-check` returns `{"requirement_check": {"score": <float>}}`.
 
+For a fully custom, non-catalog adapter — your own trained LoRA/aLoRA weights,
+not one of the built-in adapter functions — see
+[Adding a custom adapter function in 20 lines](../tutorials/07-custom-adapter-function.md).
+
 ## Composable adapter construction (advanced)
 
-> **Advanced:** `Adapter` composes an `Identity`, an `IOContract`, and a
-> weights binding into a single, inspectable object. It's scaffolding for a
-> future backend-integration surface (Epic #929) — today, neither backend
-> accepts a composed `Adapter` directly: `LocalHFBackend.add_adapter` takes a
-> `LocalFileBinding` or the `LocalHFAdapter` shim, while
-> `OpenAIBackend.add_adapter` takes only the deprecated
-> `EmbeddedIntrinsicAdapter` shim, which builds an `EmbeddedBinding`
-> internally. The construction below is illustrative of the binding shapes;
-> write a new backend integration against the bindings themselves.
+`Adapter` composes an `Identity`, an output contract (`IOContract`), and a
+weights binding into a single, inspectable object. Both `LocalHFBackend` and
+`OpenAIBackend` accept a composed `Adapter` directly via `add_adapter` —
+dispatching on the weights binding's reality (`LocalFileBinding` for
+LocalFile/PEFT, `EmbeddedBinding` for Embedded/Granite Switch) — alongside
+the deprecated shim classes, which remain functional for now (Epic #929,
+issue #1144). An `EmbeddedBinding` adapter additionally requires `add_adapter`'s
+`config=` argument (the raw io.yaml mapping) — `add_adapter` raises `ValueError`
+without it, since that reality's config cannot be cheaply re-derived later; see
+below.
 
 Each weights binding models how its deployment turns an adapter on.
 `LocalFileBinding` downloads and loads LoRA/aLoRA weights, so it exposes a
-`prepare`/`activate`/`deactivate`/`release` lifecycle:
+`prepare`/`activate`/`deactivate`/`release` lifecycle — driven automatically
+by `add_adapter`, so a caller need not call `prepare()` itself:
 
 ```python
 # Requires: mellea[hf]
-from mellea.backends.adapters import Adapter, EmbeddedBinding, Identity, IOContract, LocalFileBinding
+from mellea.backends.adapters import Adapter, Identity, LocalFileBinding, get_io_contract
 from mellea.backends.huggingface import LocalHFBackend
-from mellea.backends.openai import OpenAIBackend
-from mellea.core import Component
-
-
-class AnswerabilityContract(IOContract):
-    def build_prompt(self, **kwargs: object) -> Component:
-        raise NotImplementedError  # request formatting lands with #1516
-
-    def parse(self, raw: str) -> dict[str, object]:
-        import json
-
-        return json.loads(raw)
-
 
 # LocalFile/PEFT reality — LocalHFBackend downloads and loads the weights.
 hf_backend = LocalHFBackend(model_id="ibm-granite/granite-4.1-3b")
-hf_binding = LocalFileBinding.from_catalog("answerability")
-hf_binding.bind_backend(hf_backend)
-# hf_binding.prepare() downloads the weights and loads them into hf_backend.
-# adapter_type must match the binding — from_catalog loads the first
-# catalog-listed adapter type, which is LoRA for answerability.
 hf_adapter = Adapter(
     identity=Identity(name="answerability", adapter_type="lora"),
-    io_contract=AnswerabilityContract(),
-    weights=hf_binding,
+    io_contract=get_io_contract("answerability"),
+    weights=LocalFileBinding.from_catalog("answerability"),
 )
+hf_backend.add_adapter(hf_adapter)  # downloads and loads the weights
 ```
 
 `EmbeddedBinding` has no weights to manage — the adapter is already part of
 the served base model — so it exposes a single method, `apply_activation`,
-that edits the outgoing request instead of a lifecycle:
+that edits the outgoing request instead of a lifecycle. Its `io.yaml` config
+comes from the served checkpoint's `adapter_index.json`, not from anything
+you can construct by hand, so registration goes through
+`register_embedded_adapter_model` (or `resolve_adapter`) rather than a bare
+`add_adapter(adapter)` call with no `config=`:
 
 ```python
+from mellea.backends.openai import OpenAIBackend
+from mellea.backends.model_ids import IBM_GRANITE_SWITCH_4_1_3B_PREVIEW
+
 switch_backend = OpenAIBackend(
-    model_id="granite-switch",
+    model_id=IBM_GRANITE_SWITCH_4_1_3B_PREVIEW.hf_model_name,
     api_key="EMPTY",
     base_url="http://localhost:8000/v1",
+    load_embedded_adapters=False,
 )
-switch_adapter = Adapter(
-    identity=Identity(name="answerability", adapter_type="alora"),
-    io_contract=AnswerabilityContract(),
-    weights=EmbeddedBinding.from_base_model(switch_backend),
+# Discovers "answerability" from the model's Hugging Face repo and composes
+# an Adapter (Identity + IOContract + EmbeddedBinding) for it, including the
+# io.yaml config a bare Adapter(weights=EmbeddedBinding.from_base_model(...))
+# construction has no way to supply.
+switch_backend.register_embedded_adapter_model(
+    IBM_GRANITE_SWITCH_4_1_3B_PREVIEW.hf_model_name, intrinsic_name="answerability"
 )
 ```
 
-Weights-binding support by backend today — this tracks the binding
-implementations, not whether a composed `Adapter` can be registered directly:
+Weights-binding support by backend today:
 
 | Backend | `LocalFileBinding` (LocalFile/PEFT) | `EmbeddedBinding` (Embedded/Granite Switch) | `ServerMediatedBinding` |
 | --- | --- | --- | --- |
-| `LocalHFBackend` | ✅ shipping — `add_adapter` accepts a `LocalFileBinding` directly | ✅ shipping — `load_embedded_adapters=True`, via the deprecated `EmbeddedIntrinsicAdapter` shim | — |
-| `OpenAIBackend` | — | ✅ shipping, via the deprecated `EmbeddedIntrinsicAdapter` shim above, which builds an `EmbeddedBinding` internally | — |
+| `LocalHFBackend` | ✅ shipping — `add_adapter` accepts a composed `Adapter` or a bare `LocalFileBinding` directly | ✅ shipping — `load_embedded_adapters=True`, or `add_adapter(adapter, config=...)`/`register_embedded_adapter_model` with a composed `Adapter` | — |
+| `OpenAIBackend` | — | ✅ shipping — `load_embedded_adapters=True`, or `add_adapter(adapter, config=...)`/`register_embedded_adapter_model` with a composed `Adapter` | — |
 
 `ServerMediatedBinding` has no backend implementation yet — see discussion #1486.
+Discovering *multiple* embedded adapters from a Granite Switch checkpoint or
+Hub repo (rather than one already-known name) still goes through
+`register_embedded_adapter_model`, which builds the composed `Adapter`
+instances for you.
 
 ---
 
@@ -338,3 +357,8 @@ Safety and factuality checks use a separate set of Guardian-specific adapter fun
 `guardian_check()`, `policy_guardrails()`, `factuality_detection()`, and
 `factuality_correction()`. These are documented in the
 [Safety Guardrails](../how-to/safety-guardrails) how-to guide.
+
+**See also:**
+[Adding a custom adapter function in 20 lines](../tutorials/07-custom-adapter-function.md) |
+[Handling a breaking adapter schema change](../tutorials/08-adapter-schema-migrations.md) |
+[Adapter function metrics](../observability/metrics.md#adapter-function-metrics)

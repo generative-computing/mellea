@@ -297,6 +297,101 @@ All sampling metrics include:
 | `gen_ai.tool.name` | Name of the invoked tool | `"search"`, `"calculator"` |
 | `status` | Execution outcome | `success`, `failure` |
 
+## Adapter function metrics
+
+Mellea records metrics for adapter function calls (`core.requirement_check()`,
+`rag.check_answerability()`, `Intrinsic`/`ALoraRequirement`, and the
+deprecated shim classes alike) — no code changes are required beyond enabling
+metrics as above. They are recorded by `AdapterFunctionMetricsPlugin`
+(`mellea/telemetry/metrics_plugins.py`), which subscribes to the
+`adapter_function_invocation_complete` and `adapter_function_phase_complete`
+hooks fired by `AdapterMixin.adapter_scope()` and
+`EmbeddedBinding.apply_activation()`.
+
+### Adapter function instruments
+
+| Metric Name | Type | Attributes | Description |
+| ----------- | ---- | ---------- | ----------- |
+| `mellea.adapter_function.invocations` | Counter | `name`, `revision`, `binding_type`, `adapter_type`, `outcome` | Calls, split by outcome (`success`, `schema_error`, `error`) |
+| `mellea.adapter_function.phase_duration` | Histogram | `name`, `phase` | Lifecycle phase duration, in seconds |
+| `mellea.adapter_function.parse_failures` | Counter | `name`, `revision` | LocalFile/PEFT: calls that raised `AdapterSchemaMismatchError` *while still inside* `adapter_scope()` — see the known gap below. Embedded/Granite Switch: not subject to that gap — a malformed (non-JSON) response fires `outcome="schema_error"` directly, with no `adapter_scope()` involved |
+
+`revision` reports the *resolved* revision actually used, not the raw value
+passed in: for a `LocalFileBinding` constructed with `revision=None` (the
+default for a catalog adapter), `adapter_scope()` resolves it to the
+catalog's pinned SHA before recording the metric, so a catalog adapter used
+without an explicit revision still reports that SHA rather than `"unpinned"`.
+The `"unpinned"` label only appears when no revision could be resolved at
+all — for a `LocalFileBinding`, that means resolution itself failed (a
+non-catalog adapter with no explicit `revision` — see
+[Adding a custom adapter function](../tutorials/07-custom-adapter-function.md)).
+It is not a general filter for "running without a pinned revision." The
+Embedded/Granite Switch reality is the exception: weights are already baked
+into the served model, so there is no revision to resolve at all, and every
+Embedded invocation reports `revision="unpinned"` regardless of resolution
+success.
+
+`phase` is one of `"prepare"`, `"activate"`, `"generate"`, `"parse"`, or
+`"deactivate"` — though as of this writing only three are actually emitted:
+`"prepare"` once per `LocalFileBinding` (fired from `add_adapter`/
+`binding.prepare()` — the download-and-load cost), then
+`"activate"`/`"deactivate"` per call from `adapter_scope()` for the
+LocalFile/PEFT reality, or `"activate"` alone per call for the Embedded
+reality (`EmbeddedBinding.apply_activation()`, which has no lifecycle to
+deactivate). `"generate"`/`"parse"` phase timing is tracked as future work in
+issue #1466.
+
+> **Known gap (LocalFile/PEFT only):** every production caller
+> (`core.requirement_check()`, `call_intrinsic()`, `ALoraRequirement`) parses
+> the model's output *after* `adapter_scope()` has already exited and fired
+> `outcome="success"` — so a real `AdapterSchemaMismatchError` from one of
+> those call paths is correctly raised to your code, but is not yet reflected
+> in `parse_failures` or in `invocations{outcome="schema_error"}`. Tracked in
+> issue #1611. Until that's fixed, catch `AdapterSchemaMismatchError` in
+> application code (see
+> [Adapter schema migrations](../tutorials/08-adapter-schema-migrations.md))
+> rather than relying on these metrics to surface schema drift for that
+> reality.
+>
+> This gap does not apply to the Embedded/Granite Switch reality: a malformed
+> response there fires `outcome="schema_error"` (and increments
+> `parse_failures`) directly from the response-processing code, with no
+> `adapter_scope()` in that path to have already exited.
+
+### Adapter function dashboard queries
+
+**Success rate** — `mellea.adapter_function.invocations`, grouped by `name`
+and `outcome`:
+
+```promql
+sum by (name, outcome) (rate(mellea_adapter_function_invocations_total[5m]))
+```
+
+Watch `outcome="error"` and `outcome="schema_error"` separately — an error
+means the call itself failed (network, generation); a schema error means the
+call succeeded but its output didn't parse against the declared contract
+(subject to the known gap above).
+
+**Phase latency** — `mellea.adapter_function.phase_duration`, grouped by
+`name` and `phase`. A p95 activate-phase latency that jumps for one adapter
+but not others usually means its weights just got evicted from whatever
+cache your deployment relies on (HF Hub's local cache, or your own).
+
+**Parse-failure rate** — `mellea.adapter_function.parse_failures` divided by
+`mellea.adapter_function.invocations` for the same `name`. In principle this
+is the leading indicator for the schema-drift scenario in
+[Adapter schema migrations](../tutorials/08-adapter-schema-migrations.md): a
+sudden rise, correlated with a `revision` change in your own deploy history,
+would be exactly the signal to re-pin or roll back — subject to the known gap
+above.
+
+> **Adapter function tracing:** Mellea does not currently open OpenTelemetry
+> **spans** for adapter function calls — only these metrics, driven by hooks,
+> exist today. Span-level tracing is tracked separately in issue #1466. If
+> your dashboard needs request-level tracing today, correlate the metrics
+> above with your own application-level spans around the
+> `mfuncs.act()`/`m.instruct()` call site instead.
+
 ## Metrics export configuration
 
 Mellea supports multiple metrics exporters that can be used independently or

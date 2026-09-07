@@ -33,10 +33,12 @@ Note:
 """
 
 import abc
+import contextlib
 import json
 import threading
 import time
 import warnings
+from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
@@ -486,6 +488,7 @@ class LocalFileBinding(WeightsBinding):
                 the registration.
         """
         started_at = time.monotonic()
+        registered_here = False
         with self._lifecycle_lock:
             if self._released:
                 raise RuntimeError(
@@ -529,15 +532,101 @@ class LocalFileBinding(WeightsBinding):
                         "the backend's warning log — another adapter is already registered "
                         "under this qualified name."
                     )
-            # `load_peft_adapter` mutates the backend's underlying PEFT model, the
-            # same shared state `activate_peft_adapter`/`deactivate_peft_adapter`
-            # document "must be called while holding `_generation_lock`" for.
-            # `prepare()`/`release()` aren't driven through `adapter_scope`, so
-            # nothing else takes this lock on their behalf.
-            with self.backend._adapter_activation_lock():
-                self.backend.load_peft_adapter(self.qualified_name)
+                registered_here = True
+            try:
+                # `load_peft_adapter` mutates the backend's underlying PEFT model, the
+                # same shared state `activate_peft_adapter`/`deactivate_peft_adapter`
+                # document "must be called while holding `_generation_lock`" for.
+                # `prepare()`/`release()` aren't driven through `adapter_scope`, so
+                # nothing else takes this lock on their behalf.
+                with self.backend._adapter_activation_lock():
+                    self.backend.load_peft_adapter(self.qualified_name)
+            except BaseException:
+                # Keeps prepare() all-or-nothing for a call that did its own
+                # registration above: without this, a load failure leaves a
+                # registered binding with no way for the caller to distinguish
+                # it from a fully-prepared one, and the qualified name stays
+                # claimed — permanently refusing a *different* binding for
+                # the same capability (exactly what a fresh resolve_adapter()
+                # call constructs on retry). A call that instead retried an
+                # *already*-registered binding (registered_here False) isn't
+                # this call's registration to undo.
+                if registered_here:
+                    self._rollback_registration()
+                raise
             self._loaded = True
         self._fire_phase_complete("prepare", time.monotonic() - started_at)
+
+    def _rollback_registration(self) -> None:
+        """Undoes this call's own `add_adapter` after the weights load failed.
+
+        Called from `prepare()` with `_lifecycle_lock` already held, on the
+        failure path right after `self._staged_backend.add_adapter(self)`
+        succeeded but `load_peft_adapter` then raised. Takes only the
+        activation lock — re-entering `_lifecycle_lock` here would
+        self-deadlock, since it is a plain `threading.Lock`, not an `RLock`
+        (this is also why `release()`, which acquires `_lifecycle_lock`
+        itself, cannot be reused here).
+        """
+        backend = self.backend
+        assert backend is not None
+        try:
+            with backend._adapter_activation_lock():
+                # Unload before removing, mirroring release()'s own
+                # unload-then-remove sequence: `remove_adapter()` refuses a
+                # still-loaded name, and `load_peft_adapter()` now records the
+                # load before its own `set_adapter([])` call, so a
+                # `set_adapter([])` failure there leaves a real PEFT-level
+                # load for this to undo. Already a no-op (logs and returns)
+                # when nothing was actually loaded — the ordinary case, where
+                # `load_adapter()` itself is what failed.
+                backend.unload_peft_adapter(self.qualified_name)
+                backend.remove_adapter(self.qualified_name)
+        except NotImplementedError:
+            # State the observable fact, not the presumed cause: a real
+            # implementation can raise NotImplementedError internally for
+            # reasons unrelated to this rollback.
+            MelleaLogger.get_logger().warning(
+                f"{type(backend).__name__}.remove_adapter() raised "
+                f"NotImplementedError; {self.qualified_name!r} stays registered "
+                "after a failed load. Retrying prepare() on this same binding "
+                "still works; a different binding for the same capability "
+                "will be refused."
+            )
+            return
+        self.backend = None
+        self.path = None
+
+    @contextlib.contextmanager
+    def hold_prepared(self, backend: "AdapterMixin") -> Iterator[None]:
+        """Holds this binding's lifecycle lock while a caller publishes it.
+
+        Used by a composed `Adapter`'s registration (`LocalHFBackend.add_adapter`)
+        to commit its registry entries only while this binding is still
+        genuinely prepared for `backend`. Blocks `prepare()`/`release()` for
+        the duration, so a composed `Adapter` can never be published wrapping
+        a binding that a concurrent `release()` — running in the gap after
+        `prepare()` returned but before the caller's commit — has already
+        made terminal.
+
+        Args:
+            backend: The backend the caller is about to publish this binding
+                as registered with. Must match `self.backend`.
+
+        Raises:
+            RuntimeError: This binding is no longer prepared for `backend`
+                (released, unloaded, or reassigned since the caller's own
+                `prepare()` call returned).
+        """
+        with self._lifecycle_lock:
+            if self._released or not self._loaded or self.backend is not backend:
+                raise RuntimeError(
+                    f"LocalFileBinding {self.qualified_name!r} is no longer "
+                    f"prepared for {type(backend).__name__} (concurrent "
+                    "release()?); refusing to publish a composed Adapter "
+                    "around it."
+                )
+            yield
 
     def activate(self) -> None:
         """Selects already-loaded adapter weights for generation.
@@ -974,13 +1063,17 @@ class Adapter:
     io_contract: IOContract
     weights: WeightsBinding | EmbeddedBinding
 
-    # NOTE(#1516): a construction-time cross-check that `weights.adapter_type`
-    # agrees with `identity.adapter_type` was tried here and backed out. It is the
-    # right invariant — the two feed different lookup paths (registration and the
-    # verbs key on the binding's `qualified_name`; `_find_adapter` scans on the
-    # identity) and both return `None` on a miss, so a disagreement surfaces as
-    # "adapter not found" far from its cause. But it cannot be enforced yet:
-    # the deprecated shims carry a `_ShimWeightsBinding` with no `adapter_type`
-    # to compare at all (their identity tracks the configured type). Enforce
-    # the check once those constructions carry real, typed bindings (the shims
-    # retire in #1144).
+    # NOTE(#1516): a construction-time cross-check that `weights` (`name` and
+    # `adapter_type`) agrees with `identity` was tried here and backed out. It
+    # is the right invariant — the two feed different lookup paths
+    # (registration and the verbs key on the binding's `qualified_name`;
+    # `_find_adapter` scans on the identity) and both return `None` on a miss,
+    # so a disagreement surfaces as "adapter not found" far from its cause. It
+    # could not be enforced here because the deprecated shims carry a
+    # `_ShimWeightsBinding` with no `name`/`adapter_type` to compare at all
+    # (their identity tracks the configured name/type) — that no longer
+    # blocks the LocalFile/PEFT reality now that the shims retire in #1144, so
+    # `LocalHFBackend.add_adapter` enforces it there instead, at registration
+    # time. `EmbeddedBinding` has no `name`/`adapter_type` of its own, so the
+    # Embedded/Granite Switch reality still has nothing to cross-check
+    # against.
