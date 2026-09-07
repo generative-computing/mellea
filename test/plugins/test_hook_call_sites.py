@@ -80,6 +80,21 @@ class _MockBackend(Backend):
         return results, _MOCK_RAW_USAGE
 
 
+class _FlaggedComputedBackend(_MockBackend):
+    """Returns an already-computed thunk flagged for a wrapper-fired post_call.
+
+    Mimics the OpenAI token-id retention path: the reply is materialized before
+    returning (so the thunk is computed and astream never fires post_call), and the
+    thunk is flagged so `generate_from_context` fires the hook once `generation_id`
+    is assigned.
+    """
+
+    async def _generate_from_context(self, action, ctx, **kwargs):
+        mot, new_ctx = await super()._generate_from_context(action, ctx, **kwargs)
+        mot._call.fire_post_call_on_return = True
+        return mot, new_ctx
+
+
 async def _noop_process(mot, chunk):
     if mot._underlying_value is None:
         mot._underlying_value = ""
@@ -339,6 +354,52 @@ class TestGenerationHookCallSites:
         await mot.avalue()
 
         assert observed[0].generation_id == "gid-post-1"
+
+    async def test_post_call_fires_for_flagged_computed_thunk(self) -> None:
+        """A flagged already-computed thunk gets its post_call fired by the wrapper.
+
+        Such a thunk short-circuits astream (so its usual post_call never runs), but
+        pre_call already fired. The wrapper fires the missing post_call after assigning
+        `generation_id` -- so the payload carries a non-None id (the pre-call's partner)
+        and a real, non-negative latency (`_gen.start` was stamped by the backend).
+        """
+        observed: list[Any] = []
+
+        @hook("generation_post_call")
+        async def recorder(payload: Any, ctx: Any) -> Any:
+            observed.append(payload)
+            return None
+
+        register(recorder)
+        backend = _FlaggedComputedBackend()
+        mot, _ = await backend.generate_from_context(
+            CBlock("hi"), MagicMock(spec=Context)
+        )
+
+        assert len(observed) == 1
+        assert observed[0].generation_id is not None
+        assert observed[0].generation_id == mot._call.generation_id
+        assert observed[0].latency_ms >= 0
+
+    async def test_post_call_not_fired_for_unflagged_computed_thunk(self) -> None:
+        """An unflagged computed thunk keeps the old behavior: no wrapper-fired post_call.
+
+        Scopes the wrapper fire to opt-in backends only -- a plain computed-thunk backend
+        (e.g. DummyBackend) is unchanged, so this cannot silently start emitting post_call
+        for paths that never did.
+        """
+        observed: list[Any] = []
+
+        @hook("generation_post_call")
+        async def recorder(payload: Any, ctx: Any) -> Any:
+            observed.append(payload)
+            return None
+
+        register(recorder)
+        backend = _MockBackend()  # computed thunk, but no fire_post_call_on_return flag
+        await backend.generate_from_context(CBlock("hi"), MagicMock(spec=Context))
+
+        assert observed == []
 
     async def test_generation_error_fires_with_payload(self) -> None:
         """GENERATION_ERROR fires with the original exception and generation_id."""
