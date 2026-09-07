@@ -86,6 +86,11 @@ class {{ intrinsic_name_camelcase }}Intrinsic(Intrinsic, SimpleComponent):
             self,
             intrinsic_name=_INTRINSIC_ADAPTER_NAME,
             adapter_types=(AdapterType.ALORA,),
+            # `_generate_from_intrinsic` never adds `action` to the context —
+            # intrinsics reach the model only through their rewriter, driven
+            # by `intrinsic_kwargs` — so these arguments must be passed here,
+            # not just stored on the SimpleComponent side below.
+            intrinsic_kwargs=dict({{ arglist_as_kwargs }}),
         )
         SimpleComponent.__init__(self, {{ arglist_as_kwargs }})
 

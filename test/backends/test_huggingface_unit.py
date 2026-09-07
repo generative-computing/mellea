@@ -1993,6 +1993,45 @@ def test_load_peft_adapter_records_loaded_state_before_set_adapter_failure():
         backend.remove_adapter(adapter.qualified_name)
 
 
+def test_unload_peft_adapter_cleans_up_partial_injection_not_in_bookkeeping():
+    """`unload_peft_adapter` must attempt real PEFT-level cleanup even when
+    `_loaded_adapters` has no record of the name.
+
+    Regression: PEFT's own `load_adapter()` injects an adapter's modules into
+    the model (`inject_adapter_in_model()`) *before* it finishes applying the
+    checkpoint's weights. A failure partway through that call (e.g. a
+    corrupt/incomplete checkpoint) leaves PEFT holding a real, injected
+    adapter under this name — but `_loaded_adapters` is only written after
+    `self._model.load_adapter(...)` returns successfully, so
+    `_rollback_registration()`'s call to `unload_peft_adapter()` used to see
+    "not loaded" and skip cleanup entirely (a pure bookkeeping-gated
+    no-op) — leaving the injected adapter in place. A later registration
+    under the same name then hit PEFT's own "already exists" error, which
+    `load_peft_adapter()` swallows, silently serving the corrupt weights
+    under the new registration's identity.
+    """
+    backend = _make_backend()
+
+    # No entry in `_loaded_adapters` — this is the "load_adapter() itself
+    # raised before returning" case, not the "set_adapter([]) failed after
+    # load_adapter() returned" case the sibling test above covers.
+    assert "answerability_alora" not in backend._loaded_adapters
+
+    backend.unload_peft_adapter("answerability_alora")
+
+    backend._model.delete_adapter.assert_called_once_with("answerability_alora")  # type: ignore[union-attr]
+
+
+def test_unload_peft_adapter_tolerates_peft_also_having_nothing_registered():
+    """The best-effort direct cleanup must not raise when PEFT genuinely
+    never registered the name either (the ordinary, common case: nothing to
+    clean up at all)."""
+    backend = _make_backend()
+    backend._model.delete_adapter.side_effect = ValueError("adapter not found")  # type: ignore[union-attr]
+
+    backend.unload_peft_adapter("never-registered_alora")  # must not raise
+
+
 def test_seed_forces_do_sample_true(stub_backend):
     """Issue #40: a seed alone must flip do_sample=True so it isn't ignored."""
     out = _call(stub_backend, {ModelOption.SEED: 42})

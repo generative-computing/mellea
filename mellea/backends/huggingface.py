@@ -2989,9 +2989,22 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         # Check if the backend knows about this adapter.
         adapter = self._loaded_adapters.get(adapter_qualified_name, None)
         if adapter is None:
-            MelleaLogger.get_logger().info(
-                f"could not unload adapter {adapter_qualified_name} for backend {self}: adapter is not loaded"
-            )
+            # `_loaded_adapters` is only written after `self._model.load_adapter()`
+            # returns (see `load_peft_adapter`), but PEFT injects the adapter's
+            # modules into the model *before* it finishes loading weights —
+            # `inject_adapter_in_model()` runs, then the checkpoint state dict is
+            # applied. A failure in the latter step (e.g. a corrupt/incomplete
+            # checkpoint) leaves PEFT holding a real, injected-but-unloaded
+            # adapter under this name, with nothing in our own bookkeeping to
+            # say so. Best-effort direct cleanup covers that gap: harmless if
+            # PEFT never registered the name either, in which case its own
+            # `delete_adapter` raises and this logs instead of propagating.
+            try:
+                self._model.delete_adapter(adapter_qualified_name)
+            except ValueError:
+                MelleaLogger.get_logger().info(
+                    f"could not unload adapter {adapter_qualified_name} for backend {self}: adapter is not loaded"
+                )
             return
 
         self._model.delete_adapter(adapter.qualified_name)

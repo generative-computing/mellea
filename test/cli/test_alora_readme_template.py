@@ -84,6 +84,31 @@ def test_readme_template_constructs_composed_adapter_for_non_catalog_name():
 
 
 @pytest.mark.unit
+def test_readme_template_generated_intrinsic_forwards_args_as_intrinsic_kwargs():
+    """The generated `Intrinsic` subclass must pass its constructor arguments
+    through as `intrinsic_kwargs`, not only store them on the `SimpleComponent`
+    side.
+
+    Regression guard: `_generate_from_intrinsic` explicitly never adds the
+    action itself to the context ("Intrinsics modify the context through
+    their rewriters") — the *only* path from an `Intrinsic` action's own data
+    to the rewritten request is `rewriter.transform(request_json,
+    **action.intrinsic_kwargs)`. The generated class used to call
+    `Intrinsic.__init__` with no `intrinsic_kwargs=` at all and store the
+    caller's arguments only via `SimpleComponent.__init__`, whose
+    `format_for_llm()` is never invoked for an `Intrinsic` — every
+    user-supplied argument to a generated custom adapter was silently
+    dropped before reaching the model.
+    """
+    code = _extract_python_sample(_render_template())
+    namespace: dict = {}
+    exec(code, namespace)
+
+    intrinsic = namespace["StemboltsIntrinsic"](description="a cracked stembolt")
+    assert intrinsic.intrinsic_kwargs == {"description": "a cracked stembolt"}
+
+
+@pytest.mark.unit
 async def test_readme_template_async_wrapper_constructs_intrinsic_correctly():
     """The generated `async_<name>` wrapper must construct its `Intrinsic` subclass
     with only the arglist, not an extra positional intrinsic-name argument.
