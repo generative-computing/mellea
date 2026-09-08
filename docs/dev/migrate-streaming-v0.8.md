@@ -33,6 +33,7 @@ updated.
 | `SentenceChunker` | `SentenceChunking` | Strategy classes renamed |
 | `WordChunker` | `WordChunking` | |
 | `ParagraphChunker` | `ParagraphChunking` | |
+| `Requirement.stream_validate()` | `Requirement._stream_validate()` | Old name is now `@final` |
 
 Wrap consumption in `async with` so the generation is cancelled on every exit
 path — an early `break` or an exception — instead of leaking an abandoned

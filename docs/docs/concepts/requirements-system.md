@@ -365,11 +365,12 @@ The requirement's chunker is fed the stream's chunks, so a requirement that chun
 *coarser* than the stream may not reach a chunk boundary mid-stream; it usually returns
 `"unknown"` until end of stream, when its chunker is flushed and the leftover is
 validated as one final chunk (whose result may still be `"unknown"`). A *finer*
-requirement composes only when the stream's chunker preserves the boundaries it needs:
-because the built-in strategies discard their separators, `paragraph` → `sentence` or
-`word` works (blank lines don't touch sentence or word boundaries), but `sentence` →
-`word` does not — sentence chunking consumes the space between sentences, which is the
-boundary `word` chunking relies on. When the strategies aren't compatible, set
-`chunking=None` on the stream so each requirement chunks the raw deltas independently.
+requirement composes only when the stream's chunker preserves the boundaries it needs,
+and `WordChunking`, `SentenceChunking`, and `ParagraphChunking` never do: each splits
+on a different form of whitespace and discards it. So `sentence` → `word` sees
+`"ran.The"` as one word once the inter-sentence space is gone, and `paragraph` →
+`sentence` sees two sentences as one once the blank line is gone. When the strategies
+aren't compatible, set `chunking=None` on the stream so each requirement chunks the raw
+deltas independently.
 
 > **See also:** [Streaming with per-chunk validation](../how-to/use-async-and-streaming#streaming-with-per-chunk-validation)

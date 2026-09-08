@@ -1999,12 +1999,7 @@ async def test_per_requirement_chunking_early_fail_at_own_granularity() -> None:
 
 @pytest.mark.asyncio
 async def test_both_levels_chunked_requirement_rechunks_stream_chunks() -> None:
-    """Stream and requirement both chunk: the requirement re-chunks the stream's chunks.
-    Stream `chunking="paragraph"` yields paragraph chunks; a requirement with
-    `chunking="sentence"` re-chunks each paragraph chunk into sentences. The requirement
-    is fed the stream's chunks (not raw deltas), and its sentence chunker accumulates
-    across them.
-    """
+    """The requirement re-chunks the stream's chunks, not the raw deltas."""
     captured: list[Any] = []
 
     class SentenceRecorder(Requirement):
@@ -2038,8 +2033,7 @@ async def test_both_levels_chunked_requirement_rechunks_stream_chunks() -> None:
         ) -> ValidationResult:
             return ValidationResult(result=True)
 
-    # Trailing space before each "\n\n" so each paragraph's last sentence completes.
-    response = "First one. Second two. \n\nThird three. Fourth four. \n\n"
+    response = "First one. Second two.\n\nThird three. Fourth four.\n\n"
     backend = StreamingMockBackend(response, token_size=4)
 
     yielded: list[str] = []
@@ -2055,13 +2049,8 @@ async def test_both_levels_chunked_requirement_rechunks_stream_chunks() -> None:
 
     assert streamer.completed_normally is True
     assert len(yielded) == 2  # consumer sees the two paragraph chunks
-    # The requirement re-chunked the stream's paragraph chunks into its own sentences.
-    assert captured[0].seen == [
-        "First one.",
-        "Second two.",
-        "Third three.",
-        "Fourth four.",
-    ]
+    # Fused, not a typo: the requirement sees only the stream's paragraph chunks, not raw deltas.
+    assert captured[0].seen == ["First one.", "Second two.Third three.", "Fourth four."]
 
 
 @pytest.mark.asyncio

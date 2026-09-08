@@ -547,7 +547,7 @@ Completed normally
 `validate()` on `NumberedLineReq` always returns `True` because all format
 checking happens during streaming. If any line fails, the stream is cancelled
 before reaching `validate()`. Lines that do reach it have already passed
-`stream_validate()`. This pattern — enforce in `_stream_validate`, pass in
+`_stream_validate()`. This pattern — enforce in `_stream_validate`, pass in
 `validate` — is common for requirements whose invariant is a property of
 individual chunks rather than the full output.
 
@@ -606,17 +606,17 @@ where the consumer receives raw deltas while each requirement chunks independent
 
 A requirement's chunker is fed the *stream's* chunks, not the raw deltas, and it accumulates
 them in one stateful chunker — so the stream's chunks must carry the boundaries the requirement
-needs. Because the built-in strategies discard their separators,
-whether that holds depends on whether the separators overlap.
+needs.
 
 A requirement *coarser* than the stream may never reach a boundary mid-stream; it stays
-`"unknown"` until the end-of-stream flush validates the leftover as one chunk. The check still
-runs, just later.
+`"unknown"` until the end-of-stream flush validates the leftover as one chunk. The check
+still runs.
 
-A *finer* requirement is the one to watch: it works only when the stream chunker preserved the
-finer boundaries. `paragraph` → `sentence` or `word` is fine — splitting on blank lines leaves
-sentence and word boundaries intact. `sentence` → `word` is not, because the sentence chunker
-eats the space between sentences, which is exactly the boundary `word` chunking needs. Feed a
+A *finer* requirement is the one to watch. `WordChunking`, `SentenceChunking`, and
+`ParagraphChunking` all split on a form of whitespace and discard it, so a coarser stream
+chunker strips exactly the whitespace a finer requirement needs — no built-in pairing is
+safe. `sentence` → `word` is the clearest case: the sentence chunker eats the space between
+sentences, which is exactly the boundary `word` chunking needs. Feed a
 word-level requirement the sentence chunks `"A cat jumped the dog."` then `"The dog caught the
 horse."`; with no space between them in the requirement's accumulated buffer, it sees:
 
