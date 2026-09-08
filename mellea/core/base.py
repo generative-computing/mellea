@@ -771,8 +771,7 @@ class _GenerationState:
         on_computed: Coroutine run when the thunk becomes computed.
         start: Wall-clock start time of generation, for latency metrics.
         chunk_intervals: Per-chunk receipt intervals in milliseconds (`None` for
-            the first chunk), captured in `send_to_queue` and drained by `astream`
-            for the `time_per_output_chunk` metric.
+            the first chunk), captured in `send_to_queue` and drained by `astream`.
     """
 
     queue: asyncio.Queue = field(default_factory=lambda: asyncio.Queue(maxsize=20))
