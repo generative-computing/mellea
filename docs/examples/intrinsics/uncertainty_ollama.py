@@ -27,6 +27,8 @@ ctx, backend = start_backend(
     "ollama",
     # Before its invocation tokens, this bundled aLoRA behaves as the base model.
     model_id=os.environ["MELLEA_OLLAMA_UNCERTAINTY_MODEL"],
+    # The bundled tag cannot identify the Hugging Face adapter directory itself.
+    adapter_base_model_name="granite-4.1-3b",
     context_type="chat",
     # The certainty helper uses the same model identity.
     adapter_models={"uncertainty": os.environ["MELLEA_OLLAMA_UNCERTAINTY_MODEL"]},

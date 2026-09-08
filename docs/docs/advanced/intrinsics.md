@@ -78,6 +78,7 @@ from mellea.stdlib.context import ChatContext
 
 backend = OllamaModelBackend(
     model_id=os.environ["MELLEA_OLLAMA_UNCERTAINTY_MODEL"],
+    adapter_base_model_name="granite-4.1-3b",
     model_options={ModelOption.CONTEXT_WINDOW: 4096},
     adapter_models={
         "uncertainty": os.environ["MELLEA_OLLAMA_UNCERTAINTY_MODEL"],

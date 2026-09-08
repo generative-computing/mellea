@@ -212,6 +212,10 @@ class OllamaModelBackend(FormatterBackend, AdapterMixin):
             adapter (e.g. `"mellea-test/uncertainty-alora:latest"`). Ollama
             bundles one adapter per model, so each adapter function is served by
             its own tag. Adapter functions not listed here run against `model_id`.
+        adapter_base_model_name (str | None): Hugging Face base-model directory
+            name used to find an adapter's `io.yaml` (for example,
+            `"granite-4.1-3b"`). Required when `model_id` is itself a bundled
+            Ollama adapter tag rather than a known base-model tag.
 
     Attributes:
         to_mellea_model_opts_map (dict): Mapping from Ollama-specific option names
@@ -235,6 +239,7 @@ class OllamaModelBackend(FormatterBackend, AdapterMixin):
         model_options: dict | None = None,
         timeout: float | None = 300.0,
         adapter_models: dict[str, str] | None = None,
+        adapter_base_model_name: str | None = None,
     ):
         """Initialize an Ollama backend, connecting to the server and pulling the model if needed."""
         super().__init__(
@@ -262,6 +267,7 @@ class OllamaModelBackend(FormatterBackend, AdapterMixin):
         self._added_adapters: dict[str, _AdapterCore] = {}
         self._composed_adapter_configs: dict[str, dict] = {}
         self._adapter_models: dict[str, str] = adapter_models or {}
+        self._adapter_base_model_name = adapter_base_model_name
 
         # Setup the client and ensure that we have the model available.
         self._base_url = base_url
@@ -326,6 +332,8 @@ class OllamaModelBackend(FormatterBackend, AdapterMixin):
         Returns:
             str: The short base model name.
         """
+        if self._adapter_base_model_name is not None:
+            return self._adapter_base_model_name
         for ident in vars(model_ids).values():
             if (
                 isinstance(ident, ModelIdentifier)

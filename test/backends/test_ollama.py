@@ -300,7 +300,8 @@ async def test_async_avalue(session) -> None:
 def test_uncertainty_adapter_function(uncertainty_adapter_model: str) -> None:
     """A bundled aLoRA model serves the intrinsic and public certainty helper."""
     backend = OllamaModelBackend(
-        model_id="granite4.1:3b",
+        model_id=uncertainty_adapter_model,
+        adapter_base_model_name="granite-4.1-3b",
         model_options={ModelOption.CONTEXT_WINDOW: 4096},
         adapter_models={"uncertainty": uncertainty_adapter_model},
     )
