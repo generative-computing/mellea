@@ -10,9 +10,10 @@ checkpoints. Both local paths require a GPU or Apple Silicon Mac. An
 OpenAIBackend using a Granite Switch model served via vLLM uses
 `uv sync --extra switch` when it downloads embedded adapter metadata.
 
-Adapter functions are adapter-accelerated operations for RAG quality checks. They use
-LoRA/aLoRA adapters loaded directly into the Hugging Face backend — faster and more
-reliable than prompting a general-purpose model for these specialized micro-tasks.
+Adapter functions are adapter-accelerated operations for RAG quality checks. Their
+LoRA/aLoRA weights are loaded locally, selected from an embedded checkpoint, or
+bundled into an Ollama model — faster and more reliable than prompting a
+general-purpose model for these specialised micro-tasks.
 
 > **Backend note:** Adapter functions work with three backends:
 >
@@ -25,9 +26,8 @@ reliable than prompting a general-purpose model for these specialized micro-task
 >   `load_embedded_adapters=True`. Only adapter functions embedded in the model are
 >   available — check the model's `adapter_index.json` for the list.
 >   See `docs/docs/examples/granite-switch/README.md`
-> - **OllamaModelBackend**: uses an Ollama model that bundles the adapter,
->   for example `gabegoodhart/granite4.1-uncertainty:3b`, which is `granite4.1:3b`
->   plus the uncertainty aLoRA. Ollama bundles one adapter per model, so pass
+> - **OllamaModelBackend** — uses an Ollama model that bundles the adapter.
+>   Ollama bundles one adapter per model, so pass
 >   `adapter_models={"uncertainty": "<tag>", ...}` to route each adapter function
 >   to its model. Install `mellea[switch]` to download the adapter's `io.yaml`.
 >
@@ -42,6 +42,56 @@ from mellea.backends.huggingface import LocalHFBackend
 
 backend = LocalHFBackend(model_id="ibm-granite/granite-4.1-3b")
 ```
+
+## Use an adapter bundled in an Ollama model
+
+Ollama serves adapter weights as part of a model tag; Mellea does not load the
+weights separately. For local development, build a bundled uncertainty model
+from the pinned official Granite base and adapter artefacts:
+
+```bash
+export MELLEA_OLLAMA_UNCERTAINTY_MODEL="$(
+  ./test/scripts/build_ollama_uncertainty_adapter.sh
+)"
+```
+
+Install the lightweight Hugging Face Hub dependency that retrieves the
+catalogued `io.yaml`:
+
+```bash
+uv sync --extra switch
+```
+
+Pass the bundled model tag for each adapter function. The usual helper API
+stays unchanged:
+
+```python
+import os
+
+from mellea.backends import ModelOption
+from mellea.backends.ollama import OllamaModelBackend
+from mellea.stdlib.components import Message
+from mellea.stdlib.components.intrinsic import core
+from mellea.stdlib.context import ChatContext
+
+backend = OllamaModelBackend(
+    model_id="granite4.1:3b",
+    model_options={ModelOption.CONTEXT_WINDOW: 4096},
+    adapter_models={
+        "uncertainty": os.environ["MELLEA_OLLAMA_UNCERTAINTY_MODEL"],
+    },
+)
+context = (
+    ChatContext()
+    .add(Message("user", "What is the square root of 4?"))
+    .add(Message("assistant", "The square root of 4 is 2."))
+)
+
+print(core.check_certainty(context, backend))
+```
+
+See `docs/examples/intrinsics/uncertainty_ollama.py` for the complete
+executable example.
 
 ## Use a local Granite Switch checkpoint
 
@@ -347,8 +397,10 @@ Weights-binding support by backend today:
 | --- | --- | --- | --- |
 | `LocalHFBackend` | ✅ shipping — `add_adapter` accepts a composed `Adapter` or a bare `LocalFileBinding` directly | ✅ shipping — `load_embedded_adapters=True`, or `add_adapter(adapter, config=...)`/`register_embedded_adapter_model` with a composed `Adapter` | — |
 | `OpenAIBackend` | — | ✅ shipping — `load_embedded_adapters=True`, or `add_adapter(adapter, config=...)`/`register_embedded_adapter_model` with a composed `Adapter` | — |
+| `OllamaModelBackend` | — | — | ✅ model selection through `adapter_models` for catalogued adapter functions; lifecycle telemetry is tracked separately |
 
-`ServerMediatedBinding` has no backend implementation yet — see discussion #1486.
+`ServerMediatedBinding` currently supports Ollama's bundled-model path. A full
+server-mediated lifecycle and telemetry contract is tracked separately.
 Discovering *multiple* embedded adapters from a Granite Switch checkpoint or
 Hub repo (rather than one already-known name) still goes through
 `register_embedded_adapter_model`, which builds the composed `Adapter`

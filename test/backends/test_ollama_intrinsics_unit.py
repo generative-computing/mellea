@@ -13,17 +13,24 @@ Mocks the Ollama async client to verify that `_generate_from_intrinsic` correctl
 """
 
 import json
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
 import ollama
 import pytest
 
 from mellea.backends import ModelOption
-from mellea.backends.adapters.adapter import AdapterType, IntrinsicAdapter
+from mellea.backends.adapters import (
+    Adapter,
+    Identity,
+    ServerMediatedBinding,
+    get_io_contract,
+)
 from mellea.backends.ollama import OllamaModelBackend, _to_chat_completion_dict
 from mellea.stdlib import functional as mfuncs
 from mellea.stdlib.components import Intrinsic, Message
 from mellea.stdlib.context import ChatContext
+from mellea.stdlib.requirements import ALoraRequirement
 
 # ---------------------------------------------------------------------------
 # Configs
@@ -68,7 +75,7 @@ _UNCERTAINTY_CONFIG = {
     "sentence_boundaries": None,
 }
 
-_ADAPTER_TAG = "gabegoodhart/granite4.1-uncertainty:3b"
+_ADAPTER_TAG = "mellea-test/uncertainty-alora:latest"
 
 # ---------------------------------------------------------------------------
 # Canned responses
@@ -167,10 +174,12 @@ def _make_backend_with_adapter(
 ) -> OllamaModelBackend:
     """Return an OllamaModelBackend with a registered uncertainty adapter."""
     backend = _make_backend(model_options=model_options, adapter_models=adapter_models)
-    adapter = IntrinsicAdapter(
-        "uncertainty", adapter_type=AdapterType.LORA, config_dict=config
+    adapter = Adapter(
+        identity=Identity(name="uncertainty", adapter_type="alora"),
+        io_contract=get_io_contract("uncertainty"),
+        weights=ServerMediatedBinding(),
     )
-    backend.add_adapter(adapter)
+    backend.add_adapter(adapter, config=config)
     return backend
 
 
@@ -249,6 +258,39 @@ async def test_adapter_model_tag_defaults_to_model_id():
     _, mock_chat = await _run_intrinsic(backend, _simple_chat_response())
 
     assert mock_chat.call_args.kwargs["model"] == "granite4.1:3b"
+
+
+async def test_alora_requirement_resolves_mapped_adapter(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    """A configured catalogue adapter is resolved before requirement routing."""
+    config_path = tmp_path / "io.yaml"
+    config_path.write_text(json.dumps(_SIMPLE_CONFIG), encoding="utf-8")
+    monkeypatch.setattr(
+        "mellea.backends.ollama.granite_formatters.intrinsics.obtain_io_yaml",
+        lambda *_args, **_kwargs: config_path,
+    )
+    backend = _make_backend(adapter_models={"requirement-check": _ADAPTER_TAG})
+    mock_chat = AsyncMock(return_value=_simple_chat_response())
+    mock_client = MagicMock()
+    mock_client.chat = mock_chat
+
+    with patch.object(
+        OllamaModelBackend,
+        "_async_client",
+        new_callable=PropertyMock,
+        return_value=mock_client,
+    ):
+        mot, _ = await mfuncs.aact(
+            ALoraRequirement("The response is correct."),
+            _make_context(),
+            backend,
+            strategy=None,
+        )
+        await mot.avalue()
+
+    assert mock_chat.call_args.kwargs["model"] == _ADAPTER_TAG
+    assert backend.list_adapters() == ["requirement-check_alora"]
 
 
 async def test_result_processor_applied():
@@ -343,15 +385,63 @@ async def test_tools_passed_to_api():
 # ---------------------------------------------------------------------------
 
 
-def test_add_adapter_registers_intrinsic_adapter():
+def test_add_adapter_registers_server_mediated_adapter():
     backend = _make_backend_with_adapter(_SIMPLE_CONFIG)
-    assert backend.list_adapters() == ["uncertainty_lora"]
+    assert backend.list_adapters() == ["uncertainty_alora"]
 
 
 def test_add_adapter_rejects_other_adapter_types():
     backend = _make_backend()
-    with pytest.raises(TypeError, match="only supports IntrinsicAdapter"):
+    with pytest.raises(TypeError, match="ServerMediatedBinding"):
         backend.add_adapter(object())  # type: ignore[arg-type]
+
+
+def test_add_adapter_requires_io_yaml_config():
+    backend = _make_backend()
+    adapter = Adapter(
+        identity=Identity(name="uncertainty", adapter_type="alora"),
+        io_contract=get_io_contract("uncertainty"),
+        weights=ServerMediatedBinding(),
+    )
+
+    with pytest.raises(ValueError, match=r"No io\.yaml config"):
+        backend.add_adapter(adapter)
+
+
+def test_resolve_adapter_registers_server_mediated_adapter(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    """Resolving a capability creates the modern adapter shape without a server call."""
+    config_path = tmp_path / "io.yaml"
+    config_path.write_text(json.dumps(_SIMPLE_CONFIG), encoding="utf-8")
+    backend = _make_backend()
+    monkeypatch.setattr(
+        "mellea.backends.ollama.granite_formatters.intrinsics.obtain_io_yaml",
+        lambda *_args, **_kwargs: config_path,
+    )
+
+    adapter = backend.resolve_adapter("uncertainty")
+
+    assert adapter.identity.name == "uncertainty"
+    assert adapter.identity.adapter_type == "alora"
+    assert isinstance(adapter.weights, ServerMediatedBinding)
+    assert backend.list_adapters() == ["uncertainty_alora"]
+
+
+def test_resolve_adapter_explains_missing_huggingface_extra(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """The optional dependency failure names the extra users need to install."""
+    backend = _make_backend()
+    monkeypatch.setattr(
+        "mellea.backends.ollama.granite_formatters.intrinsics.obtain_io_yaml",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            ModuleNotFoundError(name="huggingface_hub")
+        ),
+    )
+
+    with pytest.raises(ImportError, match=r"uv sync --extra switch"):
+        backend.resolve_adapter("uncertainty")
 
 
 def test_base_model_name_maps_ollama_tag_to_hf_name():

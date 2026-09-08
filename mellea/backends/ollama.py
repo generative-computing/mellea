@@ -12,6 +12,7 @@ from typing import Any
 
 import httpx
 import ollama
+import yaml
 from tqdm import tqdm
 
 from ..backends import ModelIdentifier, model_ids
@@ -44,7 +45,10 @@ from ..helpers import (
 from ..stdlib.components import Intrinsic, Message
 from ..stdlib.requirements import ALoraRequirement, LLMaJRequirement, Requirement
 from ..telemetry.context import generate_request_id, with_context
-from .adapters.adapter import AdapterInput, AdapterMixin, IntrinsicAdapter
+from .adapters._core import Adapter as _AdapterCore, Identity, ServerMediatedBinding
+from .adapters.adapter import AdapterInput, AdapterMixin, _composed_adapter_key
+from .adapters.catalog import AdapterType, fetch_intrinsic_metadata
+from .adapters.io_contracts import get_io_contract
 from .backend import FormatterBackend
 from .model_options import ModelOption
 from .tools import add_tools_from_context_actions, add_tools_from_model_options
@@ -205,7 +209,7 @@ class OllamaModelBackend(FormatterBackend, AdapterMixin):
             `ollama` SDK default (no timeout).
         adapter_models (dict[str, str] | None): Mapping from adapter function name
             (e.g. `"uncertainty"`) to the Ollama model tag that bundles that
-            adapter (e.g. `"gabegoodhart/granite4.1-uncertainty:3b"`). Ollama
+            adapter (e.g. `"mellea-test/uncertainty-alora:latest"`). Ollama
             bundles one adapter per model, so each adapter function is served by
             its own tag. Adapter functions not listed here run against `model_id`.
 
@@ -220,6 +224,8 @@ class OllamaModelBackend(FormatterBackend, AdapterMixin):
         ConnectionError: If the Ollama server is not running at `base_url`.
         OSError: If the model cannot be pulled from the Ollama library.
     """
+
+    _supports_composed_adapters = True
 
     def __init__(
         self,
@@ -253,7 +259,8 @@ class OllamaModelBackend(FormatterBackend, AdapterMixin):
         self._model_id: str = ollama_model_id
         self._provider: str = "ollama"
 
-        self._added_adapters: dict[str, IntrinsicAdapter] = {}
+        self._added_adapters: dict[str, _AdapterCore] = {}
+        self._composed_adapter_configs: dict[str, dict] = {}
         self._adapter_models: dict[str, str] = adapter_models or {}
 
         # Setup the client and ensure that we have the model available.
@@ -328,26 +335,48 @@ class OllamaModelBackend(FormatterBackend, AdapterMixin):
                 return ident.hf_model_name.split("/")[-1]
         return self._model_id
 
-    def add_adapter(self, adapter: AdapterInput) -> None:
+    def add_adapter(self, adapter: AdapterInput, *, config: dict | None = None) -> None:
         """Register an adapter with this backend.
 
-        Ollama serves adapter weights bundled into a model, so only the
-        adapter's I/O config is used here; no weights are loaded.
+        Ollama serves adapter weights bundled into a model, so Mellea only
+        registers the adapter's I/O contract and raw `io.yaml` configuration.
+        The configured Ollama model tag activates the adapter at generation
+        time.
 
         Args:
-            adapter (AdapterInput): The adapter to register. Must be an
-                `IntrinsicAdapter`.
+            adapter (AdapterInput): A composed adapter with a
+                `ServerMediatedBinding`.
+            config (dict | None): Parsed `io.yaml` configuration for the
+                adapter. Required because a composed adapter does not retain
+                the raw configuration that powers the legacy rewriter.
 
         Raises:
-            TypeError: If `adapter` is not an `IntrinsicAdapter`.
+            TypeError: If `adapter` does not use `ServerMediatedBinding`.
+            ValueError: If `config` is omitted for a composed adapter.
         """
-        if not isinstance(adapter, IntrinsicAdapter):
+        if not isinstance(adapter, _AdapterCore) or not isinstance(
+            adapter.weights, ServerMediatedBinding
+        ):
             raise TypeError(
-                f"OllamaModelBackend currently only supports IntrinsicAdapter. "
+                "OllamaModelBackend only supports composed Adapters with a "
+                "ServerMediatedBinding. "
                 f"Got: {type(adapter).__name__}"
             )
-        adapter.backend = self
-        self._added_adapters[adapter.qualified_name] = adapter
+        if config is None:
+            raise ValueError(
+                f"No io.yaml config given for server-mediated adapter "
+                f"{adapter.identity.name!r}; registering it without one would "
+                "leave it discoverable but unable to generate."
+            )
+        key = _composed_adapter_key(adapter)
+        if key in self._added_adapters:
+            MelleaLogger.get_logger().warning(
+                f"attempted to add adapter {key!r} but it is already registered; "
+                "refusing to overwrite it."
+            )
+            return
+        self._added_adapters[key] = adapter
+        self._composed_adapter_configs[key] = config
 
     def list_adapters(self) -> list[str]:
         """Return qualified names of all registered adapters.
@@ -356,6 +385,68 @@ class OllamaModelBackend(FormatterBackend, AdapterMixin):
             list[str]: Qualified adapter names.
         """
         return list(self._added_adapters.keys())
+
+    def resolve_adapter(self, name: str) -> _AdapterCore:
+        """Find or register an Ollama model-mediated adapter by capability name.
+
+        The model tag selected through `adapter_models` contains the adapter
+        weights. Mellea downloads only the catalogued `io.yaml`, which
+        rewrites requests and processes the structured response.
+
+        Args:
+            name (str): Catalogued adapter function name.
+
+        Returns:
+            _AdapterCore: The registered server-mediated adapter.
+
+        Raises:
+            ValueError: If the catalogued `io.yaml` is invalid.
+            KeyError: If registration does not yield a discoverable adapter.
+        """
+        found = self._find_adapter(name)
+        if found is not None:
+            return found
+
+        metadata = fetch_intrinsic_metadata(name)
+        try:
+            config_path = granite_formatters.intrinsics.obtain_io_yaml(
+                name,
+                self.base_model_name,
+                metadata.repo_id,
+                revision=metadata.revision,
+                alora=True,
+            )
+        except ModuleNotFoundError as e:
+            if e.name != "huggingface_hub":
+                raise
+            raise ImportError(
+                "Ollama adapter functions require Hugging Face Hub support. "
+                "Install it with `uv sync --extra switch`."
+            ) from e
+        with config_path.open(encoding="utf-8") as config_file:
+            config = yaml.safe_load(config_file)
+        if not isinstance(config, dict):
+            raise ValueError(
+                f"Adapter configuration at {config_path} must be a mapping, "
+                f"got {type(config).__name__}."
+            )
+
+        self.add_adapter(
+            _AdapterCore(
+                identity=Identity(
+                    name=name,
+                    adapter_type=AdapterType.ALORA.value,
+                    capability=metadata.effective_capability,
+                ),
+                io_contract=get_io_contract(name),
+                weights=ServerMediatedBinding(),
+            ),
+            config=config,
+        )
+        found = self._find_adapter(name)
+        if found is None:
+            raise KeyError(f"Adapter {name!r} not found after registration")
+        return found
 
     def _check_ollama_server(self) -> bool:
         """Requests generic info about the Ollama server to ensure it's running."""
@@ -531,7 +622,7 @@ class OllamaModelBackend(FormatterBackend, AdapterMixin):
                 streaming is requested (intrinsic post-processing requires
                 the complete response).
             ValueError: If no adapter is registered for the requested intrinsic.
-            TypeError: If the adapter isn't an `IntrinsicAdapter`.
+            ValueError: If the registered adapter has no cached `io.yaml`.
         """
         if not ctx.is_chat_context:
             raise NotImplementedError("Intrinsics require a chat context.")
@@ -549,16 +640,16 @@ class OllamaModelBackend(FormatterBackend, AdapterMixin):
                 f"backend ({self}) has no adapter for processing adapter function: "
                 f"{action.intrinsic_name}"
             )
-        if not isinstance(adapter, IntrinsicAdapter):
-            raise TypeError(
-                f"OllamaModelBackend only supports IntrinsicAdapter, got: {type(adapter).__name__}"
+        key = _composed_adapter_key(adapter)
+        intrinsic_config = self._composed_adapter_configs.get(key)
+        if intrinsic_config is None:
+            raise ValueError(
+                f"No io.yaml config cached for server-mediated adapter {key!r}; "
+                "register it via add_adapter() or resolve_adapter()."
             )
 
-        intrinsic_config = adapter.config
-        assert intrinsic_config is not None
-
         rewriter = granite_formatters.IntrinsicsRewriter(
-            config_dict=intrinsic_config, model_name=adapter.name
+            config_dict=intrinsic_config, model_name=adapter.identity.name
         )
         result_processor = granite_formatters.IntrinsicsResultProcessor(
             config_dict=intrinsic_config
@@ -730,7 +821,20 @@ class OllamaModelBackend(FormatterBackend, AdapterMixin):
                     )
                     alora_action = ALoraRequirement(action.description, adapter_name)
 
-                alora_req_adapter = self._find_adapter(adapter_name, ("alora",))
+                explicit_types = getattr(alora_action, "_adapter_types", None)
+                search_types = (
+                    tuple(adapter_type.value for adapter_type in explicit_types)
+                    if explicit_types
+                    else ("alora",)
+                )
+                alora_req_adapter = self._find_adapter(adapter_name, search_types)
+                if (
+                    alora_req_adapter is None
+                    and adapter_name in self._adapter_models
+                    and not explicit_types
+                ):
+                    await asyncio.to_thread(self.resolve_adapter, adapter_name)
+                    alora_req_adapter = self._find_adapter(adapter_name, search_types)
                 if alora_req_adapter is None:
                     if reroute_to_alora:
                         MelleaLogger.get_logger().warning(
@@ -1217,9 +1321,10 @@ class OllamaModelBackend(FormatterBackend, AdapterMixin):
         )
 
         # Generate the log for this ModelOutputThunk.
+        selected_model = mot.generation.model or self._model_id
         generate_log = GenerateLog()
         generate_log.prompt = conversation
-        generate_log.backend = f"ollama::{self._model_id}"
+        generate_log.backend = f"ollama::{selected_model}"
         generate_log.model_options = mot._call.model_options
         generate_log.date = datetime.datetime.now()
         generate_log.model_output = mot.raw.response
@@ -1252,7 +1357,7 @@ class OllamaModelBackend(FormatterBackend, AdapterMixin):
             }
 
         # Populate model and provider metadata
-        mot.generation.model = self._model_id
+        mot.generation.model = selected_model
         mot.generation.provider = self._provider
         mot.raw.provider = self._provider
 
