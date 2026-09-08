@@ -153,6 +153,14 @@ jobs:
           # The names below are what the tests match against; print them so a
           # tag-name mismatch is diagnosable from the log alone.
           ollama list
+      - name: Build the official uncertainty aLoRA Ollama model
+        env:
+          # read-only public-repo HF token; used only to make the pinned build
+          # reliable under Hub rate limits.
+          HF_TOKEN: ${{ secrets.HF_TOKEN_READ_PUBLIC_ONLY }}  # zizmor: ignore[secrets-outside-env]
+        run: |
+          model=$(./test/scripts/build_ollama_uncertainty_adapter.sh)
+          echo "MELLEA_OLLAMA_UNCERTAINTY_MODEL=$model" >> "$GITHUB_ENV"
       - name: Constrain the granite4.2:3b context for the CI runner
         # The published tag ships num_ctx=131072, a ~6 GB KV cache at load —
         # too much for the 16 GB runner and a cause of the CI stalls. Re-point

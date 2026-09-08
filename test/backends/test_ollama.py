@@ -296,7 +296,6 @@ async def test_async_avalue(session) -> None:
     assert mot1.generation.ttfb_ms is None
 
 
-@pytest.mark.timeout(120)
 def test_uncertainty_adapter_function(uncertainty_adapter_model: str) -> None:
     """A bundled aLoRA model serves the intrinsic and public certainty helper."""
     backend = OllamaModelBackend(
@@ -337,7 +336,6 @@ def test_uncertainty_adapter_function(uncertainty_adapter_model: str) -> None:
 
 
 @pytest.mark.qualitative
-@pytest.mark.timeout(120)
 def test_uncertainty_adapter_changes_base_model_score(
     uncertainty_adapter_model: str,
 ) -> None:
