@@ -49,7 +49,7 @@ async def send_to_queue(
     Args:
         co: A coroutine or async iterator producing the backend response.
         mot: The `ModelOutputThunk` this stream feeds. Its `_gen.queue` receives the
-            results: a sentinel `None` is appended on normal completion; an exception
+            results — a sentinel `None` is appended on normal completion; an exception
             instance (including `TimeoutError`) is appended on error (a timeout does
             **not** append a trailing sentinel — the exception item is the stream
             terminator). Time-to-first-byte is stamped on the thunk at first-chunk
