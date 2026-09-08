@@ -62,8 +62,10 @@ catalogued `io.yaml`:
 uv sync --extra switch
 ```
 
-Pass the bundled model tag for each adapter function. The usual helper API
-stays unchanged:
+For one adapter function, use the bundled tag for both ordinary chat and the
+adapter route. Before the invocation tokens appear, the aLoRA model behaves as
+the base model; keeping one model identity lets Ollama reuse its own prefix
+cache where available.
 
 ```python
 import os
@@ -75,7 +77,7 @@ from mellea.stdlib.components.intrinsic import core
 from mellea.stdlib.context import ChatContext
 
 backend = OllamaModelBackend(
-    model_id="granite4.1:3b",
+    model_id=os.environ["MELLEA_OLLAMA_UNCERTAINTY_MODEL"],
     model_options={ModelOption.CONTEXT_WINDOW: 4096},
     adapter_models={
         "uncertainty": os.environ["MELLEA_OLLAMA_UNCERTAINTY_MODEL"],
@@ -89,6 +91,12 @@ context = (
 
 print(core.check_certainty(context, backend))
 ```
+
+When an application needs several adapter functions, keep the base model as
+`model_id` and map each function to its bundled model tag. Current Ollama
+model packaging exposes one adapter per tag, so calls across those tags do not
+share a KV cache. Use a Granite Switch checkpoint when multi-adapter,
+single-model serving is important.
 
 See `docs/examples/intrinsics/uncertainty_ollama.py` for the complete
 executable example.

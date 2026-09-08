@@ -5,9 +5,9 @@
 Evaluates how certain the model is about its response to a user question.
 The context should contain a user question followed by an assistant answer.
 
-Ollama bundles one adapter per model, so the uncertainty adapter is served by
-its own model tag (`granite4.1:3b` plus the uncertainty aLoRA). Pass that tag
-via `adapter_models`; normal chat still uses the base model.
+Ollama bundles one adapter per model. For this single-adapter example, the
+uncertainty aLoRA tag is used for normal chat and the certainty helper, so
+Ollama can retain one model identity.
 
 Requires `mellea[switch]` to download the adapter's `io.yaml`.
 
@@ -19,16 +19,16 @@ uv run python docs/examples/intrinsics/uncertainty_ollama.py
 
 import os
 
-from mellea import model_ids, start_backend
+from mellea import start_backend
 from mellea.stdlib import functional as mfuncs
 from mellea.stdlib.components.intrinsic import core
 
 ctx, backend = start_backend(
     "ollama",
-    # Regular chat uses this base model.
-    model_id=model_ids.IBM_GRANITE_4_1_3B,
+    # Before its invocation tokens, this bundled aLoRA behaves as the base model.
+    model_id=os.environ["MELLEA_OLLAMA_UNCERTAINTY_MODEL"],
     context_type="chat",
-    # The certainty helper routes only its adapter call to this bundled aLoRA model.
+    # The certainty helper uses the same model identity.
     adapter_models={"uncertainty": os.environ["MELLEA_OLLAMA_UNCERTAINTY_MODEL"]},
 )
 
