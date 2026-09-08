@@ -12,13 +12,18 @@ set -euo pipefail
 log() { echo "[ollama-adapter] $*" >&2; }
 die() { log "ERROR: $*"; exit 1; }
 
-OLLAMA_BIN="${OLLAMA_BIN:-$(command -v ollama)}"
+OLLAMA_BIN="${OLLAMA_BIN:-}"
+if [[ -z "$OLLAMA_BIN" ]]; then
+    OLLAMA_BIN="$(command -v ollama || true)"
+fi
+[[ -n "$OLLAMA_BIN" ]] || die "ollama is not installed or not on PATH."
 BASE_MODEL="${OLLAMA_BASE_MODEL:-granite4.1:3b}"
 OUTPUT_MODEL="${MELLEA_OLLAMA_UNCERTAINTY_MODEL:-mellea-test/uncertainty-alora:latest}"
 ADAPTER_REPO="ibm-granite/granitelib-core-r1.0"
 ADAPTER_REVISION="d0a2a96a4cd07e96f0fe7ca29a42bfe088299d43"
 ADAPTER_PATH="uncertainty/granite-4.1-3b/alora"
 BASE_REPO="ibm-granite/granite-4.1-3b"
+BASE_REVISION="c0650403e44e78ec0262dab1c90914c65b196c4e"
 LLAMA_CPP_REVISION="e71b80510c848c00175924ecf3c40333ccae8eb5"
 
 if [[ -n "${MELLEA_OLLAMA_ADAPTER_CACHE_DIR:-}" ]]; then
@@ -42,7 +47,7 @@ mkdir -p "$BUILD_CACHE"
 if [[ ! -f "$ADAPTER_GGUF" ]]; then
     log "Downloading official Granite base and uncertainty aLoRA..."
     HF_HOME="$HF_HOME_DIR" uv run --quiet --frozen --all-extras --all-groups \
-        python - "$BASE_DIR" "$ADAPTER_DIR" <<'PY'
+        python - "$BASE_DIR" "$ADAPTER_DIR" "$BASE_REPO" "$BASE_REVISION" "$ADAPTER_REPO" "$ADAPTER_REVISION" "$ADAPTER_PATH" <<'PY'
 import shutil
 import sys
 from pathlib import Path
@@ -51,8 +56,14 @@ from huggingface_hub import hf_hub_download, snapshot_download
 
 base_dir = Path(sys.argv[1])
 adapter_dir = Path(sys.argv[2])
+base_repo = sys.argv[3]
+base_revision = sys.argv[4]
+adapter_repo = sys.argv[5]
+adapter_revision = sys.argv[6]
+adapter_path = sys.argv[7]
 snapshot_download(
-    repo_id="ibm-granite/granite-4.1-3b",
+    repo_id=base_repo,
+    revision=base_revision,
     local_dir=base_dir,
     ignore_patterns=["*.gguf", "*.onnx", "*.tflite"],
 )
@@ -64,9 +75,9 @@ for filename in (
     "model.sig",
 ):
     source = hf_hub_download(
-        repo_id="ibm-granite/granitelib-core-r1.0",
-        filename=f"uncertainty/granite-4.1-3b/alora/{filename}",
-        revision="d0a2a96a4cd07e96f0fe7ca29a42bfe088299d43",
+        repo_id=adapter_repo,
+        filename=f"{adapter_path}/{filename}",
+        revision=adapter_revision,
     )
     shutil.copy2(source, adapter_dir / filename)
 PY
@@ -92,9 +103,11 @@ PY
         --outtype f16 \
         --outfile "$ADAPTER_GGUF"
 
-    if ! "$CONVERTER_VENV/bin/python" \
+    METADATA_DUMP="${BUILD_CACHE}/uncertainty-alora-metadata.txt"
+    "$CONVERTER_VENV/bin/python" \
         "$LLAMA_CPP_DIR/gguf-py/gguf/scripts/gguf_dump.py" "$ADAPTER_GGUF" \
-        | grep -q "adapter.alora.invocation_tokens"; then
+        > "$METADATA_DUMP"
+    if ! grep -q "adapter.alora.invocation_tokens" "$METADATA_DUMP"; then
         die "Converted adapter is missing aLoRA invocation-token metadata."
     fi
 fi

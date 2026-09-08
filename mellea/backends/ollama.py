@@ -838,6 +838,7 @@ class OllamaModelBackend(FormatterBackend, AdapterMixin):
                 alora_req_adapter = self._find_adapter(adapter_name, search_types)
                 if (
                     alora_req_adapter is None
+                    and reroute_to_alora
                     and adapter_name in self._adapter_models
                     and not explicit_types
                 ):
