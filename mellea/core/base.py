@@ -740,6 +740,10 @@ class _CallInfo:
     generation_id: str | None = None
 
 
+# Max chunks buffered per stream before the producer blocks; bounded for memory.
+_STREAM_QUEUE_MAXSIZE = 20
+
+
 @dataclass
 class _GenerationState:
     """In-flight computation machinery for a `ModelOutputThunk`.
@@ -774,7 +778,9 @@ class _GenerationState:
             the first chunk), captured in `send_to_queue` and drained by `astream`.
     """
 
-    queue: asyncio.Queue = field(default_factory=lambda: asyncio.Queue(maxsize=20))
+    queue: asyncio.Queue = field(
+        default_factory=lambda: asyncio.Queue(maxsize=_STREAM_QUEUE_MAXSIZE)
+    )
     chunk_size: int = 3
     first_chunk_received: bool = False
     processed_chunk_index: int = 0
@@ -888,7 +894,7 @@ class ModelOutputThunk(Generic[S]):
 
         Draining the internal queue after cancellation is necessary to release
         any `asyncio.Queue.put()` call that the generation task was blocked on
-        (queue maxsize=20).
+        (the queue is bounded).
 
         Args:
             error: Optional cause attached to the `generation_error` hook
