@@ -83,19 +83,24 @@ def _ensure_model_warm() -> None:
         pass  # best-effort; per-test failures will be clearer than a fixture abort
 
 
-@pytest.fixture(scope="function")
-def session():
-    """Fresh Ollama session for each test.
+def _start_ollama_session(*, thinking: bool):
+    """Start an Ollama session with a fixed context window and THINKING default.
 
     The model size is driven by GRANITE42_MODEL (see _ollama_model_for_eval).
     """
-    session = start_session(
+    return start_session(
         model_id=_ollama_model_for_eval(),
         model_options={
             ModelOption.CONTEXT_WINDOW: TEST_CONTEXT_WINDOW,
-            ModelOption.THINKING: False,
+            ModelOption.THINKING: thinking,
         },
     )
+
+
+@pytest.fixture(scope="function")
+def session():
+    """Fresh Ollama session for each test, with THINKING off at construction."""
+    session = _start_ollama_session(thinking=False)
     yield session
     session.reset()
 
@@ -115,6 +120,19 @@ def uncertainty_adapter_model() -> str:
     except subprocess.CalledProcessError as e:
         pytest.skip(f"uncertainty adapter build failed: {e}")
     return completed.stdout.strip()
+
+
+@pytest.fixture(scope="function")
+def thinking_session():
+    """Fresh Ollama session with THINKING on at construction time.
+
+    Unlike the `session` fixture (THINKING=False at construction), this lets
+    tests verify that a per-call `THINKING: False` actually overrides the
+    construction-time default, rather than merely agreeing with it.
+    """
+    thinking_session = _start_ollama_session(thinking=True)
+    yield thinking_session
+    thinking_session.reset()
 
 
 @pytest.mark.qualitative
@@ -421,6 +439,40 @@ def test_stop_sequences(session) -> None:
     assert stop not in result.value, (
         f"stop sequence leaked into output: {result.value!r}"
     )
+
+
+async def test_thinking_suppressed_per_call(thinking_session) -> None:
+    """THINKING=False per call overrides a THINKING=True construction-time default."""
+    mot, _ = await thinking_session.backend.generate_from_context(
+        CBlock("What is 1+1?"),
+        thinking_session.ctx,
+        model_options={ModelOption.THINKING: False},
+    )
+    await mot.avalue()
+    assert not mot.thinking, f"Expected no thinking trace, got: {mot.thinking!r}"
+
+
+async def test_thinking_enabled_mot_field_nonempty(session) -> None:
+    """THINKING=True per call overrides a THINKING=False construction-time default."""
+    mot, _ = await session.backend.generate_from_context(
+        CBlock("What is 1+1?"), session.ctx, model_options={ModelOption.THINKING: True}
+    )
+    await mot.avalue()
+    assert mot.thinking, (
+        f"Expected a non-empty thinking trace from "
+        f"{_ollama_model_for_eval()!r} but mot.thinking was empty/None"
+    )
+
+
+async def test_construction_time_thinking_default_suppresses(session) -> None:
+    """Backend constructed with THINKING=False suppresses thinking on all calls
+    without per-call model_options.
+    """
+    mot, _ = await session.backend.generate_from_context(
+        CBlock("What is 1+1?"), session.ctx
+    )
+    await mot.avalue()
+    assert not mot.thinking, f"Expected no thinking trace, got: {mot.thinking!r}"
 
 
 if __name__ == "__main__":
