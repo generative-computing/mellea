@@ -345,6 +345,54 @@ def test_filter_for_chat_template_drops_thinking_effort_level() -> None:
     assert result == {}
 
 
+def test_filter_for_chat_template_maps_low_effort_to_low_effort_variable() -> None:
+    """THINKING="low" maps to low_effort=True when the template declares it.
+
+    Regression test for issue #1636: Granite 4.2's chat template implements a
+    boolean `low_effort` variable (distinct from the bool-valued THINKING vars),
+    set via a string `reasoning_effort`/THINKING level rather than a bool.
+    """
+    b = _make_backend("{{ low_effort }}")
+
+    result = b._filter_for_chat_template({ModelOption.THINKING: "low"})
+
+    assert result == {"low_effort": True}
+
+
+def test_filter_for_chat_template_drops_low_effort_without_template_variable() -> None:
+    """THINKING="low" is a no-op when the template does not declare low_effort."""
+    b = _make_backend("{{ thinking }}")
+
+    result = b._filter_for_chat_template({ModelOption.THINKING: "low"})
+
+    assert "low_effort" not in result
+
+
+@pytest.mark.parametrize("thinking_value", ["medium", "high", "none"])
+def test_filter_for_chat_template_ignores_non_low_effort_levels(
+    thinking_value: str,
+) -> None:
+    """THINKING levels other than "low" remain no-ops, matching Granite's template.
+
+    Granite's chat template only has a low_effort branch — there is no "high"
+    branch on the model side (see issue #1636).
+    """
+    b = _make_backend("{{ low_effort }}{{ thinking }}")
+
+    result = b._filter_for_chat_template({ModelOption.THINKING: thinking_value})
+
+    assert result == {}
+
+
+def test_filter_for_chat_template_bool_thinking_does_not_set_low_effort() -> None:
+    """A bool THINKING value sets the bool template var, not low_effort."""
+    b = _make_backend("{{ low_effort }}{{ thinking }}")
+
+    result = b._filter_for_chat_template({ModelOption.THINKING: True})
+
+    assert result == {"thinking": True}
+
+
 def test_filter_for_chat_template_drops_thinking_effort_level_via_alias() -> None:
     """A recognised alias (`thinking`) folds into THINKING and is bool-gated too.
 
@@ -719,6 +767,43 @@ def test_granite_thinking_option_uses_detected_template_variable() -> None:
     assert b._filter_for_chat_template({ModelOption.THINKING: False}) == {
         expected_key: False
     }
+
+
+@pytest.mark.integration
+@pytest.mark.huggingface
+def test_granite_low_effort_option_reaches_real_template() -> None:
+    """Regression test for issue #1636 against the real Granite 4.2 chat template.
+
+    THINKING="low" must reach `low_effort=True` in the kwargs passed to
+    `apply_chat_template` — previously this was silently dropped because
+    `_filter_for_chat_template` only handled bool THINKING values.
+    """
+    tok = _try_load_granite_tokenizer(_GRANITE_THINKING_MODEL_ID)
+    if tok is None:
+        pytest.skip(
+            f"{_GRANITE_THINKING_MODEL_ID} not in local HF cache — "
+            "run the Granite 4.2 HF test lane first"
+        )
+
+    b: LocalHFBackend = LocalHFBackend.__new__(LocalHFBackend)
+    b._tokenizer = tok
+    b._model_id = _GRANITE_THINKING_MODEL_ID
+    b.from_mellea_model_opts_map = {ModelOption.MAX_NEW_TOKENS: "max_new_tokens"}
+
+    assert "low_effort" in b._chat_template_allowlist, (
+        f"'low_effort' missing from real Granite 4.2 allowlist; "
+        f"got: {sorted(b._chat_template_allowlist)}"
+    )
+    result = b._filter_for_chat_template({ModelOption.THINKING: "low"})
+    assert result == {"low_effort": True}
+
+    # The template must actually render differently with this kwarg — proves
+    # the fix changes real model input, not just an internal dict.
+    messages = [{"role": "user", "content": "hi"}]
+    without_low_effort = tok.apply_chat_template(messages, tokenize=False)
+    with_low_effort = tok.apply_chat_template(messages, tokenize=False, **result)
+    assert "reasoning effort: low" in with_low_effort
+    assert "reasoning effort: low" not in without_low_effort
 
 
 if __name__ == "__main__":
