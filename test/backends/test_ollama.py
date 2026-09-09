@@ -96,16 +96,16 @@ def session():
 
 
 @pytest.fixture(scope="function")
-def thinking_on_session():
+def thinking_session():
     """Fresh Ollama session with THINKING on at construction time.
 
     Unlike the `session` fixture (THINKING=False at construction), this lets
     tests verify that a per-call `THINKING: False` actually overrides the
     construction-time default, rather than merely agreeing with it.
     """
-    thinking_on_session = _start_ollama_session(thinking=True)
-    yield thinking_on_session
-    thinking_on_session.reset()
+    thinking_session = _start_ollama_session(thinking=True)
+    yield thinking_session
+    thinking_session.reset()
 
 
 @pytest.mark.qualitative
@@ -346,27 +346,17 @@ def test_stop_sequences(session) -> None:
     )
 
 
-async def test_thinking_suppressed_per_call(thinking_on_session) -> None:
+async def test_thinking_suppressed_per_call(thinking_session) -> None:
     """THINKING=False per call overrides a THINKING=True construction-time default."""
-    mot, _ = await thinking_on_session.backend.generate_from_context(
+    mot, _ = await thinking_session.backend.generate_from_context(
         CBlock("What is 1+1?"),
-        thinking_on_session.ctx,
+        thinking_session.ctx,
         model_options={ModelOption.THINKING: False},
     )
     await mot.avalue()
     assert not mot.thinking, f"Expected no thinking trace, got: {mot.thinking!r}"
 
 
-# Runs only manually / in `-m slow` sweeps. PR CI (quality.yml) never overrides
-# `-m`, so it inherits pyproject.toml's default `-m "not slow"` and never runs
-# this test. The nightly script committed here has the same default, but it's
-# driven by an external nightly.py not in this repo, so whether nightly
-# actually invokes `-m slow` is unverified rather than ruled out. Either way,
-# this is the only test in the module that would catch a regression in
-# think-block capture itself (the THINKING=False tests would pass vacuously in
-# that case). A regression in the merge/override plumbing is still caught by
-# the other two.
-@pytest.mark.slow  # generates a full think block, unlike its THINKING=False siblings
 async def test_thinking_enabled_mot_field_nonempty(session) -> None:
     """THINKING=True per call overrides a THINKING=False construction-time default."""
     mot, _ = await session.backend.generate_from_context(
