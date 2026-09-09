@@ -367,10 +367,11 @@ The requirement's chunker is fed the stream's chunks, so a requirement that chun
 validated as one final chunk (whose result may still be `"unknown"`). A *finer*
 requirement composes only when the stream's chunker preserves the boundaries it needs,
 and `WordChunking`, `SentenceChunking`, and `ParagraphChunking` never do: each splits
-on a different form of whitespace and discards it. So `sentence` → `word` sees
+on a different form of whitespace and discards it. For example, `sentence` → `word` sees
 `"ran.The"` as one word once the inter-sentence space is gone, and `paragraph` →
-`sentence` sees two sentences as one once the blank line is gone. When the strategies
-aren't compatible, set `chunking=None` on the stream so each requirement chunks the raw
-deltas independently.
+`sentence` sees two sentences as one once the blank line is gone. So set `chunking=None`
+on the stream whenever a requirement carries its own `chunking`, and each requirement
+chunks the raw deltas independently. A custom chunker that preserves its separator can
+still compose across granularities; the constraint is specific to the built-in three.
 
 > **See also:** [Streaming with per-chunk validation](../how-to/use-async-and-streaming#streaming-with-per-chunk-validation)

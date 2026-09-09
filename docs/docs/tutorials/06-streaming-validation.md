@@ -606,27 +606,29 @@ where the consumer receives raw deltas while each requirement chunks independent
 
 A requirement's chunker is fed the *stream's* chunks, not the raw deltas, and it accumulates
 them in one stateful chunker — so the stream's chunks must carry the boundaries the requirement
-needs.
+needs. The built-in strategies — `WordChunking`, `SentenceChunking`, and `ParagraphChunking` —
+all split on a form of whitespace and discard it, so when the stream and a requirement chunk
+differently, those boundaries never reach the requirement's chunker; no built-in pairing is safe.
 
 A requirement *coarser* than the stream may never reach a boundary mid-stream; it stays
-`"unknown"` until the end-of-stream flush validates the leftover as one chunk. The check
-still runs.
+`"unknown"` until the end-of-stream flush, which then validates the leftover as a single chunk,
+fused wherever the stream's chunker dropped a separator.
 
-A *finer* requirement is the one to watch. `WordChunking`, `SentenceChunking`, and
-`ParagraphChunking` all split on a form of whitespace and discard it, so a coarser stream
-chunker strips exactly the whitespace a finer requirement needs — no built-in pairing is
-safe. `sentence` → `word` is the clearest case: the sentence chunker eats the space between
-sentences, which is exactly the boundary `word` chunking needs. Feed a
-word-level requirement the sentence chunks `"A cat jumped the dog."` then `"The dog caught the
-horse."`; with no space between them in the requirement's accumulated buffer, it sees:
+A *finer* requirement hits the same fusion mid-stream, and `sentence` → `word` is the clearest
+case: the sentence chunker eats the space between sentences, which is exactly the boundary `word`
+chunking needs. Feed a word-level requirement the sentence chunks `"A cat jumped the dog."` then
+`"The dog caught the horse."`; with no space between them in the requirement's accumulated buffer,
+it sees:
 
 ```python
 ["A", "cat", "jumped", "the", "dog.The", "dog", "caught", "the", "horse."]
 ```
 
-`"dog.The"` fused across the boundary, so a check for the word `"The"` never fires. When the
-stream and requirement strategies aren't compatible, set the stream to `chunking=None` so each
-requirement re-chunks the raw deltas independently, sidestepping the problem.
+`"dog.The"` fused across the boundary, so a check for the word `"The"` never fires. So set the
+stream to `chunking=None` whenever a requirement carries its own `chunking` and let each
+requirement re-chunk the raw deltas independently. A custom chunker that keeps its separator can
+still compose with a different stream granularity; the constraint is specific to the built-in
+three.
 
 > **See also:** [`docs/examples/streaming/per_requirement_chunking.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/streaming/per_requirement_chunking.py)
 > for a runnable version with two requirements validating one stream at different granularities.
