@@ -1749,17 +1749,44 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         self._control_token_id_set.update(found)
         return found
 
-    async def _learn_control_tokens(self, adapter_name: object) -> None:
-        """Populate `_control_token_id_set` for `adapter_name`, if there is one.
+    def _seed_control_tokens_from_adapters(self) -> None:
+        """Seed `_control_token_id_set` from EVERY registered adapter's metadata.
 
-        Called only after every guard that can refuse a request without a round trip,
-        so a turn that will not reuse its prefix never pays for the probe.
+        The ceiling guard is only correct if `_control_count` recognizes every control
+        token the served model can emit -- not just the adapters this backend happens to
+        have invoked. The per-adapter probe learns lazily and so undercounts (a control
+        token for an un-probed adapter is not counted, leaving the ceiling a floor rather
+        than a bound). Each registered adapter already carries its id from
+        `adapter_index.json` on `identity.control_token_id`, so union them all up front.
+
+        Idempotent and cheap (a dict scan); safe to call before every count. An adapter
+        whose metadata supplied no id contributes nothing and falls back to the probe.
+        """
+        for adapter in self._added_adapters.values():
+            cid = getattr(adapter.identity, "control_token_id", None)
+            if cid is None:
+                continue
+            name = adapter.identity.name
+            # Populate the per-name cache too, so `_control_token_ids` treats this
+            # adapter as already learned and never probes for it.
+            self._control_token_ids_by_adapter.setdefault(name, [cid])
+            self._control_token_id_set.add(cid)
+
+    async def _learn_control_tokens(self, adapter_name: object) -> None:
+        """Ensure `_control_token_id_set` covers every adapter this model can emit.
+
+        Seeds the COMPLETE set from registered adapters' metadata first (so the count is
+        a true bound, not a floor), then falls back to the per-adapter `/tokenize` probe
+        only for an `adapter_name` passed as a raw template kwarg with no registered
+        adapter to read the id from. Called only after every guard that can refuse a
+        request without a round trip, so a turn that will not reuse never pays the probe.
 
         Args:
             adapter_name (object): The `adapter_name` template kwarg, or a falsy value
-                when this turn uses no adapter (nothing to learn).
+                when this turn uses no adapter.
         """
-        if adapter_name:
+        self._seed_control_tokens_from_adapters()
+        if adapter_name and str(adapter_name) not in self._control_token_ids_by_adapter:
             await self._control_token_ids(str(adapter_name))
 
     def _control_count(self, ids: list[int]) -> int:
