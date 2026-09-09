@@ -345,48 +345,60 @@ def test_filter_for_chat_template_drops_thinking_effort_level() -> None:
     assert result == {}
 
 
-def test_filter_for_chat_template_maps_low_effort_to_low_effort_variable() -> None:
-    """THINKING="low" maps to low_effort=True when the template declares it.
+@pytest.mark.parametrize("thinking_value", ["low", "medium", "high"])
+def test_filter_for_chat_template_forwards_string_thinking_as_reasoning_effort(
+    thinking_value: str,
+) -> None:
+    """A string THINKING level is forwarded verbatim as `reasoning_effort`.
 
-    Regression test for issue #1636: Granite 4.2's chat template implements a
-    boolean `low_effort` variable (distinct from the bool-valued THINKING vars),
-    set via a string `reasoning_effort`/THINKING level rather than a bool.
+    Regression test for issue #1636: Granite 4.2's chat template derives its
+    boolean `low_effort` variable from `reasoning_effort == "low"`
+    (chat_template.jinja), and gpt-oss's HF chat template reads
+    `reasoning_effort` directly — so the string must be forwarded as-is,
+    mirroring the OpenAI backend's `reasoning_effort` handling, rather than
+    translated into a template-specific boolean.
     """
-    b = _make_backend("{{ low_effort }}")
+    b = _make_backend("{{ reasoning_effort }}")
 
-    result = b._filter_for_chat_template({ModelOption.THINKING: "low"})
+    result = b._filter_for_chat_template({ModelOption.THINKING: thinking_value})
 
-    assert result == {"low_effort": True}
+    assert result == {"reasoning_effort": thinking_value}
 
 
-def test_filter_for_chat_template_drops_low_effort_without_template_variable() -> None:
-    """THINKING="low" is a no-op when the template does not declare low_effort."""
+def test_filter_for_chat_template_drops_string_thinking_without_reasoning_effort_var() -> (
+    None
+):
+    """A string THINKING level is a no-op when the template has no reasoning_effort var."""
     b = _make_backend("{{ thinking }}")
 
     result = b._filter_for_chat_template({ModelOption.THINKING: "low"})
 
-    assert "low_effort" not in result
+    assert "reasoning_effort" not in result
 
 
-@pytest.mark.parametrize("thinking_value", ["medium", "high", "none"])
-def test_filter_for_chat_template_ignores_non_low_effort_levels(
-    thinking_value: str,
-) -> None:
-    """THINKING levels other than "low" remain no-ops, matching Granite's template.
+def test_filter_for_chat_template_string_thinking_sentinel_overrides_raw_reasoning_effort() -> (
+    None
+):
+    """The resolved THINKING sentinel wins over an already-present raw `reasoning_effort` key.
 
-    Granite's chat template only has a low_effort branch — there is no "high"
-    branch on the model side (see issue #1636).
+    Regression guard: a caller passing both ModelOption.THINKING="low" and a
+    conflicting raw `reasoning_effort="high"` must not have the sentinel's
+    intent silently overridden — matching the existing bool-THINKING
+    precedence behaviour (see
+    test_filter_for_chat_template_sentinel_overrides_conflicting_alias_key).
     """
-    b = _make_backend("{{ low_effort }}{{ thinking }}")
+    b = _make_backend("{{ reasoning_effort }}")
 
-    result = b._filter_for_chat_template({ModelOption.THINKING: thinking_value})
+    result = b._filter_for_chat_template(
+        {ModelOption.THINKING: "low", "reasoning_effort": "high"}
+    )
 
-    assert result == {}
+    assert result == {"reasoning_effort": "low"}
 
 
-def test_filter_for_chat_template_bool_thinking_does_not_set_low_effort() -> None:
-    """A bool THINKING value sets the bool template var, not low_effort."""
-    b = _make_backend("{{ low_effort }}{{ thinking }}")
+def test_filter_for_chat_template_bool_thinking_does_not_set_reasoning_effort() -> None:
+    """A bool THINKING value sets the bool template var, not reasoning_effort."""
+    b = _make_backend("{{ reasoning_effort }}{{ thinking }}")
 
     result = b._filter_for_chat_template({ModelOption.THINKING: True})
 
@@ -771,12 +783,17 @@ def test_granite_thinking_option_uses_detected_template_variable() -> None:
 
 @pytest.mark.integration
 @pytest.mark.huggingface
-def test_granite_low_effort_option_reaches_real_template() -> None:
+def test_granite_reasoning_effort_option_reaches_real_template() -> None:
     """Regression test for issue #1636 against the real Granite 4.2 chat template.
 
-    THINKING="low" must reach `low_effort=True` in the kwargs passed to
+    THINKING="low" must reach `reasoning_effort="low"` in the kwargs passed to
     `apply_chat_template` — previously this was silently dropped because
-    `_filter_for_chat_template` only handled bool THINKING values.
+    `_filter_for_chat_template` only handled bool THINKING values. Forwarding
+    the string verbatim (rather than translating it into the template's
+    derived boolean `low_effort` variable) is the mechanism the template
+    itself expects (`{%- set low_effort = reasoning_effort == "low" %}` in
+    chat_template.jinja) and matches the OpenAI backend's `reasoning_effort`
+    handling.
     """
     tok = _try_load_granite_tokenizer(_GRANITE_THINKING_MODEL_ID)
     if tok is None:
@@ -790,20 +807,20 @@ def test_granite_low_effort_option_reaches_real_template() -> None:
     b._model_id = _GRANITE_THINKING_MODEL_ID
     b.from_mellea_model_opts_map = {ModelOption.MAX_NEW_TOKENS: "max_new_tokens"}
 
-    assert "low_effort" in b._chat_template_allowlist, (
-        f"'low_effort' missing from real Granite 4.2 allowlist; "
+    assert "reasoning_effort" in b._chat_template_allowlist, (
+        f"'reasoning_effort' missing from real Granite 4.2 allowlist; "
         f"got: {sorted(b._chat_template_allowlist)}"
     )
     result = b._filter_for_chat_template({ModelOption.THINKING: "low"})
-    assert result == {"low_effort": True}
+    assert result == {"reasoning_effort": "low"}
 
     # The template must actually render differently with this kwarg — proves
     # the fix changes real model input, not just an internal dict.
     messages = [{"role": "user", "content": "hi"}]
-    without_low_effort = tok.apply_chat_template(messages, tokenize=False)
-    with_low_effort = tok.apply_chat_template(messages, tokenize=False, **result)
-    assert "reasoning effort: low" in with_low_effort
-    assert "reasoning effort: low" not in without_low_effort
+    without_reasoning_effort = tok.apply_chat_template(messages, tokenize=False)
+    with_reasoning_effort = tok.apply_chat_template(messages, tokenize=False, **result)
+    assert "reasoning effort: low" in with_reasoning_effort
+    assert "reasoning effort: low" not in without_reasoning_effort
 
 
 if __name__ == "__main__":
