@@ -5,7 +5,8 @@
 # Build a local Ollama model from the official pinned Granite uncertainty aLoRA.
 #
 # Prints only the resulting Ollama tag to stdout so callers can assign it:
-#   export MELLEA_OLLAMA_UNCERTAINTY_MODEL="$(./test/scripts/build_ollama_uncertainty_adapter.sh)"
+#   MELLEA_OLLAMA_UNCERTAINTY_MODEL="$(./test/scripts/build_ollama_uncertainty_adapter.sh)"
+#   export MELLEA_OLLAMA_UNCERTAINTY_MODEL
 
 set -euo pipefail
 

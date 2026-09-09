@@ -218,6 +218,36 @@ async def _run_intrinsic(
 # ---------------------------------------------------------------------------
 
 
+async def test_documents_folded_into_message_when_not_docs_as_message():
+    """Documents extra_body has no Ollama transport, so they must land in a message.
+
+    `_SIMPLE_CONFIG` sets no `docs_as_message`, mirroring the shipped
+    answerability/citations/etc. io.yaml configs. Without folding, Ollama
+    receives zero documents and still returns a schema-valid, meaningless score.
+    """
+    backend = _make_backend_with_adapter(_SIMPLE_CONFIG)
+    context = ChatContext().add(
+        Message("user", "What is the square root of 4?", documents=["4 is 2 squared."])
+    )
+    mock_chat = AsyncMock(return_value=_simple_chat_response())
+    mock_client = MagicMock()
+    mock_client.chat = mock_chat
+
+    with patch.object(
+        OllamaModelBackend,
+        "_async_client",
+        new_callable=PropertyMock,
+        return_value=mock_client,
+    ):
+        mot, _ = await mfuncs.aact(
+            Intrinsic("uncertainty"), context, backend, strategy=None
+        )
+        await mot.avalue()
+
+    messages = mock_chat.call_args.kwargs["messages"]
+    assert any("4 is 2 squared." in m["content"] for m in messages)
+
+
 async def test_instruction_appended_as_last_message():
     """The io.yaml instruction (the adapter activation text) is the final user message."""
     backend = _make_backend_with_adapter(_SIMPLE_CONFIG)
@@ -408,13 +438,50 @@ def test_add_adapter_requires_io_yaml_config():
         backend.add_adapter(adapter)
 
 
+def test_resolve_adapter_requires_configured_model_tag():
+    """Resolving without a configured tag raises instead of silently succeeding.
+
+    A cold resolve with no `adapter_models` entry used to register the io.yaml
+    anyway; generation would then fall back to the base `model_id`, producing a
+    schema-valid score from a model with no adapter weights.
+    """
+    backend = _make_backend()
+
+    with pytest.raises(ValueError, match=r"No Ollama model tag configured"):
+        backend.resolve_adapter("uncertainty")
+
+
+def test_resolve_adapter_falls_back_to_lora_when_alora_unavailable(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    """citations/hallucination_detection/context-attribution ship LoRA only."""
+    config_path = tmp_path / "io.yaml"
+    config_path.write_text(json.dumps(_SIMPLE_CONFIG), encoding="utf-8")
+    backend = _make_backend(adapter_models={"citations": _ADAPTER_TAG})
+    recorded_alora: list[bool] = []
+
+    def _fake_obtain_io_yaml(*_args, alora: bool, **_kwargs) -> Path:
+        recorded_alora.append(alora)
+        return config_path
+
+    monkeypatch.setattr(
+        "mellea.backends.ollama.granite_formatters.intrinsics.obtain_io_yaml",
+        _fake_obtain_io_yaml,
+    )
+
+    adapter = backend.resolve_adapter("citations")
+
+    assert recorded_alora == [False]
+    assert adapter.identity.adapter_type == "lora"
+
+
 def test_resolve_adapter_registers_server_mediated_adapter(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ):
     """Resolving a capability creates the modern adapter shape without a server call."""
     config_path = tmp_path / "io.yaml"
     config_path.write_text(json.dumps(_SIMPLE_CONFIG), encoding="utf-8")
-    backend = _make_backend()
+    backend = _make_backend(adapter_models={"uncertainty": _ADAPTER_TAG})
     monkeypatch.setattr(
         "mellea.backends.ollama.granite_formatters.intrinsics.obtain_io_yaml",
         lambda *_args, **_kwargs: config_path,
@@ -432,7 +499,7 @@ def test_resolve_adapter_explains_missing_huggingface_extra(
     monkeypatch: pytest.MonkeyPatch,
 ):
     """The optional dependency failure names the extra users need to install."""
-    backend = _make_backend()
+    backend = _make_backend(adapter_models={"uncertainty": _ADAPTER_TAG})
     monkeypatch.setattr(
         "mellea.backends.ollama.granite_formatters.intrinsics.obtain_io_yaml",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(

@@ -153,6 +153,17 @@ jobs:
           # The names below are what the tests match against; print them so a
           # tag-name mismatch is diagnosable from the log alone.
           ollama list
+      - name: Constrain the granite4.1:3b context for the CI runner
+        # granite4.1:3b ships the same oversized num_ctx default as
+        # granite4.2:3b below. The uncertainty aLoRA Ollama model is built
+        # `FROM` this tag, so it must be constrained *before* that build step
+        # or the bundled adapter model inherits the unconstrained context.
+        run: |
+          ollama cp granite4.1:3b granite4.1:3b-128k
+          printf 'FROM granite4.1:3b-128k\nPARAMETER num_ctx 8192\n' \
+            > /tmp/MODELFILE-granite41-ci
+          ollama create granite4.1:3b -f /tmp/MODELFILE-granite41-ci
+          ollama show granite4.1:3b --modelfile | grep -qx 'PARAMETER num_ctx 8192'
       - name: Build the official uncertainty aLoRA Ollama model
         env:
           # read-only public-repo HF token; used only to make the pinned build

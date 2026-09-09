@@ -28,7 +28,7 @@ from mellea.stdlib.components.intrinsic import core
 adapter_model = os.environ.get("MELLEA_OLLAMA_UNCERTAINTY_MODEL")
 if adapter_model is None:
     builder = (
-        Path(__file__).parents[2] / "test/scripts/build_ollama_uncertainty_adapter.sh"
+        Path(__file__).parents[3] / "test/scripts/build_ollama_uncertainty_adapter.sh"
     )
     adapter_model = subprocess.run(
         [builder], check=True, stdout=subprocess.PIPE, text=True

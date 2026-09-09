@@ -50,9 +50,10 @@ weights separately. For local development, build a bundled uncertainty model
 from the pinned official Granite base and adapter artefacts:
 
 ```bash
-export MELLEA_OLLAMA_UNCERTAINTY_MODEL="$(
+MELLEA_OLLAMA_UNCERTAINTY_MODEL="$(
   ./test/scripts/build_ollama_uncertainty_adapter.sh
 )"
+export MELLEA_OLLAMA_UNCERTAINTY_MODEL
 ```
 
 Install the lightweight Hugging Face Hub dependency that retrieves the

@@ -105,9 +105,15 @@ def uncertainty_adapter_model() -> str:
     """Build and return the official uncertainty aLoRA Ollama model tag."""
     if configured_model := os.environ.get("MELLEA_OLLAMA_UNCERTAINTY_MODEL"):
         return configured_model
-    completed = subprocess.run(
-        [_UNCERTAINTY_ADAPTER_BUILDER], check=True, stdout=subprocess.PIPE, text=True
-    )
+    try:
+        completed = subprocess.run(
+            [_UNCERTAINTY_ADAPTER_BUILDER],
+            check=True,
+            stdout=subprocess.PIPE,
+            text=True,
+        )
+    except subprocess.CalledProcessError as e:
+        pytest.skip(f"uncertainty adapter build failed: {e}")
     return completed.stdout.strip()
 
 

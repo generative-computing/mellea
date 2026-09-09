@@ -195,9 +195,10 @@ done
 
 log "All ollama models ready."
 
-export MELLEA_OLLAMA_UNCERTAINTY_MODEL="$(
+MELLEA_OLLAMA_UNCERTAINTY_MODEL="$(
     ./test/scripts/build_ollama_uncertainty_adapter.sh
 )"
+export MELLEA_OLLAMA_UNCERTAINTY_MODEL
 OLLAMA_MODEL_LIST+=("$MELLEA_OLLAMA_UNCERTAINTY_MODEL")
 
 # --- Warm up models (first load into memory is slow) ---

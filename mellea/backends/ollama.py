@@ -32,6 +32,7 @@ from ..core import (
 )
 from ..core.base import AbstractMelleaTool
 from ..formatters import ChatFormatter, TemplateFormatter, granite as granite_formatters
+from ..formatters.granite.intrinsics.input import move_documents_to_message
 from ..helpers import (
     DEFAULT_CHUNK_TIMEOUT,
     ClientCache,
@@ -216,6 +217,10 @@ class OllamaModelBackend(FormatterBackend, AdapterMixin):
             name used to find an adapter's `io.yaml` (for example,
             `"granite-4.1-3b"`). Required when `model_id` is itself a bundled
             Ollama adapter tag rather than a known base-model tag.
+        default_to_constraint_checking_alora (bool): If `False`, deactivates
+            automatic rerouting of a plain `Requirement` to the
+            `requirement-check` adapter. Matches `OpenAIBackend` and
+            `LocalHFBackend`.
 
     Attributes:
         to_mellea_model_opts_map (dict): Mapping from Ollama-specific option names
@@ -240,6 +245,7 @@ class OllamaModelBackend(FormatterBackend, AdapterMixin):
         timeout: float | None = 300.0,
         adapter_models: dict[str, str] | None = None,
         adapter_base_model_name: str | None = None,
+        default_to_constraint_checking_alora: bool = True,
     ):
         """Initialize an Ollama backend, connecting to the server and pulling the model if needed."""
         super().__init__(
@@ -268,6 +274,7 @@ class OllamaModelBackend(FormatterBackend, AdapterMixin):
         self._composed_adapter_configs: dict[str, dict] = {}
         self._adapter_models: dict[str, str] = adapter_models or {}
         self._adapter_base_model_name = adapter_base_model_name
+        self.default_to_constraint_checking_alora = default_to_constraint_checking_alora
 
         # Setup the client and ensure that we have the model available.
         self._base_url = base_url
@@ -408,21 +415,33 @@ class OllamaModelBackend(FormatterBackend, AdapterMixin):
             _AdapterCore: The registered server-mediated adapter.
 
         Raises:
-            ValueError: If the catalogued `io.yaml` is invalid.
+            ValueError: If `name` has no entry in `adapter_models`, or if the
+                catalogued `io.yaml` is invalid.
             KeyError: If registration does not yield a discoverable adapter.
         """
         found = self._find_adapter(name)
         if found is not None:
             return found
 
+        if name not in self._adapter_models:
+            raise ValueError(
+                f"No Ollama model tag configured for adapter function {name!r}; "
+                "add one to `adapter_models` before resolving it."
+            )
+
         metadata = fetch_intrinsic_metadata(name)
+        # Prefer aLoRA (shares the base model's KV cache) where the catalog
+        # says it's published; fall back to LoRA otherwise (e.g. citations,
+        # hallucination_detection, context-attribution ship LoRA only).
+        use_alora = AdapterType.ALORA in metadata.adapter_types
+        adapter_type = AdapterType.ALORA if use_alora else AdapterType.LORA
         try:
             config_path = granite_formatters.intrinsics.obtain_io_yaml(
                 name,
                 self.base_model_name,
                 metadata.repo_id,
                 revision=metadata.revision,
-                alora=True,
+                alora=use_alora,
             )
         except ModuleNotFoundError as e:
             if e.name != "huggingface_hub":
@@ -443,7 +462,7 @@ class OllamaModelBackend(FormatterBackend, AdapterMixin):
             _AdapterCore(
                 identity=Identity(
                     name=name,
-                    adapter_type=AdapterType.ALORA.value,
+                    adapter_type=adapter_type.value,
                     capability=metadata.effective_capability,
                 ),
                 io_contract=get_io_contract(name),
@@ -689,6 +708,15 @@ class OllamaModelBackend(FormatterBackend, AdapterMixin):
 
         rewritten = rewriter.transform(request_json, **action.intrinsic_kwargs)
 
+        # Ollama's chat API has no extra_body passthrough (unlike the OpenAI-
+        # compatible endpoints this rewriter otherwise targets), so any
+        # documents the io.yaml didn't already fold into a message via
+        # `docs_as_message` must be folded in here or they're silently dropped.
+        if rewritten.extra_body is not None and rewritten.extra_body.documents:
+            rewritten = move_documents_to_message(  # type: ignore[assignment]
+                rewritten, "string"
+            )
+
         tools: dict[str, AbstractMelleaTool] = dict()
         if tool_calls:
             add_tools_from_model_options(tools, model_options)
@@ -813,14 +841,17 @@ class OllamaModelBackend(FormatterBackend, AdapterMixin):
 
         _model_id_str = str(getattr(self, "model_id", "unknown"))
         with with_context(request_id=generate_request_id(), model_id=_model_id_str):
+            await self.do_generate_walk(action)
+
             model_opts = self._simplify_and_merge(model_options)
 
             # Requirements can be automatically rerouted to a requirement adapter.
             if isinstance(action, Requirement):
-                reroute_to_alora = isinstance(action, ALoraRequirement)
+                reroute_to_alora = self.default_to_constraint_checking_alora
                 adapter_name = "requirement-check"
 
                 if isinstance(action, ALoraRequirement):
+                    reroute_to_alora = True
                     adapter_name = action.intrinsic_name
                     alora_action = action
                 else:
@@ -845,7 +876,7 @@ class OllamaModelBackend(FormatterBackend, AdapterMixin):
                     await asyncio.to_thread(self.resolve_adapter, adapter_name)
                     alora_req_adapter = self._find_adapter(adapter_name, search_types)
                 if alora_req_adapter is None:
-                    if reroute_to_alora:
+                    if reroute_to_alora and isinstance(action, ALoraRequirement):
                         MelleaLogger.get_logger().warning(
                             f"attempted to use an AloraRequirement but backend {self} "
                             f"doesn't have the specified adapter added {adapter_name}; "
