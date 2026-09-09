@@ -22,6 +22,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from mellea.backends.adapters._core import Identity
 from mellea.backends.openai import (
     MAX_RETAINED_CONTROL_TOKENS,
     DeltaNotDerivable,
@@ -318,3 +319,90 @@ async def test_chat_path_declines_reuse_when_documents_are_supplied():
     kwargs = create.call_args.kwargs
     assert "prompt" not in kwargs
     assert kwargs["extra_body"]["documents"] == [{"text": "doc"}]
+
+
+# --- control-token count is COMPLETE, not per-invoked-adapter ---------------
+#
+# The ceiling guard only bounds the true count if `_control_count` recognizes every
+# control token the served model can emit. The old per-adapter probe learned lazily,
+# so a control token for an adapter never invoked went uncounted -- the ceiling was a
+# floor. Seeding the full set from every registered adapter's `adapter_index.json`
+# metadata (`Identity.control_token_id`) closes that.
+
+
+class _StubAdapter:
+    """Minimal stand-in for a registered adapter: only `.identity` is read."""
+
+    def __init__(self, name: str, control_token_id: int | None):
+        self.identity = Identity(
+            name=name, adapter_type="lora", control_token_id=control_token_id
+        )
+        self.qualified_name = f"{name}_lora"
+
+
+def test_seed_unions_every_registered_adapters_control_token():
+    """All registered adapters' ids populate the set, not just an invoked one."""
+    backend = _make_backend()
+    backend._added_adapters = {
+        "answerability_lora": _StubAdapter("answerability", 100356),
+        "uncertainty_lora": _StubAdapter("uncertainty", 100361),
+        "citations_lora": _StubAdapter("citations", 100352),
+    }
+
+    backend._seed_control_tokens_from_adapters()
+
+    assert backend._control_token_id_set == {100356, 100361, 100352}
+
+
+def test_uninvoked_adapters_control_token_is_counted():
+    """A control token for an adapter this backend never invoked is still counted.
+
+    This is the undercount the fix targets: before seeding, `_control_count` would
+    return 0 for `citations` unless a `citations` turn had probed it. After seeding
+    from metadata, its token is recognized regardless of what has been invoked.
+    """
+    backend = _make_backend()
+    backend._added_adapters = {"citations_lora": _StubAdapter("citations", 100352)}
+    assert backend._control_count([100352, 42, 100352]) == 0  # nothing learned yet
+
+    backend._seed_control_tokens_from_adapters()
+
+    assert backend._control_count([100352, 42, 100352]) == 2
+
+
+def test_adapters_without_metadata_id_contribute_nothing():
+    """An adapter whose metadata supplied no id is skipped, not crashed on."""
+    backend = _make_backend()
+    backend._added_adapters = {
+        "known_lora": _StubAdapter("known", 100356),
+        "legacy_lora": _StubAdapter("legacy", None),  # older index, no control_token.id
+    }
+
+    backend._seed_control_tokens_from_adapters()
+
+    assert backend._control_token_id_set == {100356}
+
+
+async def test_learn_control_tokens_does_not_probe_a_registered_adapter():
+    """A registered adapter is served from metadata; no `/tokenize` probe is issued."""
+    backend = _make_backend()
+    backend._added_adapters = {"uncertainty_lora": _StubAdapter("uncertainty", 100361)}
+    backend._control_token_ids = AsyncMock(
+        side_effect=AssertionError("must not probe a registered adapter")
+    )
+
+    await backend._learn_control_tokens("uncertainty")
+
+    assert 100361 in backend._control_token_id_set
+
+
+async def test_learn_control_tokens_probes_only_an_unregistered_adapter():
+    """An `adapter_name` with no registered metadata still falls back to the probe."""
+    backend = _make_backend()
+    backend._added_adapters = {"uncertainty_lora": _StubAdapter("uncertainty", 100361)}
+    probe = AsyncMock(return_value=[100356])
+    backend._control_token_ids = probe
+
+    await backend._learn_control_tokens("answerability")  # not registered
+
+    probe.assert_awaited_once_with("answerability")
