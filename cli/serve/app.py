@@ -29,6 +29,8 @@ from mellea.backends.model_options import ModelOption
 from mellea.core import MelleaLogger
 from mellea.helpers.openai_compatible_helpers import (
     build_completion_usage,
+    build_response_output_items,
+    build_response_usage,
     build_tool_calls,
 )
 
@@ -41,9 +43,13 @@ from .models import (
     JsonSchemaFormat,
     OpenAIError,
     OpenAIErrorResponse,
+    Response,
+    ResponseInputItem,
+    ResponseRequest,
+    ResponseUsage,
 )
 from .schema_converter import json_schema_to_pydantic
-from .streaming import stream_chat_completion_chunks
+from .streaming import stream_chat_completion_chunks, stream_response_chunks
 from .utils import extract_finish_reason
 
 logger = MelleaLogger.get_logger()
@@ -162,7 +168,7 @@ def _build_model_options(request: ChatCompletionRequest) -> dict:
     return ModelOption.replace_keys(filtered_options, openai_to_model_option)
 
 
-def _build_client_options(request: ChatCompletionRequest) -> dict:
+def _build_client_options(request: ChatCompletionRequest | ResponseRequest) -> dict:
     """Return the full raw client request as a plain dict.
 
     Passed to serve() as client_options when the function declares that
@@ -173,6 +179,171 @@ def _build_client_options(request: ChatCompletionRequest) -> dict:
     backend-specific generation parameters.
     """
     return request.model_dump(exclude_none=True)
+
+
+def _build_model_options_from_response_request(request: ResponseRequest) -> dict:
+    """Build model_options dict from Responses API request parameters."""
+    excluded_fields = {
+        "input",
+        "instructions",
+        "model",
+        "stream",
+        "store",
+        "conversation",
+        "previous_response_id",
+        "background",
+        "include",
+        "parallel_tool_calls",
+        "context_management",
+        "prompt_cache_options",
+        "extra",
+        # Not-yet-implemented
+        "top_p",
+    }
+    openai_to_model_option = {
+        "max_output_tokens": ModelOption.MAX_NEW_TOKENS,
+        "temperature": ModelOption.TEMPERATURE,
+        "tools": ModelOption.TOOLS,
+        "tool_choice": ModelOption.TOOL_CHOICE,
+    }
+
+    filtered_options = {
+        key: value
+        for key, value in request.model_dump(exclude_none=True).items()
+        if key not in excluded_fields
+    }
+
+    return ModelOption.replace_keys(filtered_options, openai_to_model_option)
+
+
+def _convert_response_input_to_messages(
+    input_data: str | list[ResponseInputItem],
+    instructions: str | list[ResponseInputItem] | None,
+) -> list:
+    """Convert Responses API input + instructions to a ChatMessage list.
+
+    Handles string shorthand, message arrays, and developer/system role
+    mapping. The Responses API uses ``developer`` where Chat Completions uses
+    ``system``; both are mapped to ``system`` so existing backends receive a
+    role they understand.
+    """
+    from mellea.serve.models import ChatMessage
+
+    def _role(r: str) -> str:
+        return "system" if r in ("developer", "system") else r
+
+    messages: list[ChatMessage] = []
+
+    if instructions:
+        if isinstance(instructions, str):
+            messages.append(ChatMessage(role="system", content=instructions))
+        else:
+            for item in instructions:
+                text = item.content if isinstance(item.content, str) else None
+                messages.append(ChatMessage(role=_role(item.role), content=text))  # type: ignore[arg-type]
+
+    if isinstance(input_data, str):
+        messages.append(ChatMessage(role="user", content=input_data))
+    else:
+        for item in input_data:
+            text = item.content if isinstance(item.content, str) else None
+            messages.append(ChatMessage(role=_role(item.role), content=text))  # type: ignore[arg-type]
+
+    return messages
+
+
+def make_responses_endpoint(module):
+    """Makes a /v1/responses endpoint using a custom module.
+
+    Mirrors make_chat_endpoint() with Responses API-specific adaptations:
+    input conversion, semantic streaming, and Response output format.
+    """
+    serve_sig = inspect.signature(module.serve)
+    accepts_format = "format" in serve_sig.parameters
+    accepts_client_options = "client_options" in serve_sig.parameters
+    is_async = inspect.iscoroutinefunction(module.serve)
+
+    async def endpoint(request: ResponseRequest):
+        try:
+            if request.background:
+                return create_openai_error_response(
+                    status_code=400,
+                    message="Background processing is not yet supported.",
+                    error_type="invalid_request_error",
+                    param="background",
+                )
+
+            response_id = f"resp_{uuid.uuid4().hex[:24]}"
+            created_timestamp = int(time.time())
+
+            messages = _convert_response_input_to_messages(
+                request.input, request.instructions
+            )
+            model_options = _build_model_options_from_response_request(request)
+
+            format_model: type[BaseModel] | None = None
+
+            serve_kwargs: dict[str, Any] = {
+                "input": messages,
+                "requirements": None,
+                "model_options": model_options,
+            }
+            if accepts_format:
+                serve_kwargs["format"] = format_model
+            if accepts_client_options:
+                serve_kwargs["client_options"] = _build_client_options(request)
+
+            if is_async:
+                output = await module.serve(**serve_kwargs)
+            else:
+                output = await asyncio.to_thread(module.serve, **serve_kwargs)
+
+            if request.stream:
+                return StreamingResponse(
+                    stream_response_chunks(
+                        output=output,
+                        response_id=response_id,
+                        model=request.model,
+                        created=created_timestamp,
+                        conversation=request.conversation,
+                    ),
+                    media_type="text/event-stream",
+                )
+
+            tool_calls_list = build_tool_calls(output)
+            output_items = build_response_output_items(output, tool_calls_list)
+            usage = build_response_usage(output) or ResponseUsage(
+                input_tokens=0, output_tokens=0, total_tokens=0
+            )
+
+            return Response(
+                id=response_id,
+                created_at=created_timestamp,
+                model=request.model,
+                status="completed",
+                output=output_items,
+                output_text=output.value or "",
+                usage=usage,
+                conversation=request.conversation,
+                previous_response_id=request.previous_response_id,
+            )
+
+        except ValueError as e:
+            return create_openai_error_response(
+                status_code=400,
+                message=f"Invalid request: {e!s}",
+                error_type="invalid_request_error",
+            )
+        except Exception:
+            logger.exception("Unhandled error in responses endpoint")
+            return create_openai_error_response(
+                status_code=500,
+                message="Internal server error",
+                error_type="server_error",
+            )
+
+    endpoint.__name__ = f"responses_{module.__name__}_endpoint"
+    return endpoint
 
 
 def make_chat_endpoint(module):
@@ -318,13 +489,20 @@ def run_server(
 ):
     """Serve a FastAPI endpoint for a given script."""
     module = load_module_from_path(script_path)
-    route_path = "/v1/chat/completions"
 
     app.add_api_route(
-        route_path,
+        "/v1/chat/completions",
         make_chat_endpoint(module),
         methods=["POST"],
         response_model=ChatCompletion | OpenAIErrorResponse,
     )
-    typer.echo(f"Serving {route_path} at http://{host}:{port}")
+    app.add_api_route(
+        "/v1/responses",
+        make_responses_endpoint(module),
+        methods=["POST"],
+        response_model=Response | OpenAIErrorResponse,
+    )
+    typer.echo(
+        f"Serving /v1/chat/completions and /v1/responses at http://{host}:{port}"
+    )
     uvicorn.run(app, host=host, port=port)
