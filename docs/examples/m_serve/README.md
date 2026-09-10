@@ -17,6 +17,10 @@ Each subdirectory contains a server implementation and its matching client(s):
 | `pii/` | PII detection service |
 | `model-routing/` | Using or ignoring the client-supplied model ID |
 
+Subdirectories marked with a `client_responses*.py` file include a Responses API
+client alongside the standard Chat Completions client. Both clients use the same
+server program — no server changes are needed to use `/v1/responses`.
+
 ## Files
 
 ### simple/m_serve_example_simple.py
@@ -90,11 +94,20 @@ Example showing how to use `client_options` to route on the client-supplied `mod
 Client code demonstrating routing via the standard `model` field and fallback to the default backend.
 
 ### simple/client.py
-Client code for testing the served API endpoints with non-streaming requests.
+Client code for testing the served API endpoints with non-streaming requests
+via `/v1/chat/completions`.
+
+### simple/client_responses.py
+Client code for testing the same server via `/v1/responses`, printing
+`output_text` from the response.
 
 ### streaming/client_streaming.py
 Client code demonstrating streaming responses using Server-Sent Events (SSE)
-against `streaming/m_serve_example_streaming.py`.
+against `streaming/m_serve_example_streaming.py` via `/v1/chat/completions`.
+
+### streaming/client_responses_streaming.py
+Client code demonstrating the Responses API semantic streaming events
+(`response.output_text.delta`) against `streaming/m_serve_example_streaming.py`.
 
 ### response-format/client_response_format.py
 Client code demonstrating all three `response_format` types with examples.
@@ -103,7 +116,12 @@ Client code demonstrating all three `response_format` types with examples.
 Example of serving a function with tool calling capabilities through `m serve`.
 
 ### tool-calling/client_tool_calling.py
-Client code for testing tool calling endpoints, demonstrating function invocation through the API.
+Client code for testing tool calling via `/v1/chat/completions`, demonstrating
+function invocation through the API.
+
+### tool-calling/client_responses_tool_calling.py
+Client code for testing tool calling via `/v1/responses`, demonstrating
+`function_call` output items and follow-up requests.
 
 ### tool-calling/client_streaming_tool_calling.py
 Client code demonstrating streaming responses combined with tool calling.
