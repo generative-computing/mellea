@@ -189,13 +189,13 @@ def _prompt_digest(messages: list[dict]) -> tuple[str, ...]:
     EVERY field on the message is fingerprinted: these dicts are what goes on the wire,
     so any field the chat template renders is part of the prompt, and one left out of the
     fingerprint is a prompt change this guard cannot see. `reasoning_content` is included
-    for that reason -- the chat path emits it for a tool-calling turn
-    (`should_replay_reasoning`) and the intrinsic path never does, so the same history
-    renders differently on the two paths -- as is `tool_call_id`.
+    for that reason -- a chat turn passes `replay_reasoning` for a turn that carried tool
+    calls (`should_replay_reasoning`) while `_generate_from_intrinsic` never does, so the
+    same history renders differently in the two requests -- as is `tool_call_id`.
 
     Values are canonicalized rather than hashed as the raw dict, and empty ones are
-    dropped, so the SAME turn fingerprints identically whether the chat path's serializer
-    (which omits a field it has no value for) or the intrinsic path's
+    dropped, so the SAME turn fingerprints identically whether a chat turn's serializer
+    (which omits a field it has no value for) or `_generate_from_intrinsic`'s
     `ChatMessage.model_dump()` (which can carry it as `None`) produced it -- keeping a
     valid `Chat -> Intrinsic` reuse from being needlessly refused.
 
@@ -1228,7 +1228,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             conversation.append({"role": "system", "content": system_prompt})
         # Intrinsic/adapter calls are single-shot evaluations over a rewritten
         # conversation, not multi-turn generation, so reasoning is never replayed
-        # here (no `replay_reasoning=`) — unlike the chat path in
+        # here (no `replay_reasoning=`) — unlike a chat turn in
         # `_generate_from_context`, which applies `should_replay_reasoning`.
         conversation.extend(
             [message_to_openai_message(m, provider=self._provider) for m in messages]
@@ -1471,8 +1471,10 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         - `logprobs`: score adapters (certainty, answerability) get logprobs in a
           different shape from /v1/completions than the result processor expects.
         - `reasoning_effort`: a string reasoning level is chat-only.
-        - `documents`: rendered server-side by the chat template, but not given to
-          `/tokenize`, so pre-tokenized ids would omit them.
+
+        `documents` travel with the template kwargs via
+        `_template_kwargs_with_documents`, so a turn supplying them reuses its prefix
+        like any other.
 
         Args:
             ctx (Context): The generation context. Reuse is attempted only for a
@@ -1480,7 +1482,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             messages_dicts (list[dict]): The rewritten conversation being sent.
             extra_body (dict[str, Any]): The intrinsic request's `extra_body`, read for
                 `chat_template_kwargs` (carries the adapter control token into
-                `/tokenize`) and the `documents` gate.
+                `/tokenize`) and `documents` (rendered into the same request).
             api_params (dict[str, Any]): The intrinsic request's top-level params, read
                 for the `logprobs` and `reasoning_effort` gates.
             use_tools (bool): Whether tools were assembled for this turn.
@@ -1501,11 +1503,9 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             or api_params.get("reasoning_effort")
         ):
             return None
-        if extra_body.get("documents"):
-            return None
         try:
             return await self._build_prompt_ids(
-                ctx, messages_dicts, extra_body.get("chat_template_kwargs")
+                ctx, messages_dicts, self._template_kwargs_with_documents(extra_body)
             )
         except (DeltaNotDerivable, TokenizeUnavailable) as e:
             # The intrinsic changed the prefix, or the server cannot tokenize: the chat
@@ -1740,6 +1740,37 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         return self._token_id_reprefills
 
     @staticmethod
+    def _template_kwargs_with_documents(
+        extra_body: dict[str, Any] | None,
+    ) -> dict[str, Any] | None:
+        """Return this turn's chat-template kwargs with `documents` folded in.
+
+        `documents` is a top-level field on the chat endpoint, but the server binds it as
+        a chat template VARIABLE -- vLLM merges it into the template kwargs alongside
+        `add_generation_prompt`. `/tokenize` has no `documents` field of its own yet
+        accepts arbitrary template kwargs, so passing it there renders the same prompt.
+        That is what lets a RAG turn keep its retained prefix instead of re-rendering the
+        whole transcript, on the turns where the prefix is longest and worth the most.
+
+        The top-level value wins over a `chat_template_kwargs["documents"]` a caller set
+        by hand, matching the server's own merge order.
+
+        Args:
+            extra_body (dict[str, Any] | None): The request's `extra_body`, read for
+                `chat_template_kwargs` and `documents`.
+
+        Returns:
+            dict[str, Any] | None: The template kwargs to render this turn under, or
+                `None` when the turn has neither.
+        """
+        body = extra_body or {}
+        kwargs = body.get("chat_template_kwargs")
+        documents = body.get("documents")
+        if not documents:
+            return kwargs
+        return {**(kwargs or {}), "documents": documents}
+
+    @staticmethod
     def _kwargs_cache_key(chat_template_kwargs: dict[str, Any] | None) -> str:
         """A stable cache key for a chat-template kwargs dict."""
         return json.dumps(chat_template_kwargs or {}, sort_keys=True, default=repr)
@@ -1856,17 +1887,22 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         Args:
             chat_template_kwargs (dict[str, Any] | None): Template variables for the
-                turn being closed. `adapter_name` is dropped: it applies to the turn's
-                own region, not to its terminator, and keying on it would re-probe for
-                every adapter.
+                turn being closed. `adapter_name` and `documents` are dropped: neither
+                changes how a turn is closed, and keying on them would re-probe for
+                every adapter and every document set.
 
         Returns:
             list[int] | None: The terminator ids, or `None` if the server could not
                 be asked or the probe produced nothing usable -- in which case this
                 turn cannot be retained.
         """
+        # `adapter_name` applies to the turn's own region, not to its terminator, and
+        # `documents` render into the system block rather than the assistant boundary.
+        # Both are dropped so the probe is not re-run per adapter or per document set.
         kwargs = {
-            k: v for k, v in (chat_template_kwargs or {}).items() if k != "adapter_name"
+            k: v
+            for k, v in (chat_template_kwargs or {}).items()
+            if k not in ("adapter_name", "documents")
         } or None
         key = self._kwargs_cache_key(kwargs)
         cached = self._turn_terminator_ids.get(key)
@@ -1905,8 +1941,8 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         The reusable core of the policy: reads the retained state off `ctx` and reuses
         the exact ids of a genuinely-unchanged prefix. `conversation` is the messages
-        actually being sent -- the canonical history on the chat path, or the REWRITTEN
-        conversation `_reuse_intrinsic_prefix_ids` hands over on the intrinsic path. The
+        actually being sent -- the canonical history for a chat turn, or the REWRITTEN
+        conversation `_reuse_intrinsic_prefix_ids` hands over for an intrinsic. The
         prefix is identified by `sent_prompt_digest`, not `sent_message_count`, which
         cannot see a prefix whose content changed under it.
 
@@ -2319,11 +2355,11 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         )
         # The PRIVATE method, deliberately: the public `generate_from_raw` is `@final`
         # and fires its own GENERATION_BATCH_PRE/POST_CALL hooks, which -- nested inside
-        # the chat path's already-fired GENERATION_PRE/POST_CALL -- would double-count
+        # the chat turn's already-fired GENERATION_PRE/POST_CALL -- would double-count
         # metrics and nest a `text_completion` span in a `chat` span. It also returns
         # `tuple[list, dict | None]` rather than a bare list.
         #
-        # Stamp the generation start BEFORE the request, matching the standard chat path
+        # Stamp the generation start BEFORE the request, matching the standard chat send
         # (which sets `_gen.start` just before `chat.completions.create`). `_generate_from_raw`
         # never sets it, so without this `_elapsed_ms()` returns -1 and LatencyMetricsPlugin
         # records a negative duration for every retained turn.
@@ -2560,18 +2596,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             # on the same grounds, or the same request succeeds differently depending on
             # whether an intrinsic or a chat turn issued it.
             decline_reason: str | None = None
-            if (extra_params.get("extra_body") or {}).get("documents"):
-                # `documents` is rendered into the system block by the chat template but
-                # is not a `/tokenize` parameter, so pre-tokenized ids would omit it
-                # entirely -- a RAG request answered against no context, with no error.
-                decline_reason = (
-                    "token-id history is not used for this turn because `documents` "
-                    "were supplied: they are rendered server-side by the chat template "
-                    "and cannot be tokenized into the prompt, so retained ids would "
-                    "omit them. The turn is sent as chat messages instead; only its "
-                    "prefix-cache hit is lost."
-                )
-            elif backend_specific.get("logprobs") or (
+            if backend_specific.get("logprobs") or (
                 extra_params.get("extra_body") or {}
             ).get("logprobs"):
                 # The two endpoints report logprobs in incompatible shapes: a
@@ -2601,8 +2626,10 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                     return await self._generate_via_token_ids(
                         ctx,
                         conversation,
-                        (extra_params.get("extra_body") or {}).get(
-                            "chat_template_kwargs"
+                        # `documents` ride in with the template kwargs: the server binds
+                        # them as a template variable, so `/tokenize` renders them too.
+                        self._template_kwargs_with_documents(
+                            extra_params.get("extra_body")
                         ),
                         action=action,
                         linearized_context=linearized_context,

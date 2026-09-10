@@ -290,29 +290,36 @@ async def test_terminator_cache_is_not_shared_between_backend_instances():
     assert b._turn_terminator_ids == {}
 
 
-# --- (a) documents on the chat path -----------------------------------------
+# --- (a) documents on a retaining chat turn ---------------------------------
 
 
-async def test_chat_path_declines_reuse_when_documents_are_supplied():
-    """`documents` are not a `/tokenize` parameter, so ids would omit them entirely.
+async def test_documents_introduced_mid_conversation_falls_back_to_chat():
+    """Documents supplied after ids were retained re-render the already-sent region.
 
-    The chat template renders them into the system block server-side. A pre-tokenized
-    prompt therefore answers a RAG question against no context at all, with every other
-    guard passing. The intrinsic path already declines for this reason; so must this one.
+    They are a chat-template variable, so they change how earlier turns render. Appearing
+    on both sides of the subtraction, they cancel out of the delta and would reach neither
+    the reused prefix nor the new turn -- a RAG question answered against no context, with
+    every other guard passing. The kwargs guard refuses before any round trip and the turn
+    goes out as chat messages, documents intact.
     """
     backend = _make_backend()
     sent = [{"role": "user", "content": "U1"}]
+    # Recorded without documents; this turn supplies them, so the kwargs differ.
     ctx = _ctx_holding(backend, [10, 11], sent, template_kwargs={}).add(
         Message("user", "U1")
     )
 
     create = MagicMock(return_value=MagicMock(name="chat_request"))
     backend._async_client.chat.completions.create = create
-    backend._tokenize_chat = AsyncMock(
-        side_effect=AssertionError("documents must be refused before tokenizing")
+    setattr(
+        backend,
+        "_tokenize_chat",
+        AsyncMock(
+            side_effect=AssertionError("drift must be refused before tokenizing")
+        ),
     )
     backend._async_client.completions.create = AsyncMock(
-        side_effect=AssertionError("the id path cannot carry documents")
+        side_effect=AssertionError("a refused prefix must not reach the id transport")
     )
 
     with patch("mellea.backends.openai.send_to_queue", new=AsyncMock()):
@@ -327,10 +334,148 @@ async def test_chat_path_declines_reuse_when_documents_are_supplied():
     assert kwargs["extra_body"]["documents"] == [{"text": "doc"}]
 
 
-# --- (a2) logprobs on the chat path ------------------------------------------
+# --- (a1) documents ride the template kwargs to /tokenize --------------------
+#
+# `documents` is a top-level chat-endpoint field, but vLLM binds it as a chat TEMPLATE
+# VARIABLE (`ChatCompletionRequest.build_chat_params` merges it into the template
+# kwargs). `/tokenize` has no such field yet accepts arbitrary template kwargs, so
+# passing it there renders the same prompt -- which is what lets a RAG turn reuse its
+# retained prefix instead of re-reading its whole render.
+
+_DOCS = [{"doc_id": "1", "text": "The policy covers water damage."}]
 
 
-async def test_chat_path_declines_reuse_when_logprobs_are_requested(
+async def test_retaining_turn_sends_documents_to_tokenize_and_reuses_the_prefix() -> (
+    None
+):
+    """A RAG turn keeps its prefix: the documents reach `/tokenize` as a template kwarg.
+
+    Without this the ids would omit the documents entirely, so the turn had to be
+    declined; folding them into the kwargs makes the pre-tokenized prompt match the
+    render the chat endpoint would have produced.
+    """
+    backend = _make_backend()
+    # Documents were supplied from the first turn, so they are part of the recorded
+    # kwargs and this turn is not drift.
+    sent = [{"role": "user", "content": "U1"}]
+    ctx = _ctx_holding(
+        backend, [10, 11], sent, template_kwargs={"documents": _DOCS}
+    ).add(Message("user", "U1"))
+
+    seen: list[dict | None] = []
+
+    async def fake_tokenize(messages, *, add_generation_prompt=True, **kw):
+        seen.append(kw.get("chat_template_kwargs"))
+        return [1, 2, 3, 4, 40] if add_generation_prompt else [1, 2, 3, 4]
+
+    setattr(backend, "_tokenize_chat", AsyncMock(side_effect=fake_tokenize))
+    setattr(
+        backend._async_client.completions,
+        "create",
+        AsyncMock(side_effect=AssertionError("reached the id path")),
+    )
+    setattr(
+        backend._async_client.chat.completions,
+        "create",
+        MagicMock(
+            side_effect=AssertionError("must not fall back to the chat endpoint")
+        ),
+    )
+
+    with pytest.raises(AssertionError, match="reached the id path"):
+        await backend._generate_from_context(
+            Message("user", "U2"),
+            ctx,
+            model_options={"extra_body": {"documents": _DOCS}},
+        )
+
+    assert seen, "no /tokenize call was made"
+    assert all((k or {}).get("documents") == _DOCS for k in seen), (
+        f"documents missing from a /tokenize render: {seen}"
+    )
+
+
+async def test_retaining_intrinsic_sends_documents_to_tokenize() -> None:
+    """An intrinsic reuses its prefix on a documents turn, folding them in the same way."""
+    backend = _make_backend()
+    sent = [{"role": "user", "content": "U1"}]
+    ctx = _ctx_holding(backend, [10, 11], sent, template_kwargs={"documents": _DOCS})
+    conversation = [*sent, {"role": "user", "content": "U2"}]
+
+    seen: list[dict | None] = []
+
+    async def fake_tokenize(messages, *, add_generation_prompt=True, **kw):
+        seen.append(kw.get("chat_template_kwargs"))
+        return [1, 2, 40] if add_generation_prompt else [1, 2]
+
+    setattr(backend, "_tokenize_chat", AsyncMock(side_effect=fake_tokenize))
+
+    ids = await backend._reuse_intrinsic_prefix_ids(
+        ctx, conversation, {"documents": _DOCS}, {}, False
+    )
+
+    assert ids == [10, 11, 40], "the intrinsic path declined a documents turn"
+    assert all((k or {}).get("documents") == _DOCS for k in seen), seen
+
+
+async def test_turn_terminator_probe_does_not_key_on_documents() -> None:
+    """The terminator is probed without `documents`, so its cache is not per document set.
+
+    How a template closes an assistant turn does not depend on the system block, and
+    keying the cache on the documents would spend two `/tokenize` round trips on every
+    new document set.
+    """
+    backend = _make_backend()
+    seen: list[dict | None] = []
+
+    async def fake_tokenize(messages, *, add_generation_prompt=True, **kw):
+        seen.append(kw.get("chat_template_kwargs"))
+        return [1, 2] if add_generation_prompt else [1, 2, 77]
+
+    setattr(backend, "_tokenize_chat", AsyncMock(side_effect=fake_tokenize))
+
+    assert await backend._turn_terminator(
+        {"documents": _DOCS, "enable_thinking": True}
+    ) == [77]
+
+    assert all("documents" not in (k or {}) for k in seen), seen
+    # Second probe with different documents must hit the cache, not re-probe.
+    tokenize_mock = getattr(backend, "_tokenize_chat")
+    calls = tokenize_mock.await_count
+    await backend._turn_terminator(
+        {"documents": [{"text": "other"}], "enable_thinking": True}
+    )
+    assert tokenize_mock.await_count == calls
+
+
+async def test_build_prompt_ids_refuses_documents_outside_the_sent_kwargs() -> None:
+    """Documents absent from the recorded kwargs are drift, and drift is refused.
+
+    They re-render the already-sent region, so they appear on both sides of the
+    subtraction and cancel out of the delta -- a request that would omit them entirely.
+    The unit-level counterpart of `test_documents_introduced_mid_conversation_falls_back_to_chat`,
+    which covers the same case through `_generate_from_context`.
+    """
+    backend = _make_backend()
+    sent = [{"role": "user", "content": "U1"}, {"role": "assistant", "content": "A1"}]
+    ctx = _ctx_holding(backend, [10, 11], sent, template_kwargs={})
+    conversation = [*sent, {"role": "user", "content": "U2"}]
+    setattr(
+        backend,
+        "_tokenize_chat",
+        AsyncMock(
+            side_effect=AssertionError("drift must be refused before tokenizing")
+        ),
+    )
+
+    with pytest.raises(DeltaNotDerivable, match="documents"):
+        await backend._build_prompt_ids(ctx, conversation, {"documents": _DOCS})
+
+
+# --- (a2) logprobs on a retaining chat turn ---------------------------------
+
+
+async def test_retaining_turn_declines_reuse_when_logprobs_are_requested(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """The two endpoints report logprobs in incompatible shapes, so ids are declined.
@@ -389,7 +534,7 @@ async def test_chat_path_declines_reuse_when_logprobs_are_requested(
     )
 
 
-async def test_chat_path_declines_reuse_for_logprobs_passed_via_extra_body() -> None:
+async def test_retaining_turn_declines_reuse_for_logprobs_via_extra_body() -> None:
     """`logprobs` reaches the server from either channel, so the gate reads both.
 
     The SDK sends `extra_body` keys at the top level of the request, so
@@ -434,7 +579,7 @@ async def test_chat_path_declines_reuse_for_logprobs_passed_via_extra_body() -> 
     assert kwargs["extra_body"]["logprobs"] is True, "the request itself is untouched"
 
 
-async def test_chat_path_still_reuses_when_logprobs_are_not_requested(
+async def test_retaining_turn_still_reuses_when_logprobs_are_not_requested(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """The gate is keyed on the request, not on retention: without logprobs, ids are used.
