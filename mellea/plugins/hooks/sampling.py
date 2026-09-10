@@ -41,6 +41,9 @@ class SamplingIterationPayload(MelleaBasePayload):
         strategy_name: Class name of the sampling strategy (e.g. `"RejectionSamplingStrategy"`).
         iteration: 1-based iteration number within the sampling loop. There is no guarantee that
             iteration will be monotonically increasing when concurrency is enabled.
+        sample_index: Optional 0-based index identifying the outer concurrent sample branch —
+            set by fan-out strategies such as majority voting; `None` for strategies without an
+            outer fan-out.
         action: The `Component` used for this attempt.
 
         result: The `ModelOutputThunk` produced by this attempt.
@@ -54,6 +57,7 @@ class SamplingIterationPayload(MelleaBasePayload):
     sampling_id: str = ""
     strategy_name: str = ""
     iteration: int = 0
+    sample_index: int | None = None
     action: Any = None
     result: Any = None
     validation_results: list[tuple[Any, Any]] = []
@@ -75,6 +79,9 @@ class SamplingRepairPayload(MelleaBasePayload):
         repair_action: The repaired `Component` to use for the next attempt.
         repair_context: The `Context` to use for the next attempt.
         repair_iteration: 1-based iteration at which the repair was triggered.
+        sample_index: Optional 0-based index identifying the outer concurrent sample branch —
+            set by fan-out strategies such as majority voting; `None` for strategies without an
+            outer fan-out.
     """
 
     sampling_id: str = ""
@@ -85,6 +92,7 @@ class SamplingRepairPayload(MelleaBasePayload):
     repair_action: Any = None
     repair_context: Any = None
     repair_iteration: int = 0
+    sample_index: int | None = None
 
 
 class SamplingLoopEndPayload(MelleaBasePayload):

@@ -19,7 +19,6 @@ Sampling strategies control how Mellea handles validation failures during genera
 
 import abc
 import asyncio
-import uuid
 from collections.abc import AsyncGenerator, Callable, Sequence
 from copy import deepcopy
 from dataclasses import dataclass
@@ -44,8 +43,6 @@ from ...core import (
     ValidationResult,
     log_context,
 )
-from ...plugins.manager import has_plugins, invoke_hook
-from ...plugins.types import HookType
 from ...stdlib import functional as mfuncs
 from ...telemetry.context import with_context
 from ..components import Instruction, Message
@@ -202,31 +199,39 @@ class BaseSamplingStrategy(SamplingStrategy):
         """
         ...
 
-    async def sample(
+    async def _sample(
         self,
         action: Component[S] | CBlock | ModelOutputThunk,
         context: Context,
         backend: Backend,
-        requirements: list[Requirement] | None,
+        requirements: list[Requirement],
         *,
+        effective_loop_budget: int,
         validation_ctx: Context | None = None,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
+        sampling_id: str,
         show_progress: bool = True,
+        sample_index: int | None = None,
+        **kwargs,
     ) -> SamplingResult[S]:
-        """This method performs a sampling operation based on the given instruction.
+        """Execute the rejection-sampling loop.
 
         Args:
-            action : The action object to be sampled. A `Component`, `CBlock`, or `ModelOutputThunk`.
+            action: The action object to be sampled. A `Component`, `CBlock`, or `ModelOutputThunk`.
             context: The context to be passed to the sampling strategy.
             backend: The backend used for generating samples.
-            requirements: List of requirements to test against (merged with global requirements).
+            requirements: Merged and deduplicated list of requirements.
+            effective_loop_budget: The loop budget after hook modification (always >= 1).
             validation_ctx: Optional context to use for validation. If None, validation_ctx = ctx.
             format: output format for structured outputs.
             model_options: model options to pass to the backend during generation / validation.
             tool_calls: True if tool calls should be used during this sampling strategy.
+            sampling_id: UUID correlating iteration/repair/end hooks for this loop.
             show_progress: if true, a tqdm progress bar is used. Otherwise, messages will still be sent to flog.
+            sample_index: Optional 0-based index of this branch within a fan-out strategy (e.g. majority voting). `None` for strategies without an outer fan-out.
+            **kwargs: Additional keyword arguments forwarded by `SamplingStrategy.sample()`.
 
         Returns:
             SamplingResult[S]: A result object indicating the success or failure of the sampling process.
@@ -235,7 +240,6 @@ class BaseSamplingStrategy(SamplingStrategy):
             AssertionError: If `select_from_failure` returns an out-of-range index
                 into `sample_generations`, or if the selected result's
                 `_generate_log` is `None`.
-            ValueError: If a `SAMPLING_LOOP_START` hook returns a non-positive `loop_budget`.
             Exception: If all subsamples raise without producing a result,
                 the first non-cancellation exception is re-raised (e.g. a
                 backend error).
@@ -244,231 +248,152 @@ class BaseSamplingStrategy(SamplingStrategy):
 
         flog = MelleaLogger.get_logger()
 
-        with log_context(strategy=type(self).__name__, loop_budget=self.loop_budget):
+        with log_context(
+            strategy=type(self).__name__, loop_budget=effective_loop_budget
+        ):
             # The `logging_redirect_tqdm` approach did not work, so instead we will use the show_progress
             # flag to determine whether we should show the pbar.
             show_progress = (
                 show_progress and flog.getEffectiveLevel() <= MelleaLogger.INFO
             )
 
-            reqs = []
-            # global requirements supersede local requirements (global requirements can be defined by user)
-            # Todo: re-evaluate if this makes sense
-            if self.requirements is not None:
-                reqs += self.requirements
-            elif requirements is not None:
-                reqs += requirements
-            reqs = list(set(reqs))
+            total_possible_generations = effective_loop_budget * self.concurrency_budget
+            progress_indicator = (
+                tqdm.tqdm(
+                    iterable=range(total_possible_generations),
+                    desc=f"{type(self).__name__}",
+                )
+                if show_progress
+                else None
+            )
 
-            sampling_id = str(uuid.uuid4())
-
-            # --- sampling_loop_start hook ---
-            effective_loop_budget = self.loop_budget
-            if has_plugins(HookType.SAMPLING_LOOP_START):
-                from ...plugins.hooks.sampling import SamplingLoopStartPayload
-
-                start_payload = SamplingLoopStartPayload(
-                    sampling_id=sampling_id,
-                    strategy_name=type(self).__name__,
+            # Create `concurrency_budget` concurrent generators that all generate up to the `loop_budget` number of generations.
+            generators: list[AsyncGenerator[_SamplingResultSlice[S], Any]] = [
+                self._subsample_iteration(
+                    subsample_index=idx,
+                    iterations=effective_loop_budget,
                     action=action,
                     context=context,
-                    requirements=reqs,
-                    loop_budget=self.loop_budget,
+                    backend=backend,
+                    requirements=requirements,
+                    validation_ctx=validation_ctx,
+                    format=format,
+                    model_options=model_options,
+                    tool_calls=tool_calls,
+                    sampling_id=sampling_id,
+                    sample_index=sample_index,
                 )
-                _, start_payload = await invoke_hook(
-                    HookType.SAMPLING_LOOP_START, start_payload, backend=backend
-                )
-                effective_loop_budget = start_payload.loop_budget
+                for idx in range(self.concurrency_budget)
+            ]
 
-            exception: BaseException | None = None
-            try:
-                # Hooks can override loop_budget but bypass the constructor's
-                # validation; reject non-positive values up front so the failure
-                # mode is a clear error rather than an empty-slices AssertionError.
-                if effective_loop_budget < 1:
-                    raise ValueError(
-                        f"SAMPLING_LOOP_START hook returned non-positive loop_budget="
-                        f"{effective_loop_budget}; must be >= 1."
-                    )
+            # Sentinel pushed by each producer when it exhausts its generator.
+            # Lets the consumer detect "all producers done" without racing
+            # queue.get() against a separate completion future.
+            _DONE = object()
 
-                total_possible_generations = (
-                    effective_loop_budget * self.concurrency_budget
-                )
-                progress_indicator = (
-                    tqdm.tqdm(
-                        iterable=range(total_possible_generations),
-                        desc=f"{type(self).__name__}",
-                    )
-                    if show_progress
-                    else None
-                )
-
-                # Create `concurrency_budget` concurrent generators that all generate up to the `loop_budget` number of generations.
-                generators: list[AsyncGenerator[_SamplingResultSlice[S], Any]] = [
-                    self._subsample_iteration(
-                        subsample_index=idx,
-                        iterations=effective_loop_budget,
-                        action=action,
-                        context=context,
-                        backend=backend,
-                        requirements=reqs,
-                        validation_ctx=validation_ctx,
-                        format=format,
-                        model_options=model_options,
-                        tool_calls=tool_calls,
-                        sampling_id=sampling_id,
-                    )
-                    for idx in range(self.concurrency_budget)
-                ]
-
-                # Sentinel pushed by each producer when it exhausts its generator.
-                # Lets the consumer detect "all producers done" without racing
-                # queue.get() against a separate completion future.
-                _DONE = object()
-
-                async def _producer(
-                    generator: AsyncGenerator[_SamplingResultSlice, Any],
-                    queue: asyncio.Queue[_SamplingResultSlice | object],
-                ) -> None:
-                    """Drain an async generator into a shared queue, then signal completion."""
-                    try:
-                        async for item in generator:
-                            await queue.put(item)
-                    finally:
-                        await queue.put(_DONE)
-
-                # Create the queue that the samples are consumed from.
-                slice_queue: asyncio.Queue[_SamplingResultSlice | object] = (
-                    asyncio.Queue()
-                )
-                producer_tasks = [
-                    # Use tasks to push to the queue so that we don't need to explicitly await each generator.
-                    asyncio.create_task(_producer(gen, slice_queue))
-                    for gen in generators
-                ]
-
-                slices: list[_SamplingResultSlice] = []
-                producer_results: list[Any] = []
-
-                # Keep track of the producers left. It's the easiest way to ensure we don't deadlock
-                # if the producers finish and queue is empty at the same time.
-                remaining_producers = len(producer_tasks)
+            async def _producer(
+                generator: AsyncGenerator[_SamplingResultSlice, Any],
+                queue: asyncio.Queue[_SamplingResultSlice | object],
+            ) -> None:
+                """Drain an async generator into a shared queue, then signal completion."""
                 try:
-                    while remaining_producers > 0:
-                        item = await slice_queue.get()
-
-                        if item is _DONE:
-                            remaining_producers -= 1
-                            continue
-
-                        assert isinstance(item, _SamplingResultSlice)
-                        slices.append(item)
-
-                        if progress_indicator is not None:
-                            progress_indicator.update()
-
-                        if item.success:
-                            # Found a successful sample. Exit early.
-                            break
+                    async for item in generator:
+                        await queue.put(item)
                 finally:
-                    for t in producer_tasks:
-                        t.cancel()  # No-op if already done / cancelled.
+                    await queue.put(_DONE)
 
-                    # Wait for cancellations to settle so we don't leak tasks.
-                    # Capture results so we can surface backend errors that would
-                    # otherwise be swallowed when no slices made it through.
-                    producer_results = await asyncio.gather(
-                        *producer_tasks, return_exceptions=True
-                    )
+            # Create the queue that the samples are consumed from.
+            slice_queue: asyncio.Queue[_SamplingResultSlice | object] = asyncio.Queue()
+            producer_tasks = [
+                # Use tasks to push to the queue so that we don't need to explicitly await each generator.
+                asyncio.create_task(_producer(gen, slice_queue))
+                for gen in generators
+            ]
 
-                    # Drain anything queued before producers were cancelled.
-                    while not slice_queue.empty():
-                        try:
-                            item = slice_queue.get_nowait()
-                        except asyncio.QueueEmpty:
-                            break
-                        if item is _DONE:
-                            continue
-                        assert isinstance(item, _SamplingResultSlice)
-                        slices.append(item)
-                        if progress_indicator is not None:
-                            progress_indicator.update()
+            slices: list[_SamplingResultSlice] = []
+            producer_results: list[Any] = []
+
+            # Keep track of the producers left. It's the easiest way to ensure we don't deadlock
+            # if the producers finish and queue is empty at the same time.
+            remaining_producers = len(producer_tasks)
+            try:
+                while remaining_producers > 0:
+                    item = await slice_queue.get()
+
+                    if item is _DONE:
+                        remaining_producers -= 1
+                        continue
+
+                    assert isinstance(item, _SamplingResultSlice)
+                    slices.append(item)
 
                     if progress_indicator is not None:
-                        progress_indicator.close()
+                        progress_indicator.update()
 
-                # If no slices made it through, surface the first non-cancellation
-                # exception from a producer rather than letting the empty-slices
-                # state crash later in SamplingResult with a misleading assertion.
+                    if item.success:
+                        # Found a successful sample. Exit early.
+                        break
+            finally:
+                for t in producer_tasks:
+                    t.cancel()  # No-op if already done / cancelled.
+
+                # Wait for cancellations to settle so we don't leak tasks.
+                # Capture results so we can surface backend errors that would
+                # otherwise be swallowed when no slices made it through.
+                producer_results = await asyncio.gather(
+                    *producer_tasks, return_exceptions=True
+                )
+
+                # Drain anything queued before producers were cancelled.
+                while not slice_queue.empty():
+                    try:
+                        item = slice_queue.get_nowait()
+                    except asyncio.QueueEmpty:
+                        break
+                    if item is _DONE:
+                        continue
+                    assert isinstance(item, _SamplingResultSlice)
+                    slices.append(item)
+                    if progress_indicator is not None:
+                        progress_indicator.update()
+
+                if progress_indicator is not None:
+                    progress_indicator.close()
+
+            # If no slices made it through, surface the first non-cancellation
+            # exception from a producer rather than letting the empty-slices
+            # state crash later in SamplingResult with a misleading assertion.
+            for r in producer_results:
+                if isinstance(r, BaseException) and not isinstance(
+                    r, asyncio.CancelledError
+                ):
+                    flog.warning("A concurrent subsample raised an exception: %s", r)
+
+            if not slices:
                 for r in producer_results:
                     if isinstance(r, BaseException) and not isinstance(
                         r, asyncio.CancelledError
                     ):
-                        flog.warning(
-                            "A concurrent subsample raised an exception: %s", r
-                        )
+                        raise r
 
-                if not slices:
-                    for r in producer_results:
-                        if isinstance(r, BaseException) and not isinstance(
-                            r, asyncio.CancelledError
-                        ):
-                            raise r
+            s_result = _get_sampling_result(
+                slices=slices, select_from_failure=self.select_from_failure
+            )
 
-                s_result = _get_sampling_result(
-                    slices=slices, select_from_failure=self.select_from_failure
+            if s_result.success:
+                flog.info("Sampling was successful.")
+            else:
+                flog.info(
+                    f"Invoking select_from_failure after {len(s_result.sample_generations)} failed attempts."
                 )
 
-                if s_result.success:
-                    flog.info("Sampling was successful.")
-                else:
-                    flog.info(
-                        f"Invoking select_from_failure after {len(s_result.sample_generations)} failed attempts."
-                    )
+            assert s_result.result_index < len(s_result.sample_generations), (
+                "The select_from_failure method did not return a valid result. It must return an index into failed_results."
+            )
+            assert s_result.result._generate_log is not None
+            s_result.result._generate_log.is_final_result = True
 
-                assert s_result.result_index < len(s_result.sample_generations), (
-                    "The select_from_failure method did not return a valid result. It must return an index into failed_results."
-                )
-                assert s_result.result._generate_log is not None
-                s_result.result._generate_log.is_final_result = True
-
-                return s_result
-
-            except BaseException as exc:
-                exception = exc
-                raise
-            finally:
-                # --- sampling_loop_end hook ---
-                if has_plugins(HookType.SAMPLING_LOOP_END):
-                    from ...plugins.hooks.sampling import SamplingLoopEndPayload
-
-                    if exception is not None:
-                        end_payload = SamplingLoopEndPayload(
-                            sampling_id=sampling_id,
-                            strategy_name=type(self).__name__,
-                            success=False,
-                            exception=exception,
-                        )
-                    else:
-                        end_payload = SamplingLoopEndPayload(
-                            sampling_id=sampling_id,
-                            strategy_name=type(self).__name__,
-                            success=s_result.success,
-                            iterations_used=len(slices),
-                            final_result=s_result.result,
-                            final_action=s_result.result_action,
-                            final_context=s_result.result_ctx,
-                            all_results=list(s_result.sample_generations),
-                            all_validations=list(s_result.sample_validations),
-                            failure_reason=(
-                                None
-                                if s_result.success
-                                else f"Budget exhausted after {len(slices)} iterations"
-                            ),
-                        )
-                    await invoke_hook(
-                        HookType.SAMPLING_LOOP_END, end_payload, backend=backend
-                    )
+            return s_result
 
     async def _subsample_iteration(
         self,
@@ -483,7 +408,8 @@ class BaseSamplingStrategy(SamplingStrategy):
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
-        sampling_id: str = "",
+        sampling_id: str,
+        sample_index: int | None = None,
     ) -> AsyncGenerator[_SamplingResultSlice[S], Any]:
         """Run one concurrent subsample: up to `iterations` generate/validate/repair attempts.
 
@@ -547,25 +473,15 @@ class BaseSamplingStrategy(SamplingStrategy):
 
                 constraint_scores = list(zip(requirements, val_scores))
                 all_validations_passed = all(bool(s[1]) for s in constraint_scores)
-
-                # --- sampling_iteration hook ---
-                if has_plugins(HookType.SAMPLING_ITERATION):
-                    from ...plugins.hooks.sampling import SamplingIterationPayload
-
-                    iter_payload = SamplingIterationPayload(
-                        sampling_id=sampling_id,
-                        strategy_name=type(self).__name__,
-                        iteration=current_iteration,
-                        action=next_action,
-                        result=result,
-                        validation_results=constraint_scores,
-                        all_validations_passed=all_validations_passed,
-                        valid_count=sum(1 for s in constraint_scores if bool(s[1])),
-                        total_count=len(constraint_scores),
-                    )
-                    await invoke_hook(
-                        HookType.SAMPLING_ITERATION, iter_payload, backend=backend
-                    )
+                await self._emit_sampling_iteration(
+                    sampling_id=sampling_id,
+                    iteration=current_iteration,
+                    action=next_action,
+                    result=result,
+                    validation_results=constraint_scores,
+                    backend=backend,
+                    sample_index=sample_index,
+                )
 
                 if not all_validations_passed:
                     failed = [s for s in constraint_scores if not bool(s[1])]
@@ -610,25 +526,17 @@ class BaseSamplingStrategy(SamplingStrategy):
                     sampled_scores,
                 )
 
-                # --- sampling_repair hook ---
-                if has_plugins(HookType.SAMPLING_REPAIR):
-                    from ...plugins.hooks.sampling import SamplingRepairPayload
-
-                    repair_payload = SamplingRepairPayload(
-                        sampling_id=sampling_id,
-                        repair_type=getattr(
-                            self, "_get_repair_type", lambda: "unknown"
-                        )(),
-                        failed_action=sampled_actions[-1],
-                        failed_result=sampled_results[-1],
-                        failed_validations=sampled_scores[-1],
-                        repair_action=next_action,
-                        repair_context=next_context,
-                        repair_iteration=current_iteration,
-                    )
-                    await invoke_hook(
-                        HookType.SAMPLING_REPAIR, repair_payload, backend=backend
-                    )
+                await self._emit_sampling_repair(
+                    sampling_id=sampling_id,
+                    repair_iteration=current_iteration,
+                    failed_action=sampled_actions[-1],
+                    failed_result=sampled_results[-1],
+                    failed_validations=sampled_scores[-1],
+                    repair_action=next_action,
+                    repair_context=next_context,
+                    backend=backend,
+                    sample_index=sample_index,
+                )
 
 
 class RejectionSamplingStrategy(BaseSamplingStrategy):

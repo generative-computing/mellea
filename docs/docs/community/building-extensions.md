@@ -13,11 +13,11 @@ Components, Sampling Strategies, and Backends without modifying the core library
 
 Choose the pathway that fits the scope of your work:
 
-| Pathway | When to use |
-| ------- | ----------- |
-| **Core repository** | General-purpose additions that benefit all users — open an issue first to discuss placement |
-| **Your own repo** (`mellea-` prefix) | Application-specific or domain-specific libraries |
-| **[mellea-contribs](https://github.com/generative-computing/mellea-contribs)** | Experimental or specialized components not yet ready for the standard library |
+| Pathway                                                                        | When to use                                                                                 |
+| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------- |
+| **Core repository**                                                            | General-purpose additions that benefit all users — open an issue first to discuss placement |
+| **Your own repo** (`mellea-` prefix)                                           | Application-specific or domain-specific libraries                                           |
+| **[mellea-contribs](https://github.com/generative-computing/mellea-contribs)** | Experimental or specialized components not yet ready for the standard library               |
 
 > **Note:** For general-purpose Components, Requirements, or Sampling Strategies,
 > open an issue before submitting a PR. This avoids duplication and ensures
@@ -143,12 +143,14 @@ For a full walkthrough of the Component protocol and templating system, see
 
 A [`SamplingStrategy`](../reference/glossary#sampling-strategy) controls how Mellea
 generates and validates outputs — for example, rejection sampling, best-of-n, or
-beam search. Subclass `SamplingStrategy` and implement `sample`:
+beam search. Subclass `SamplingStrategy` and implement `_sample`:
+
+> **Note:** `sample()` is `@final` — it owns the sampling lifecycle (hooks, budget
+> management). Override `_sample()` instead; `sample()` calls it automatically.
 
 ```python
-import asyncio
 from mellea.core.backend import Backend
-from mellea.core.base import Component, Context, ModelOutputThunk, S
+from mellea.core.base import CBlock, Component, Context, ModelOutputThunk, S
 from mellea.core.requirement import Requirement
 from mellea.core.sampling import SamplingResult, SamplingStrategy
 
@@ -164,36 +166,42 @@ class BestOfNStrategy(SamplingStrategy):
         """
         self.n = n
 
-    async def sample(
+    async def _sample(
         self,
-        action: Component[S],
+        action: Component[S] | CBlock | ModelOutputThunk,
         context: Context,
         backend: Backend,
-        requirements: list[Requirement] | None,
+        requirements: list[Requirement],
         *,
+        effective_loop_budget: int,
         validation_ctx: Context | None = None,
         format: type | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
+        sampling_id: str,
+        **kwargs,
     ) -> SamplingResult[S]:
         """Generate N candidates and return the best one.
 
         Args:
-            action: The component to generate a response for.
+            action: The component, block, or thunk to generate a response for.
             context: The current session context.
             backend: The backend used for generation.
             requirements: Requirements to validate each candidate against.
+            effective_loop_budget: Loop budget after hook modification.
             validation_ctx: Optional context override for validation.
             format: Structured output format, if any.
             model_options: Model options to pass to the backend.
             tool_calls: Whether to enable tool calls during generation.
+            sampling_id: UUID correlating iteration/repair/end hooks to this loop.
+            **kwargs: Additional keyword arguments (e.g., `show_progress`).
 
         Returns:
             SamplingResult containing the selected candidate and validation details.
         """
         generations: list[ModelOutputThunk[S]] = []
         contexts: list[Context] = []
-        actions: list[Component[S]] = []
+        actions: list[Component[S] | CBlock | ModelOutputThunk] = []
         validations: list[list[tuple[Requirement, object]]] = []
 
         for _ in range(self.n):

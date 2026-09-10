@@ -693,6 +693,14 @@ class TestSamplingIterationPayload:
         assert payload.all_validations_passed is False
         assert modified.total_count == 2
 
+    def test_sample_index_defaults_to_none(self):
+        payload = SamplingIterationPayload()
+        assert payload.sample_index is None
+
+    def test_sample_index_construction(self):
+        payload = SamplingIterationPayload(sample_index=2)
+        assert payload.sample_index == 2
+
     def test_inherits_base_fields(self):
         assert issubclass(SamplingIterationPayload, MelleaBasePayload)
 
@@ -755,6 +763,14 @@ class TestSamplingRepairPayload:
         assert payload.repair_iteration == 0
         assert payload.repair_context is None
         assert modified.repair_type == "prompt_repair"
+
+    def test_sample_index_defaults_to_none(self):
+        payload = SamplingRepairPayload()
+        assert payload.sample_index is None
+
+    def test_sample_index_construction(self):
+        payload = SamplingRepairPayload(sample_index=2)
+        assert payload.sample_index == 2
 
     def test_inherits_base_fields(self):
         assert issubclass(SamplingRepairPayload, MelleaBasePayload)

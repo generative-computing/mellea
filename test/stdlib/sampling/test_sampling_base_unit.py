@@ -189,6 +189,7 @@ async def test_subsample_iteration_ends_after_success(mocked_context_backend):
         context=ChatContext(),
         backend=mocked_context_backend,
         requirements=[always_pass],
+        sampling_id="test-sampling-id",
     )
 
     first = await generator.__anext__()
