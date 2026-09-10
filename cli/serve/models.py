@@ -4,18 +4,41 @@
 # Re-exported so callers can import from cli.serve.models instead of mellea.serve.models
 __all__ = [
     "ChatMessage",
+    "ContextManagementConfig",
+    "FileSearchTool",
     "ImageUrlContent",
     "InputAudioContent",
     "InputAudioData",
+    "InputContent",
+    "MCPTool",
     "MessageContent",
+    "OutputTextContent",
+    "PromptCacheOptions",
+    "Response",
+    "ResponseError",
+    "ResponseFunctionCall",
+    "ResponseInputItem",
+    "ResponseOutputItem",
+    "ResponseOutputMessage",
+    "ResponseRequest",
+    "ResponseTool",
+    "ResponseUsage",
     "TextContent",
+    "WebSearchTool",
 ]
 
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, RootModel, model_validator
 
-from mellea.helpers.openai_compatible_helpers import CompletionUsage
+from mellea.helpers.openai_compatible_helpers import (
+    CompletionUsage,
+    OutputTextContent,
+    ResponseFunctionCall,
+    ResponseOutputItem,
+    ResponseOutputMessage,
+    ResponseUsage,
+)
 from mellea.serve.models import (
     ChatMessage,
     ImageUrlContent,
@@ -332,3 +355,137 @@ class OpenAIErrorResponse(BaseModel):
 
     error: OpenAIError
     """The error object."""
+
+
+# ---------------------------------------------------------------------------
+# Responses API models
+# ---------------------------------------------------------------------------
+
+
+class InputContent(BaseModel):
+    """Content part in a Responses API input item."""
+
+    type: Literal["input_text", "input_image", "input_file"]
+    text: str | None = None
+    image_url: str | None = None
+    file_id: str | None = None
+
+
+class ResponseInputItem(BaseModel):
+    """A single input message for the Responses API."""
+
+    role: Literal["user", "assistant", "developer", "system", "tool"]
+    content: str | list[InputContent] | None = None
+    tool_call_id: str | None = None
+    tool_calls: list[Any] | None = None
+
+
+class WebSearchTool(BaseModel):
+    """Native web-search tool declaration."""
+
+    type: Literal["web_search"]
+
+
+class FileSearchTool(BaseModel):
+    """Native file-search tool declaration."""
+
+    type: Literal["file_search"]
+    vector_store_ids: list[str]
+
+
+class MCPTool(BaseModel):
+    """Native MCP server tool declaration."""
+
+    type: Literal["mcp"]
+    server_label: str
+    server_url: str
+
+
+class ResponseTool(BaseModel):
+    """Tool declaration accepted by the Responses API."""
+
+    type: Literal["function", "web_search", "file_search", "mcp", "code_interpreter"]
+    function: FunctionDefinition | None = None
+    web_search: WebSearchTool | None = None
+    file_search: FileSearchTool | None = None
+    mcp: MCPTool | None = None
+
+
+class ContextManagementConfig(BaseModel):
+    """Context compaction configuration."""
+
+    compact_threshold: float | None = None
+    strategy: Literal["auto", "manual"] | None = None
+
+
+class PromptCacheOptions(BaseModel):
+    """Prompt caching settings."""
+
+    enabled: bool | None = None
+    breakpoint: str | None = None
+
+
+class ResponseRequest(BaseModel):
+    """Request body for POST /v1/responses."""
+
+    model_config = {"extra": "allow"}
+
+    model: str
+    """Model to use (e.g. gpt-5.6, o1)."""
+
+    input: str | list[ResponseInputItem]
+    """Text, image, or file inputs."""
+
+    instructions: str | list[ResponseInputItem] | None = None
+    """System/developer context for the response."""
+
+    tools: list[ResponseTool] | None = None
+    tool_choice: Literal["none", "auto", "required"] | dict[str, Any] | None = None
+    max_output_tokens: int | None = None
+    temperature: float | None = Field(default=1.0, ge=0, le=2)
+    top_p: float | None = Field(default=1.0, ge=0, le=1)
+    stream: bool | None = False
+    store: bool | None = True
+    conversation: str | None = None
+    previous_response_id: str | None = None
+    background: bool | None = False
+    include: list[str] | None = None
+    parallel_tool_calls: bool | None = True
+    context_management: ContextManagementConfig | None = None
+    prompt_cache_options: PromptCacheOptions | None = None
+
+    extra: dict[str, Any] = Field(default_factory=dict)
+
+
+class ResponseError(BaseModel):
+    """Error object embedded in a failed Responses API response."""
+
+    code: str
+    message: str
+    param: str | None = None
+
+
+class Response(BaseModel):
+    """A completed response from POST /v1/responses."""
+
+    id: str
+    """Unique response identifier (resp_…)."""
+
+    created_at: int
+    """Unix timestamp of when the response was created."""
+
+    model: str
+    """Model used to generate the response."""
+
+    status: Literal["completed", "failed", "in_progress", "incomplete"]
+    output: list[ResponseOutputItem]
+    """Typed output items (messages, function calls, etc.)."""
+
+    output_text: str
+    """Convenience field: concatenated text from all output message items."""
+
+    error: ResponseError | None = None
+    incomplete_details: dict[str, Any] | None = None
+    usage: ResponseUsage
+    conversation: str | None = None
+    previous_response_id: str | None = None

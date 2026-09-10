@@ -618,3 +618,134 @@ def build_tool_calls(output: ModelOutputThunk) -> list[ToolCallDict] | None:
         tool_calls.append(tool_call)
 
     return tool_calls
+
+
+# ---------------------------------------------------------------------------
+# Responses API helpers — models defined here to avoid cli → mellea import cycle
+# ---------------------------------------------------------------------------
+
+
+class ResponseUsage(BaseModel):
+    """Token usage for a Responses API response, including reasoning tokens."""
+
+    input_tokens: int
+    output_tokens: int
+    total_tokens: int
+    reasoning_tokens: int | None = None
+    input_tokens_details: dict[str, Any] | None = None
+    output_tokens_details: dict[str, Any] | None = None
+
+
+class ResponseOutputItem(BaseModel):
+    """Base output item returned in a Responses API response."""
+
+    id: str
+    type: Literal[
+        "message",
+        "function_call",
+        "web_search_call",
+        "file_search_call",
+        "code_interpreter_call",
+    ]
+    status: Literal["completed", "in_progress", "failed", "incomplete"]
+
+
+class OutputTextContent(BaseModel):
+    """A text content block in a Responses API output message."""
+
+    type: Literal["output_text"]
+    text: str
+
+
+class ResponseOutputMessage(ResponseOutputItem):
+    """An assistant message output item."""
+
+    type: Literal["message"]  # type: ignore[assignment]
+    role: Literal["assistant"]
+    content: list[OutputTextContent]
+
+
+class ResponseFunctionCall(ResponseOutputItem):
+    """A function-call output item."""
+
+    type: Literal["function_call"]  # type: ignore[assignment]
+    name: str
+    arguments: str
+    call_id: str
+
+
+def build_response_usage(output: ModelOutputThunk) -> ResponseUsage | None:
+    """Build a Responses API usage object from a model output, if available.
+
+    Extends the standard completion usage with reasoning tokens and token
+    detail dicts when the backend populates them.
+
+    Args:
+        output: Model output object whose `generation.usage` mapping contains
+            token counts.
+
+    Returns:
+        A `ResponseUsage` object when usage metadata is present, otherwise
+        `None`.
+    """
+    if output.generation.usage is None:
+        return None
+
+    prompt_tokens = output.generation.usage.get("prompt_tokens", 0)
+    completion_tokens = output.generation.usage.get("completion_tokens", 0)
+    total_tokens = output.generation.usage.get(
+        "total_tokens", prompt_tokens + completion_tokens
+    )
+    return ResponseUsage(
+        input_tokens=prompt_tokens,
+        output_tokens=completion_tokens,
+        total_tokens=total_tokens,
+        reasoning_tokens=output.generation.usage.get("reasoning_tokens"),
+        input_tokens_details=output.generation.usage.get("input_tokens_details"),
+        output_tokens_details=output.generation.usage.get("output_tokens_details"),
+    )
+
+
+def build_response_output_items(
+    output: ModelOutputThunk, tool_calls_list: list[ToolCallDict] | None
+) -> list[ResponseOutputItem]:
+    """Build typed Responses API output items from a model output.
+
+    Creates a `ResponseOutputMessage` for any text content and a
+    `ResponseFunctionCall` for each tool call.
+
+    Args:
+        output: Model output thunk containing the generated text and metadata.
+        tool_calls_list: List of `ToolCallDict` objects from `build_tool_calls`,
+            or `None`.
+
+    Returns:
+        A list of `ResponseOutputItem` subclass instances.
+    """
+    items: list[ResponseOutputItem] = []
+
+    if output.value:
+        items.append(
+            ResponseOutputMessage(
+                id=f"msg_{uuid.uuid4().hex[:24]}",
+                type="message",
+                role="assistant",
+                status="completed",
+                content=[OutputTextContent(type="output_text", text=output.value)],
+            )
+        )
+
+    if tool_calls_list:
+        for tool_call in tool_calls_list:
+            items.append(
+                ResponseFunctionCall(
+                    id=f"fc_{uuid.uuid4().hex[:24]}",
+                    type="function_call",
+                    status="completed",
+                    name=tool_call["function"]["name"],
+                    arguments=tool_call["function"]["arguments"],
+                    call_id=tool_call["id"],
+                )
+            )
+
+    return items

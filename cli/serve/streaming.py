@@ -3,6 +3,7 @@
 
 """Streaming utilities for OpenAI-compatible server responses."""
 
+import json
 from collections.abc import AsyncGenerator
 from typing import Literal
 
@@ -10,6 +11,7 @@ from mellea.core.base import ModelOutputThunk
 from mellea.core.utils import MelleaLogger
 from mellea.helpers.openai_compatible_helpers import (
     build_completion_usage,
+    build_response_usage,
     build_tool_calls,
 )
 
@@ -169,3 +171,82 @@ async def stream_chat_completion_chunks(
         )
         yield f"data: {error_response.model_dump_json()}\n\n"
         yield "data: [DONE]\n\n"
+
+
+async def stream_response_chunks(
+    output, response_id: str, model: str, created: int, conversation: str | None = None
+) -> AsyncGenerator[str, None]:
+    """Generate Responses API SSE events with semantic event names.
+
+    Emits the following event sequence:
+
+    - ``response.created`` — initial in-progress envelope
+    - ``response.in_progress`` — signals streaming has started
+    - ``response.output_text.delta`` — one per streamed token (or one for pre-computed)
+    - ``response.output_text.done`` — full accumulated text
+    - ``response.function_call_arguments.done`` — one per tool call (if any)
+    - ``response.completed`` — final envelope with status and usage
+
+    On error, emits ``response.failed`` instead of the completion event.
+
+    Args:
+        output: The model output thunk to stream.
+        response_id: Unique response identifier (``resp_…``).
+        model: Model name to include in event payloads.
+        created: Unix timestamp of when the response was created.
+        conversation: Optional conversation ID to echo back in events.
+    """
+    try:
+        yield (
+            f"event: response.created\n"
+            f"data: {json.dumps({'id': response_id, 'created_at': created, 'model': model, 'status': 'in_progress', 'conversation': conversation})}\n\n"
+        )
+        yield (
+            f"event: response.in_progress\n"
+            f"data: {json.dumps({'id': response_id, 'status': 'in_progress'})}\n\n"
+        )
+
+        accumulated_text = ""
+
+        if output.is_computed():
+            text = output.value or ""
+            accumulated_text = text
+            yield (
+                f"event: response.output_text.delta\n"
+                f"data: {json.dumps({'id': response_id, 'output_index': 0, 'delta': text})}\n\n"
+            )
+        else:
+            while not output.is_computed():
+                delta = await output.astream()
+                if delta:
+                    accumulated_text += delta
+                    yield (
+                        f"event: response.output_text.delta\n"
+                        f"data: {json.dumps({'id': response_id, 'output_index': 0, 'delta': delta})}\n\n"
+                    )
+
+        yield (
+            f"event: response.output_text.done\n"
+            f"data: {json.dumps({'id': response_id, 'output_index': 0, 'text': accumulated_text})}\n\n"
+        )
+
+        tool_calls = build_tool_calls(output)
+        if tool_calls:
+            for idx, tool_call in enumerate(tool_calls):
+                yield (
+                    f"event: response.function_call_arguments.done\n"
+                    f"data: {json.dumps({'id': response_id, 'output_index': idx + 1, 'call_id': tool_call['id'], 'name': tool_call['function']['name'], 'arguments': tool_call['function']['arguments']})}\n\n"
+                )
+
+        usage_obj = build_response_usage(output)
+        yield (
+            f"event: response.completed\n"
+            f"data: {json.dumps({'id': response_id, 'status': 'completed', 'usage': usage_obj.model_dump() if usage_obj else None})}\n\n"
+        )
+
+    except Exception as e:
+        MelleaLogger.get_logger().exception("Streaming error in responses endpoint")
+        yield (
+            f"event: response.failed\n"
+            f"data: {json.dumps({'id': response_id, 'status': 'failed', 'error': {'message': str(e), 'code': 'streaming_error'}})}\n\n"
+        )
