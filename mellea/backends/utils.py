@@ -100,11 +100,16 @@ def to_chat(
     # NOTE: `self.formatter.to_chat_messages` explicitly skips `Message` objects. However, we need
     # to print `Message`s to correctly serialize any documents with the message. Do the printing here.
     # NOTE: `Message.thinking` is forwarded as `reasoning_content` (the key Granite/Qwen3
-    # templates consume) whenever the message is an assistant turn with captured reasoning.
-    # This effectively restores replay only on tool-call turns: Granite's own
-    # `truncate_history_thinking` gate strips reasoning on plain turns regardless, matching
-    # the #1201 cross-backend consensus (replay on tool-call turns only) rather than
-    # extending it. See test_rendered_prompt_*_turn in test_huggingface_thinking.py.
+    # templates consume) for every assistant turn that has it. Granite's own chat template
+    # (not a turn-type check) then decides whether to keep or strip it: reasoning survives
+    # only for a turn at or after the most recent user message (`last_user_idx` /
+    # `truncate_history_thinking`, defaulted True and never overridden by mellea), and is
+    # stripped for anything from an earlier exchange, tool-call or not. In mellea's typical
+    # flow a tool-call turn has no intervening user message before its continuation, so it
+    # tends to survive, and a plain turn from a prior exchange tends not to — but that's a
+    # consequence of the recency rule, not a tool-call/plain-turn distinction Mellea enforces
+    # (unlike #1201's cross-backend `should_replay_reasoning`, which HF does not call). See
+    # test_rendered_prompt_*_turn in test_huggingface_thinking.py.
     ctx_as_conversation: list = []
     for m in ctx_as_message_list:
         msg_dict: dict = {"role": m.role, "content": formatter.print(m)}

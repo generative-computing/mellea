@@ -1885,13 +1885,15 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         # for a model that ignores an explicit ModelOption.THINKING=False, or that always
         # emits <think> blocks without declaring any of _CHAT_TEMPLATE_THINKING_VARS in its
         # template. The resulting raw tags leak into mot.value and get replayed as ordinary
-        # `content` on the next turn (still read by requirement checks/judges). The
-        # alternative — splitting unconditionally — trades this for a worse failure: an
-        # over-split misfiles real answer text into mot.thinking, which then gets attached
-        # as `reasoning_content` at replay time and is stripped outright by Granite's own
-        # template on any non-tool-call turn (mellea/backends/utils.py) — a permanent loss
-        # of answer content, not just a mislabeling. Kept on the more conservative side
-        # deliberately; see #1604 for detecting always-thinking models without a declared var.
+        # `content` on the next turn — visible in the answer, and still read by requirement
+        # checks/judges, but not silently dropped anywhere. The alternative — splitting
+        # unconditionally — trades this for a worse failure: an over-split misfiles real
+        # answer text into mot.thinking, which gets attached as `reasoning_content` at
+        # replay time and is silently dropped from every subsequent prompt once a newer
+        # user turn exists, per Granite's own recency-based truncation (see the NOTE in
+        # mellea/backends/utils.py). Under-split stays diagnosable; over-split is invisible
+        # once replayed. Kept on the more conservative side deliberately; see #1604 for
+        # detecting always-thinking models without a declared var.
         thinking_allowlist: frozenset[str] = getattr(
             self, "_chat_template_allowlist", frozenset()
         )
