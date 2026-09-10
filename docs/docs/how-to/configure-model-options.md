@@ -184,15 +184,18 @@ Accepted values and their effect are backend-dependent:
 | Backend | `True` | `False` | `"low"` / `"medium"` / `"high"` |
 | ------- | ------ | ------- | -------------------------------- |
 | Native `OllamaModelBackend` | Enables thinking (Ollama `think=True`) | Disables thinking (`think=False`) | Passed through to Ollama's `think=` param, which handles string effort levels itself |
-| `OpenAIBackend` / LiteLLM (OpenAI-compatible) | Enables thinking (`reasoning_effort="medium"`, plus `chat_template_kwargs.enable_thinking=True` for vLLM-served templates) | Disables thinking | Sent as `reasoning_effort` verbatim |
-| `LocalHFBackend` | Forwards to whichever chat-template variable is declared (`think`, `thinking`, or `enable_thinking`) | Same | Forwarded verbatim as `reasoning_effort` when the tokenizer's chat template declares that variable — same mechanism as the OpenAI backend |
+| `OpenAIBackend` / LiteLLM (OpenAI-compatible) | Enables thinking (`reasoning_effort="medium"`, plus `chat_template_kwargs.enable_thinking=True` for vLLM-served templates) | Disables thinking on vLLM-served/OpenAI-compatible servers that honour `chat_template_kwargs`. **Real OpenAI reasoning models, and LiteLLM targets that aren't Ollama, deliberately never receive `reasoning_effort="none"`** (real OpenAI rejects that value) — there is no supported way to fully disable reasoning on them via `ModelOption.THINKING` | Sent as `reasoning_effort` verbatim — a top-level request parameter, independent of any chat template |
+| `LocalHFBackend` | Forwards to whichever chat-template variable is declared (`think`, `thinking`, or `enable_thinking`) | Same, `False` value | Forwarded verbatim as the chat template's own `reasoning_effort` variable when the template declares one. This is a different transport than the OpenAI backend's top-level parameter — it only takes effect if the served model's template exposes that variable |
 
 For Granite 4.2 specifically: the chat template only distinguishes `"low"`
 effort from everything else — `reasoning_effort == "low"` triggers genuine
 low-effort (short) reasoning, while `"medium"`/`"high"` are accepted but
 behave the same as `True`/omitted (full-length reasoning). This holds across
-all three backends. Granite defaults to thinking **on** when
-`ModelOption.THINKING` is not set at all.
+all three backends, provided the serving runtime forwards the effort level
+into the chat template (Ollama and vLLM do). Granite defaults to thinking
+**on** when `ModelOption.THINKING` is not set at all.
+
+> **Depends on [#1639](https://github.com/generative-computing/mellea/issues/1639) and [#1616](https://github.com/generative-computing/mellea/pull/1616):** the `LocalHFBackend` string-forwarding behaviour above, and the paragraph below, describe the state once those two open PRs merge. On current `main`, `LocalHFBackend` only forwards boolean `THINKING` values and does not populate `result.thinking`.
 
 `LocalHFBackend` also parses Granite's `<think>...</think>` block out of the
 response, so `result.thinking` and `result.value` are populated separately —
@@ -200,9 +203,9 @@ matching the other backends — rather than leaving the reasoning trace
 embedded raw in `result.value`.
 
 ```python
+import mellea
 from mellea.backends import ModelOption, model_ids
 from mellea.backends.ollama import OllamaModelBackend
-import mellea
 
 m = mellea.MelleaSession(
     backend=OllamaModelBackend(model_id=model_ids.IBM_GRANITE_4_2_3B)
@@ -212,6 +215,7 @@ m = mellea.MelleaSession(
 answer = m.instruct("What is 17 * 24?", model_options={ModelOption.THINKING: True})
 print(answer.thinking)  # reasoning trace
 print(answer.value)     # final answer
+# Output will vary — reasoning traces are non-deterministic.
 
 # Short, low-effort reasoning — use when you need an answer within a small
 # token budget rather than an exhaustive trace
@@ -221,9 +225,11 @@ answer = m.instruct("What is 17 * 24?", model_options={ModelOption.THINKING: "lo
 answer = m.instruct("What is 17 * 24?", model_options={ModelOption.THINKING: False})
 ```
 
+> **Full example:** [`docs/examples/thinking_mode.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/thinking_mode.py)
+
 If you're serving Granite 4.2 via vLLM, make sure your vLLM install picks up
 the model's latest reasoning-parser update (shipped in the model's Hugging
-Face files) — an older cached parser produces stale thinking behaviour.
+Face files) — an older cached parser produces stale thinking behavior.
 
 For non-Granite thinking models served through an OpenAI-compatible endpoint
 (e.g. Qwen3 on vLLM), see
