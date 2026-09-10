@@ -1249,7 +1249,13 @@ class EmbeddedIntrinsicAdapter(_AdapterCore):
         """Allow deletion; bypasses the frozen restriction on _AdapterCore."""
         object.__delattr__(self, name)
 
-    def __init__(self, intrinsic_name: str, config: dict, technology: str = "lora"):
+    def __init__(
+        self,
+        intrinsic_name: str,
+        config: dict,
+        technology: str = "lora",
+        control_token_id: int | None = None,
+    ):
         """Initialize an embedded adapter function with its I/O config."""
         if technology not in ("lora", "alora"):
             raise ValueError(
@@ -1283,6 +1289,7 @@ class EmbeddedIntrinsicAdapter(_AdapterCore):
             name=intrinsic_name,
             adapter_type=cast(Literal["lora", "alora"], technology),
             capability=capability,
+            control_token_id=control_token_id,
         )
 
         io_contract = get_io_contract(intrinsic_name)
@@ -1354,11 +1361,20 @@ class EmbeddedIntrinsicAdapter(_AdapterCore):
             with open(io_config_path, encoding="utf-8") as f:
                 config_dict = yaml.safe_load(f)
 
+            # The control token's vocabulary id, when the index records it. Carried
+            # onto the adapter so a backend can count control tokens from metadata
+            # rather than probing /tokenize per adapter (token-id retention).
+            control_token = entry.get("control_token")
+            control_token_id = (
+                control_token.get("id") if isinstance(control_token, dict) else None
+            )
+
             adapters.append(
                 EmbeddedIntrinsicAdapter(
                     intrinsic_name=entry_name,
                     config=config_dict,
                     technology=entry.get("technology", "lora"),
+                    control_token_id=control_token_id,
                 )
             )
 

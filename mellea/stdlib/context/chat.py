@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from mellea.backends.context_lengths import get_context_length
 from mellea.backends.model_ids import ModelIdentifier
@@ -65,6 +65,33 @@ class ChatContext(Context):
             `token_context_length_limit` is not provided,
             `view_for_generation` looks up the model's known context length
             and uses it as the token budget.
+        retain_token_ids (bool): Opt into id-preserving history. When `True`, a
+            backend that supports it sends the exact ids already sent plus only the
+            new turn's, instead of re-rendering from text -- which would drop an
+            earlier turn's adapter control tokens (a Granite Switch control token
+            substitutes for the role marker) and cannot reproduce non-canonical BPE
+            splits, both of which invalidate the server's prefix cache. Defaults to
+            `False`. Two caveats: generation becomes EAGER (the id path awaits the
+            completion and returns a computed thunk, so `aact` fan-out loses
+            concurrency), and it needs vLLM 0.10.2+ for `return_token_ids` (without
+            it nothing is retained and each turn warns).
+        sent_token_ids (tuple[int, ...]): Ids the server has already seen, verbatim.
+            Empty until a backend records a turn. A tuple so callers cannot mutate it.
+        sent_model_id (str | None): Model those ids were produced by. Ids are not
+            portable across vocabularies, so a backend can refuse a mismatched prefix.
+        sent_message_count (int): How many chat messages `sent_token_ids` covers, so
+            a backend can re-render exactly the already-sent side to subtract against.
+        sent_template_kwargs (dict[str, Any]): Chat-template variables the retained
+            ids were rendered under, so a backend re-renders the already-sent side the
+            way it was actually sent. A kwarg introduced mid-conversation is refused
+            rather than silently cancelling out of the subtraction.
+        sent_prompt_digest (tuple[str, ...]): Per-message fingerprint of the messages
+            `sent_token_ids` covers. Count says WHICH messages; the digest proves they
+            are still the SAME messages, so any path (chat or intrinsic) can reuse a
+            genuinely-unchanged prefix and refuse a changed one.
+
+    A backend does not mutate this state directly: it stashes ids on the thunk's
+    `_meta`, and `generate_from_chat_context` moves them onto the new node.
 
     Class Attributes:
         _propagated_fields: Instance-attribute names copied by `add()` and
@@ -76,7 +103,23 @@ class ChatContext(Context):
         "_compactor",
         "_token_context_length_limit",
         "_model_id",
+        "_retain_token_ids",
+        "_sent_token_ids",
+        "_sent_model_id",
+        "_sent_message_count",
+        "_sent_prompt_digest",
+        "_sent_template_kwargs",
     )
+
+    # Class-level defaults: `_rebuild_chat_context` builds nodes via `__new__`
+    # (skipping `__init__`), so these keep `_propagated_fields` iteration from
+    # raising AttributeError on the first `add()` afterwards.
+    _retain_token_ids: bool = False
+    _sent_token_ids: tuple[int, ...] = ()
+    _sent_model_id: str | None = None
+    _sent_message_count: int = 0
+    _sent_prompt_digest: tuple[str, ...] = ()
+    _sent_template_kwargs: dict[str, Any] = {}
 
     def __init__(
         self,
@@ -85,8 +128,9 @@ class ChatContext(Context):
         window_size: int | None = None,
         token_context_length_limit: int | None = None,
         model_id: str | ModelIdentifier | None = None,
+        retain_token_ids: bool = False,
     ) -> None:
-        """Initialize a ChatContext with an optional compactor, token budget, and model binding."""
+        """Initialize a ChatContext with an optional compactor, token budget, model binding, and id-retention policy."""
         if compactor is not None and window_size is not None:
             raise ValueError(
                 "ChatContext: pass either `compactor` or `window_size`, not both."
@@ -110,11 +154,114 @@ class ChatContext(Context):
             self._compactor = compactor
         self._token_context_length_limit = token_context_length_limit
         self._model_id: str | ModelIdentifier | None = model_id
+        # Policy (propagates and survives a root reset) vs. state (propagates but
+        # is per-conversation, so `_make_root` clears it below).
+        self._retain_token_ids: bool = retain_token_ids
+        self._sent_token_ids: tuple[int, ...] = ()
+        self._sent_model_id: str | None = None
+        self._sent_message_count: int = 0
+        self._sent_prompt_digest: tuple[str, ...] = ()
+        self._sent_template_kwargs: dict[str, Any] = {}
 
     @property
     def model_id(self) -> str | ModelIdentifier | None:
         """The model identifier bound to this context, or `None` if unbound."""
         return self._model_id
+
+    @property
+    def retains_token_ids(self) -> bool:
+        """Whether this context asked for id-preserving history."""
+        return self._retain_token_ids
+
+    @property
+    def sent_token_ids(self) -> tuple[int, ...]:
+        """Ids the server has already seen, verbatim. Empty if none recorded."""
+        return self._sent_token_ids
+
+    @property
+    def sent_model_id(self) -> str | None:
+        """Model the retained ids were produced by, or `None` if none are held."""
+        return self._sent_model_id
+
+    @property
+    def sent_message_count(self) -> int:
+        """How many chat messages `sent_token_ids` covers. `0` if none are held."""
+        return self._sent_message_count
+
+    @property
+    def sent_prompt_digest(self) -> tuple[str, ...]:
+        """Per-message fingerprint of the model-input prefix `sent_token_ids` covers.
+
+        One opaque string per message, in order; empty if no ids are held. Before
+        splicing, a backend re-fingerprints the leading messages of the conversation
+        it is about to send and refuses reuse on a mismatch -- so the prefix is
+        VERIFIED unchanged, not merely the first `sent_message_count` messages (which
+        a rewritten historical message or dropped oldest turns would leave intact).
+        """
+        return self._sent_prompt_digest
+
+    @property
+    def sent_template_kwargs(self) -> dict[str, Any]:
+        """Chat-template variables the retained ids were rendered under (a copy).
+
+        Empty if no ids are held. `adapter_name` is never included: it applies to the
+        turn being generated, not to the prefix, so keeping it would make every
+        adapter turn look like drift against the next one.
+
+        A backend re-renders the already-sent side under THESE kwargs, not the current
+        turn's. Using the current turn's puts a newly-introduced kwarg on both sides of
+        the subtraction, where it cancels out -- so a turn that first supplies
+        `documents=[...]` would send a prefix rendered without them and a delta that
+        does not contain them either, activating a RAG adapter against an empty context
+        with every other guard still passing.
+        """
+        return dict(self._sent_template_kwargs)
+
+    def with_sent_token_ids(
+        self,
+        ids: list[int],
+        model_id: str | None = None,
+        message_count: int = 0,
+        prompt_digest: tuple[str, ...] = (),
+        template_kwargs: dict[str, Any] | None = None,
+    ) -> ChatContext:
+        """Return a copy of this context at the same position, holding retained `ids`.
+
+        A `Context` is immutable, so recording what the server saw produces a new
+        node rather than mutating this one. Built by hand rather than via
+        `Context.from_previous`, which asserts `data is not None` and so rejects a
+        root node (a root must stay a root).
+
+        Args:
+            ids (list[int]): Full id sequence the server has now seen (prompt sent
+                plus answer produced).
+            model_id (str | None): Model that produced them, so a later turn against
+                a different model can be refused.
+            message_count (int): How many chat messages these ids cover.
+            prompt_digest (tuple[str, ...]): Per-message fingerprint of those
+                messages; see `sent_prompt_digest`.
+            template_kwargs (dict[str, Any] | None): Chat-template variables the ids
+                were rendered under. `adapter_name` is stripped; see
+                `sent_template_kwargs`.
+
+        Returns:
+            ChatContext: A new context at the same position; this one is unchanged.
+        """
+        new = type(self)()
+        for field in self._propagated_fields:
+            setattr(new, field, getattr(self, field))
+        new._previous = self._previous
+        new._data = self._data
+        new._is_root = self._is_root
+        new._is_chat_context = self._is_chat_context
+        new._sent_token_ids = tuple(int(i) for i in ids)
+        new._sent_model_id = model_id
+        new._sent_message_count = message_count
+        new._sent_prompt_digest = tuple(prompt_digest)
+        new._sent_template_kwargs = {
+            k: v for k, v in (template_kwargs or {}).items() if k != "adapter_name"
+        }
+        return new
 
     def _make_root(self, model_id: str | ModelIdentifier | None) -> ChatContext:
         """Return a new empty root `ChatContext`, propagating all `_propagated_fields` then binding `model_id`."""
@@ -124,6 +271,14 @@ class ChatContext(Context):
         # Override whatever _propagated_fields copied for _model_id: the caller
         # explicitly supplies the model_id to bind (e.g. _bind_model changes it).
         new._model_id = model_id
+        # Keep the `_retain_token_ids` policy, but clear the per-conversation ids:
+        # a fresh root has sent nothing, so a stale prefix would subtract ids the
+        # server never saw for this conversation.
+        new._sent_token_ids = ()
+        new._sent_model_id = None
+        new._sent_message_count = 0
+        new._sent_prompt_digest = ()
+        new._sent_template_kwargs = {}
         return new
 
     def _bind_model(self, model_id: str | ModelIdentifier) -> ChatContext:
@@ -182,6 +337,11 @@ class ChatContext(Context):
             setattr(new, field, getattr(self, field))
         if self._compactor is not None:
             new = self._compactor.compact(new)
+            # Reapplied because a compactor may build its returned context however it
+            # likes; without this a hand-rolled one that copies nothing would silently
+            # reset every propagated field (token-budget view, id retention) to default.
+            for field in self._propagated_fields:
+                setattr(new, field, getattr(self, field))
         return new
 
     def view_for_generation(self) -> list[Span] | None:
@@ -278,6 +438,7 @@ def _rebuild_chat_context(
     compactor: InlineCompactor | None = None,
     token_context_length_limit: int | None = None,
     model_id: str | ModelIdentifier | None = None,
+    retain_token_ids: bool = False,
 ) -> ChatContext:
     """Build a fresh `ChatContext` linked-list without triggering compaction.
 
@@ -291,6 +452,13 @@ def _rebuild_chat_context(
         compactor: Compactor to attach to every node of the rebuilt context.
         token_context_length_limit: Token budget to attach to every node.
         model_id: Model identifier to attach to every node.
+        retain_token_ids: Id-retention POLICY to attach to every node. Callers pass
+            the source context's `_retain_token_ids` so compaction does not silently
+            downgrade a retaining conversation to full chat renders. The retained
+            ids themselves are per-conversation STATE and are deliberately NOT
+            carried: compaction just dropped turns, so ids covering them describe a
+            conversation that no longer exists. They stay at the class defaults
+            (empty), which is the same split `_make_root` makes.
 
     Returns:
         A new `ChatContext` whose linear history is exactly `components`.
@@ -300,6 +468,7 @@ def _rebuild_chat_context(
         node._compactor = compactor
         node._token_context_length_limit = token_context_length_limit
         node._model_id = model_id
+        node._retain_token_ids = retain_token_ids
 
     ctx: ChatContext = ChatContext.__new__(ChatContext)
     Context.__init__(ctx)

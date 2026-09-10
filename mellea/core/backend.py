@@ -130,6 +130,31 @@ class Backend(abc.ABC):
             raise
         # Save the ID for the post_call / error hooks.
         mot._call.generation_id = generation_id
+
+        # An already-computed thunk (e.g. the OpenAI token-id retention path, which
+        # must materialize the reply to derive the ids before returning) short-circuits
+        # `astream()`, so the `generation_post_call` hook astream normally fires never
+        # runs -- leaving the `generation_pre_call` fired above without its partner. Fire
+        # it here, now that `generation_id` is assigned, so the PRE/POST pair balances
+        # and the tracing/metrics plugins see a finished thunk with the right id.
+        if (
+            mot._call.fire_post_call_on_return
+            and mot.is_computed()
+            and has_plugins(HookType.GENERATION_POST_CALL)
+        ):
+            from ..plugins.hooks.generation import GenerationPostCallPayload
+
+            glog = mot._generate_log
+            await invoke_hook(
+                HookType.GENERATION_POST_CALL,
+                GenerationPostCallPayload(
+                    prompt=glog.prompt if glog and glog.prompt else "",
+                    model_output=mot,
+                    latency_ms=mot._elapsed_ms(),
+                    generation_id=generation_id,
+                ),
+                backend=self,
+            )
         return mot, new_ctx
 
     @abc.abstractmethod
