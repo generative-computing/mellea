@@ -10,9 +10,10 @@
 # WITH_VLLM=1. Override with WITH_VLLM=0 to force-disable even on GPU hosts.
 #
 # Usage:
-#   ./run_tests_with_ollama_and_vllm.sh                              # auto (vLLM on GPU hosts)
-#   ./run_tests_with_ollama_and_vllm.sh -m ollama                    # only ollama tests
-#   ./run_tests_with_ollama_and_vllm.sh --group-by-backend -v -s     # custom pytest args
+#   ./run_tests_with_ollama_and_vllm.sh                              # auto (vLLM on GPU hosts), phased (default)
+#   ./run_tests_with_ollama_and_vllm.sh -k test_ollama               # selection/verbosity args only
+#   SERIAL_PHASES=0 ./run_tests_with_ollama_and_vllm.sh -m ollama    # legacy mode honours -m (single process)
+#   SERIAL_PHASES=0 ./run_tests_with_ollama_and_vllm.sh --group-by-backend -v -s
 #   WITH_VLLM=1 ./run_tests_with_ollama_and_vllm.sh                  # force-enable vLLM
 #   WITH_VLLM=0 ./run_tests_with_ollama_and_vllm.sh                  # force-disable vLLM
 #   SKIP_WARMUP=1 ./run_tests_with_ollama_and_vllm.sh                 # skip ollama model warmup
@@ -20,11 +21,45 @@
 #   WITH_TOOLING_TESTS=1 ./run_tests_with_ollama_and_vllm.sh          # include test/tooling/
 #   WITH_VLLM=1 VLLM_MODEL=ibm-granite/granite-4.2-3b \
 #     ./run_tests_with_ollama_and_vllm.sh --group-by-backend -v -s
+# Execution modes
+#   Phased (DEFAULT, SERIAL_PHASES=1): each backend group runs as its own
+#   pytest process with per-phase server lifecycles — only one CUDA context
+#   is alive at a time. Peak GPU memory drops from ~72 GiB (both servers up)
+#   to ~33 GiB (the vLLM phase), in-process HF models are released between
+#   phases, and the single-context phases (hf/vllm/base) can run on an
+#   exclusive GPU. SERIAL_PHASES=0 selects the legacy single-pytest-process
+#   run with both servers up for the whole run.
+#   PHASES=hf,ollama,vllm,base (default "all") selects which phases run, so
+#   one script can drive separate jobs with different -gpu requests.
 #
-# LSF example:
-#   bsub -n 1 -G grp_preemptable -q preemptable \
-#     -gpu "num=1/task:mode=shared:j_exclusive=yes" \
-#     "./run_tests_with_ollama_and_vllm.sh --group-by-backend -v -s"
+# Caller arguments
+#   Pass only test-selection (-k, node ids) and verbosity arguments.
+#   Full per-test durations and a JSON report are recorded under the log
+#   directory by the script itself (override with your own
+#   --durations/--json-report if needed):
+#     single-run:  pytest_full.log + pytest_report.json
+#     phased:      pytest_full.log (all phases appended) +
+#                  phase_<name>.log + pytest_report_<name>.json per phase
+#   NOTE: a caller -m conflicts with the per-phase marker selection, so the
+#   script falls back to single-run mode with a warning.
+#
+# LSF examples
+#   Single job (shared GPU request; both/phase servers as needed):
+#     bsub -n 1 -G grp_runtime -q normal \
+#       -gpu "num=1/task:mode=shared:gmem=65G" \
+#       "./run_tests_with_ollama_and_vllm.sh"
+#   Two jobs (recommended: exclusive GPU for the single-context phases,
+#   shared for the Ollama phase, whose per-model llama-server workers need
+#   multi-process GPU access and cannot run under exclusive mode):
+#     bsub -n 1 -G grp_runtime -q normal -gpu "num=1" \
+#       "PHASES=hf,vllm,base ./run_tests_with_ollama_and_vllm.sh"
+#     bsub -n 1 -G grp_runtime -q normal \
+#       -gpu "num=1/task:mode=shared:gmem=20G" \
+#       "PHASES=ollama ./run_tests_with_ollama_and_vllm.sh"
+#   Legacy single-process run:
+#     bsub -n 1 -G grp_runtime -q normal \
+#       -gpu "num=1/task:mode=shared:gmem=65G" \
+#       "SERIAL_PHASES=0 ./run_tests_with_ollama_and_vllm.sh --group-by-backend"
 
 set -euo pipefail
 
@@ -81,6 +116,25 @@ VLLM_VENV="${CACHE_DIR:+${CACHE_DIR}/.vllm-venv}"
 VLLM_VENV="${VLLM_VENV:-.vllm-venv}"
 VLLM_PID=""
 
+# SERIAL_PHASES: phased execution is the DEFAULT. Each backend group runs as
+# its own pytest process with per-phase server lifecycles (only one CUDA
+# context alive at a time): peak GPU memory drops from ~72 GiB (both servers
+# up) to ~33 GiB (the vLLM phase), in-process HF models are released between
+# phases, and the single-context phases can run on an exclusive GPU.
+# Set SERIAL_PHASES=0 for the legacy single-pytest-process run with both
+# servers up for the whole run.
+SERIAL_PHASES="${SERIAL_PHASES:-1}"
+# PHASES: comma list of which serial phases to run (hf, ollama, vllm, base).
+# Default "all". Lets one script drive subsets across separate LSF jobs with
+# different -gpu requests (e.g. exclusive for hf/vllm/base, mode=shared for
+# ollama, whose per-model llama-server workers need multi-process GPU access).
+PHASES="${PHASES:-all}"
+# GPU release gate (serial mode): the GPU counts as released once
+# memory.used drops below GPU_FREE_THRESHOLD_MB (MiB); wait at most
+# GPU_FREE_TIMEOUT seconds before warning and continuing.
+GPU_FREE_THRESHOLD_MB="${GPU_FREE_THRESHOLD_MB:-2048}"
+GPU_FREE_TIMEOUT="${GPU_FREE_TIMEOUT:-120}"
+
 # Log directory - use MELLEA_LOGDIR if set (from nightly.py), otherwise create standalone
 if [[ -n "${MELLEA_LOGDIR:-}" ]]; then
     LOGDIR="$MELLEA_LOGDIR"
@@ -91,43 +145,106 @@ else
 fi
 mkdir -p "$LOGDIR"
 
-cleanup() {
+stop_ollama() {
     if [[ "${OLLAMA_EXTERNAL:-0}" == "1" ]]; then
         log "Ollama managed externally (OLLAMA_EXTERNAL=1) — skipping shutdown"
-    else
+    elif [[ -n "${OLLAMA_PID:-}" ]] && kill -0 "$OLLAMA_PID" 2>/dev/null; then
         log "Shutting down ollama server..."
-        if [[ -n "${OLLAMA_PID:-}" ]] && kill -0 "$OLLAMA_PID" 2>/dev/null; then
-            kill "$OLLAMA_PID" 2>/dev/null
-            wait "$OLLAMA_PID" 2>/dev/null || true
-            # Ollama's llama-server workers are children of the serve process
-            # and survive its SIGTERM, holding VRAM as orphans. Kill any still
-            # alive, scoped to this install's runtime dir so other jobs'
-            # workers are untouched (their command lines carry their own
-            # runtime path).
-            local lib_dir
-            lib_dir="$(dirname "$(dirname "$OLLAMA_BIN")")/lib/ollama"
-            if pkill -f "${lib_dir}/llama-server" 2>/dev/null; then
-                log "Killed orphaned llama-server worker(s) from ${lib_dir}"
-            fi
+        kill "$OLLAMA_PID" 2>/dev/null
+        wait "$OLLAMA_PID" 2>/dev/null || true
+        # Ollama's llama-server workers are children of the serve process and
+        # survive its SIGTERM, holding VRAM as orphans. Kill any still alive,
+        # scoped to this install's runtime dir so other jobs' workers are
+        # untouched (their command lines carry their own runtime path).
+        local lib_dir
+        lib_dir="$(dirname "$(dirname "$OLLAMA_BIN")")/lib/ollama"
+        if pkill -f "${lib_dir}/llama-server" 2>/dev/null; then
+            log "Killed orphaned llama-server worker(s) from ${lib_dir}"
         fi
         log "Ollama stopped."
+    else
+        log "Ollama not running — nothing to stop."
     fi
+    OLLAMA_PID=""
+}
 
-    if [[ "$WITH_VLLM" == "1" ]]; then
-        if [[ "${VLLM_EXTERNAL:-0}" == "1" ]]; then
-            log "vLLM managed externally (VLLM_EXTERNAL=1) — skipping shutdown"
-        elif [[ -n "$VLLM_PID" ]] && kill -0 "$VLLM_PID" 2>/dev/null; then
-            log "Shutting down vLLM server..."
-            kill "$VLLM_PID" 2>/dev/null
-            wait "$VLLM_PID" 2>/dev/null || true
-            log "vLLM stopped."
-        fi
-        if [[ "${KEEP_VLLM_VENV:-0}" != "1" ]]; then
-            rm -rf "$VLLM_VENV"
-        fi
+stop_vllm() {
+    if [[ "$WITH_VLLM" != "1" ]]; then
+        return 0
+    fi
+    if [[ "${VLLM_EXTERNAL:-0}" == "1" ]]; then
+        log "vLLM managed externally (VLLM_EXTERNAL=1) — skipping shutdown"
+    elif [[ -n "$VLLM_PID" ]] && kill -0 "$VLLM_PID" 2>/dev/null; then
+        log "Shutting down vLLM server..."
+        kill "$VLLM_PID" 2>/dev/null
+        wait "$VLLM_PID" 2>/dev/null || true
+        log "vLLM stopped."
+    fi
+    VLLM_PID=""
+    if [[ "${KEEP_VLLM_VENV:-0}" != "1" ]]; then
+        rm -rf "$VLLM_VENV"
     fi
 }
+
+cleanup() {
+    stop_ollama
+    stop_vllm
+}
 trap cleanup EXIT
+
+# wait_gpu_free LABEL
+# Serial-phase gate: after a server is stopped, wait until the GPU's
+# memory.used drops below GPU_FREE_THRESHOLD_MB. On timeout, log the
+# resident compute processes (leaked/zombie context evidence) and
+# continue — the gate is diagnostic, not fatal.
+wait_gpu_free() {
+    local label="$1"
+    if ! command -v nvidia-smi >/dev/null 2>&1; then
+        log "GPU release gate skipped (nvidia-smi unavailable) after ${label}"
+        return 0
+    fi
+    local deadline=$(( $(date +%s) + GPU_FREE_TIMEOUT )) used
+    while :; do
+        used=$(nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits 2>/dev/null | head -1 | tr -d '[:space:]')
+        if [[ -n "$used" && "$used" -lt "$GPU_FREE_THRESHOLD_MB" ]]; then
+            log "GPU released after ${label} (memory.used=${used} MiB)"
+            return 0
+        fi
+        if (( $(date +%s) >= deadline )); then
+            log "WARNING: GPU not released within ${GPU_FREE_TIMEOUT}s after ${label} (memory.used=${used:-unknown} MiB) — possible leaked context, continuing."
+            nvidia-smi --query-compute-apps=pid,used_memory,process_name --format=csv,noheader 2>/dev/null | tee -a "$LOGDIR/gpu_release_gate.log" || true
+            return 0
+        fi
+        log "Waiting for GPU release after ${label} (memory.used=${used:-unknown} MiB)..."
+        sleep 5
+    done
+}
+
+# run_phase NAME PYTEST_ARGS...
+# Run one backend group as its own pytest process (serial mode). Each phase
+# writes phase_NAME.log + pytest_report_NAME.json and appends to
+# pytest_full.log for a single consolidated view.
+OVERALL_RC=0
+run_phase() {
+    local name="$1"; shift
+    local report_args=()
+    if [[ $CALLER_JSON_REPORT -eq 0 ]]; then
+        report_args=(--json-report --json-report-file="$LOGDIR/pytest_report_${name}.json")
+    fi
+    log "=== PHASE ${name}: pytest $* ==="
+    local rc=0
+    set +e
+    uv run --quiet --frozen --all-groups --all-extras $UV_PYTHON_ARG \
+        pytest "$PYTEST_DIR" "$@" "${DURATIONS_ARG[@]}" "${report_args[@]}" \
+        2>&1 | tee "$LOGDIR/phase_${name}.log" | tail -3
+    rc=${PIPESTATUS[0]}
+    set -e
+    cat "$LOGDIR/phase_${name}.log" >> "$LOGDIR/pytest_full.log"
+    log "PHASE ${name} exit code: ${rc}"
+    if (( OVERALL_RC == 0 && rc != 0 )); then
+        OVERALL_RC=$rc
+    fi
+}
 
 # --- Install a compatible Ollama binary ---
 OLLAMA_MIN_VERSION="${OLLAMA_MIN_VERSION:-0.32.2}"
@@ -158,85 +275,88 @@ if [[ ! -x "$OLLAMA_BIN" ]] || ! printf '%s\n%s\n' "$OLLAMA_MIN_VERSION" "$ollam
     log "Installed Ollama $OLLAMA_MIN_VERSION to $OLLAMA_PREFIX (bin + CUDA libs)"
 fi
 
-# --- Check if ollama is already running ---
-if curl -sf "http://${OLLAMA_HOST}:${OLLAMA_PORT}/api/tags" >/dev/null 2>&1; then
-    log "Ollama already running on ${OLLAMA_HOST}:${OLLAMA_PORT} — using existing server"
-    OLLAMA_PID=""
-else
-    # Find a free port starting from OLLAMA_PORT
-    while ss -tln 2>/dev/null | grep -q ":${OLLAMA_PORT} " || \
-          netstat -tln 2>/dev/null | grep -q ":${OLLAMA_PORT} "; do
-        log "Port $OLLAMA_PORT in use, trying $((OLLAMA_PORT + 1))..."
-        OLLAMA_PORT=$((OLLAMA_PORT + 1))
-    done
-
-    # --- Start ollama server ---
-    log "Starting ollama server on ${OLLAMA_HOST}:${OLLAMA_PORT}..."
-    export OLLAMA_HOST="${OLLAMA_HOST}:${OLLAMA_PORT}"
-    export OLLAMA_MODELS="${OLLAMA_DIR}/models"
-    export OLLAMA_CONTEXT_LENGTH
-    mkdir -p "$OLLAMA_MODELS"
-
-    # Ensure ollama can find system CUDA libraries
-    if [[ -d "/usr/local/cuda" ]]; then
-        export LD_LIBRARY_PATH="/usr/local/cuda/lib64:/usr/local/cuda/targets/x86_64-linux/lib:${LD_LIBRARY_PATH:-}"
-        log "Added system CUDA to LD_LIBRARY_PATH"
-    fi
-
-    log "Using Ollama default context length: $OLLAMA_CONTEXT_LENGTH"
-    "$OLLAMA_BIN" serve > "$LOGDIR/ollama.log" 2>&1 &
-    OLLAMA_PID=$!
-    log "Ollama server PID: $OLLAMA_PID"
-
-    # Wait for server to be ready
-    log "Waiting for ollama to be ready..."
-    for i in $(seq 1 120); do
-        if curl -sf "http://127.0.0.1:${OLLAMA_PORT}/api/tags" >/dev/null 2>&1; then
-            log "Ollama ready after ${i}s"
-            break
-        fi
-        if ! kill -0 "$OLLAMA_PID" 2>/dev/null; then
-            die "Ollama process died during startup. Check $LOGDIR/ollama.log"
-        fi
-        sleep 1
-    done
-
-    if ! curl -sf "http://127.0.0.1:${OLLAMA_PORT}/api/tags" >/dev/null 2>&1; then
-        die "Ollama failed to start within 30s. Check $LOGDIR/ollama.log"
-    fi
-fi
-
-# --- Pull required models ---
-export OLLAMA_HOST="127.0.0.1:${OLLAMA_PORT}"
-for model in "${OLLAMA_MODEL_LIST[@]}"; do
-    if "$OLLAMA_BIN" list 2>/dev/null | grep -q "^${model}"; then
-        log "Model $model already pulled"
+# start_ollama: start (or adopt) the Ollama server, pull models, warm up.
+start_ollama() {
+    # --- Check if ollama is already running ---
+    if curl -sf "http://${OLLAMA_HOST}:${OLLAMA_PORT}/api/tags" >/dev/null 2>&1; then
+        log "Ollama already running on ${OLLAMA_HOST}:${OLLAMA_PORT} — using existing server"
+        OLLAMA_PID=""
     else
-        log "Pulling $model ..."
-        "$OLLAMA_BIN" pull "$model" 2>&1 | tail -1
+        # Find a free port starting from OLLAMA_PORT
+        while ss -tln 2>/dev/null | grep -q ":${OLLAMA_PORT} " || \
+              netstat -tln 2>/dev/null | grep -q ":${OLLAMA_PORT} "; do
+            log "Port $OLLAMA_PORT in use, trying $((OLLAMA_PORT + 1))..."
+            OLLAMA_PORT=$((OLLAMA_PORT + 1))
+        done
+
+        # --- Start ollama server ---
+        log "Starting ollama server on ${OLLAMA_HOST}:${OLLAMA_PORT}..."
+        export OLLAMA_HOST="${OLLAMA_HOST}:${OLLAMA_PORT}"
+        export OLLAMA_MODELS="${OLLAMA_DIR}/models"
+        export OLLAMA_CONTEXT_LENGTH
+        mkdir -p "$OLLAMA_MODELS"
+
+        # Ensure ollama can find system CUDA libraries
+        if [[ -d "/usr/local/cuda" ]]; then
+            export LD_LIBRARY_PATH="/usr/local/cuda/lib64:/usr/local/cuda/targets/x86_64-linux/lib:${LD_LIBRARY_PATH:-}"
+            log "Added system CUDA to LD_LIBRARY_PATH"
+        fi
+
+        log "Using Ollama default context length: $OLLAMA_CONTEXT_LENGTH"
+        "$OLLAMA_BIN" serve > "$LOGDIR/ollama.log" 2>&1 &
+        OLLAMA_PID=$!
+        log "Ollama server PID: $OLLAMA_PID"
+
+        # Wait for server to be ready
+        log "Waiting for ollama to be ready..."
+        for i in $(seq 1 120); do
+            if curl -sf "http://127.0.0.1:${OLLAMA_PORT}/api/tags" >/dev/null 2>&1; then
+                log "Ollama ready after ${i}s"
+                break
+            fi
+            if ! kill -0 "$OLLAMA_PID" 2>/dev/null; then
+                die "Ollama process died during startup. Check $LOGDIR/ollama.log"
+            fi
+            sleep 1
+        done
+
+        if ! curl -sf "http://127.0.0.1:${OLLAMA_PORT}/api/tags" >/dev/null 2>&1; then
+            die "Ollama failed to start within 30s. Check $LOGDIR/ollama.log"
+        fi
     fi
-done
 
-log "All ollama models ready."
-
-# --- Warm up models (first load into memory is slow) ---
-# Disable with SKIP_WARMUP=1 (covers all backends) or OLLAMA_SKIP_WARMUP=1 (ollama only).
-# Note: vLLM has no warmup step — it serves immediately after the readiness check.
-if [[ "${SKIP_WARMUP:-0}" == "1" || "${OLLAMA_SKIP_WARMUP:-0}" == "1" ]]; then
-    log "Skipping model warmup"
-else
-    log "Warming up models..."
+    # --- Pull required models ---
+    export OLLAMA_HOST="127.0.0.1:${OLLAMA_PORT}"
     for model in "${OLLAMA_MODEL_LIST[@]}"; do
-        log "  Warming $model ..."
-        curl -sf "http://127.0.0.1:${OLLAMA_PORT}/api/generate" \
-            -d "{\"model\": \"$model\", \"prompt\": \"hi\", \"stream\": false}" \
-            -o /dev/null --max-time 120 || log "  Warning: warmup for $model timed out (will load on first test)"
+        if "$OLLAMA_BIN" list 2>/dev/null | grep -q "^${model}"; then
+            log "Model $model already pulled"
+        else
+            log "Pulling $model ..."
+            "$OLLAMA_BIN" pull "$model" 2>&1 | tail -1
+        fi
     done
-    log "Warmup complete."
-fi
 
-# --- vLLM server (optional, auto-enabled on CUDA hosts) ---
-if [[ "$WITH_VLLM" == "1" ]]; then
+    log "All ollama models ready."
+
+    # --- Warm up models (first load into memory is slow) ---
+    # Disable with SKIP_WARMUP=1 (covers all backends) or OLLAMA_SKIP_WARMUP=1 (ollama only).
+    # Note: vLLM has no warmup step — it serves immediately after the readiness check.
+    if [[ "${SKIP_WARMUP:-0}" == "1" || "${OLLAMA_SKIP_WARMUP:-0}" == "1" ]]; then
+        log "Skipping model warmup"
+    else
+        log "Warming up models..."
+        for model in "${OLLAMA_MODEL_LIST[@]}"; do
+            log "  Warming $model ..."
+            curl -sf "http://127.0.0.1:${OLLAMA_PORT}/api/generate" \
+                -d "{\"model\": \"$model\", \"prompt\": \"hi\", \"stream\": false}" \
+                -o /dev/null --max-time 120 || log "  Warning: warmup for $model timed out (will load on first test)"
+        done
+        log "Warmup complete."
+    fi
+}
+
+# start_vllm: start (or adopt) the vLLM server and export the test env.
+start_vllm() {
     if [[ "${VLLM_EXTERNAL:-0}" == "1" ]]; then
         log "vLLM managed externally (VLLM_EXTERNAL=1) — skipping startup"
         if ! curl -sf "http://127.0.0.1:${VLLM_PORT}/v1/models" >/dev/null 2>&1; then
@@ -298,9 +418,7 @@ if [[ "$WITH_VLLM" == "1" ]]; then
     export VLLM_TEST_MODEL="$VLLM_MODEL"
     export VLLM_VENV_PATH="$VLLM_VENV"
     log "vLLM ready. VLLM_TEST_BASE_URL=$VLLM_TEST_BASE_URL"
-else
-    log "vLLM disabled (WITH_VLLM=0). Pass WITH_VLLM=1 to enable, or run on a CUDA host for auto-detection."
-fi
+}
 
 # WITH_EXAMPLES=1 runs pytest on the whole repo (includes docs/examples/)
 if [[ "${WITH_EXAMPLES:-0}" == "1" ]]; then
@@ -317,16 +435,49 @@ if [[ "${WITH_TOOLING_TESTS:-0}" != "1" ]]; then
     log "Tooling tests disabled (WITH_TOOLING_TESTS=0). Pass WITH_TOOLING_TESTS=1 to include test/tooling/."
 fi
 
-if [[ "$#" -eq 0 ]]; then
+if [[ "$#" -eq 0 && "$SERIAL_PHASES" != "1" ]]; then
     PYTEST_ARGS+=("--group-by-backend")
-else
+elif [[ "$#" -gt 0 ]]; then
     PYTEST_ARGS+=("$@")
 fi
 
+# A caller-supplied -m would override the per-phase marker selections (pytest
+# keeps the last -m on the command line) and run the same selection in every
+# phase, so marker selection is only meaningful in single-run mode. Fall back
+# to single-run mode with a loud warning instead.
+USER_MARKER=0
+for arg in "$@"; do
+    if [[ "$arg" == "-m" ]]; then
+        USER_MARKER=1
+        break
+    fi
+done
+if [[ "$SERIAL_PHASES" == "1" && "$USER_MARKER" == "1" ]]; then
+    log "WARNING: caller passed -m, which conflicts with per-phase marker selection — falling back to single-run mode (SERIAL_PHASES=0). Use PHASES= to scope phases explicitly."
+    SERIAL_PHASES=0
+fi
+
+# The script owns the diagnostic report contract: every run records full
+# per-test durations and a JSON report under $LOGDIR (pytest_full.log plus
+# pytest_report.json in single-run mode; phase_<name>.log plus
+# pytest_report_<name>.json per phase in serial mode) unless the caller
+# supplies its own --durations/--json-report arguments. Callers should pass
+# only test-selection and verbosity arguments.
+CALLER_DURATIONS=0
+CALLER_JSON_REPORT=0
+for arg in "$@"; do
+    case "$arg" in
+        --durations*) CALLER_DURATIONS=1 ;;
+        --json-report*|--no-json-report) CALLER_JSON_REPORT=1 ;;
+    esac
+done
+DURATIONS_ARG=()
+if [[ $CALLER_DURATIONS -eq 0 ]]; then
+    DURATIONS_ARG=(--durations=0)
+fi
+
 # --- Run tests ---
-log "Starting pytest..."
 log "Log directory: $LOGDIR"
-log "Pytest args: ${PYTEST_ARGS[*]}"
 ${UV_PYTHON:+log "Python version: $UV_PYTHON"}
 
 # Use UV_PYTHON env var if set, otherwise use default Python
@@ -340,11 +491,81 @@ log "Downloading NLTK punkt_tab data..."
 uv run --quiet --frozen --all-groups --all-extras $UV_PYTHON_ARG \
     python -c "import nltk; nltk.download('punkt_tab', quiet=True)" || true
 
-uv run --quiet --frozen --all-groups --all-extras $UV_PYTHON_ARG \
-    pytest "$PYTEST_DIR" "${PYTEST_ARGS[@]}" \
-    2>&1 | tee "$LOGDIR/pytest_full.log"
+# phase_enabled NAME — true if PHASES includes NAME (or PHASES=all).
+phase_enabled() {
+    [[ "$PHASES" == "all" || ",$PHASES," == *",$1,"* ]]
+}
 
-EXIT_CODE=${PIPESTATUS[0]}
+if [[ "$SERIAL_PHASES" == "1" ]]; then
+    # Phased execution: one pytest process per backend group, one CUDA
+    # context at a time. Intended for exclusive-GPU jobs (bare -gpu "num=1").
+    # The phase marker expressions mirror the --group-by-backend groups
+    # (huggingface -> ollama -> openai_vllm -> api/other); "not slow" is
+    # re-stated because a command-line -m replaces addopts' "-m not slow".
+    log "SERIAL_PHASES=1 — phased execution (phases: ${PHASES}; per-phase base args: ${PYTEST_ARGS[*]})"
+    PHASE_ARGS=("${PYTEST_ARGS[@]}" --cov-append)
+
+    if phase_enabled hf; then
+        log "Starting phase 1 (huggingface, in-process — no servers)..."
+        run_phase p1_huggingface "${PHASE_ARGS[@]}" -m "huggingface and not slow"
+    else
+        log "Phase p1_huggingface skipped (PHASES=${PHASES})"
+    fi
+
+    if phase_enabled ollama; then
+        start_ollama
+        log "Starting phase 2 (ollama)..."
+        run_phase p2_ollama "${PHASE_ARGS[@]}" -m "ollama and not slow"
+        stop_ollama
+        wait_gpu_free "ollama phase"
+    else
+        log "Phase p2_ollama skipped (PHASES=${PHASES})"
+    fi
+
+    if phase_enabled vllm; then
+        if [[ "$WITH_VLLM" == "1" ]]; then
+            start_vllm
+            log "Starting phase 3 (openai/vllm; openai+ollama tests already ran in phase 2)..."
+            run_phase p3_openai_vllm "${PHASE_ARGS[@]}" -m "(openai or vllm) and not ollama and not slow"
+            stop_vllm
+            wait_gpu_free "vllm phase"
+        else
+            log "Phase 3 skipped (WITH_VLLM=0)"
+        fi
+    else
+        log "Phase p3_openai_vllm skipped (PHASES=${PHASES})"
+    fi
+
+    if phase_enabled base; then
+        log "Starting phase 4 (base/unit/api — no servers)..."
+        run_phase p4_base "${PHASE_ARGS[@]}" -m "not huggingface and not ollama and not openai and not vllm and not slow"
+    else
+        log "Phase p4_base skipped (PHASES=${PHASES})"
+    fi
+
+    EXIT_CODE=$OVERALL_RC
+else
+    log "Starting pytest (single-run mode; both servers up for the whole run)..."
+    log "Pytest args: ${PYTEST_ARGS[*]}"
+
+    start_ollama
+    if [[ "$WITH_VLLM" == "1" ]]; then
+        start_vllm
+    else
+        log "vLLM disabled (WITH_VLLM=0). Pass WITH_VLLM=1 to enable, or run on a CUDA host for auto-detection."
+    fi
+
+    REPORT_ARGS=()
+    if [[ $CALLER_JSON_REPORT -eq 0 ]]; then
+        REPORT_ARGS=(--json-report --json-report-file="$LOGDIR/pytest_report.json")
+    fi
+    set +e
+    uv run --quiet --frozen --all-groups --all-extras $UV_PYTHON_ARG \
+        pytest "$PYTEST_DIR" "${PYTEST_ARGS[@]}" "${DURATIONS_ARG[@]}" "${REPORT_ARGS[@]}" \
+        2>&1 | tee "$LOGDIR/pytest_full.log"
+    EXIT_CODE=${PIPESTATUS[0]}
+    set -e
+fi
 
 log "Tests finished with exit code: $EXIT_CODE"
 log "Logs: $LOGDIR/"
