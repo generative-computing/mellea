@@ -113,7 +113,12 @@ trap cleanup EXIT
 OLLAMA_MIN_VERSION="${OLLAMA_MIN_VERSION:-0.32.2}"
 ollama_current_version=""
 if [[ -x "$OLLAMA_BIN" ]]; then
-    ollama_current_version=$("$OLLAMA_BIN" --version 2>/dev/null | awk '{print $NF}' | sed 's/^v//')
+    # `ollama --version` prints a multi-line warning block to stdout
+    # (e.g. "Warning: client version is 0.32.2"); extract the first
+    # dotted version number rather than trusting the last field of the
+    # last line, which yields "instance\n0.32.2" and always fails the
+    # version comparison below.
+    ollama_current_version=$("$OLLAMA_BIN" --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
 fi
 
 if [[ ! -x "$OLLAMA_BIN" ]] || ! printf '%s\n%s\n' "$OLLAMA_MIN_VERSION" "$ollama_current_version" | sort -V -C; then
