@@ -67,6 +67,11 @@ VLLM_MODEL="${VLLM_MODEL:-ibm-granite/granite-4.2-3b}"
 VLLM_GPU_MEM="${VLLM_GPU_MEM:-0.4}"
 VLLM_MAX_MODEL_LEN="${VLLM_MAX_MODEL_LEN:-4096}"
 VLLM_MAX_NUM_SEQS="${VLLM_MAX_NUM_SEQS:-256}"
+# Readiness timeout in seconds. vLLM startup (package import, weight load,
+# torch.compile, CUDA graph capture, API server startup) exceeds 120s on
+# modern vLLM releases, and slows further when multiple instances start
+# concurrently on one node — raise it in those cases.
+VLLM_READY_TIMEOUT="${VLLM_READY_TIMEOUT:-120}"
 VLLM_VENV="${CACHE_DIR:+${CACHE_DIR}/.vllm-venv}"
 VLLM_VENV="${VLLM_VENV:-.vllm-venv}"
 VLLM_PID=""
@@ -255,9 +260,9 @@ if [[ "$WITH_VLLM" == "1" ]]; then
         VLLM_PID=$!
         log "vLLM server PID: $VLLM_PID"
 
-        # Wait for vLLM to be ready (model load can take 60-90s)
-        log "Waiting for vLLM to be ready..."
-        for i in $(seq 1 120); do
+        # Wait for vLLM to be ready (startup can exceed 120s on modern vLLM)
+        log "Waiting for vLLM to be ready (timeout ${VLLM_READY_TIMEOUT}s)..."
+        for i in $(seq 1 "$VLLM_READY_TIMEOUT"); do
             if curl -sf "http://127.0.0.1:${VLLM_PORT}/v1/models" >/dev/null 2>&1; then
                 log "vLLM ready after ${i}s"
                 break
@@ -269,7 +274,7 @@ if [[ "$WITH_VLLM" == "1" ]]; then
         done
 
         if ! curl -sf "http://127.0.0.1:${VLLM_PORT}/v1/models" >/dev/null 2>&1; then
-            die "vLLM failed to start within 120s. Check $LOGDIR/vllm.log"
+            die "vLLM failed to start within ${VLLM_READY_TIMEOUT}s. Check $LOGDIR/vllm.log"
         fi
     fi
 
