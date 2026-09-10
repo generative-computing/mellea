@@ -438,6 +438,7 @@ def _rebuild_chat_context(
     compactor: InlineCompactor | None = None,
     token_context_length_limit: int | None = None,
     model_id: str | ModelIdentifier | None = None,
+    retain_token_ids: bool = False,
 ) -> ChatContext:
     """Build a fresh `ChatContext` linked-list without triggering compaction.
 
@@ -451,6 +452,13 @@ def _rebuild_chat_context(
         compactor: Compactor to attach to every node of the rebuilt context.
         token_context_length_limit: Token budget to attach to every node.
         model_id: Model identifier to attach to every node.
+        retain_token_ids: Id-retention POLICY to attach to every node. Callers pass
+            the source context's `_retain_token_ids` so compaction does not silently
+            downgrade a retaining conversation to full chat renders. The retained
+            ids themselves are per-conversation STATE and are deliberately NOT
+            carried: compaction just dropped turns, so ids covering them describe a
+            conversation that no longer exists. They stay at the class defaults
+            (empty), which is the same split `_make_root` makes.
 
     Returns:
         A new `ChatContext` whose linear history is exactly `components`.
@@ -460,6 +468,7 @@ def _rebuild_chat_context(
         node._compactor = compactor
         node._token_context_length_limit = token_context_length_limit
         node._model_id = model_id
+        node._retain_token_ids = retain_token_ids
 
     ctx: ChatContext = ChatContext.__new__(ChatContext)
     Context.__init__(ctx)
