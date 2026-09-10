@@ -528,9 +528,9 @@ Two mechanisms in `test/conftest.py` handle this:
   Always active, no flags required.
 - **Group warm-up/eviction** (`pytest_runtest_setup`) — warms up a fixed set of CI
   models (`keep_alive=-1`) when entering the Ollama backend group and evicts them
-  when leaving. Triggered by `--group-by-backend` ordering in legacy mode, or
-  implicitly in phased mode (`SERIAL_PHASES=1`, default), where each phase is a
-  separate process containing a single group.
+  when leaving. Triggered by `--group-by-backend` ordering in legacy mode, and in
+  phased mode (default) by the per-phase `--group-by-backend` the script passes —
+  each phase process contains a single group.
 
 **Trade-off:** if two consecutive test files use the same model, it will be unloaded
 and reloaded (~5–15 s overhead). Predictable memory behaviour is more important
