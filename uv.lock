@@ -3465,7 +3465,7 @@ requires-dist = [
     { name = "opentelemetry-sdk", marker = "extra == 'telemetry'", specifier = ">=1.20.0" },
     { name = "packaging" },
     { name = "peft", marker = "extra == 'hf'", specifier = ">=0.18.1" },
-    { name = "pillow", specifier = ">=12.0.0" },
+    { name = "pillow", specifier = ">=12.2.0,!=12.3.0" },
     { name = "pyarrow", marker = "extra == 'granite-retriever'" },
     { name = "pydantic" },
     { name = "pyyaml" },
