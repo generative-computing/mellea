@@ -728,7 +728,11 @@ class GroundednessRequirement(Requirement):
             # logic the flat path uses below, so near-miss labels like
             # "FULLY SUPPORTED" (space) aren't silently downgraded.
             def _norm(raw: object) -> str:
-                raw = _normalise_label(raw).upper()
+                # Split camelCase boundaries and collapse separators to spaces
+                # so \b sees word edges around "NOT"/"UNSUPPORTED" regardless
+                # of delimiter style (underscore, hyphen, or camelCase).
+                label = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", _normalise_label(raw))
+                raw = re.sub(r"[^A-Za-z0-9]+", " ", label).upper().strip()
                 if re.search(r"\b(?:NOT|UNSUPPORTED)\b", raw):
                     return "NOT_SUPPORTED"
                 if "FULLY" in raw and "SUPPORTED" in raw:
@@ -745,9 +749,9 @@ class GroundednessRequirement(Requirement):
 
                 span_id = _normalise_span_id(judgment.get("span_id"), expected_count)
                 nested_levels: set[str] = set()
-                support_level_raw = _normalise_label(
-                    judgment.get("support_level")
-                ).upper()
+                # Case is preserved here (not upper-cased) so _norm can still
+                # see camelCase word boundaries like "notFullySupported".
+                support_level_raw = _normalise_label(judgment.get("support_level"))
                 # Handle nested format: {"span_id": 0, "evidence": [{"support_level": "..."}]}
                 # Checks both "evidence" and "citations" (prior key, kept defensively).
                 if not support_level_raw:

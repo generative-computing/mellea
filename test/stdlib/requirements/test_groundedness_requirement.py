@@ -683,7 +683,18 @@ def test_parse_batch_support_output_mixed_duplicate_ids_are_pessimistic(
     assert result == {0: "NOT_SUPPORTED"}
 
 
-@pytest.mark.parametrize("support_level", ["NOT FULLY SUPPORTED", "FULLY UNSUPPORTED"])
+@pytest.mark.parametrize(
+    "support_level",
+    [
+        "NOT FULLY SUPPORTED",
+        "FULLY UNSUPPORTED",
+        "NOT_FULLY_SUPPORTED",
+        "FULLY_UNSUPPORTED",
+        "not_fully_supported",
+        "NotFullySupported",
+        "notFullySupported",
+    ],
+)
 def test_parse_batch_support_output_negated_labels_are_not_supported(
     support_level: str,
 ):
