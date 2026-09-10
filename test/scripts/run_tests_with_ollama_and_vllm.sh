@@ -94,6 +94,16 @@ cleanup() {
         if [[ -n "${OLLAMA_PID:-}" ]] && kill -0 "$OLLAMA_PID" 2>/dev/null; then
             kill "$OLLAMA_PID" 2>/dev/null
             wait "$OLLAMA_PID" 2>/dev/null || true
+            # Ollama's llama-server workers are children of the serve process
+            # and survive its SIGTERM, holding VRAM as orphans. Kill any still
+            # alive, scoped to this install's runtime dir so other jobs'
+            # workers are untouched (their command lines carry their own
+            # runtime path).
+            local lib_dir
+            lib_dir="$(dirname "$(dirname "$OLLAMA_BIN")")/lib/ollama"
+            if pkill -f "${lib_dir}/llama-server" 2>/dev/null; then
+                log "Killed orphaned llama-server worker(s) from ${lib_dir}"
+            fi
         fi
         log "Ollama stopped."
     fi
