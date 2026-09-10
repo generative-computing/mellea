@@ -14,6 +14,9 @@ import pytest
 # Fixtures
 # ---------------------------------------------------------------------------
 
+# docs/docs relative to this script (tooling/docs-autogen/)
+DOCS_ROOT = Path(__file__).parent.parents[1] / "docs" / "docs"
+
 
 @pytest.fixture(scope="module")
 def click_app():
@@ -30,7 +33,7 @@ def generated_md(click_app):
     """Generate the full CLI reference Markdown string."""
     from generate_cli_reference import generate_cli_reference
 
-    return generate_cli_reference(click_app)
+    return generate_cli_reference(click_app, docs_root=DOCS_ROOT)
 
 
 # ---------------------------------------------------------------------------
@@ -117,6 +120,22 @@ def test_parse_see_also():
     assert links == [("guide", "how-to/my-page"), ("guide", "advanced/other")]
 
 
+def test_guide_extension_matches_disk(tmp_path):
+    """A `See Also` target that is `.mdx` on disk must link as `.mdx`, not `.md`."""
+    from generate_cli_reference import _guide_extension
+
+    (tmp_path / "community").mkdir()
+    (tmp_path / "community" / "plugins.mdx").write_text("jsx page")
+    (tmp_path / "how-to").mkdir()
+    (tmp_path / "how-to" / "plain.md").write_text("md page")
+
+    assert _guide_extension("community/plugins", tmp_path) == ".mdx"
+    assert _guide_extension("how-to/plain", tmp_path) == ".md"
+    # Unknown target and unknown docs root both fall back to `.md`.
+    assert _guide_extension("how-to/missing", tmp_path) == ".md"
+    assert _guide_extension("community/plugins", None) == ".md"
+
+
 # ---------------------------------------------------------------------------
 # Generated output tests
 # ---------------------------------------------------------------------------
@@ -170,9 +189,7 @@ def test_see_also_targets_exist(click_app):
     """
     from generate_cli_reference import _parse_docstring_sections, _parse_see_also
 
-    # Locate docs/docs relative to this script (tooling/docs-autogen/)
-    script_dir = Path(__file__).parent
-    docs_root = script_dir.parents[1] / "docs" / "docs"
+    docs_root = DOCS_ROOT
 
     missing: list[str] = []
 
@@ -184,7 +201,7 @@ def test_see_also_targets_exist(click_app):
         for kind, path in _parse_see_also(see_also):
             if kind != "guide":
                 continue
-            # The generator produces ../<path>.md relative to reference/cli.md,
+            # The generator produces ../<path><ext> relative to reference/cli.md,
             # which means docs/<path>.md or docs/<path>.mdx must exist.
             candidate_md = docs_root / f"{path}.md"
             candidate_mdx = docs_root / f"{path}.mdx"
@@ -199,6 +216,26 @@ def test_see_also_targets_exist(click_app):
             _check_command(f"m {cmd_name}", cmd)
 
     assert not missing, "Broken See Also paths:\n" + "\n".join(missing)
+
+
+def test_see_also_link_extensions_resolve(generated_md):
+    """Every generated `See Also` link must point at a file that exists on disk.
+
+    Guards the extension choice specifically: a link emitted as `.md` for a page
+    that is actually `.mdx` (or vice versa) breaks the Docusaurus build, and
+    checking "either extension exists" would not catch it.
+    """
+    urls: list[str] = []
+    for target in re.findall(r"\*\*See also:\*\* (.+)", generated_md):
+        urls.extend(re.findall(r"\]\((\.\./[^)]+)\)", target))
+
+    assert urls, "No See Also guide links found to verify"
+
+    # Links are relative to docs/reference/cli.md, so `../x.md` → docs/x.md.
+    broken = [
+        url for url in urls if not (DOCS_ROOT / url.removeprefix("../")).is_file()
+    ]
+    assert not broken, "See Also links do not resolve on disk:\n" + "\n".join(broken)
 
 
 def test_synopsis_present(generated_md):

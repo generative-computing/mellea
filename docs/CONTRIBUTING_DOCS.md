@@ -188,9 +188,14 @@ Verify before merge: relative links resolve (the Docusaurus build enforces this 
 links, which the build does *not* reject:
 
 ```bash
-rg -n -P '\]\((?:\./|\.\./|/(?!/))[^)]*\)' docs/docs -g '*.md' -g '*.mdx' \
+rg -n -P '\]\((?:\./|\.\./|/(?!/))[^)]*\)' docs/docs -t md \
   | rg -v '\.(md|mdx|png|svg|jpg|jpeg|gif|json|py|ts|yml|yaml|toml|txt|ipynb)(\)|#)'
 ```
+
+Use `-t md` (covers `.md` and `.mdx`), not `-g '*.md' -g '*.mdx'`: an `-g`
+override glob takes precedence over `.gitignore` and so re-includes generated
+pages such as `docs/docs/reference/cli.md`, whose links come from the generator
+and are not a contributor's to fix by hand.
 
 ---
 
