@@ -14,7 +14,9 @@ the BPE round-trip half.
 
 import logging
 import os
+import re
 
+import httpx
 import pytest
 
 from mellea import MelleaSession
@@ -203,3 +205,113 @@ def test_unextendable_prefix_falls_back_and_the_turn_still_succeeds(
         )
     finally:
         windowed.reset()
+
+
+# --- Server-side proof: the prefix cache is actually HIT ----------------------
+#
+# Every assertion above compares ids on the CLIENT: it proves the prompt was eligible
+# for a cache hit (its leading tokens are byte-identical to what the server already
+# saw), not that the server hit its cache. Only the server's own counters show that.
+
+_CACHE_METRIC = re.compile(
+    r"^vllm:(?:gpu_)?prefix_cache_(queries|hits)_total(?:\{[^}]*\})?\s+([0-9.e+-]+)$",
+    re.MULTILINE,
+)
+
+
+def _server_root() -> str:
+    """The server root (no `/v1`), where vLLM serves `/metrics`."""
+    return os.environ["VLLM_TEST_BASE_URL"].rstrip("/").removesuffix("/v1")
+
+
+def _prefix_cache_counters() -> tuple[float, float] | None:
+    """Return `(queries, hits)` summed over label sets, or `None` if unavailable.
+
+    `None` covers both a missing `/metrics` route and a build that reports neither
+    counter (the v0 engine exports a hit-RATE gauge instead), so a server that cannot
+    answer the question makes the test skip rather than fail.
+    """
+    try:
+        body = httpx.get(f"{_server_root()}/metrics", timeout=10.0).text
+    except httpx.HTTPError:
+        return None
+    totals = {"queries": 0.0, "hits": 0.0}
+    found = False
+    for kind, value in _CACHE_METRIC.findall(body):
+        totals[kind] += float(value)
+        found = True
+    return (totals["queries"], totals["hits"]) if found else None
+
+
+def _turn_two_cache_delta(
+    ctx: ChatContext, backend: OpenAIBackend
+) -> tuple[float, float]:
+    """Run a fixed two-turn conversation on `ctx`; return turn 2's `(queries, hits)` delta.
+
+    Turn 1 is outside the measurement: it populates the cache, and what is under test is
+    whether turn 2 finds it. Both turns are identical across callers so the only variable
+    is the context's retention policy.
+    """
+    session = MelleaSession(backend, ctx=ctx)
+    try:
+        session.chat("Name one primary color.")
+        before = _prefix_cache_counters()
+        assert before is not None
+        session.chat("Name another one.")
+        after = _prefix_cache_counters()
+        assert after is not None
+    finally:
+        session.reset()
+    return after[0] - before[0], after[1] - before[1]
+
+
+def test_retained_turn_hits_the_server_prefix_cache(backend: OpenAIBackend) -> None:
+    """Turn 2 of a retaining conversation is HIT by the server's prefix cache.
+
+    The client-side exact-prefix assertions prove eligibility; this reads the server's
+    own `prefix_cache_hits_total` and so proves reuse. Measured as a delta around turn 2
+    only, and the module runs single-threaded against a dedicated server, so no other
+    traffic contributes to the window.
+    """
+    if _prefix_cache_counters() is None:
+        pytest.skip("server exports no prefix_cache_{queries,hits}_total counters")
+
+    queries, hits = _turn_two_cache_delta(
+        ChatContext(retain_token_ids=True, model_id=_MODEL), backend
+    )
+
+    assert queries > 0, "turn 2 queried no cache blocks; the counters are not moving"
+    # Turn 2 re-sends turn 1's whole transcript and adds one short user turn, so the
+    # overwhelming majority of its blocks must already be resident.
+    assert hits > 0, "the retained prefix was queried but never hit"
+    assert hits / queries > 0.5, f"only {hits}/{queries} blocks hit"
+
+
+def test_retaining_ids_is_never_worse_than_re_rendering(backend: OpenAIBackend) -> None:
+    """A retaining context hits at least as much of the cache as a non-retaining one.
+
+    The non-retaining control matters because a high hit rate alone does not implicate
+    the policy: vLLM also hits on a plain chat turn whenever re-rendering the transcript
+    happens to reproduce the same tokens. Asserted as `>=` rather than `>` deliberately
+    -- on a model whose text round-trips exactly (no adapter control tokens, no BPE
+    divergence) the two are legitimately equal, and a strict `>` would make this test
+    fail on precisely the servers where the policy is merely redundant rather than wrong.
+    Serving a Granite Switch build is what makes the gap appear.
+    """
+    if _prefix_cache_counters() is None:
+        pytest.skip("server exports no prefix_cache_{queries,hits}_total counters")
+
+    retained_queries, retained_hits = _turn_two_cache_delta(
+        ChatContext(retain_token_ids=True, model_id=_MODEL), backend
+    )
+    plain_queries, plain_hits = _turn_two_cache_delta(
+        ChatContext(model_id=_MODEL), backend
+    )
+
+    assert retained_queries > 0 and plain_queries > 0
+    retained_rate = retained_hits / retained_queries
+    plain_rate = plain_hits / plain_queries
+    assert retained_rate >= plain_rate, (
+        f"retaining ids hit {retained_rate:.2%} of queried blocks but re-rendering hit "
+        f"{plain_rate:.2%} -- the policy is costing cache hits rather than preserving them"
+    )
