@@ -4,13 +4,13 @@ description: "How instruct(), requirements, and the IVR loop work in Mellea."
 # diataxis: explanation
 ---
 
-**Prerequisites:** [Quick Start](../getting-started/quickstart) complete,
+**Prerequisites:** [Quick Start](../getting-started/quickstart.md) complete,
 `pip install mellea`, Ollama running locally.
 
-`instruct()` is the primary API in Mellea. It builds a structured [`Instruction`](../reference/glossary#component)
+`instruct()` is the primary API in Mellea. It builds a structured [`Instruction`](../reference/glossary.md#component)
 component — not a raw chat message — with a description, requirements, user variables,
 grounding context, few-shot examples, and images. The instruction is rendered through
-[Jinja2](https://jinja.palletsprojects.com/) templates and run through an [instruct–validate–repair (IVR)](../reference/glossary#ivr-instruct-validate-repair) loop by default.
+[Jinja2](https://jinja.palletsprojects.com/) templates and run through an [instruct–validate–repair (IVR)](../reference/glossary.md#ivr-instruct-validate-repair) loop by default.
 
 ## Basic `instruct()`
 
@@ -25,7 +25,7 @@ print(str(email))
 # Output will vary — LLM responses depend on model and temperature.
 ```
 
-`instruct()` returns a [`ModelOutputThunk`](../reference/glossary#modeloutputthunk). Access the result as a string with
+`instruct()` returns a [`ModelOutputThunk`](../reference/glossary.md#modeloutputthunk). Access the result as a string with
 `str(email)` or via `email.value`.
 
 ## User variables
@@ -82,7 +82,7 @@ print(str(email))
 
 ## Custom validation functions
 
-For deterministic checks, attach a `validation_fn` to a [`Requirement`](../reference/glossary#requirement):
+For deterministic checks, attach a `validation_fn` to a [`Requirement`](../reference/glossary.md#requirement):
 
 ```python
 # Requires: mellea
@@ -139,7 +139,7 @@ print(str(email))
 
 ## Sampling strategies and the IVR loop
 
-By default, `instruct()` uses [`RejectionSamplingStrategy`](../reference/glossary#sampling-strategy)`(loop_budget=2)`: it
+By default, `instruct()` uses [`RejectionSamplingStrategy`](../reference/glossary.md#sampling-strategy)`(loop_budget=2)`: it
 generates once, validates all requirements, and retries up to two times if any fail.
 
 Configure the loop explicitly with `strategy`:
@@ -172,13 +172,13 @@ else:
     print(str(result.sample_generations[0].value))
 ```
 
-With `return_sampling_results=True`, `instruct()` returns a [`SamplingResult`](../reference/glossary#samplingresult) instead
+With `return_sampling_results=True`, `instruct()` returns a [`SamplingResult`](../reference/glossary.md#samplingresult) instead
 of a `ModelOutputThunk`. This lets you inspect whether validation passed and access
 all intermediate generations.
 
 > **Advanced:** SOFAI (`SOFAISamplingStrategy`) is a dual-model strategy that routes
 > between a fast and a slow model based on confidence. See
-> [Inference-Time Scaling](../advanced/inference-time-scaling).
+> [Inference-Time Scaling](../advanced/inference-time-scaling.md).
 
 ## Grounding context
 
@@ -200,7 +200,7 @@ print(str(answer))
 `grounding_context` maps string keys to document text. The keys are arbitrary
 labels — they appear in the prompt as `[key] = value` so the model can reference
 them by name, but there is no required naming convention (e.g. `"doc0"`, `"annual_report"`,
-`"spec"` all work). See [Working with Data](../how-to/working-with-data) for richer
+`"spec"` all work). See [Working with Data](../how-to/working-with-data.md) for richer
 document handling using MObjects and `RichDocument`.
 
 ## ICL examples
@@ -254,7 +254,7 @@ print(str(m.ctx.last_output()))
 # Output will vary — LLM responses depend on model and temperature.
 ```
 
-[`ChatContext`](../reference/glossary#context) accumulates turns. `SimpleContext` (the default) discards the previous
+[`ChatContext`](../reference/glossary.md#context) accumulates turns. `SimpleContext` (the default) discards the previous
 turn on each call.
 
 ## `chat()` vs `instruct()`

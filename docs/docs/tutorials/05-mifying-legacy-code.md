@@ -4,10 +4,10 @@ description: "Add LLM query and transform capabilities to existing Python classe
 # diataxis: tutorial
 ---
 
-> **Concept overview:** [MObjects and mify](../concepts/mobjects-and-mify) explains the design and trade-offs.
+> **Concept overview:** [MObjects and mify](../concepts/mobjects-and-mify.md) explains the design and trade-offs.
 
 This tutorial shows how to make existing Python objects queryable and transformable
-by the LLM using [`@mify`](../reference/glossary#mify--mify) — without changing their Python interface or behaviour.
+by the LLM using [`@mify`](../reference/glossary.md#mify--mify) — without changing their Python interface or behaviour.
 
 By the end you will have covered:
 
@@ -17,7 +17,7 @@ By the end you will have covered:
 - Controlling which fields and methods the LLM sees
 - Using `stringify_func` for custom text representations
 
-**Prerequisites:** [Tutorial 01](./your-first-generative-program) complete,
+**Prerequisites:** [Tutorial 01](./01-your-first-generative-program.md) complete,
 `pip install mellea`, Ollama running locally with `granite4.1:3b` downloaded.
 
 ---
@@ -71,7 +71,7 @@ The last purchase of the customer named Ada is wireless headphones.
 
 > **Note:** LLM output is non-deterministic, output may vary.
 
-`@mify` adds the [`MObject`](../reference/glossary#mobject) protocol to every instance. The
+`@mify` adds the [`MObject`](../reference/glossary.md#mobject) protocol to every instance. The
 `stringify_func` controls the text the LLM receives. It is required here because
 without it the model sees Python's default `str()` repr — which for a custom class
 contains no field values — and cannot answer questions about the object's data.
@@ -282,6 +282,6 @@ modifying their class definitions:
 | `funcs_include` | Specific methods should be callable by the LLM |
 | `mify(obj)` | You don't own the class |
 
-**See also:** [MObjects and mify](../concepts/mobjects-and-mify) |
-[Working with Data](../how-to/working-with-data) |
-[Tutorial 03: Using Generative Stubs](./using-generative-stubs)
+**See also:** [MObjects and mify](../concepts/mobjects-and-mify.md) |
+[Working with Data](../how-to/working-with-data.md) |
+[Tutorial 03: Using Generative Stubs](./03-using-generative-stubs.md)

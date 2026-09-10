@@ -22,8 +22,8 @@ class or instance so you can pass it directly to session methods like `m.act()`,
 
 ## Prerequisites
 
-- [Quick Start](../getting-started/quickstart) complete
-- [MObjects and mify](../concepts/mobjects-and-mify) concept page (recommended background)
+- [Quick Start](../getting-started/quickstart.md) complete
+- [MObjects and mify](../concepts/mobjects-and-mify.md) concept page (recommended background)
 - Ollama running locally with `granite4.1:3b` pulled
 
 ## The full example
@@ -324,7 +324,7 @@ explicit.
 
 **What to try next:**
 
-- Read the [MObjects and mify](../concepts/mobjects-and-mify) concept page for
+- Read the [MObjects and mify](../concepts/mobjects-and-mify.md) concept page for
   the full design rationale.
 - See `docs/examples/mify/rich_document_advanced.py` for mify combined with
   rich document types.
@@ -333,4 +333,4 @@ explicit.
 
 ---
 
-**See also:** [MObjects and mify](../concepts/mobjects-and-mify) | [Tutorial 05: MIFYing Legacy Code](../tutorials/mifying-legacy-code) | [Examples Index](../examples)
+**See also:** [MObjects and mify](../concepts/mobjects-and-mify.md) | [Tutorial 05: MIFYing Legacy Code](../tutorials/05-mifying-legacy-code.md) | [Examples Index](./index.md)

@@ -168,10 +168,16 @@ Key rules that differ from typical Markdown habits:
 
 - **No H1 in the body** — Docusaurus renders the frontmatter `title` automatically;
   a body `# Heading` produces a duplicate title in the published site
-- **Use `.md` extensions in relative cross-doc links** — use `../concepts/requirements-system.md`,
-  not `../concepts/requirements-system`. Docusaurus treats links with `.md` as doc
-  cross-references (baseUrl-aware); links without `.md` are treated as raw URL paths
-  and fail the broken-link check when the site is built with a non-root `baseUrl`.
+- **Cross-doc links: relative, with the extension** — use `../concepts/requirements-system.md`,
+  not `../concepts/requirements-system`, and never a root-absolute `/concepts/requirements-system`.
+  With the extension Docusaurus resolves against the **source file**, so a rename breaks the
+  build loudly and the link also works when browsing on GitHub. Extensionless links are raw
+  URL paths checked only against the route table, and root-absolute ones are version-blind —
+  from a page in `docs/docs/` (the `next` version) they resolve to the *released* version's
+  route. Numbered files keep their prefix in the link
+  (`../tutorials/02-streaming-and-async.md`). The Docusaurus build does **not** reject
+  extensionless links, so check with the `rg` sweep in
+  [`docs/CONTRIBUTING_DOCS.md`](docs/CONTRIBUTING_DOCS.md) → Links.
 - **Frontmatter required** — every page needs `title` and `description`; add
   `sidebar_label` if the title is long
 - **markdownlint gate** — run `npx markdownlint-cli2 "docs/docs/**/*.md"` and fix

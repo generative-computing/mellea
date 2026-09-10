@@ -456,7 +456,10 @@ def _render_command(
             for kind, path in links:
                 if kind == "guide":
                     title = _slug_to_title(path.split("/")[-1])
-                    see_parts.append(f"[{title}](../{path})")
+                    # The `.md` extension makes Docusaurus resolve the link
+                    # against the source file, so a renamed guide fails the
+                    # build instead of silently resolving to another version.
+                    see_parts.append(f"[{title}](../{path}.md)")
             if see_parts:
                 lines.append(f"**See also:** {', '.join(see_parts)}")
                 lines.append("")

@@ -4,7 +4,7 @@ description: "Export distributed traces from Mellea using OpenTelemetry semantic
 # diataxis: how-to
 ---
 
-**Prerequisites:** [Telemetry](../observability/telemetry)
+**Prerequisites:** [Telemetry](./telemetry.md)
 introduces the environment variables and trace scopes. This page focuses on
 exporting traces to external backends and interpreting the span data they contain.
 
@@ -309,7 +309,7 @@ When you open a trace in your backend, look for these patterns:
 **High input token counts on early spans.** A single `action` span with
 `gen_ai.usage.input_tokens` much larger than expected usually means the context
 has accumulated many previous messages. Use
-[prefix caching](../advanced/prefix-caching-and-kv-blocks) to reduce cost.
+[prefix caching](../advanced/prefix-caching-and-kv-blocks.md) to reduce cost.
 
 **Repeated `validation` spans beneath one `sampling` span.** The model is
 retrying because requirements keep failing. Each `sampling` span records
@@ -342,9 +342,9 @@ uv run python docs/examples/telemetry/telemetry_example.py
 
 **See also:**
 
-- [Telemetry](../observability/telemetry) — overview of all
+- [Telemetry](./telemetry.md) — overview of all
   telemetry features and configuration.
-- [Metrics](../observability/metrics) — metrics, exporters,
+- [Metrics](./metrics.md) — metrics, exporters,
   and custom instruments.
-- [Logging](../observability/logging) — console logging and OTLP
+- [Logging](./logging.md) — console logging and OTLP
   log export.

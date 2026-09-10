@@ -238,7 +238,7 @@ m = MelleaSession(
 )
 ```
 
-See [Backends and Configuration](../how-to/backends-and-configuration) for the
+See [Backends and Configuration](../how-to/backends-and-configuration.md) for the
 full `OpenAIBackend` reference.
 
 ## Troubleshooting
@@ -273,5 +273,5 @@ pip install mellea
 
 ---
 
-**See also:** [Backends and Configuration](../how-to/backends-and-configuration) |
-[Getting Started](../getting-started/installation)
+**See also:** [Backends and Configuration](../how-to/backends-and-configuration.md) |
+[Getting Started](../getting-started/installation.md)

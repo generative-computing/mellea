@@ -4,7 +4,7 @@ description: "Create custom components, backends, sampling strategies, and requi
 # diataxis: how-to
 ---
 
-**Prerequisites:** Mellea installed (`uv sync --all-extras --all-groups`), familiarity with the [core concepts](../concepts/requirements-system).
+**Prerequisites:** Mellea installed (`uv sync --all-extras --all-groups`), familiarity with the [core concepts](../concepts/requirements-system.md).
 
 Mellea is designed to be extended at every layer. You can add new Requirements,
 Components, Sampling Strategies, and Backends without modifying the core library.
@@ -25,7 +25,7 @@ Choose the pathway that fits the scope of your work:
 
 ## Custom requirements
 
-A [`Requirement`](../reference/glossary#requirement) validates a generation against a
+A [`Requirement`](../reference/glossary.md#requirement) validates a generation against a
 criterion. You can provide a Python function for deterministic checks, or rely on
 LLM-as-a-Judge for semantic validation.
 
@@ -88,11 +88,11 @@ strict_requirement = Requirement(
 )
 ```
 
-For deeper validation patterns, see [Write Custom Verifiers](../how-to/write-custom-verifiers).
+For deeper validation patterns, see [Write Custom Verifiers](../how-to/write-custom-verifiers.md).
 
 ## Custom components
 
-A [`Component`](../reference/glossary#component) is a composite data structure that an LLM
+A [`Component`](../reference/glossary.md#component) is a composite data structure that an LLM
 can read and write. Implement the `Component` protocol by providing `parts`,
 `format_for_llm`, and `_parse`:
 
@@ -137,11 +137,11 @@ class TaggedOutput(Component[str]):
 ```
 
 For a full walkthrough of the Component protocol and templating system, see
-[Custom Components](../advanced/custom-components).
+[Custom Components](../advanced/custom-components.md).
 
 ## Custom sampling strategies
 
-A [`SamplingStrategy`](../reference/glossary#sampling-strategy) controls how Mellea
+A [`SamplingStrategy`](../reference/glossary.md#sampling-strategy) controls how Mellea
 generates and validates outputs — for example, rejection sampling, best-of-n, or
 beam search. Subclass `SamplingStrategy` and implement `sample`:
 
@@ -222,11 +222,11 @@ class BestOfNStrategy(SamplingStrategy):
 ```
 
 For built-in strategies and advanced patterns, see
-[Inference-Time Scaling](../advanced/inference-time-scaling).
+[Inference-Time Scaling](../advanced/inference-time-scaling.md).
 
 ## Custom backends
 
-A [`Backend`](../reference/glossary#backend) connects Mellea to an inference provider.
+A [`Backend`](../reference/glossary.md#backend) connects Mellea to an inference provider.
 Subclass the abstract `Backend` class from `mellea.core.backend`, implement
 `_generate_from_context` and `_generate_from_raw`, and set `_model_id` and
 `_provider`.
@@ -302,7 +302,7 @@ class EchoBackend(Backend):
 ```
 
 The full `Backend` abstract interface is documented in the
-[API reference](/api/mellea/core/backend).
+[API reference](../api/mellea/core/backend.mdx).
 
 > **Note:** Production backends handle async streaming, tokenization, and error
 > recovery. Study an existing backend in `mellea/backends/` before implementing
@@ -322,7 +322,7 @@ standard library. It is the right place for:
 
 1. Open an issue on mellea-contribs describing your extension.
 2. Fork the repository and create a branch.
-3. Follow the coding standards from the [contributing guide](../community/contributing-guide).
+3. Follow the coding standards from the [contributing guide](./contributing-guide.md).
 4. Open a pull request referencing the issue.
 
 If a contribution in mellea-contribs matures and proves broadly useful, it can
@@ -331,6 +331,6 @@ graduate to the standard library via an issue in the core repository.
 ---
 
 **See also:**
-[Custom Components](../advanced/custom-components),
-[Write Custom Verifiers](../how-to/write-custom-verifiers),
-[Inference-Time Scaling](../advanced/inference-time-scaling)
+[Custom Components](../advanced/custom-components.md),
+[Write Custom Verifiers](../how-to/write-custom-verifiers.md),
+[Inference-Time Scaling](../advanced/inference-time-scaling.md)

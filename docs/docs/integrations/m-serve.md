@@ -111,6 +111,6 @@ print(response.choices[0].message.content)
 
 ---
 
-**See also:** [Context and Sessions](../concepts/context-and-sessions) |
-[Backends and Configuration](../how-to/backends-and-configuration) |
-[CLI Reference](../reference/cli)
+**See also:** [Context and Sessions](../concepts/context-and-sessions.md) |
+[Backends and Configuration](../how-to/backends-and-configuration.md) |
+[CLI Reference](../reference/cli.md)

@@ -184,7 +184,7 @@ def test_see_also_targets_exist(click_app):
         for kind, path in _parse_see_also(see_also):
             if kind != "guide":
                 continue
-            # The generator produces ../<path> relative to reference/cli.md,
+            # The generator produces ../<path>.md relative to reference/cli.md,
             # which means docs/<path>.md or docs/<path>.mdx must exist.
             candidate_md = docs_root / f"{path}.md"
             candidate_mdx = docs_root / f"{path}.mdx"

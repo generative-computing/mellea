@@ -6,10 +6,10 @@ description: "How the @generative decorator turns a Python function signature in
 
 In classical programming, a pure function takes inputs and produces outputs deterministically.
 In a generative program, a function can have the same interface but delegate its implementation
-to an LLM. Mellea calls these [**generative functions**](../reference/glossary#generative-function) and provides the [`@generative`](../reference/glossary#generative) decorator
+to an LLM. Mellea calls these [**generative functions**](../reference/glossary.md#generative-function) and provides the [`@generative`](../reference/glossary.md#generative) decorator
 to define them.
 
-> **Looking to use this in code?** See [Generative Functions](../how-to/generative-functions) for practical examples and API details.
+> **Looking to use this in code?** See [Generative Functions](../how-to/generative-functions.md) for practical examples and API details.
 
 ## The @generative decorator
 
@@ -175,6 +175,6 @@ functions, which can be maintained and tested independently.
 Use `@generative` when you want a named, typed, reusable LLM-backed operation. Use
 `m.instruct()` for one-off generation where a function abstraction would be overhead.
 
-**See also:** [Instruct, Validate, Repair](./instruct-validate-repair) |
-[The Requirements System](./requirements-system) |
-[Tools and Agents](../how-to/tools-and-agents)
+**See also:** [Instruct, Validate, Repair](./instruct-validate-repair.md) |
+[The Requirements System](./requirements-system.md) |
+[Tools and Agents](../how-to/tools-and-agents.md)

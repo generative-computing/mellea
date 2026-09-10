@@ -168,11 +168,29 @@ State only what is genuinely required for that specific page.
 
 ## Links
 
-- Within guide: relative, **include the `.md` extension** — `./tools-and-agents.md`, not `./tools-and-agents`. Without `.md`, Docusaurus treats the link as a raw URL path; it resolves incorrectly on deployments with a non-root `baseUrl` and fails `onBrokenLinks: 'throw'`.
-- API reference: from docs root — `../../api/mellea/stdlib/session`
+- Within guide: relative, **include the file extension** — `./tools-and-agents.md`, not
+  `./tools-and-agents`. With the extension, Docusaurus resolves the link against the
+  **source file**, so renaming or moving a page breaks the build loudly; the link also
+  works when the file is browsed on GitHub. Without it, the link is a raw URL path
+  checked only against the route table — a stale link can silently resolve to a
+  same-named page in a different docs version.
+- **Never link with a root-absolute path** — `/how-to/act-and-aact` is version-blind: from
+  a page in `docs/docs/` (the `next` version) it resolves to the *released* version's
+  route. Use the relative form instead.
+- Numbered filenames keep their prefix in the link: `../tutorials/02-streaming-and-async.md`,
+  even though the published route drops it (`/tutorials/streaming-and-async`).
+- API reference: relative, extension included — `../../api/mellea/stdlib/session.mdx`
+  (the generator emits `.mdx`).
 - External: descriptive text — `[Ollama](https://ollama.ai)` — no bare URLs.
 
-Verify before merge: relative links resolve (the Docusaurus build enforces this with `onBrokenLinks: 'throw'`), absolute URLs return HTTP 200.
+Verify before merge: relative links resolve (the Docusaurus build enforces this with
+`onBrokenLinks: 'throw'`), absolute URLs return HTTP 200. To catch extensionless internal
+links, which the build does *not* reject:
+
+```bash
+rg -n -P '\]\((?:\./|\.\./|/(?!/))[^)]*\)' docs/docs -g '*.md' -g '*.mdx' \
+  | rg -v '\.(md|mdx|png|svg|jpg|jpeg|gif|json|py|ts|yml|yaml|toml|txt|ipynb)(\)|#)'
+```
 
 ---
 
@@ -478,7 +496,7 @@ Guide pages that document CLI commands should include a link to the CLI Referenc
 in their **See also** footer:
 
 ```markdown
-**See also:** [Other Page](../path/to-page) | [CLI Reference](../reference/cli)
+**See also:** [Other Page](../path/to-page.md) | [CLI Reference](../reference/cli.md)
 ```
 
 ---
@@ -530,7 +548,8 @@ npx markdownlint-cli2 "docs/docs/**/*.md"
 - [ ] All code blocks have language tags.
 - [ ] All code and inline fragments verified against current Mellea source.
 - [ ] No real API keys or credentials.
-- [ ] All relative cross-doc links include `.md` extension; external links checked.
+- [ ] All cross-doc links are relative and include the `.md`/`.mdx` extension (no
+      root-absolute `/how-to/...` paths); external links checked.
 - [ ] US English throughout, including code comments.
 - [ ] `markdownlint` passes with zero warnings.
 - [ ] New glossary terms added to `glossary.md`.

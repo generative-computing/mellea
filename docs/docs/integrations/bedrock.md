@@ -41,8 +41,8 @@ print(str(result))
 # Output will vary — LLM responses depend on model and temperature.
 ```
 
-`create_bedrock_openai_backend` returns an [`OpenAIBackend`](../reference/glossary#backend) pointed at the Bedrock
-Mantle endpoint. Pass it to [`MelleaSession`](../reference/glossary#melleasession) as shown above. It reads `AWS_BEARER_TOKEN_BEDROCK` from the environment and checks
+`create_bedrock_openai_backend` returns an [`OpenAIBackend`](../reference/glossary.md#backend) pointed at the Bedrock
+Mantle endpoint. Pass it to [`MelleaSession`](../reference/glossary.md#melleasession) as shown above. It reads `AWS_BEARER_TOKEN_BEDROCK` from the environment and checks
 that the requested model is available in the target region before returning.
 
 ## Specifying a region
@@ -92,7 +92,7 @@ print(stringify_mantle_model_ids())
 
 ## Bedrock via LiteLLM
 
-An alternative path to Bedrock is the [`LiteLLMBackend`](../reference/glossary#litellm--litellmbackend),
+An alternative path to Bedrock is the [`LiteLLMBackend`](../reference/glossary.md#litellm--litellmbackend),
 which uses the standard AWS credentials chain (IAM roles, `~/.aws/credentials`,
 environment variables):
 
@@ -149,9 +149,9 @@ or pass a different `region` to `create_bedrock_openai_backend`.
 
 Bedrock models accessed via the Mantle endpoint use the `OpenAIBackend` under the hood,
 so vision-capable models (e.g., `amazon.nova-pro-v1:0`) support image input via
-`images=[...]`. Pass a PIL image or an [`ImageBlock`](../reference/glossary#imageblock) to
-`instruct()` or `chat()`. See [Use Images and Vision Models](../how-to/use-images-and-vision).
+`images=[...]`. Pass a PIL image or an [`ImageBlock`](../reference/glossary.md#imageblock) to
+`instruct()` or `chat()`. See [Use Images and Vision Models](../how-to/use-images-and-vision.md).
 
 ---
 
-**See also:** [Backends and Configuration](../how-to/backends-and-configuration)
+**See also:** [Backends and Configuration](../how-to/backends-and-configuration.md)

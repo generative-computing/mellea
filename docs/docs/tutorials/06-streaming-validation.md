@@ -21,8 +21,8 @@ By the end you will have covered:
   by iterating `stream(as_events=True)`
 - Subclassing `ChunkingStrategy` to define a custom split boundary
 
-**Prerequisites:** [Tutorial 02](./streaming-and-async) (async and streaming),
-[Tutorial 04](./making-agents-reliable) (requirements and validation),
+**Prerequisites:** [Tutorial 02](./02-streaming-and-async.md) (async and streaming),
+[Tutorial 04](./04-making-agents-reliable.md) (requirements and validation),
 `pip install mellea`, Ollama running locally with `granite4.1:3b` downloaded.
 
 ---
@@ -575,6 +575,6 @@ explicitly or subclass to override `flush()`.
 ---
 
 > **See also:**
-> [How-to: Streaming with per-chunk validation](../how-to/use-async-and-streaming#streaming-with-per-chunk-validation) |
-> [Concepts: The Requirements System — Streaming validation](../concepts/requirements-system#streaming-validation) |
+> [How-to: Streaming with per-chunk validation](../how-to/use-async-and-streaming.md#streaming-with-per-chunk-validation) |
+> [Concepts: The Requirements System — Streaming validation](../concepts/requirements-system.md#streaming-validation) |
 > [Examples: streaming/](https://github.com/generative-computing/mellea/tree/main/docs/examples/streaming)

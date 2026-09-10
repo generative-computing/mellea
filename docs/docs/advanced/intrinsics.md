@@ -5,7 +5,7 @@ description: "Adapter-accelerated RAG quality checks using LoRA/aLoRA adapters w
 ---
 
 **Prerequisites:** use `uv sync --extra hf` for runtime LoRA/aLoRA adapter
-functions and local [Granite Switch](/reference/glossary#granite-switch)
+functions and local [Granite Switch](../reference/glossary.md#granite-switch)
 checkpoints. Both local paths require a GPU or Apple Silicon Mac. An
 OpenAIBackend using a Granite Switch model served via vLLM uses
 `uv sync --extra switch` when it downloads embedded adapter metadata.
@@ -356,7 +356,7 @@ instances for you.
 Safety and factuality checks use a separate set of Guardian-specific adapter functions:
 `guardian_check()`, `policy_guardrails()`, `factuality_detection()`, and
 `factuality_correction()`. These are documented in the
-[Safety Guardrails](../how-to/safety-guardrails) how-to guide.
+[Safety Guardrails](../how-to/safety-guardrails.md) how-to guide.
 
 **See also:**
 [Adding a custom adapter function in 20 lines](../tutorials/07-custom-adapter-function.md) |
