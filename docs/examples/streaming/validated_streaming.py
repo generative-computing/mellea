@@ -3,7 +3,7 @@
 """Streaming generation with per-chunk validation using stream().
 
 Demonstrates:
-- Subclassing Requirement to override stream_validate() for early-exit checks
+- Subclassing Requirement to override _stream_validate() for early-exit checks
 - Calling stream() with sentence-level chunking
 - Iterating the typed StreamEvents from an EventStreamer (stream(as_events=True))
 - Driving the stream with `async with` + `async for` for safe cleanup
@@ -59,7 +59,7 @@ class MaxSentencesReq(Requirement):
     def format_for_llm(self) -> str:
         return f"The response must be at most {self._limit} sentences long."
 
-    async def stream_validate(
+    async def _stream_validate(
         self, chunk: str, *, backend: Backend, ctx: Context
     ) -> PartialValidationResult:
         self._count += len(_SENTENCE_END.findall(chunk))
