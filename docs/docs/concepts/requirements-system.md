@@ -371,7 +371,7 @@ on a different form of whitespace and discards it. For example, `sentence` → `
 `"ran.The"` as one word once the inter-sentence space is gone, and `paragraph` →
 `sentence` sees two sentences as one once the blank line is gone. So set `chunking=None`
 on the stream whenever a requirement carries its own `chunking`, and each requirement
-chunks the raw deltas independently. A custom chunker that preserves its separator can
+chunks the raw deltas independently. A custom chunking strategy that preserves its separator can
 still compose across granularities; the constraint is specific to the built-in three.
 
 > **See also:** [Streaming with per-chunk validation](../how-to/use-async-and-streaming#streaming-with-per-chunk-validation)

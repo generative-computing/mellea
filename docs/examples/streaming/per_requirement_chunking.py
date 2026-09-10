@@ -57,6 +57,17 @@ class MaxWordsPerSentence(Requirement):
             )
         return PartialValidationResult("unknown")
 
+    async def validate(
+        self,
+        backend: Backend,
+        ctx: Context,
+        *,
+        format: type | None = None,
+        model_options: dict | None = None,
+    ) -> ValidationResult:
+        # Overridden only to skip the default LLM-as-a-judge fallback.
+        return ValidationResult(result=True)
+
 
 class NoBannedWord(Requirement):
     """Fails if any word matches a banned term.
@@ -80,6 +91,17 @@ class NoBannedWord(Requirement):
         if word in self._banned:
             return PartialValidationResult("fail", reason=f"banned word: {word!r}")
         return PartialValidationResult("unknown")
+
+    async def validate(
+        self,
+        backend: Backend,
+        ctx: Context,
+        *,
+        format: type | None = None,
+        model_options: dict | None = None,
+    ) -> ValidationResult:
+        # Overridden only to skip the default LLM-as-a-judge fallback.
+        return ValidationResult(result=True)
 
 
 async def main() -> None:

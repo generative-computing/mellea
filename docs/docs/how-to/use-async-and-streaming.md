@@ -369,8 +369,9 @@ requirement (both `"pass"` and `"unknown"`). This means `"pass"` from
 The `chunking=` on `stream()` sets what the *consumer* receives. A requirement
 declares the granularity its own check needs, independent of the stream's: a
 sentence-level check knows it wants sentences, so it sets `chunking="sentence"` in
-its constructor and validates sentence by sentence regardless of the stream's
-chunking. See
+its constructor. Because the built-in chunking strategies all discard their
+separators, set the stream's `chunking=None` when a requirement carries its own,
+so each requirement re-chunks the raw deltas independently. See
 [`docs/examples/streaming/per_requirement_chunking.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/streaming/per_requirement_chunking.py)
 for two requirements validating one stream at different granularities.
 

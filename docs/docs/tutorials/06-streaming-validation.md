@@ -615,7 +615,7 @@ A requirement *coarser* than the stream may never reach a boundary mid-stream; i
 fused wherever the stream's chunker dropped a separator.
 
 A *finer* requirement hits the same fusion mid-stream, and `sentence` → `word` is the clearest
-case: the sentence chunker eats the space between sentences, which is exactly the boundary `word`
+case: sentence chunking eats the space between sentences, which is exactly the boundary `word`
 chunking needs. Feed a word-level requirement the sentence chunks `"A cat jumped the dog."` then
 `"The dog caught the horse."`; with no space between them in the requirement's accumulated buffer,
 it sees:
@@ -626,7 +626,7 @@ it sees:
 
 `"dog.The"` fused across the boundary, so a check for the word `"The"` never fires. So set the
 stream to `chunking=None` whenever a requirement carries its own `chunking` and let each
-requirement re-chunk the raw deltas independently. A custom chunker that keeps its separator can
+requirement re-chunk the raw deltas independently. A custom chunking strategy that keeps its separator can
 still compose with a different stream granularity; the constraint is specific to the built-in
 three.
 
