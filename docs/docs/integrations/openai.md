@@ -400,7 +400,7 @@ separately on the underlying `ModelOutputThunk`.
 > see [Reasoning and thinking mode](../how-to/configure-model-options.md#reasoning-and-thinking-mode).
 > The `extra_body`/`enable_thinking` pattern below remains useful as a fallback
 > for runtime-specific params `ModelOption.THINKING` doesn't cover, and for the
-> post-#1617 `default_extra_body` merge semantics described here.
+> `default_extra_body` merge semantics described below.
 
 Diagnose with:
 
