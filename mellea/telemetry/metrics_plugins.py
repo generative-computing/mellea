@@ -182,8 +182,10 @@ class LatencyMetricsPlugin(Plugin, name="latency_metrics", priority=1051):
     ) -> None:
         """Record inter-chunk timing from `chunk_processed` events.
 
-        Each streamed chunk after the first carries an interval; the first has
-        none and is skipped. `chunk_processed` events are opt-in via
+        The recorded interval is a client-side chunk-receipt cadence: work between
+        chunk receipts counts toward it, so it is not purely the provider's
+        token-generation rate. Each streamed chunk after the first carries an interval;
+        the first has none and is skipped. `chunk_processed` events are opt-in via
         `MELLEA_GENERATION_CHUNK_EVENTS`, so the
         `gen_ai.client.operation.time_per_output_chunk` histogram stays empty
         unless that flag is set.

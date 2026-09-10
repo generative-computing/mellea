@@ -19,7 +19,13 @@ from typing import Any
 import pytest
 
 from mellea.core.backend import Backend
-from mellea.core.base import CBlock, Context, GenerateType, ModelOutputThunk
+from mellea.core.base import (
+    _STREAM_QUEUE_MAXSIZE,
+    CBlock,
+    Context,
+    GenerateType,
+    ModelOutputThunk,
+)
 from mellea.core.requirement import (
     PartialValidationResult,
     Requirement,
@@ -1003,11 +1009,11 @@ async def test_external_cancellation_mid_stream_still_finalizes() -> None:
 async def test_early_exit_does_not_deadlock() -> None:
     """A high-throughput stream that fails early must not hang.
 
-    The response is far longer than the MOT queue (maxsize 20), so an early
-    fail must not leave the producer blocked on a full queue after the consumer
-    stops. A hang trips the timeout.
+    The response is far longer than the MOT queue, so an early fail must not
+    leave the producer blocked on a full queue after the consumer stops. A hang
+    trips the timeout.
     """
-    response = "word " * 200
+    response = "word " * (_STREAM_QUEUE_MAXSIZE * 10)
     backend = StreamingMockBackend(response, token_size=5)
     req = FailAfterWordsReq(threshold=3)
 

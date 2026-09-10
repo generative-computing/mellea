@@ -4,9 +4,11 @@
 """Unit tests for mellea.helpers.async_helpers."""
 
 import asyncio
+import datetime
 
 import pytest
 
+from mellea.core.base import ModelOutputThunk
 from mellea.helpers.async_helpers import (
     DEFAULT_CHUNK_TIMEOUT,
     ClientCache,
@@ -17,6 +19,19 @@ from mellea.helpers.async_helpers import (
 # --- send_to_queue ---
 
 
+def _make_thunk(*, streaming: bool = False) -> ModelOutputThunk:
+    """A bare thunk whose `_gen.queue` receives `send_to_queue` output.
+
+    With `streaming=True` the thunk is primed so `_record_ttfb()` stamps `ttfb_ms`
+    at first-chunk receipt.
+    """
+    mot: ModelOutputThunk = ModelOutputThunk(value=None)
+    if streaming:
+        mot.generation.streaming = True
+        mot._gen.start = datetime.datetime.now()
+    return mot
+
+
 class TestSendToQueue:
     async def test_coroutine_single_value(self):
         """Coroutine returning a non-iterator value is put into queue followed by sentinel."""
@@ -24,8 +39,9 @@ class TestSendToQueue:
         async def produce():
             return "result"
 
-        q: asyncio.Queue = asyncio.Queue()
-        await send_to_queue(produce(), q)
+        mot = _make_thunk()
+        q = mot._gen.queue
+        await send_to_queue(produce(), mot)
         assert await q.get() == "result"
         assert await q.get() is None  # sentinel
 
@@ -39,8 +55,9 @@ class TestSendToQueue:
 
             return _gen()
 
-        q: asyncio.Queue = asyncio.Queue()
-        await send_to_queue(produce(), q)
+        mot = _make_thunk()
+        q = mot._gen.queue
+        await send_to_queue(produce(), mot)
         assert await q.get() == "a"
         assert await q.get() == "b"
         assert await q.get() is None
@@ -52,8 +69,9 @@ class TestSendToQueue:
             yield 1
             yield 2
 
-        q: asyncio.Queue = asyncio.Queue()
-        await send_to_queue(_gen(), q)
+        mot = _make_thunk()
+        q = mot._gen.queue
+        await send_to_queue(_gen(), mot)
         assert await q.get() == 1
         assert await q.get() == 2
         assert await q.get() is None
@@ -64,8 +82,9 @@ class TestSendToQueue:
         async def explode():
             raise ValueError("boom")
 
-        q: asyncio.Queue = asyncio.Queue()
-        await send_to_queue(explode(), q)
+        mot = _make_thunk()
+        q = mot._gen.queue
+        await send_to_queue(explode(), mot)
         item = await q.get()
         assert isinstance(item, ValueError)
         assert str(item) == "boom"
@@ -77,8 +96,9 @@ class TestSendToQueue:
             yield "ok"
             raise RuntimeError("mid-stream")
 
-        q: asyncio.Queue = asyncio.Queue()
-        await send_to_queue(_gen(), q)
+        mot = _make_thunk()
+        q = mot._gen.queue
+        await send_to_queue(_gen(), mot)
         assert await q.get() == "ok"
         item = await q.get()
         assert isinstance(item, RuntimeError)
@@ -91,8 +111,9 @@ class TestSendToQueue:
             await asyncio.sleep(1)  # longer than chunk_timeout
             yield "never"  # pragma: no cover
 
-        q: asyncio.Queue = asyncio.Queue()
-        await send_to_queue(_stalling_gen(), q, chunk_timeout=0.05)
+        mot = _make_thunk()
+        q = mot._gen.queue
+        await send_to_queue(_stalling_gen(), mot, chunk_timeout=0.05)
 
         assert await q.get() == "first"
         item = await q.get()
@@ -113,9 +134,10 @@ class TestSendToQueue:
             await asyncio.sleep(1)
             yield "never"  # pragma: no cover
 
-        q: asyncio.Queue = asyncio.Queue()
+        mot = _make_thunk()
+        q = mot._gen.queue
         await send_to_queue(
-            _stalling_gen(), q, chunk_timeout=0.05, on_timeout=on_timeout
+            _stalling_gen(), mot, chunk_timeout=0.05, on_timeout=on_timeout
         )
 
         assert await q.get() == "first"
@@ -132,9 +154,10 @@ class TestSendToQueue:
             await asyncio.sleep(1)
             yield "never"  # pragma: no cover
 
-        q: asyncio.Queue = asyncio.Queue()
+        mot = _make_thunk()
+        q = mot._gen.queue
         await send_to_queue(
-            _stalling_gen(), q, chunk_timeout=0.05, on_timeout=on_timeout
+            _stalling_gen(), mot, chunk_timeout=0.05, on_timeout=on_timeout
         )
 
         item = await q.get()
@@ -152,9 +175,10 @@ class TestSendToQueue:
         async def _completed_gen():
             yield "done"
 
-        q: asyncio.Queue = asyncio.Queue()
+        mot = _make_thunk()
+        q = mot._gen.queue
         await send_to_queue(
-            _completed_gen(), q, chunk_timeout=0.05, on_timeout=on_timeout
+            _completed_gen(), mot, chunk_timeout=0.05, on_timeout=on_timeout
         )
 
         assert await q.get() == "done"
@@ -173,9 +197,10 @@ class TestSendToQueue:
             raise TimeoutError("backend timeout")
             yield  # pragma: no cover
 
-        q: asyncio.Queue = asyncio.Queue()
+        mot = _make_thunk()
+        q = mot._gen.queue
         await send_to_queue(
-            _backend_timeout(), q, chunk_timeout=1, on_timeout=on_timeout
+            _backend_timeout(), mot, chunk_timeout=1, on_timeout=on_timeout
         )
 
         item = await q.get()
@@ -191,12 +216,55 @@ class TestSendToQueue:
             await asyncio.sleep(0.05)
             yield "b"
 
-        q: asyncio.Queue = asyncio.Queue()
-        await send_to_queue(_slow_gen(), q, chunk_timeout=None)
+        mot = _make_thunk()
+        q = mot._gen.queue
+        await send_to_queue(_slow_gen(), mot, chunk_timeout=None)
 
         assert await q.get() == "a"
         assert await q.get() == "b"
         assert await q.get() is None  # sentinel present on clean completion
+
+    async def test_ttfb_stamped_at_first_chunk_for_streaming(self):
+        """A streaming response stamps ttfb_ms on the thunk at first-chunk receipt."""
+
+        async def _gen():
+            yield "a"
+            yield "b"
+
+        mot = _make_thunk(streaming=True)
+        await send_to_queue(_gen(), mot)
+
+        # Stamped during production, before any consumer dequeues.
+        assert mot.generation.ttfb_ms is not None
+        assert mot.generation.ttfb_ms >= 0
+
+    async def test_ttfb_not_stamped_for_non_iterator(self):
+        """A non-iterator (non-streaming) response leaves ttfb_ms unset."""
+
+        async def produce():
+            return "result"
+
+        mot = _make_thunk(streaming=True)
+        await send_to_queue(produce(), mot)
+
+        assert await mot._gen.queue.get() == "result"
+        assert mot.generation.ttfb_ms is None
+
+    async def test_chunk_intervals_captured_per_chunk(self):
+        """send_to_queue records one receipt interval per chunk: None first, then floats."""
+
+        async def _gen():
+            yield "a"
+            yield "b"
+            yield "c"
+
+        mot = _make_thunk(streaming=True)
+        await send_to_queue(_gen(), mot)
+
+        intervals = list(mot._gen.chunk_intervals)
+        assert len(intervals) == 3
+        assert intervals[0] is None
+        assert all(isinstance(i, float) and i >= 0 for i in intervals[1:])
 
     def test_default_chunk_timeout_value(self):
         """DEFAULT_CHUNK_TIMEOUT is 120 seconds."""
