@@ -497,6 +497,14 @@ def _rebuild_chat_context(
     / `model_id` arguments; any that is left `None` falls back to `source`'s
     value.
 
+    The retained token ids are the one exception to that copy. `_retain_token_ids`
+    is POLICY and is preserved, so compaction does not silently downgrade a
+    retaining conversation to full chat renders; the ids, their count, digest, and
+    template kwargs are per-conversation STATE naming exactly which messages the
+    server has already seen, and compaction just dropped some of them, so they are
+    reset to the class defaults on every rebuilt node. This is the same policy/state
+    split `_make_root` makes.
+
     Note:
         Nodes are constructed via `cls.__new__(cls)` and configured by copying
         fields, so the subclass initializer is deliberately not re-run. A
@@ -519,7 +527,8 @@ def _rebuild_chat_context(
     Args:
         components: Components to materialise as the new context, in order.
         source: The context being rebuilt. Its `_propagated_fields` values are
-            copied onto every node so subclass-owned state survives.
+            copied onto every node so subclass-owned state survives -- except the
+            retained token ids, which are reset (see the note above).
         compactor: Compactor to attach to every node; when `None`, `source`'s
             compactor is used.
         token_context_length_limit: Token budget to attach to every node; when
@@ -548,6 +557,19 @@ def _rebuild_chat_context(
         for field, value in overrides.items():
             if value is not None:
                 setattr(node, field, value)
+        # `_retain_token_ids` rides along with that copy, which is what compaction
+        # must preserve: the POLICY, so a retaining conversation is not silently
+        # downgraded to full chat renders. The retained ids are the opposite -- they
+        # are per-conversation STATE naming exactly which messages the server has
+        # seen, and compaction just dropped some of those, so ids covering them
+        # describe a conversation that no longer exists. Reset them to the class
+        # defaults, the same policy/state split `_make_root` makes. A fresh dict per
+        # node, never the shared class-level default.
+        node._sent_token_ids = ()
+        node._sent_model_id = None
+        node._sent_message_count = 0
+        node._sent_prompt_digest = ()
+        node._sent_template_kwargs = {}
 
     ctx: ChatContext = target_cls.__new__(target_cls)
     Context.__init__(ctx)

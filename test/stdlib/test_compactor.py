@@ -216,6 +216,57 @@ class TestWindowCompactor:
         assert [m.content for m in items] == ["m4", "m5", "m6"]
 
 
+class TestCompactionPreservesContextPolicy:
+    """Compaction rebuilds every node, so per-node configuration must survive it.
+
+    `_rebuild_chat_context` builds nodes via `__new__` and re-applies configuration by
+    hand, which is where a field can be forgotten. `ChatContext` distinguishes POLICY
+    (survives a rebuild) from per-conversation STATE (must be cleared) -- see
+    `_make_root`, which keeps the first and clears the second.
+    """
+
+    def test_manual_compaction_keeps_the_retain_token_ids_policy(self):
+        """A retaining context is still retaining after it is compacted.
+
+        Losing the policy silently downgrades every later turn to a full chat render:
+        nothing raises, nothing logs, and the only symptom is a fallen prefix-cache hit
+        rate -- so a caller who compacts mid-conversation would never learn that the
+        feature stopped working.
+        """
+        ctx = ChatContext(retain_token_ids=True, window_size=10_000)
+        for i in range(4):
+            ctx = ctx.add(_msg(i))
+
+        compacted = WindowCompactor(size=2).compact(ctx)
+
+        assert compacted.retains_token_ids is True
+        # And it keeps propagating to nodes appended after the rebuild.
+        assert compacted.add(_msg(9)).retains_token_ids is True
+
+    def test_manual_compaction_clears_the_retained_ids_it_invalidated(self):
+        """Compaction dropped turns, so the ids covering them must NOT survive.
+
+        The policy travels; the prefix does not. Splicing ids that cover messages
+        compaction just removed would send a prompt whose prefix the server never saw
+        (the backend's shrink guard refuses them anyway, but on a fresh chain there is
+        nothing to refuse -- the state must simply be gone).
+        """
+        ctx = ChatContext(retain_token_ids=True, window_size=10_000)
+        ctx = ctx.add(_msg(0)).add(_msg(1))
+        ctx = ctx.with_sent_token_ids(
+            [10, 11, 12], model_id="granite", message_count=2, prompt_digest=("a", "b")
+        )
+        ctx = ctx.add(_msg(2)).add(_msg(3))
+
+        compacted = WindowCompactor(size=2).compact(ctx)
+
+        assert compacted.sent_token_ids == ()
+        assert compacted.sent_message_count == 0
+        assert compacted.sent_prompt_digest == ()
+        assert compacted.sent_model_id is None
+        assert compacted.sent_template_kwargs == {}
+
+
 class TestCompactorProtocol:
     def test_user_class_satisfies_protocol_via_inline_marker(self):
         """A user class structurally matching Compactor and inheriting InlineCompactor
