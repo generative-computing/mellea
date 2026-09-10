@@ -4,7 +4,10 @@
 import asyncio
 import json
 import os
+import subprocess
+from pathlib import Path
 from typing import Annotated
+from unittest.mock import patch
 
 import ollama as _ollama
 import pydantic
@@ -15,8 +18,12 @@ from mellea.backends import ModelOption, model_ids
 from mellea.backends.model_ids import IBM_GRANITE_4_2_3B
 from mellea.backends.ollama import OllamaModelBackend
 from mellea.core import CBlock, Requirement
-from mellea.stdlib.context import SimpleContext
+from mellea.stdlib import functional as mfuncs
+from mellea.stdlib.components import Intrinsic, Message
+from mellea.stdlib.components.intrinsic import core
+from mellea.stdlib.context import ChatContext, SimpleContext
 from mellea.stdlib.requirements import simple_validate
+from test.conftest import hf_skip
 
 # Mark all tests in this module as requiring Ollama
 pytestmark = [pytest.mark.ollama, pytest.mark.e2e]
@@ -24,6 +31,9 @@ pytestmark = [pytest.mark.ollama, pytest.mark.e2e]
 # Match granite4.2:3b's constrained default (Modelfile num_ctx: 8192) so the
 # runner is loaded once and never reloaded for a context-size mismatch.
 TEST_CONTEXT_WINDOW = 8192
+_UNCERTAINTY_ADAPTER_BUILDER = (
+    Path(__file__).parents[2] / "test/scripts/build_ollama_uncertainty_adapter.sh"
+)
 
 
 def _ollama_model_for_eval() -> str:
@@ -93,6 +103,23 @@ def session():
     session = _start_ollama_session(thinking=False)
     yield session
     session.reset()
+
+
+@pytest.fixture(scope="session")
+def uncertainty_adapter_model() -> str:
+    """Build and return the official uncertainty aLoRA Ollama model tag."""
+    if configured_model := os.environ.get("MELLEA_OLLAMA_UNCERTAINTY_MODEL"):
+        return configured_model
+    try:
+        completed = subprocess.run(
+            [_UNCERTAINTY_ADAPTER_BUILDER],
+            check=True,
+            stdout=subprocess.PIPE,
+            text=True,
+        )
+    except subprocess.CalledProcessError as e:
+        pytest.skip(f"uncertainty adapter build failed: {e}")
+    return completed.stdout.strip()
 
 
 @pytest.fixture(scope="function")
@@ -291,6 +318,74 @@ async def test_async_avalue(session) -> None:
     assert mot1.generation.provider == "ollama"
     assert mot1.generation.streaming is False
     assert mot1.generation.ttfb_ms is None
+
+
+def test_uncertainty_adapter_function(uncertainty_adapter_model: str) -> None:
+    """A bundled aLoRA model serves the intrinsic and public certainty helper."""
+    backend = OllamaModelBackend(
+        model_id=uncertainty_adapter_model,
+        adapter_base_model_name="granite-4.1-3b",
+        model_options={ModelOption.CONTEXT_WINDOW: 4096},
+        adapter_models={"uncertainty": uncertainty_adapter_model},
+    )
+    context = (
+        ChatContext()
+        .add(Message("user", "What is the square root of 4?"))
+        .add(Message("assistant", "The square root of 4 is 2."))
+    )
+    with hf_skip():
+        adapter = backend.resolve_adapter("uncertainty")
+    requested_models: list[str] = []
+    original_chat = _ollama.AsyncClient.chat
+
+    async def record_model_selection(client, *args, **kwargs):
+        model = kwargs.get("model")
+        assert isinstance(model, str)
+        requested_models.append(model)
+        return await original_chat(client, *args, **kwargs)
+
+    with patch.object(_ollama.AsyncClient, "chat", new=record_model_selection):
+        output, _ = mfuncs.act(
+            Intrinsic("uncertainty"), context, backend, strategy=None
+        )
+        score = core.check_certainty(context, backend)
+
+    assert requested_models == [uncertainty_adapter_model, uncertainty_adapter_model]
+    assert output.generation.model == uncertainty_adapter_model
+    parsed = json.loads(output.value)
+    assert 0.0 <= parsed["certainty"] <= 1.0
+
+    assert 0.0 <= score <= 1.0
+    assert adapter.identity.adapter_type == "alora"
+
+
+@pytest.mark.qualitative
+def test_uncertainty_adapter_changes_base_model_score(
+    uncertainty_adapter_model: str,
+) -> None:
+    """The bundled aLoRA materially changes the base model's certainty score."""
+    context = (
+        ChatContext()
+        .add(Message("user", "What is the square root of 4?"))
+        .add(Message("assistant", "The square root of 4 is 2."))
+    )
+    model_options = {ModelOption.CONTEXT_WINDOW: 4096, ModelOption.TEMPERATURE: 0.0}
+    base_backend = OllamaModelBackend(
+        model_id="granite4.1:3b",
+        model_options=model_options,
+        adapter_models={"uncertainty": "granite4.1:3b"},
+    )
+    adapter_backend = OllamaModelBackend(
+        model_id="granite4.1:3b",
+        model_options=model_options,
+        adapter_models={"uncertainty": uncertainty_adapter_model},
+    )
+
+    with hf_skip():
+        base_score = core.check_certainty(context, base_backend)
+        adapter_score = core.check_certainty(context, adapter_backend)
+
+    assert abs(adapter_score - base_score) >= 0.2
 
 
 def test_multiple_asyncio_runs(session) -> None:

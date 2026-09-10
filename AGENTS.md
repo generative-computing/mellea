@@ -226,15 +226,17 @@ For lower-level control (custom adapters, model options), use `mfuncs.act()` wit
 
 ### Weights binding shapes
 
-`Adapter.weights` normalizes each deployment's activation mechanism behind one of
-two shapes — a `WeightsBinding` lifecycle for weights you stage yourself, or
-`EmbeddedBinding.apply_activation` for weights already in the served model. The
+`Adapter.weights` normalizes each deployment's activation mechanism behind three
+shapes — a `WeightsBinding` lifecycle for weights you stage yourself,
+`EmbeddedBinding.apply_activation` for weights already in the served model, or
+`ServerMediatedBinding` for a model tag selected by the provider. The
 post-activation shape each produces:
 
 | Binding | Reality | Lifecycle verbs | Caller invokes | Normalized post-activation state |
 |---------|---------|------------------|-----------------|-----------------------------------|
 | `LocalFileBinding` | LocalFile/PEFT | `prepare` / `activate` / `deactivate` / `release` | `activate()` / `deactivate()`, via `adapter_scope` | Backend-internal PEFT adapter state toggled; the outgoing request is untouched |
 | `EmbeddedBinding` | Embedded/Granite Switch | none — weights are already in the served model | `apply_activation(request, identity)` | `request.extra_body["chat_template_kwargs"]["adapter_name"]` set; `request.api_params["model"]` removed if present |
+| `ServerMediatedBinding` | Ollama bundled adapter model | none for the current Ollama path | select the configured model tag during intrinsic generation | Ollama request's `model` is the bundled adapter tag; full lifecycle telemetry remains follow-up work |
 
 ### Project Resources
 

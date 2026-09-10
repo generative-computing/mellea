@@ -365,8 +365,8 @@ response = m.instruct(
 
 output_text = str(response)
 
-# Guardian adapter functions require a LocalHFBackend — they load LoRA adapters
-# that are not supported by OllamaModelBackend.
+# This tutorial uses LocalHFBackend. Ollama requires a compatible bundled model
+# for each Guardian adapter function; see Adapter functions for that setup.
 guardian_backend = LocalHFBackend(model_id="ibm-granite/granite-4.1-3b")
 
 # Build a context containing the exchange to check.
@@ -397,9 +397,11 @@ and dynamic applications with ease. The word "Mellea" consists of
 6 characters.
 ```
 
-> **Note:** Guardian adapter functions load LoRA adapters and require `LocalHFBackend`.
-> They cannot run against `OllamaModelBackend`. The main agent and the Guardian
-> checks can use different backends — only the Guardian calls need `LocalHFBackend`.
+> **Note:** This tutorial uses `LocalHFBackend` because it loads Guardian LoRA
+> adapters directly. `OllamaModelBackend` can run a Guardian adapter function
+> only when you provide an Ollama model tag that bundles that adapter through
+> `adapter_models`. The main agent and the Guardian checks can use different
+> backends.
 
 Scores are floats between 0.0 (safe) and 1.0 (risk detected); 0.5 is the
 threshold. The available criteria are: `"harm"`, `"jailbreak"`, `"social_bias"`,
