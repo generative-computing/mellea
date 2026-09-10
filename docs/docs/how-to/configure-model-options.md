@@ -185,13 +185,19 @@ Accepted values and their effect are backend-dependent:
 | ------- | ------ | ------- | -------------------------------- |
 | Native `OllamaModelBackend` | Enables thinking (Ollama `think=True`) | Disables thinking (`think=False`) | Passed through to Ollama's `think=` param, which handles string effort levels itself |
 | `OpenAIBackend` / LiteLLM (OpenAI-compatible) | Enables thinking (`reasoning_effort="medium"`, plus `chat_template_kwargs.enable_thinking=True` for vLLM-served templates) | Disables thinking | Sent as `reasoning_effort` verbatim |
-| `LocalHFBackend` | Forwards to whichever chat-template variable is declared (`think`, `thinking`, or `enable_thinking`) | Same | **Not supported** — silently dropped, model falls back to full-length thinking. Tracked in [#1636](https://github.com/generative-computing/mellea/issues/1636). |
+| `LocalHFBackend` | Forwards to whichever chat-template variable is declared (`think`, `thinking`, or `enable_thinking`) | Same | Forwarded verbatim as `reasoning_effort` when the tokenizer's chat template declares that variable — same mechanism as the OpenAI backend |
 
 For Granite 4.2 specifically: the chat template only distinguishes `"low"`
 effort from everything else — `reasoning_effort == "low"` triggers genuine
 low-effort (short) reasoning, while `"medium"`/`"high"` are accepted but
-behave the same as `True`/omitted (full-length reasoning). Granite defaults
-to thinking **on** when `ModelOption.THINKING` is not set at all.
+behave the same as `True`/omitted (full-length reasoning). This holds across
+all three backends. Granite defaults to thinking **on** when
+`ModelOption.THINKING` is not set at all.
+
+`LocalHFBackend` also parses Granite's `<think>...</think>` block out of the
+response, so `result.thinking` and `result.value` are populated separately —
+matching the other backends — rather than leaving the reasoning trace
+embedded raw in `result.value`.
 
 ```python
 from mellea.backends import ModelOption, model_ids
