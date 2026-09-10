@@ -284,9 +284,19 @@ def _split_think_tags(text: str) -> tuple[str | None, str]:
     A string-level fallback for `transformers.PreTrainedTokenizerBase.parse_response()`
     (schema-driven, token-decode-then-parse), used because no tokenizer available to
     this backend today declares a `response_schema`. Even that upstream mechanism is
-    text-level, not token-level, and can't disambiguate a genuine end-of-reasoning
-    token from literal `</think>` text for Granite either — its own `</think>` token
-    is registered non-special.
+    text-level, not token-level.
+
+    A token-position check against the raw generated sequence (scanning for
+    Granite's `</think>` token id rather than re-scanning decoded text) would be
+    strictly more conservative than this string match — it would not misfire on
+    a mention the model spells out as separate pieces rather than emitting the
+    single vocab token. It would not fully eliminate false positives either: a
+    model is free to emit that same single token for a literal in-prose mention,
+    so a genuine close and a canonical-token literal mention still decode
+    identically. Not adopted here because HF's streaming path
+    (`TextIteratorStreamer`) only exposes decoded text, not token ids, so a
+    token check could not apply uniformly to both the streaming and
+    non-streaming paths — see #1604 for a scoped follow-up.
 
     Splits on </think> alone (not a <think>...</think> pair) because some chat
     templates (e.g. granite-4.2 with enable_thinking) bake the opening tag into
@@ -1870,6 +1880,18 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         # this mirrors what the model was actually asked to do on this call.
         # Skip for streaming: astream() assumes mot.value only grows, and shrinking it here
         # would corrupt the final delta (see #1604 for proper incremental splitting later).
+        #
+        # Known limitation, deliberately not addressed here: this gate can under-split
+        # for a model that ignores an explicit ModelOption.THINKING=False, or that always
+        # emits <think> blocks without declaring any of _CHAT_TEMPLATE_THINKING_VARS in its
+        # template. The resulting raw tags leak into mot.value and get replayed as ordinary
+        # `content` on the next turn (still read by requirement checks/judges). The
+        # alternative — splitting unconditionally — trades this for a worse failure: an
+        # over-split misfiles real answer text into mot.thinking, which then gets attached
+        # as `reasoning_content` at replay time and is stripped outright by Granite's own
+        # template on any non-tool-call turn (mellea/backends/utils.py) — a permanent loss
+        # of answer content, not just a mislabeling. Kept on the more conservative side
+        # deliberately; see #1604 for detecting always-thinking models without a declared var.
         thinking_allowlist: frozenset[str] = getattr(
             self, "_chat_template_allowlist", frozenset()
         )
