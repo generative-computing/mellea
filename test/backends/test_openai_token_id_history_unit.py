@@ -158,12 +158,17 @@ async def test_build_prompt_ids_splices_retained_prefix_verbatim():
     fresh renders and be spliced onto the retained ids -- never compared to them.
     """
     backend = _make_backend()
-    prev_msgs = [{"role": "user", "content": "U1"}]
+    # The ids cover [U1, A1], so the digest fingerprints both: a digest that stopped
+    # short of the count is refused (see the digest-coverage test below).
+    prev_msgs = [
+        {"role": "user", "content": "U1"},
+        {"role": "assistant", "content": "A1"},
+    ]
     # Retained prefix carries a control token (999) that a fresh render would lose.
     ctx = ChatContext(retain_token_ids=True).with_sent_token_ids(
         [10, 11, 999],
         model_id=backend._model_id,
-        message_count=2,
+        message_count=len(prev_msgs),
         prompt_digest=_prompt_digest(prev_msgs),
     )
     conversation = [
@@ -380,3 +385,159 @@ async def test_tokenize_unavailable_is_not_swallowed_by_the_fallback():
         await backend._generate_from_context(
             Message("user", "U2"), ctx, model_options={}
         )
+
+
+async def test_build_prompt_ids_refuses_a_digest_that_does_not_cover_the_count():
+    """A non-empty digest shorter than the count proves less than the count claims.
+
+    `sent_message_count` says which messages the ids cover; the digest is the proof they
+    are unchanged. When the proof stops short, the uncovered tail messages -- the newest,
+    most likely to be edited -- would be reused on trust alone. Refused before any round
+    trip rather than verified only as far as the proof reaches.
+    """
+    backend = _make_backend()
+    ctx = ChatContext(retain_token_ids=True).with_sent_token_ids(
+        [10, 11],
+        model_id=backend._model_id,
+        message_count=2,  # claims [U1, A1]
+        prompt_digest=_prompt_digest(
+            [{"role": "user", "content": "U1"}]
+        ),  # proves [U1]
+    )
+    conversation = [
+        {"role": "user", "content": "U1"},
+        {"role": "assistant", "content": "A1-EDITED"},
+        {"role": "user", "content": "U2"},
+    ]
+    backend._tokenize_chat = AsyncMock(side_effect=AssertionError("must not tokenize"))
+
+    with pytest.raises(DeltaNotDerivable):
+        await backend._build_prompt_ids(ctx, conversation, None)
+
+
+# --- /tokenize reply validation ----------------------------------------------
+#
+# These ids become the prompt verbatim, so the reader must reject anything it cannot
+# trust rather than coerce it: a coerced id is a DIFFERENT prompt, and since both sides
+# of `derive_delta` come through this same reader a consistent corruption cancels out
+# and every downstream guard still passes.
+
+
+def _backend_with_tokenize_payload(payload: object) -> OpenAIBackend:
+    """A backend whose `/tokenize` route replies with `payload`."""
+    backend = _make_backend()
+    response = MagicMock()
+    response.json = MagicMock(return_value=payload)
+    # setattr so mypy does not flag mock-over-method assignment.
+    setattr(backend._async_client, "post", AsyncMock(return_value=response))
+    return backend
+
+
+async def test_tokenize_chat_returns_ids_for_a_well_formed_reply():
+    backend = _backend_with_tokenize_payload({"tokens": [1, 2, 3]})
+    assert await backend._tokenize_chat([{"role": "user", "content": "U1"}]) == [
+        1,
+        2,
+        3,
+    ]
+
+
+@pytest.mark.parametrize(
+    ("tokens", "why"),
+    [
+        ([1, True, 3], "bool coerces to 1 even though it is not a vocabulary id"),
+        ([1, 2.9, 3], "float would be silently truncated to a different id"),
+        (["12", "13"], "numeric strings are not ids the server assigned"),
+        (["abc"], "unparsable entry raised a bare ValueError, not TokenizeUnavailable"),
+        ([None], "null entry"),
+        ([[1], 2], "nested list"),
+    ],
+)
+async def test_tokenize_chat_refuses_entries_that_are_not_exact_ids(tokens, why):
+    """Any non-int entry fails as `TokenizeUnavailable`, the one documented type.
+
+    Callers catch `TokenizeUnavailable` to fall back to a chat send, so a reply the
+    reader cannot trust must cost a cache hit -- not the turn (a bare `ValueError`
+    escapes the fallback) and not the prompt's integrity (a coerced id would be sent).
+    """
+    backend = _backend_with_tokenize_payload({"tokens": tokens})
+    with pytest.raises(TokenizeUnavailable):
+        await backend._tokenize_chat([{"role": "user", "content": "U1"}])
+
+
+# --- digest coverage: every field that reaches the wire ----------------------
+#
+# The fingerprint's contract is "if the message changed, the digest changes". It is
+# compared against messages about to be sent, so anything the SERVER sees must be in
+# it -- an unfingerprinted field that the chat template renders is a prompt change the
+# guard cannot see, which is the whole failure class this policy exists to prevent.
+
+
+def test_prompt_digest_notices_a_changed_reasoning_trace():
+    """`reasoning_content` reaches the wire, so it must be fingerprinted.
+
+    The chat path emits it for a turn that carried tool calls (`should_replay_reasoning`),
+    and the chat template renders it. Two messages differing only there are two different
+    prompts, so they must not share a digest.
+    """
+    call = [
+        {"id": "c1", "type": "function", "function": {"name": "f", "arguments": "{}"}}
+    ]
+    a = {
+        "role": "assistant",
+        "content": "Blue.",
+        "tool_calls": call,
+        "reasoning_content": "I will call the tool.",
+    }
+    b = dict(a, reasoning_content="Actually I will not call it.")
+    assert _prompt_digest([a]) != _prompt_digest([b])
+
+
+def test_prompt_digest_notices_a_changed_tool_call_id():
+    """`tool_call_id` reaches the wire on a tool-result turn, so it must be fingerprinted."""
+    a = {"role": "tool", "content": "42", "tool_call_id": "call_AAA"}
+    b = dict(a, tool_call_id="call_ZZZ")
+    assert _prompt_digest([a]) != _prompt_digest([b])
+
+
+def test_prompt_digest_ignores_absent_versus_null_keys():
+    """A key left out and the same key set to `None` are the same message.
+
+    Path independence: the chat serializer omits keys it has no value for, while the
+    intrinsic path's `model_dump()` can carry them as `None`. Fingerprinting that
+    difference would refuse a valid `Chat -> Intrinsic` reuse.
+    """
+    lean = {"role": "user", "content": "U1"}
+    padded = {
+        "role": "user",
+        "content": "U1",
+        "tool_calls": None,
+        "reasoning_content": "",
+    }
+    assert _prompt_digest([lean]) == _prompt_digest([padded])
+
+
+async def test_build_prompt_ids_refuses_a_digest_longer_than_the_count():
+    """A digest claiming MORE messages than the ids cover is refused, not worked around.
+
+    Comparing over the digest's own length would verify messages beyond the retained
+    boundary, so an edit to a message the ids never covered would refuse reuse. The two
+    facts must agree exactly; a mismatch means the retained state was not recorded by
+    this backend and cannot be trusted either way.
+    """
+    backend = _make_backend()
+    msgs = [
+        {"role": "user", "content": "U1"},
+        {"role": "assistant", "content": "A1"},
+        {"role": "user", "content": "U2"},
+    ]
+    ctx = ChatContext(retain_token_ids=True).with_sent_token_ids(
+        [10, 11],
+        model_id=backend._model_id,
+        message_count=2,  # ids cover [U1, A1]
+        prompt_digest=_prompt_digest(msgs),  # but three fingerprints
+    )
+    backend._tokenize_chat = AsyncMock(side_effect=AssertionError("must not tokenize"))
+
+    with pytest.raises(DeltaNotDerivable):
+        await backend._build_prompt_ids(ctx, msgs, None)

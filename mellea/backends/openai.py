@@ -186,11 +186,18 @@ def _prompt_digest(messages: list[dict]) -> tuple[str, ...]:
     policy exists to survive (see `derive_delta`) while still catching an edited
     historical turn or dropped oldest turns that leave `sent_message_count` intact.
 
-    Only `role`, `content`, and `tool_calls` are fingerprinted, canonicalized rather
-    than hashed as the raw dict, so the SAME turn fingerprints identically whether it
-    was shaped by the chat path's serializer or the intrinsic path's
-    `ChatMessage.model_dump()` (which differ in incidental keys) -- keeping a valid
-    `Chat -> Intrinsic` reuse from being needlessly refused.
+    EVERY field on the message is fingerprinted: these dicts are what goes on the wire,
+    so any field the chat template renders is part of the prompt, and one left out of the
+    fingerprint is a prompt change this guard cannot see. `reasoning_content` is included
+    for that reason -- the chat path emits it for a tool-calling turn
+    (`should_replay_reasoning`) and the intrinsic path never does, so the same history
+    renders differently on the two paths -- as is `tool_call_id`.
+
+    Values are canonicalized rather than hashed as the raw dict, and empty ones are
+    dropped, so the SAME turn fingerprints identically whether the chat path's serializer
+    (which omits a field it has no value for) or the intrinsic path's
+    `ChatMessage.model_dump()` (which can carry it as `None`) produced it -- keeping a
+    valid `Chat -> Intrinsic` reuse from being needlessly refused.
 
     Args:
         messages (list[dict]): OpenAI-shaped chat messages, in order.
@@ -200,25 +207,27 @@ def _prompt_digest(messages: list[dict]) -> tuple[str, ...]:
     """
     digests: list[str] = []
     for message in messages:
-        # Path-independent projection: content coerced to a string (multimodal lists
-        # JSON-canonicalized), plus role and any tool_calls; sort_keys so key order
-        # and incidental serializer differences never matter.
-        raw_content = message.get("content")
-        content = (
-            raw_content
-            if isinstance(raw_content, str) or raw_content is None
-            else json.dumps(raw_content, sort_keys=True, ensure_ascii=False)
-        )
-        projection = {"role": message.get("role"), "content": content}
-        if message.get("tool_calls"):
-            projection["tool_calls"] = message["tool_calls"]
+        # Every key, with non-strings JSON-canonicalized (multimodal content lists,
+        # tool_calls) and empty values dropped so absent-vs-`None` is not a difference.
+        # sort_keys so key order never matters.
+        projection = {
+            key: value
+            if isinstance(value, str)
+            else json.dumps(value, sort_keys=True, ensure_ascii=False)
+            for key, value in message.items()
+            if value is not None and value != "" and value != [] and value != {}
+        }
         canonical = json.dumps(projection, sort_keys=True, ensure_ascii=False)
         digests.append(hashlib.sha256(canonical.encode("utf-8")).hexdigest())
     return tuple(digests)
 
 
 def _completion_choice_as_chat_response(
-    choice: dict[str, Any], usage: dict[str, Any] | None = None
+    choice: dict[str, Any],
+    usage: dict[str, Any] | None = None,
+    *,
+    response_id: str | None = None,
+    response_model: str | None = None,
 ) -> dict[str, Any]:
     """Return a `/v1/completions` choice in chat-completion shape.
 
@@ -233,20 +242,35 @@ def _completion_choice_as_chat_response(
     exactly that keeps the transport swap invisible to everything downstream,
     including `_retained_ids`, instead of teaching each consumer a second shape.
 
+    Rebuilt from the choice alone, the result would silently lose what only the
+    enclosing response carries -- the provider's response id and served model -- and the
+    choice's own `logprobs`. `raw.response` is what `generate_log.model_output` and any
+    provider-shape consumer reads, so those are carried through explicitly rather than
+    dropped by the transport swap.
+
     Args:
         choice (dict[str, Any]): One element of a completions response's `choices`.
         usage (dict[str, Any] | None): Token usage for the request, if reported.
+        response_id (str | None): The enclosing response's `id`, so a retained turn's
+            log can still be traced to the provider's response.
+        response_model (str | None): The model the enclosing response reported serving.
 
     Returns:
         dict[str, Any]: A chat-shaped response carrying the completion text as the
             assistant message content, with `token_ids` preserved on the choice.
     """
     return {
+        "id": response_id,
+        "model": response_model,
+        "object": "chat.completion",
         "choices": [
             {
                 "index": choice.get("index", 0),
                 "message": {"role": "assistant", "content": choice.get("text") or ""},
                 "finish_reason": choice.get("finish_reason") or "stop",
+                # Per-token detail the completions endpoint reports on the choice; a
+                # consumer reading it from a chat-shaped reply finds it in the same place.
+                "logprobs": choice.get("logprobs"),
                 # Kept on the choice, where a genuine chat reply puts them, so
                 # `_retained_ids` reads one location for both transports.
                 "token_ids": choice.get("token_ids"),
@@ -1685,7 +1709,24 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 f"/tokenize replied without a 'tokens' list (got keys "
                 f"{sorted(payload)}), so its ids cannot be trusted."
             )
-        return [int(t) for t in tokens]
+        # Validated, not coerced. `int()` accepts things that are not ids and turns them
+        # into plausible ones -- `True` -> 1, `2.9` -> 2, `"12"` -> 12 -- while
+        # `int("abc")` raises a bare `ValueError` that escapes the callers catching
+        # `TokenizeUnavailable` to fall back to a chat send. These ids BECOME the prompt,
+        # and both sides of `derive_delta` come through this same reader, so a consistent
+        # corruption cancels out of the subtraction and reaches the server with every
+        # guard passing. Same rule `PreTokenizedCBlock` applies on the way out
+        # (`core/base.py`):
+        # an int, and `bool` is not one despite subclassing it.
+        non_ids = [t for t in tokens if not isinstance(t, int) or isinstance(t, bool)]
+        if non_ids:
+            raise TokenizeUnavailable(
+                f"/tokenize replied with {len(non_ids)} of {len(tokens)} entries that "
+                f"are not exact token ids (e.g. {non_ids[0]!r}, a "
+                f"{type(non_ids[0]).__name__}), so its ids cannot be trusted. Coercing "
+                "them would build a different prompt than the server rendered."
+            )
+        return list(tokens)
 
     @property
     def token_id_reprefills(self) -> int:
@@ -1847,7 +1888,8 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             self._turn_terminator_ids[key] = []
             return None
         if len(closed_ids) <= len(open_ids) or closed_ids[: len(open_ids)] != open_ids:
-            # The closed render does not extend the open one; the probe told us nothing.
+            # The closed render does not extend the open one, so the probe yielded
+            # nothing that can be attributed to a terminator.
             self._turn_terminator_ids[key] = []
             return None
         self._turn_terminator_ids[key] = closed_ids[len(open_ids) :]
@@ -1893,8 +1935,9 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         Raises:
             DeltaNotDerivable: If the retained prefix cannot be reused -- ids from a
                 different model, a history that shrank below the retained boundary, a
-                leading prefix whose content no longer matches the recorded digest, or
-                two renders that disagree on the already-sent side.
+                digest that fingerprints fewer messages than the count claims, a leading
+                prefix whose content no longer matches the recorded digest, or two
+                renders that disagree on the already-sent side.
             TokenizeUnavailable: If the server cannot tokenize the conversation.
         """
         retained_ids = list(ctx.sent_token_ids)
@@ -1945,18 +1988,37 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         # Prove the leading prefix is still the SAME messages (over TEXT, so immune to
         # the `encode(decode(ids))` non-identity) before reusing its ids: `retained_count`
-        # cannot see a rewritten earlier turn or dropped oldest turns. Compared over the
-        # digest's own length, before tokenizing so a changed prefix costs no round trip.
+        # cannot see a rewritten earlier turn or dropped oldest turns. Checked before
+        # tokenizing, so a changed prefix costs no round trip.
+        #
+        # The count and the digest describe the same messages, so they must agree
+        # exactly. FEWER fingerprints than the count proves less than the count claims,
+        # and the unproven tail is the newest end -- the assistant reply included -- so
+        # an edit there would pass while the retained ids still carry the original text.
+        # MORE fingerprints reach past the retained boundary, where an edit cannot
+        # corrupt anything, and would refuse reuse for nothing. Either way the state was
+        # not recorded by this backend and is not trusted; an empty digest stays the
+        # explicit "no proof recorded" opt-out it has always been.
+        if retained_digest and len(retained_digest) != retained_count:
+            raise DeltaNotDerivable(
+                f"the retained ids cover {retained_count} messages but their digest "
+                f"fingerprints {len(retained_digest)}. The two must describe the same "
+                "messages, so this retained state cannot be verified; this turn "
+                "re-renders as chat messages and only its prefix-cache hit is lost."
+            )
+        # Compared over the count -- the messages the ids actually cover -- now that the
+        # digest is guaranteed to be exactly that long.
         if retained_digest and (
-            _prompt_digest(conversation[: len(retained_digest)]) != retained_digest
+            _prompt_digest(conversation[:retained_count]) != retained_digest
         ):
             raise DeltaNotDerivable(
                 "the retained ids' leading prefix no longer matches this conversation: "
-                "an earlier message's content changed, or the oldest turns were "
-                "dropped, while the message count stayed at or above the retained "
-                "boundary. Splicing the old ids would send a prompt whose prefix the "
-                "server never cached, so the ids are not reused; this turn re-renders "
-                "as chat messages and only its prefix-cache hit is lost."
+                "an earlier message's content changed, an already-sent turn was edited "
+                "in place, or the oldest turns were dropped, while the message count "
+                "stayed at or above the retained boundary. Splicing the old ids would "
+                "send a prompt whose prefix the server never cached, so the ids are not "
+                "reused; this turn re-renders as chat messages and only its prefix-cache "
+                "hit is lost."
             )
 
         # A kwarg that re-renders the already-sent region cannot be represented as a
@@ -2285,7 +2347,12 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         #    `_retained_ids` further down both see one shape.
         if isinstance(output.raw.response, dict):
             output.raw.response = _completion_choice_as_chat_response(
-                output.raw.response, usage
+                output.raw.response,
+                usage,
+                # Recovered from the thunk, where `_generate_from_raw` recorded what the
+                # enclosing completion reported; the per-choice dump does not carry them.
+                response_id=output.generation.response_id,
+                response_model=output.generation.response_model,
             )
         #
         # 1. Its action is the synthetic `PreTokenizedCBlock`, so `parsed_repr` is the
@@ -2336,12 +2403,21 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             # `generate_from_chat_context` to move onto the context.
             output._meta["retained_token_ids"] = retained
             output._meta["retained_model_id"] = self._model_id
-            # Covers every rendered message plus the assistant turn just produced.
-            output._meta["retained_message_count"] = len(conversation) + 1
-            # Fingerprint of the sent messages so the next turn can PROVE the prefix
-            # unchanged before splicing. The assistant reply has no dict form yet; the
-            # count still covers it, and it is spliced verbatim from `retained` anyway.
-            output._meta["retained_prompt_digest"] = _prompt_digest(conversation)
+            # Every rendered message PLUS the assistant turn just produced -- serialized
+            # through the same `to_chat_messages` -> `message_to_openai_message` pipeline
+            # the next turn renders its history with, so its fingerprint matches then.
+            # (`_prompt_digest` projects only role/content/tool_calls, so a differing
+            # `replay_reasoning` decision on the next turn cannot perturb it.)
+            retained_messages = list(conversation) + [
+                message_to_openai_message(m, self.formatter, provider=self._provider)
+                for m in self.formatter.to_chat_messages([output])
+            ]
+            # Count and digest are derived from ONE list, so they cannot disagree about
+            # which messages the ids cover: a count reaching past the digest would leave
+            # the uncovered tail -- the assistant reply most of all -- reused on trust,
+            # and an edit to it would splice the ORIGINAL reply back into the prompt.
+            output._meta["retained_message_count"] = len(retained_messages)
+            output._meta["retained_prompt_digest"] = _prompt_digest(retained_messages)
             # The kwargs this prefix was rendered under, so the next turn can
             # re-render the already-sent side the way it was actually sent and
             # refuse a kwarg that would cancel out of the subtraction.
@@ -2478,18 +2554,48 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         # it only reuses, via `_reuse_intrinsic_prefix_ids`. Both call the same
         # `_build_prompt_ids`; only the commit differs.
         if isinstance(ctx, ChatContext) and ctx.retains_token_ids:
+            # Request shapes the completions transport cannot honour. Each is checked
+            # before any round trip and costs only the cache hit, and each mirrors a gate
+            # `_reuse_intrinsic_prefix_ids` already applies -- the two paths must decline
+            # on the same grounds, or the same request succeeds differently depending on
+            # whether an intrinsic or a chat turn issued it.
+            decline_reason: str | None = None
             if (extra_params.get("extra_body") or {}).get("documents"):
                 # `documents` is rendered into the system block by the chat template but
                 # is not a `/tokenize` parameter, so pre-tokenized ids would omit it
                 # entirely -- a RAG request answered against no context, with no error.
-                # The intrinsic path declines for the same reason; this is the chat one.
-                MelleaLogger.get_logger().warning(
+                decline_reason = (
                     "token-id history is not used for this turn because `documents` "
                     "were supplied: they are rendered server-side by the chat template "
                     "and cannot be tokenized into the prompt, so retained ids would "
                     "omit them. The turn is sent as chat messages instead; only its "
                     "prefix-cache hit is lost."
                 )
+            elif backend_specific.get("logprobs") or (
+                extra_params.get("extra_body") or {}
+            ).get("logprobs"):
+                # The two endpoints report logprobs in incompatible shapes: a
+                # completions choice as `tokens`/`token_logprobs`/`top_logprobs`/
+                # `text_offset`, a chat choice as `content`, a list of
+                # `{token, logprob, top_logprobs}`. Consumers read the chat shape
+                # (`make_begin_to_token_table` takes `logprobs.content`, and
+                # `TokenToFloat` requires a `ChatCompletionLogProbs`, not a dict), and
+                # this path adapts only the reply's ENVELOPE -- so the id transport would
+                # hand them a payload they cannot read inside a reply labelled a chat
+                # completion.
+                #
+                # Both channels are read because the SDK sends `extra_body` keys at the
+                # top level of the request: `logprobs=True` and
+                # `extra_body={"logprobs": True}` are the same request to the server, so
+                # a gate watching only the model option would leave the second one open.
+                decline_reason = (
+                    "token-id history is not used for this turn because `logprobs` "
+                    "were requested: /v1/completions reports them in a different shape "
+                    "than a chat reply, which consumers expect. The turn is sent as "
+                    "chat messages instead; only its prefix-cache hit is lost."
+                )
+            if decline_reason is not None:
+                MelleaLogger.get_logger().warning(decline_reason)
             else:
                 try:
                     return await self._generate_via_token_ids(
@@ -2849,6 +2955,16 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             )
             output.generation.model = self._model_id
             output.generation.provider = self._provider
+            # Response-side metadata, which lives on the ENCLOSING completion rather
+            # than the per-choice dump above. Set here because this endpoint has no
+            # `post_processing()` step to populate it, so without this every batch
+            # completion -- and every token-id-retained chat turn, which borrows this
+            # method as its transport -- reports `None` to telemetry.
+            output.generation.response_id = completion_response.id
+            output.generation.response_model = completion_response.model
+            if response.finish_reason:
+                # This thunk's own choice, not every choice in the batch.
+                output.generation.finish_reasons = [response.finish_reason]
 
             output.parsed_repr = (
                 action.parse(output) if isinstance(action, Component) else output.value

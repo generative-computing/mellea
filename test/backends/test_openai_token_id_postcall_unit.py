@@ -338,3 +338,108 @@ async def test_chat_through_achat_returns_message_not_keyerror():
 
     assert isinstance(reply, Message)
     assert reply.content == "Blue."
+
+
+# --- Retained-state completeness: the digest must cover what the count claims -
+
+
+async def test_retained_digest_covers_every_message_the_count_claims():
+    """One digest entry per message `sent_message_count` covers, assistant turn included.
+
+    The count and the digest answer different questions -- WHICH messages the ids cover
+    vs. PROOF they are unchanged -- and `_build_prompt_ids` only verifies as far as the
+    digest reaches. A digest shorter than the count leaves the tail messages reused on
+    trust, so the two must be the same length by construction.
+    """
+    _, new_ctx, _ = await _run_token_id_turn(
+        _backend(), ChatContext(retain_token_ids=True)
+    )
+
+    assert new_ctx.sent_message_count > 0
+    assert len(new_ctx.sent_prompt_digest) == new_ctx.sent_message_count
+
+
+async def test_an_edited_retained_assistant_turn_is_refused_on_the_next_turn():
+    """Rewriting the assistant reply the ids contain must refuse reuse, not splice.
+
+    The retained ids carry the reply the server actually produced. If the caller edits
+    that turn in the context and the guard does not notice, the spliced prompt contains
+    the ORIGINAL reply -- a conversation the caller never described, with no error.
+
+    Driven without pre-adding the action to the context (the real caller shape, since
+    `generate_from_chat_context` appends it itself), so the retained state covers exactly
+    `[user, assistant]` and the assistant turn is the one under test. The tokenize mock
+    asserts the refusal lands before any round trip.
+    """
+    from mellea.backends.openai import DeltaNotDerivable
+
+    backend = _backend()
+    action = Message("user", "Name a primary color.")
+    mock_client = MagicMock()
+    mock_client.completions.create = AsyncMock(return_value=_completion(text="Blue."))
+    with patch.object(
+        OpenAIBackend,
+        "_async_client",
+        new_callable=PropertyMock,
+        return_value=mock_client,
+    ):
+        setattr(backend, "do_generate_walk", AsyncMock())
+        setattr(backend, "_build_prompt_ids", AsyncMock(return_value=[1, 2, 3]))
+        setattr(backend, "_turn_terminator", AsyncMock(return_value=[999]))
+        _, new_ctx = await backend.generate_from_chat_context(
+            action, ChatContext(retain_token_ids=True)
+        )
+
+    assert new_ctx.sent_message_count == 2, "expected ids over [user, assistant]"
+
+    # Turn 2's conversation, with the assistant turn rewritten in place.
+    edited = [
+        {"role": "user", "content": "Name a primary color."},
+        {"role": "assistant", "content": "Red."},
+        {"role": "user", "content": "Name another one."},
+    ]
+    next_backend = _backend()
+    setattr(
+        next_backend,
+        "_tokenize_chat",
+        AsyncMock(side_effect=AssertionError("must refuse before tokenizing")),
+    )
+
+    with pytest.raises(DeltaNotDerivable):
+        await next_backend._build_prompt_ids(new_ctx, edited, None)
+
+
+# --- Response-side metadata survives the completions transport ---------------
+
+
+async def test_retained_turn_populates_response_metadata():
+    """`response_id`, `response_model`, and `finish_reasons` are set on a retained turn.
+
+    The id transport sends via `/v1/completions` and never runs the chat
+    `post_processing()` that normally fills these, so without explicit population every
+    retained turn reports `None` to telemetry -- breaking the AGENTS.md backend contract
+    on exactly the turns this feature adds.
+    """
+    mot, _, _ = await _run_token_id_turn(
+        _backend(), ChatContext(retain_token_ids=True), completion=_completion()
+    )
+
+    assert mot.generation.response_id == "cmpl-1"
+    assert mot.generation.response_model == "granite-switch"
+    assert mot.generation.finish_reasons == ["stop"]
+
+
+async def test_retained_turn_response_keeps_top_level_id_and_model():
+    """The chat-shaped adaptation carries the provider's response id and model.
+
+    `raw.response` is what `generate_log.model_output` and any provider-shape consumer
+    reads. Rebuilding it from the choice alone drops the top-level identifiers, so a
+    retained turn's log could not be traced back to the provider's response.
+    """
+    mot, _, _ = await _run_token_id_turn(
+        _backend(), ChatContext(retain_token_ids=True), completion=_completion()
+    )
+
+    assert isinstance(mot.raw.response, dict)
+    assert mot.raw.response["id"] == "cmpl-1"
+    assert mot.raw.response["model"] == "granite-switch"

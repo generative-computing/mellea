@@ -18,6 +18,7 @@ prefix-cache hit rate:
   closes.
 """
 
+import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -41,11 +42,16 @@ def _make_backend() -> OpenAIBackend:
 
 
 def _ctx_holding(backend, ids, messages, template_kwargs=None):
-    """A retaining context holding `ids` for `messages`."""
+    """A retaining context holding `ids` for `messages`.
+
+    Count and digest both cover every message in `messages`: a digest that stops short
+    of the count is refused, so the two must agree (see
+    `test_build_prompt_ids_refuses_a_digest_that_does_not_cover_the_count`).
+    """
     return ChatContext(retain_token_ids=True).with_sent_token_ids(
         ids,
         model_id=backend._model_id,
-        message_count=len(messages) + 1,
+        message_count=len(messages),
         prompt_digest=_prompt_digest(messages),
         template_kwargs=template_kwargs,
     )
@@ -85,7 +91,7 @@ async def test_build_prompt_ids_renders_prev_under_the_kwargs_it_was_sent_with()
     backend = _make_backend()
     sent = [{"role": "user", "content": "U1"}, {"role": "assistant", "content": "A1"}]
     ctx = _ctx_holding(
-        backend, [10, 11], sent[:1], template_kwargs={"enable_thinking": True}
+        backend, [10, 11], sent, template_kwargs={"enable_thinking": True}
     )
     conversation = [*sent, {"role": "user", "content": "U2"}]
 
@@ -114,7 +120,7 @@ async def test_build_prompt_ids_refuses_when_template_kwargs_changed_mid_convers
     """A kwarg that re-renders history is refused by name, not silently dropped."""
     backend = _make_backend()
     sent = [{"role": "user", "content": "U1"}, {"role": "assistant", "content": "A1"}]
-    ctx = _ctx_holding(backend, [10, 11], sent[:1], template_kwargs={})
+    ctx = _ctx_holding(backend, [10, 11], sent, template_kwargs={})
     conversation = [*sent, {"role": "user", "content": "U2"}]
     backend._tokenize_chat = AsyncMock(return_value=[1, 2, 3])
 
@@ -126,7 +132,7 @@ async def test_build_prompt_ids_ignores_adapter_name_when_comparing_kwargs():
     """An adapter on the new turn is not drift: its token belongs to the delta."""
     backend = _make_backend()
     sent = [{"role": "user", "content": "U1"}, {"role": "assistant", "content": "A1"}]
-    ctx = _ctx_holding(backend, [10, 11], sent[:1], template_kwargs={})
+    ctx = _ctx_holding(backend, [10, 11], sent, template_kwargs={})
     conversation = [*sent, {"role": "user", "content": "U2"}]
 
     async def fake_tokenize(messages, *, add_generation_prompt=True, **_):
@@ -184,7 +190,7 @@ async def test_over_budget_prefix_is_rebaselined_instead_of_spliced():
     backend._control_token_id_set = {100356}
     sent = [{"role": "user", "content": "U1"}, {"role": "assistant", "content": "A1"}]
     over = [100356] * (MAX_RETAINED_CONTROL_TOKENS + 1)
-    ctx = _ctx_holding(backend, over, sent[:1], template_kwargs={})
+    ctx = _ctx_holding(backend, over, sent, template_kwargs={})
     conversation = [*sent, {"role": "user", "content": "U2"}]
 
     async def fake_tokenize(messages, *, add_generation_prompt=True, **_):
@@ -217,7 +223,7 @@ async def test_within_budget_prefix_is_still_spliced():
     backend = _make_backend()
     backend._control_token_id_set = {100356}
     sent = [{"role": "user", "content": "U1"}, {"role": "assistant", "content": "A1"}]
-    ctx = _ctx_holding(backend, [100356, 11], sent[:1], template_kwargs={})
+    ctx = _ctx_holding(backend, [100356, 11], sent, template_kwargs={})
     conversation = [*sent, {"role": "user", "content": "U2"}]
 
     async def fake_tokenize(messages, *, add_generation_prompt=True, **_):
@@ -319,6 +325,150 @@ async def test_chat_path_declines_reuse_when_documents_are_supplied():
     kwargs = create.call_args.kwargs
     assert "prompt" not in kwargs
     assert kwargs["extra_body"]["documents"] == [{"text": "doc"}]
+
+
+# --- (a2) logprobs on the chat path ------------------------------------------
+
+
+async def test_chat_path_declines_reuse_when_logprobs_are_requested(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The two endpoints report logprobs in incompatible shapes, so ids are declined.
+
+    `/v1/completions` reports them on the choice as `tokens` / `token_logprobs` /
+    `top_logprobs` / `text_offset`; a chat reply reports `content`, a list of
+    `{token, logprob, top_logprobs}`. Consumers read the chat shape --
+    `make_begin_to_token_table` takes `logprobs.content` -- so sending a turn over the
+    id transport would hand them a shape they cannot read, inside a reply that claims to
+    be a chat completion. The intrinsic path already declines for this exact reason
+    (`_reuse_intrinsic_prefix_ids`); this is the chat one.
+    """
+    backend = _make_backend()
+    sent = [{"role": "user", "content": "U1"}]
+    ctx = _ctx_holding(backend, [10, 11], sent, template_kwargs={}).add(
+        Message("user", "U1")
+    )
+
+    create = MagicMock(return_value=MagicMock(name="chat_request"))
+    # setattr (not `x.y = ...`) so mypy does not flag mock-over-method assignment.
+    setattr(backend._async_client.chat.completions, "create", create)
+    setattr(
+        backend,
+        "_tokenize_chat",
+        AsyncMock(
+            side_effect=AssertionError("logprobs must be refused before tokenizing")
+        ),
+    )
+    setattr(
+        backend._async_client.completions,
+        "create",
+        AsyncMock(
+            side_effect=AssertionError(
+                "the id path reports logprobs in the wrong shape"
+            )
+        ),
+    )
+
+    with (
+        patch("mellea.backends.openai.send_to_queue", new=AsyncMock()),
+        caplog.at_level(logging.WARNING, logger="mellea"),
+    ):
+        await backend._generate_from_context(
+            Message("user", "U2"),
+            ctx,
+            model_options={"logprobs": True, "top_logprobs": 3},
+        )
+
+    kwargs = create.call_args.kwargs
+    assert "prompt" not in kwargs, "the turn must go out as chat messages"
+    # The request itself is untouched: declining reuse must not drop what was asked for.
+    assert kwargs["logprobs"] is True
+    assert kwargs["top_logprobs"] == 3
+    assert any("logprobs" in r.message for r in caplog.records), (
+        "declining reuse must say why, or the lost cache hit is unexplainable"
+    )
+
+
+async def test_chat_path_declines_reuse_for_logprobs_passed_via_extra_body() -> None:
+    """`logprobs` reaches the server from either channel, so the gate reads both.
+
+    The SDK sends `extra_body` keys at the top level of the request, so
+    `extra_body={"logprobs": True}` and `logprobs=True` are the same request as far as
+    the server is concerned. A gate that inspected only the plain model option would let
+    this turn take the id transport and hand back completions-shaped logprobs inside a
+    reply labelled as a chat completion.
+    """
+    backend = _make_backend()
+    sent = [{"role": "user", "content": "U1"}]
+    ctx = _ctx_holding(backend, [10, 11], sent, template_kwargs={}).add(
+        Message("user", "U1")
+    )
+
+    create = MagicMock(return_value=MagicMock(name="chat_request"))
+    # setattr (not `x.y = ...`) so mypy does not flag mock-over-method assignment.
+    setattr(backend._async_client.chat.completions, "create", create)
+    setattr(
+        backend,
+        "_tokenize_chat",
+        AsyncMock(
+            side_effect=AssertionError("logprobs must be refused before tokenizing")
+        ),
+    )
+    setattr(
+        backend._async_client.completions,
+        "create",
+        AsyncMock(
+            side_effect=AssertionError(
+                "the id path reports logprobs in the wrong shape"
+            )
+        ),
+    )
+
+    with patch("mellea.backends.openai.send_to_queue", new=AsyncMock()):
+        await backend._generate_from_context(
+            Message("user", "U2"), ctx, model_options={"extra_body": {"logprobs": True}}
+        )
+
+    kwargs = create.call_args.kwargs
+    assert "prompt" not in kwargs, "the turn must go out as chat messages"
+    assert kwargs["extra_body"]["logprobs"] is True, "the request itself is untouched"
+
+
+async def test_chat_path_still_reuses_when_logprobs_are_not_requested(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The gate is keyed on the request, not on retention: without logprobs, ids are used.
+
+    Guards this gate against being written so broadly that it refuses every turn -- the
+    failure mode a `logprobs` key that is present but falsy would produce.
+    """
+    backend = _make_backend()
+    sent = [{"role": "user", "content": "U1"}]
+    ctx = _ctx_holding(backend, [10, 11], sent, template_kwargs={}).add(
+        Message("user", "U1")
+    )
+    setattr(
+        backend,
+        "_tokenize_chat",
+        AsyncMock(side_effect=lambda m, **_: [1, 2, 40] if len(m) == 2 else [1, 2]),
+    )
+    setattr(
+        backend._async_client.completions,
+        "create",
+        AsyncMock(side_effect=AssertionError("reached the id path")),
+    )
+    setattr(
+        backend._async_client.chat.completions,
+        "create",
+        MagicMock(
+            side_effect=AssertionError("must not fall back to the chat endpoint")
+        ),
+    )
+
+    with pytest.raises(AssertionError, match="reached the id path"):
+        await backend._generate_from_context(
+            Message("user", "U2"), ctx, model_options={"logprobs": False}
+        )
 
 
 # --- control-token count is COMPLETE, not per-invoked-adapter ---------------
