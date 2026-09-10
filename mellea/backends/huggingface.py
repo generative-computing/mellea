@@ -282,6 +282,14 @@ _HF_INTERNAL_TEMPLATE_VARS: frozenset[str] = frozenset(
 
 _CHAT_TEMPLATE_THINKING_VARS: tuple[str, ...] = ("think", "thinking", "enable_thinking")
 
+# A string THINKING level (e.g. "low") is forwarded verbatim as `reasoning_effort`
+# when the chat template declares that variable — this is the actual mechanism
+# Granite 4.2's chat template consumes (chat_template.jinja derives its boolean
+# `low_effort` from `reasoning_effort == "low"`) and what gpt-oss's HF chat
+# template reads directly. Mirrors the OpenAI backend's string-valued
+# `reasoning_effort` handling (_map_thinking_option in openai.py).
+_CHAT_TEMPLATE_REASONING_EFFORT_VAR = "reasoning_effort"
+
 
 def _compute_generate_kwargs_allowlist() -> frozenset[str]:
     """Names that `transformers`' `model.generate` accepts as keyword arguments.
@@ -2598,6 +2606,11 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         thinking_value = model_options.get(ModelOption.THINKING)
         if thinking_template_var is not None and type(thinking_value) is bool:
             backend_opts[thinking_template_var] = thinking_value
+        elif (
+            isinstance(thinking_value, str)
+            and _CHAT_TEMPLATE_REASONING_EFFORT_VAR in self._chat_template_allowlist
+        ):
+            backend_opts[_CHAT_TEMPLATE_REASONING_EFFORT_VAR] = thinking_value
         return {
             k: v for k, v in backend_opts.items() if k in self._chat_template_allowlist
         }
