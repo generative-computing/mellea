@@ -43,12 +43,17 @@ else
 fi
 OLLAMA_BIN="${OLLAMA_BIN:-$(command -v ollama 2>/dev/null || echo "$HOME/.local/bin/ollama")}"
 OLLAMA_CONTEXT_LENGTH="${OLLAMA_CONTEXT_LENGTH:-2048}"
+# Keep in sync with the models the test suite actually requests.
+# llama3.2:1b is used by the SOFAI tests (test/stdlib/sampling/test_sofai_*.py);
+# it is NOT the same tag as plain "llama3.2" (3B) and must be pulled explicitly,
+# otherwise the server pulls it on demand mid-test (hidden network dependency).
+# Models used only by docs/examples/ are intentionally excluded — the nightly
+# does not run examples (WITH_EXAMPLES=0).
 OLLAMA_MODEL_LIST=(
     "granite4.2:3b"
     "granite4:micro-h"
     "hf.co/ibm-granite/granite-vision-4.1-4b-GGUF:Q4_K_M"
-    "llama3.2"
-    "qwen2.5vl:7b"
+    "llama3.2:1b"
 )
 
 # --- vLLM configuration ---
