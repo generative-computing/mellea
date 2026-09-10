@@ -43,6 +43,13 @@
 #                  (+ gpu_release_gate.log if a release gate times out)
 #   NOTE: a caller -m conflicts with the per-phase marker selection, so the
 #   script falls back to single-run mode with a warning.
+#   NOTE: a caller-supplied --json-report-file in phased mode is NOT written
+#   to directly by each phase (that would let phase 4 silently overwrite
+#   phases 1-3). Instead each phase keeps writing its own
+#   pytest_report_<name>.json, and after all phases finish they are merged
+#   into the caller's requested path — so a driver like mellea-oc's
+#   lsf/nightly.py, which passes one --json-report-file for the whole run,
+#   still gets every phase's failures in it.
 #
 # LSF examples
 #   Single job (shared GPU request; both/phase servers as needed):
@@ -522,15 +529,38 @@ fi
 # only test-selection and verbosity arguments.
 CALLER_DURATIONS=0
 CALLER_JSON_REPORT=0
+CALLER_JSON_REPORT_FILE=""
 for arg in "$@"; do
     case "$arg" in
         --durations=*) CALLER_DURATIONS=1 ;;
+        --json-report-file=*)
+            CALLER_JSON_REPORT=1
+            CALLER_JSON_REPORT_FILE="${arg#--json-report-file=}"
+            ;;
         --json-report*) CALLER_JSON_REPORT=1 ;;
     esac
 done
 DURATIONS_ARG=()
 if [[ $CALLER_DURATIONS -eq 0 ]]; then
     DURATIONS_ARG=(--durations=0)
+fi
+
+# Phased mode can't hand a caller-supplied --json-report-file straight to
+# pytest per phase — each phase's run would overwrite it, leaving only the
+# last phase's results. Strip it out of the per-phase pytest args (so
+# run_phase falls back to its own pytest_report_<name>.json naming) and
+# merge the per-phase reports into the caller's path once all phases finish.
+if [[ "$SERIAL_PHASES" == "1" && $CALLER_JSON_REPORT -eq 1 ]]; then
+    _FILTERED_PYTEST_ARGS=()
+    for arg in "${PYTEST_ARGS[@]}"; do
+        case "$arg" in
+            --json-report|--json-report-file=*) ;;
+            *) _FILTERED_PYTEST_ARGS+=("$arg") ;;
+        esac
+    done
+    PYTEST_ARGS=("${_FILTERED_PYTEST_ARGS[@]}")
+    CALLER_JSON_REPORT=0
+    log "Phased mode: deferring caller's --json-report-file — per-phase reports will be merged into ${CALLER_JSON_REPORT_FILE} after all phases finish."
 fi
 
 # --- Run tests ---
@@ -609,6 +639,39 @@ if [[ "$SERIAL_PHASES" == "1" ]]; then
 
     if [[ $RAN_ANY -eq 0 ]]; then
         die "No phases executed (PHASES=${PHASES}) — nothing was tested"
+    fi
+
+    if [[ -n "$CALLER_JSON_REPORT_FILE" ]]; then
+        log "Merging per-phase JSON reports into ${CALLER_JSON_REPORT_FILE} ..."
+        uv run --quiet --frozen --all-groups --all-extras $UV_PYTHON_ARG python - "$LOGDIR" "$CALLER_JSON_REPORT_FILE" <<'PYEOF'
+import glob
+import json
+import os
+import sys
+
+logdir, out_path = sys.argv[1], sys.argv[2]
+reports = sorted(glob.glob(os.path.join(logdir, "pytest_report_p*.json")))
+merged = None
+for path in reports:
+    with open(path) as f:
+        data = json.load(f)
+    if merged is None:
+        merged = data
+        merged["tests"] = list(data.get("tests", []))
+        continue
+    merged["tests"].extend(data.get("tests", []))
+    summary = merged.setdefault("summary", {})
+    for key, val in data.get("summary", {}).items():
+        summary[key] = summary.get(key, 0) + val
+    merged["duration"] = merged.get("duration", 0) + data.get("duration", 0)
+
+if merged is not None:
+    out_dir = os.path.dirname(out_path)
+    if out_dir:
+        os.makedirs(out_dir, exist_ok=True)
+    with open(out_path, "w") as f:
+        json.dump(merged, f)
+PYEOF
     fi
 
     EXIT_CODE=$OVERALL_RC
