@@ -73,7 +73,7 @@ class MaxSentencesReq(Requirement):
     def format_for_llm(self) -> str:
         return f"The response must be at most {self._limit} sentences long."
 
-    async def stream_validate(
+    async def _stream_validate(
         self, chunk: str, *, backend: Backend, ctx: Context
     ) -> PartialValidationResult:
         self._count += sum(chunk.count(p) for p in ".!?")

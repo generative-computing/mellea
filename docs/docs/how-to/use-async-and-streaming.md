@@ -274,7 +274,7 @@ class MaxSentencesReq(Requirement):
     def format_for_llm(self) -> str:
         return f"The response must be at most {self._limit} sentences."
 
-    async def stream_validate(
+    async def _stream_validate(
         self, chunk: str, *, backend: Backend, ctx: Context
     ) -> PartialValidationResult:
         self._count += 1
@@ -349,9 +349,9 @@ print(f"Completed normally: {streamer.completed_normally}")
 See the [Streaming Validation tutorial](../tutorials/06-streaming-validation.md)
 for a full walkthrough.
 
-### The `stream_validate` tri-state
+### The `_stream_validate` tri-state
 
-Each call to `stream_validate` returns a `PartialValidationResult` with one of
+Each call to `_stream_validate` returns a `PartialValidationResult` with one of
 three values:
 
 | Value | Meaning |
@@ -362,7 +362,18 @@ three values:
 
 After a natural stream end, `validate()` is called on every non-`"fail"`
 requirement (both `"pass"` and `"unknown"`). This means `"pass"` from
-`stream_validate` does **not** replace the final `validate()` call.
+`_stream_validate` does **not** replace the final `validate()` call.
+
+### Requirement chunking
+
+The `chunking=` on `stream()` sets what the *consumer* receives. A requirement
+declares the granularity its own check needs, independent of the stream's: a
+sentence-level check knows it wants sentences, so it sets `chunking="sentence"` in
+its constructor. Because the built-in chunking strategies all discard their
+separators, set the stream's `chunking=None` when a requirement carries its own,
+so each requirement re-chunks the raw deltas independently. See
+[`docs/examples/streaming/per_requirement_chunking.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/streaming/per_requirement_chunking.py)
+for two requirements validating one stream at different granularities.
 
 > **See also:** [The Requirements System — Streaming validation](../concepts/requirements-system.md#streaming-validation)
 
