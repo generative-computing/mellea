@@ -315,3 +315,57 @@ def test_retaining_ids_is_never_worse_than_re_rendering(backend: OpenAIBackend) 
         f"retaining ids hit {retained_rate:.2%} of queried blocks but re-rendering hit "
         f"{plain_rate:.2%} -- the policy is costing cache hits rather than preserving them"
     )
+
+
+def test_documents_turn_reuses_its_prefix_and_hits_the_cache(
+    backend: OpenAIBackend,
+) -> None:
+    """A RAG turn keeps its prefix: `/tokenize` renders `documents` the way the server does.
+
+    `documents` are a chat-template variable, so they are forwarded into the
+    `chat_template_kwargs` sent to `/tokenize` rather than declined. That is only correct
+    if the tokenize render matches the render the chat template would produce for the same
+    documents -- and nothing client-side can verify it, because the assembled prompt is
+    never returned. The server's prefix cache is the check: a render that differed would
+    put the retained ids out of step with what the server saw, and turn 2 would miss.
+
+    Documents are supplied from the FIRST turn, since introducing them later re-renders
+    the already-sent region and is refused as template-kwargs drift by design.
+    """
+    if _prefix_cache_counters() is None:
+        pytest.skip("server exports no prefix_cache_{queries,hits}_total counters")
+
+    docs = [
+        {"doc_id": "1", "text": "Mellea retains token ids to keep prefixes cached."}
+    ]
+    opts = {"extra_body": {"documents": docs}}
+    session = MelleaSession(
+        backend, ctx=ChatContext(retain_token_ids=True, model_id=_MODEL)
+    )
+    try:
+        session.chat("What does the document say?", model_options=opts)
+        prev = _chat_ctx(session).sent_token_ids
+        assert prev, (
+            "no ids retained on a documents turn: the server did not report token_ids "
+            "(need vLLM >= 0.10.2), or the turn did not take the id transport"
+        )
+
+        before = _prefix_cache_counters()
+        assert before is not None
+        session.chat("And what else?", model_options=opts)
+        after = _prefix_cache_counters()
+        assert after is not None
+
+        now = _chat_ctx(session).sent_token_ids
+        assert now[: len(prev)] == prev, "turn 2 did not splice turn 1's exact ids"
+        assert len(now) > len(prev)
+
+        queries, hits = after[0] - before[0], after[1] - before[1]
+        assert queries > 0, "turn 2 queried no cache blocks"
+        assert hits / queries > 0.5, (
+            f"only {hits}/{queries} blocks hit -- the /tokenize render of `documents` "
+            "probably differs from the chat template's, so the retained ids describe a "
+            "prompt the server never cached"
+        )
+    finally:
+        session.reset()

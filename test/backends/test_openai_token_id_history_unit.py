@@ -476,7 +476,7 @@ async def test_tokenize_chat_refuses_entries_that_are_not_exact_ids(tokens, why)
 def test_prompt_digest_notices_a_changed_reasoning_trace():
     """`reasoning_content` reaches the wire, so it must be fingerprinted.
 
-    The chat path emits it for a turn that carried tool calls (`should_replay_reasoning`),
+    A chat turn emits it for a turn that carried tool calls (`should_replay_reasoning`),
     and the chat template renders it. Two messages differing only there are two different
     prompts, so they must not share a digest.
     """
