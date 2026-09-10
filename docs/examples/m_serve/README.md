@@ -349,10 +349,14 @@ for chunk in stream:
 
 ## API Endpoints
 
-The `m serve` command automatically creates:
-- `POST /generate`: Main generation endpoint
-- `GET /health`: Health check endpoint
-- `GET /docs`: API documentation (Swagger UI)
+The `m serve` command registers:
+
+- `POST /v1/chat/completions` — OpenAI Chat Completions API
+- `POST /v1/responses` — OpenAI Responses API
+- `GET /health` — health check
+
+Both endpoints call the same `serve()` function in your program.
+FastAPI's interactive docs are available at `GET /docs` while the server is running.
 
 ## Use Cases
 
