@@ -10,7 +10,7 @@ import os
 import sys
 import time
 import uuid
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 try:
     import typer
@@ -229,8 +229,12 @@ def _convert_response_input_to_messages(
     """
     from mellea.serve.models import ChatMessage
 
-    def _role(r: str) -> str:
-        return "system" if r in ("developer", "system") else r
+    def _role(r: str) -> Literal["system", "user", "assistant", "tool", "function"]:
+        if r in ("developer", "system"):
+            return "system"
+        if r in ("user", "assistant", "tool", "function"):
+            return cast(Literal["system", "user", "assistant", "tool", "function"], r)
+        raise ValueError(f"Unexpected role: {r!r}")
 
     messages: list[ChatMessage] = []
 
@@ -240,14 +244,14 @@ def _convert_response_input_to_messages(
         else:
             for item in instructions:
                 text = item.content if isinstance(item.content, str) else None
-                messages.append(ChatMessage(role=_role(item.role), content=text))  # type: ignore[arg-type]
+                messages.append(ChatMessage(role=_role(item.role), content=text))
 
     if isinstance(input_data, str):
         messages.append(ChatMessage(role="user", content=input_data))
     else:
         for item in input_data:
             text = item.content if isinstance(item.content, str) else None
-            messages.append(ChatMessage(role=_role(item.role), content=text))  # type: ignore[arg-type]
+            messages.append(ChatMessage(role=_role(item.role), content=text))
 
     return messages
 
