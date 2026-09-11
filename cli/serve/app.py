@@ -10,9 +10,12 @@ import os
 import sys
 import time
 import uuid
+from dataclasses import dataclass, field
 from typing import Any, Literal, cast
 
 try:
+    from contextlib import asynccontextmanager
+
     import typer
     import uvicorn
     from fastapi import FastAPI, Request
@@ -54,11 +57,60 @@ from .utils import extract_finish_reason
 
 logger = MelleaLogger.get_logger()
 
+
+@asynccontextmanager
+async def _lifespan(application: FastAPI):
+    """Start background tasks on server startup."""
+    task = asyncio.create_task(_evict_expired_responses())
+    yield
+    task.cancel()
+
+
 app = FastAPI(
     title="M serve OpenAI API Compatible Server",
     description="M programs that run as a simple OpenAI API-compatible server",
     version="0.1.0",
+    lifespan=_lifespan,
 )
+
+# ---------------------------------------------------------------------------
+# In-memory response store
+#
+# Keyed by response_id (resp_…).  Each entry holds the completed Response
+# object plus the full message history so that a future request can pass
+# previous_response_id to continue the conversation without re-sending
+# history.  Entries are evicted after _response_ttl_seconds by a background
+# sweep task started in run_server().
+# ---------------------------------------------------------------------------
+
+_response_ttl_seconds: int = 1800  # 30 minutes, overridden by run_server()
+
+
+@dataclass
+class _StoredResponse:
+    response: Response
+    # Ordered list of ChatMessage-compatible dicts representing the full
+    # conversation up to and including this response, in a format both
+    # endpoints can consume without importing Responses API types.
+    history: list[dict[str, Any]]
+    stored_at: float = field(default_factory=time.time)
+
+
+_response_store: dict[str, _StoredResponse] = {}
+
+
+async def _evict_expired_responses() -> None:
+    """Background task: evict store entries older than _response_ttl_seconds."""
+    while True:
+        await asyncio.sleep(60)  # sweep every minute
+        cutoff = time.time() - _response_ttl_seconds
+        expired = [
+            rid for rid, entry in _response_store.items() if entry.stored_at < cutoff
+        ]
+        for rid in expired:
+            del _response_store[rid]
+        if expired:
+            logger.debug("Evicted %d expired response(s) from store", len(expired))
 
 
 @app.get("/health")
@@ -256,11 +308,33 @@ def _convert_response_input_to_messages(
     return messages
 
 
+def _build_history_from_messages(
+    messages: list, assistant_text: str
+) -> list[dict[str, Any]]:
+    """Serialize a message list + assistant reply into a plain dict history.
+
+    The history is stored in a format that both the responses and chat/completions
+    endpoints can consume: a list of ``{"role": str, "content": str}`` dicts,
+    matching the ChatMessage wire format.
+    """
+    history: list[dict[str, Any]] = [
+        {"role": m.role, "content": m.content} for m in messages
+    ]
+    history.append({"role": "assistant", "content": assistant_text})
+    return history
+
+
 def make_responses_endpoint(module):
     """Makes a /v1/responses endpoint using a custom module.
 
     Mirrors make_chat_endpoint() with Responses API-specific adaptations:
     input conversion, semantic streaming, and Response output format.
+
+    Supports multi-turn sessions via ``previous_response_id``: when set, the
+    server looks up the stored history from that response and prepends it to
+    the current input, so the client only needs to send the new turn.
+    Completed responses are stored in the in-memory ``_response_store`` when
+    ``store=True`` (the default) and expire after ``_response_ttl_seconds``.
     """
     serve_sig = inspect.signature(module.serve)
     accepts_format = "format" in serve_sig.parameters
@@ -283,6 +357,26 @@ def make_responses_endpoint(module):
             messages = _convert_response_input_to_messages(
                 request.input, request.instructions
             )
+
+            # Prepend history from a previous response if the client is
+            # continuing an existing conversation.
+            if request.previous_response_id:
+                stored = _response_store.get(request.previous_response_id)
+                if stored is None:
+                    return create_openai_error_response(
+                        status_code=404,
+                        message=f"Response '{request.previous_response_id}' not found or has expired.",
+                        error_type="invalid_request_error",
+                        param="previous_response_id",
+                    )
+                from mellea.serve.models import ChatMessage
+
+                prior_messages = [
+                    ChatMessage(role=m["role"], content=m["content"])
+                    for m in stored.history
+                ]
+                messages = prior_messages + messages
+
             model_options = _build_model_options_from_response_request(request)
 
             format_model: type[BaseModel] | None = None
@@ -320,7 +414,7 @@ def make_responses_endpoint(module):
                 input_tokens=0, output_tokens=0, total_tokens=0
             )
 
-            return Response(
+            response = Response(
                 id=response_id,
                 created_at=created_timestamp,
                 model=request.model,
@@ -331,6 +425,15 @@ def make_responses_endpoint(module):
                 conversation=request.conversation,
                 previous_response_id=request.previous_response_id,
             )
+
+            # Store the response and full history for future previous_response_id use.
+            if request.store is not False:
+                _response_store[response_id] = _StoredResponse(
+                    response=response,
+                    history=_build_history_from_messages(messages, output.value or ""),
+                )
+
+            return response
 
         except ValueError as e:
             return create_openai_error_response(
@@ -486,12 +589,34 @@ def make_chat_endpoint(module):
     return endpoint
 
 
+@app.get("/v1/responses/{response_id}", response_model=Response | OpenAIErrorResponse)
+async def get_response(response_id: str) -> Response | JSONResponse:
+    """Retrieve a stored response by ID.
+
+    Returns the completed ``Response`` object that was stored when
+    ``store=True`` (the default) on the original ``POST /v1/responses``
+    request.  Returns 404 if the response has expired or was never stored.
+    """
+    stored = _response_store.get(response_id)
+    if stored is None:
+        return create_openai_error_response(
+            status_code=404,
+            message=f"Response '{response_id}' not found or has expired.",
+            error_type="invalid_request_error",
+        )
+    return stored.response
+
+
 def run_server(
     script_path: str = "docs/examples/m_serve/example.py",
     host: str = "0.0.0.0",
     port: int = 8080,
+    response_ttl: int = 1800,
 ):
     """Serve a FastAPI endpoint for a given script."""
+    global _response_ttl_seconds
+    _response_ttl_seconds = response_ttl
+
     module = load_module_from_path(script_path)
 
     app.add_api_route(
@@ -506,7 +631,10 @@ def run_server(
         methods=["POST"],
         response_model=Response | OpenAIErrorResponse,
     )
+
+    ttl_minutes = response_ttl // 60
     typer.echo(
         f"Serving /v1/chat/completions and /v1/responses at http://{host}:{port}"
     )
+    typer.echo(f"Response store TTL: {ttl_minutes} minutes")
     uvicorn.run(app, host=host, port=port)
