@@ -593,6 +593,10 @@ if [[ "$SERIAL_PHASES" == "1" ]]; then
     # so start from a clean file (honours per-job COVERAGE_FILE).
     rm -f "${COVERAGE_FILE:-.coverage}"
     PHASE_ARGS=("${PYTEST_ARGS[@]}" --cov-append --group-by-backend)
+    # Start pytest_full.log clean: it's appended to per-phase below, and a
+    # reused MELLEA_LOGDIR (e.g. a retried nightly job) would otherwise mix
+    # this run's output with a previous run's.
+    : > "$LOGDIR/pytest_full.log"
 
     if phase_enabled hf; then
         log "Starting phase 1 (huggingface, in-process — no servers)..."
@@ -638,11 +642,16 @@ if [[ "$SERIAL_PHASES" == "1" ]]; then
     fi
 
     if [[ $RAN_ANY -eq 0 ]]; then
-        die "No phases executed (PHASES=${PHASES}) — nothing was tested"
+        die "No phases executed (PHASES=${PHASES}) — nothing was tested. If PHASES included vllm, check WITH_VLLM (currently ${WITH_VLLM})."
     fi
 
     if [[ -n "$CALLER_JSON_REPORT_FILE" ]]; then
         log "Merging per-phase JSON reports into ${CALLER_JSON_REPORT_FILE} ..."
+        # Non-fatal: a merge failure (e.g. a phase's report truncated by an
+        # OOM-kill mid-write) must not abort the script before EXIT_CODE is
+        # set below, or the nightly would surface this traceback instead of
+        # the real per-phase pass/fail.
+        set +e
         uv run --quiet --frozen --all-groups --all-extras $UV_PYTHON_ARG python - "$LOGDIR" "$CALLER_JSON_REPORT_FILE" <<'PYEOF'
 import glob
 import json
@@ -653,8 +662,12 @@ logdir, out_path = sys.argv[1], sys.argv[2]
 reports = sorted(glob.glob(os.path.join(logdir, "pytest_report_p*.json")))
 merged = None
 for path in reports:
-    with open(path) as f:
-        data = json.load(f)
+    try:
+        with open(path) as f:
+            data = json.load(f)
+    except (OSError, json.JSONDecodeError) as exc:
+        print(f"WARNING: skipping unreadable report {path}: {exc}", file=sys.stderr)
+        continue
     if merged is None:
         merged = data
         merged["tests"] = list(data.get("tests", []))
@@ -671,7 +684,14 @@ if merged is not None:
         os.makedirs(out_dir, exist_ok=True)
     with open(out_path, "w") as f:
         json.dump(merged, f)
+else:
+    sys.exit(1)
 PYEOF
+        merge_rc=$?
+        set -e
+        if [[ $merge_rc -ne 0 ]]; then
+            log "WARNING: JSON report merge failed (exit ${merge_rc}) — per-phase reports remain at ${LOGDIR}/pytest_report_p*.json; ${CALLER_JSON_REPORT_FILE} was not written."
+        fi
     fi
 
     EXIT_CODE=$OVERALL_RC
