@@ -395,6 +395,13 @@ final answer. The OpenAI backend reports the response faithfully — the model
 genuinely returned `content=None` — but the reasoning content is preserved
 separately on the underlying `ModelOutputThunk`.
 
+> **Preferred entry point:** for backends that honour it (this one included),
+> `ModelOption.THINKING` is the portable way to enable/disable/level thinking —
+> see [Reasoning and thinking mode](../how-to/configure-model-options.md#reasoning-and-thinking-mode).
+> The `extra_body`/`enable_thinking` pattern below remains useful as a fallback
+> for runtime-specific params `ModelOption.THINKING` doesn't cover, and for the
+> `default_extra_body` merge semantics described below.
+
 Diagnose with:
 
 ```python
