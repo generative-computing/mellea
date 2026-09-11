@@ -16,6 +16,7 @@ Each subdirectory contains a server implementation and its matching client(s):
 | `multimodal-audio/` | Audio-text-to-text serving (llama-server and Ollama/Granite variants) |
 | `pii/` | PII detection service |
 | `model-routing/` | Using or ignoring the client-supplied model ID |
+| `sessions/` | Multi-turn sessions via `previous_response_id` (Responses API) |
 
 Subdirectories marked with a `client_responses*.py` file include a Responses API
 client alongside the standard Chat Completions client. Both clients use the same
@@ -259,6 +260,16 @@ uv run m serve docs/examples/m_serve/model-routing/m_serve_example_model_routing
 uv run python docs/examples/m_serve/model-routing/client_model_routing.py
 ```
 
+### Multi-Turn Sessions
+
+```bash
+# Start the sessions example server
+m serve docs/examples/m_serve/sessions/m_serve_example_sessions.py
+
+# In another terminal, run the session client
+python docs/examples/m_serve/sessions/client_responses_sessions.py
+```
+
 ## Response Format Support
 
 The server supports structured output via the `response_format` parameter, which allows you to control the format of the model's response. This is compatible with OpenAI's response format API.
@@ -365,15 +376,56 @@ for chunk in stream:
         print(chunk.choices[0].delta.content, end="", flush=True)
 ```
 
+## Multi-Turn Sessions (Responses API)
+
+The Responses API stores completed responses in memory and lets clients continue
+a conversation without resending history.  Each response carries an `id`
+(e.g. `resp_abc123`); pass it as `previous_response_id` in the next request and
+the server reconstructs the full history automatically.
+
+```python
+import openai
+
+client = openai.OpenAI(api_key="na", base_url="http://0.0.0.0:8080/v1")
+
+# Turn 1
+r1 = client.responses.create(model="granite4.1:3b", input="My name is Alice.")
+print(r1.output_text)   # "Nice to meet you, Alice!"
+
+# Turn 2 — only send the new message, not the history
+r2 = client.responses.create(
+    model="granite4.1:3b",
+    input="What is my name?",
+    previous_response_id=r1.id,
+)
+print(r2.output_text)   # "Your name is Alice."
+```
+
+Stored responses can also be retrieved by ID:
+
+```bash
+curl http://0.0.0.0:8080/v1/responses/resp_abc123
+```
+
+Sessions expire after 30 minutes by default.  Pass `--response-ttl <seconds>` to
+`m serve` to change the TTL:
+
+```bash
+m serve my_app.py --response-ttl 3600   # 1-hour sessions
+```
+
+See `sessions/` for a full runnable example.
+
 ## API Endpoints
 
 The `m serve` command registers:
 
 - `POST /v1/chat/completions` — OpenAI Chat Completions API
-- `POST /v1/responses` — OpenAI Responses API
+- `POST /v1/responses` — OpenAI Responses API (supports `previous_response_id` sessions)
+- `GET /v1/responses/{id}` — Retrieve a stored response by ID
 - `GET /health` — health check
 
-Both endpoints call the same `serve()` function in your program.
+Both POST endpoints call the same `serve()` function in your program.
 FastAPI's interactive docs are available at `GET /docs` while the server is running.
 
 ## Use Cases
