@@ -416,8 +416,10 @@ uv run pytest -rs
 # CI mode locally (mirrors what PR CI does)
 CICD=1 uv run pytest test
 
-# Nightly-style local run on a GPU host
-./test/scripts/run_tests_with_ollama_and_vllm.sh --group-by-backend -v -s
+# Nightly-style local run on a GPU host (phased execution is the default)
+./test/scripts/run_tests_with_ollama_and_vllm.sh
+# Legacy single-process run (both servers up for the whole run)
+SERIAL_PHASES=0 ./test/scripts/run_tests_with_ollama_and_vllm.sh --group-by-backend -v -s
 ```
 
 ### Scoping a test run
@@ -452,7 +454,7 @@ Tests skip automatically when requirements are not met:
 |------|---------|-------|-----------|
 | **Pre-commit** | Every commit (local) | Local hook | ruff, mypy, uv-lock, codespell, markdownlint |
 | **PR CI** | Every push / merge group | GitHub Actions, Ubuntu | `pytest test/` on Python 3.11/3.12/3.13 with Ollama. `CICD=1` (qualitative skipped). `slow` excluded. |
-| **Nightly** | Scheduled | IBM internal LSF cluster (GPU) | Full `pytest test/ --group-by-backend`, Ollama + vLLM, qualitative enabled. Failures file an auto-issue. |
+| **Nightly** | Scheduled | IBM internal LSF cluster (GPU) | Full suite via `run_tests_with_ollama_and_vllm.sh` (phased execution by default: one pytest process per backend group, per-phase server lifecycles; `SERIAL_PHASES=0` for the legacy `--group-by-backend` run), Ollama + vLLM, qualitative enabled. Failures file an auto-issue. |
 | **On-demand nightly** | Not yet available | IBM internal LSF cluster | Comment-triggered nightly against a PR branch. Tracked in [#734](https://github.com/generative-computing/mellea/issues/734); ask a maintainer if you need pre-merge GPU validation today. |
 
 **PR CI** (`ci.yml` → `quality.yml`): pre-commit checks, then Ollama installed
@@ -460,10 +462,21 @@ and `granite4.2:3b` + `granite4:micro-h` + the `granite-vision-4.1-4b` GGUF
 pulled, then `uv run -m pytest -v --junit-xml=... test`. `docs/examples/` is
 not collected in PR CI.
 
-**Nightly** (`test/scripts/run_tests_with_ollama_and_vllm.sh`): starts local
-Ollama and (when GPU present) a local vLLM server, then runs
-`pytest test/ --group-by-backend`. The `--group-by-backend` flag reorders tests
-to run each backend as a contiguous group, reducing GPU memory fragmentation.
+**Nightly** (`test/scripts/run_tests_with_ollama_and_vllm.sh`): starts a local
+Ollama and (when a GPU is present) a local vLLM server, then runs the suite.
+By default it runs **phased execution** (`SERIAL_PHASES=1`): each backend group
+runs as its own pytest process with per-phase server lifecycles — only one CUDA
+context is alive at a time, peak GPU memory drops from ~72 GiB to ~33 GiB, and
+the single-context phases can run on an exclusive LSF GPU
+(`-gpu "num=1"`; the Ollama phase needs `mode=shared` because Ollama runs one
+`llama-server` worker per model). `SERIAL_PHASES=0` selects the legacy
+single-process run, which starts both servers up front and runs
+`pytest test/ --group-by-backend` (the flag reorders tests into contiguous
+backend groups, reducing GPU memory fragmentation). The script records full
+per-test durations and JSON reports under its log directory
+(`pytest_full.log` + `pytest_report.json` legacy; `phase_<name>.log` +
+`pytest_report_<name>.json` per phase) — see the script header for the LSF
+submission patterns (single job vs the recommended two-job exclusive split).
 
 ## Coverage
 
@@ -515,7 +528,9 @@ Two mechanisms in `test/conftest.py` handle this:
   Always active, no flags required.
 - **Group warm-up/eviction** (`pytest_runtest_setup`) — warms up a fixed set of CI
   models (`keep_alive=-1`) when entering the Ollama backend group and evicts them
-  when leaving. Requires `--group-by-backend`.
+  when leaving. Triggered by `--group-by-backend` ordering in legacy mode, and in
+  phased mode (default) by the per-phase `--group-by-backend` the script passes —
+  each phase process contains a single group.
 
 **Trade-off:** if two consecutive test files use the same model, it will be unloaded
 and reloaded (~5–15 s overhead). Predictable memory behaviour is more important
