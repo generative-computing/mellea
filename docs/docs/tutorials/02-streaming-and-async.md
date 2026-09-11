@@ -15,7 +15,7 @@ By the end you will have covered:
 - `wait_for_all_mots` for fan-out concurrent generation
 - Context behaviour with concurrent async calls
 
-**Prerequisites:** [Tutorial 01](./your-first-generative-program) complete,
+**Prerequisites:** [Tutorial 01](./01-your-first-generative-program.md) complete,
 `pip install mellea`, Ollama running locally with `granite4.2:3b` downloaded.
 
 ---
@@ -51,7 +51,7 @@ which was time-consuming, but support was beneficial once connected.
 
 > **Note:** LLM output is non-deterministic. Your result will vary in wording, but should be a single sentence.
 
-`ainstruct()` returns a [`ModelOutputThunk`](../reference/glossary#modeloutputthunk). `await`-ing it starts generation
+`ainstruct()` returns a [`ModelOutputThunk`](../reference/glossary.md#modeloutputthunk). `await`-ing it starts generation
 immediately; `str(result)` resolves the value when it is ready. Every other
 method follows the same pattern: `achat()`, `aact()`, `aquery()`,
 `atransform()`, `avalidate()`.
@@ -295,8 +295,8 @@ Issues:    {
 
 ## Step 5: Context and concurrency
 
-By default [`start_session()`](../reference/glossary#melleasession) uses [`SimpleContext`](../reference/glossary#context), which is safe for concurrent
-async calls. If you switch to [`ChatContext`](../reference/glossary#context), Mellea logs a warning because
+By default [`start_session()`](../reference/glossary.md#melleasession) uses [`SimpleContext`](../reference/glossary.md#context), which is safe for concurrent
+async calls. If you switch to [`ChatContext`](../reference/glossary.md#context), Mellea logs a warning because
 concurrent writes can corrupt the context state:
 
 ```text
@@ -354,5 +354,5 @@ For parallel generation, keep the default `SimpleContext`.
 
 ---
 
-**See also:** [Async and Streaming](../how-to/use-async-and-streaming) (full API reference) |
-[Tutorial 03: Using Generative Stubs](./using-generative-stubs)
+**See also:** [Async and Streaming](../how-to/use-async-and-streaming.md) (full API reference) |
+[Tutorial 03: Using Generative Stubs](./03-using-generative-stubs.md)

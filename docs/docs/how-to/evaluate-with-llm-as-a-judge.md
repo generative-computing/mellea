@@ -4,21 +4,21 @@ description: "Use the LLM itself to evaluate output quality — inline as a requ
 # diataxis: how-to
 ---
 
-**Prerequisites:** [The Requirements System](../concepts/requirements-system),
-[Quick Start](../getting-started/quickstart) complete, `pip install mellea`.
+**Prerequisites:** [The Requirements System](../concepts/requirements-system.md),
+[Quick Start](../getting-started/quickstart.md) complete, `pip install mellea`.
 
 LLM-as-a-judge (LLMaJ) uses a second model call to evaluate whether a generated
 output meets a criterion expressed in natural language. In Mellea this is the
-default validation strategy for [`req()`](../reference/glossary#requirement) — you describe what good output looks
+default validation strategy for [`req()`](../reference/glossary.md#requirement) — you describe what good output looks
 like, and Mellea asks the model whether the output satisfies that description.
 
 > **Reliability note:** LLM-as-a-judge quality is highly model-dependent. Larger models tend to be stronger
 > judges. For deterministic constraints, prefer a Python validator; for subjective
-> constraints, use the aLoRA `requirement-check` adapter (on Granite models) or use LLM-as-a-judge. See [Choosing a validation approach](../concepts/requirements-system#choosing-a-validation-approach).
+> constraints, use the aLoRA `requirement-check` adapter (on Granite models) or use LLM-as-a-judge. See [Choosing a validation approach](../concepts/requirements-system.md#choosing-a-validation-approach).
 
 ## How it works
 
-When a [`Requirement`](../reference/glossary#requirement) has no `validation_fn`, Mellea runs a separate LLM call
+When a [`Requirement`](../reference/glossary.md#requirement) has no `validation_fn`, Mellea runs a separate LLM call
 after generation. The requirement's `description` and the model output are
 formatted into a judge prompt, and the model returns a verdict. Mellea converts
 the verdict to `True` / `False` by looking for `"yes"` (case-insensitive) in the
@@ -46,7 +46,7 @@ limit) and feeds the failure reason back into the next attempt.
 
 > **Observability:** If tracing is enabled, judge calls appear as
 > child spans with `mellea.component.type = "Requirement"`, separate from the main
-> generation span. See [Tracing](../observability/tracing).
+> generation span. See [Tracing](../observability/tracing.md).
 
 ## Standalone validation with m.validate()
 
@@ -71,11 +71,11 @@ for r, vr in zip([completeness, conciseness], validation_results):
         print(f"  Reason: {vr.reason}")
 ```
 
-`m.validate()` returns a list of [`ValidationResult`](../reference/glossary#validationresult) objects, one per requirement.
+`m.validate()` returns a list of [`ValidationResult`](../reference/glossary.md#validationresult) objects, one per requirement.
 
 ## Capture judge reasoning with generate_logs
 
-To inspect the full judge prompt and verdict, pass a [`GenerateLog`](../reference/glossary#generatelog) list:
+To inspect the full judge prompt and verdict, pass a [`GenerateLog`](../reference/glossary.md#generatelog) list:
 
 ```python
 from mellea import start_session
@@ -106,8 +106,8 @@ string, which is useful for debugging requirements that are failing unexpectedly
 ## Avoid the purple elephant effect with check()
 
 Including a requirement description in the generation prompt can cause the model
-to fixate on the thing you want to avoid — the [purple elephant effect](../reference/glossary#purple-elephant-effect). Use
-[`check()`](../reference/glossary#requirement) to validate without including the description in the generation prompt:
+to fixate on the thing you want to avoid — the [purple elephant effect](../reference/glossary.md#purple-elephant-effect). Use
+[`check()`](../reference/glossary.md#requirement) to validate without including the description in the generation prompt:
 
 ```python
 from mellea import start_session
@@ -205,10 +205,10 @@ print(f"Passed: {output.success}")
 print(f"Attempts: {len(output.sample_generations)}")
 ```
 
-[`SamplingResult`](../reference/glossary#samplingresult)`.success` is `True` if at least one attempt satisfied all
+[`SamplingResult`](../reference/glossary.md#samplingresult)`.success` is `True` if at least one attempt satisfied all
 requirements. `sample_generations` lists every attempt made.
 
-**See also:** [The Requirements System](../concepts/requirements-system) |
-[Write Custom Verifiers](../how-to/write-custom-verifiers) |
-[Handling Exceptions and Failures](../how-to/handling-exceptions) |
-[CLI Reference](../reference/cli)
+**See also:** [The Requirements System](../concepts/requirements-system.md) |
+[Write Custom Verifiers](./write-custom-verifiers.md) |
+[Handling Exceptions and Failures](./handling-exceptions.md) |
+[CLI Reference](../reference/cli.md)

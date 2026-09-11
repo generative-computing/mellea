@@ -4,7 +4,7 @@ description: "Write reliable tests for @generative functions using pytest marker
 # diataxis: how-to
 ---
 
-**Prerequisites:** [Quick Start](../getting-started/quickstart) complete,
+**Prerequisites:** [Quick Start](../getting-started/quickstart.md) complete,
 `pip install mellea`, Ollama running locally, `pytest` installed.
 
 > **Contributing to Mellea itself?** See
@@ -433,9 +433,9 @@ pytest -m qualitative
 
 ## Next steps
 
-- [The Requirements System](../concepts/requirements-system) — understand how
+- [The Requirements System](../concepts/requirements-system.md) — understand how
   `Requirement`, `simple_validate`, and `check` interact with the IVR loop
-- [Handling Exceptions](../how-to/handling-exceptions) —
+- [Handling Exceptions](./handling-exceptions.md) —
   catch and diagnose errors that occur during generation
-- [Evaluate with LLM-as-a-Judge](/how-to/evaluate-with-llm-as-a-judge) —
+- [Evaluate with LLM-as-a-Judge](./evaluate-with-llm-as-a-judge.md) —
   the `Requirement`-based approach for inline judge evaluation

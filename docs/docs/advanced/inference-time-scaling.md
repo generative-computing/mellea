@@ -4,7 +4,7 @@ description: "Control how Mellea generates and validates outputs: rejection samp
 # diataxis: how-to
 ---
 
-**Prerequisites:** [Instruct, Validate, Repair](../concepts/instruct-validate-repair)
+**Prerequisites:** [Instruct, Validate, Repair](../concepts/instruct-validate-repair.md)
 complete, `pip install mellea`, Ollama running locally.
 
 A sampling strategy controls what happens after the first generation: whether to

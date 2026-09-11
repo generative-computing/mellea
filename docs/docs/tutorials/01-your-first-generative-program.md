@@ -17,9 +17,9 @@ By the end you will have covered:
 
 > **`@generative` in depth:** This tutorial uses `@generative` in the final pipeline
 > step. For a dedicated walkthrough of typed returns, `Literal`, and Pydantic models,
-> see [Tutorial 03: Using Generative Stubs](../tutorials/using-generative-stubs).
+> see [Tutorial 03: Using Generative Stubs](./03-using-generative-stubs.md).
 
-**Prerequisites:** [Quick Start](../getting-started/quickstart) complete,
+**Prerequisites:** [Quick Start](../getting-started/quickstart.md) complete,
 Mellea installed (`uv add mellea`), Ollama running locally with `granite4.2:3b` downloaded.
 
 ---
@@ -49,7 +49,7 @@ challenging but support staff provided valuable assistance later.
 
 > **Note:** LLM output is non-deterministic. Your result will vary in wording.
 
-`instruct()` returns a [`ModelOutputThunk`](../reference/glossary#modeloutputthunk). Calling `str()` on it (or accessing
+`instruct()` returns a [`ModelOutputThunk`](../reference/glossary.md#modeloutputthunk). Calling `str()` on it (or accessing
 `.value`) gives you the string. This is already a generative program: it calls an
 LLM and returns structured text.
 
@@ -196,7 +196,7 @@ to code reliably.
 ## Step 5: Rejection sampling and inspecting results
 
 By default, `instruct()` retries up to twice if any requirement fails. Use
-[`RejectionSamplingStrategy`](../reference/glossary#sampling-strategy) to control the budget and inspect results:
+[`RejectionSamplingStrategy`](../reference/glossary.md#sampling-strategy) to control the budget and inspect results:
 
 ```python
 # Requires: mellea
@@ -242,7 +242,7 @@ Onboarding process was found confusing and overly prolonged by customers.
 
 > **Note:** LLM output is non-deterministic. Your result will vary in wording, but should be a single sentence fewer than 30 words.
 
-With `return_sampling_results=True`, `instruct()` returns a [`SamplingResult`](../reference/glossary#samplingresult) with
+With `return_sampling_results=True`, `instruct()` returns a [`SamplingResult`](../reference/glossary.md#samplingresult) with
 `.success`, `.result`, and `.sample_generations`. This gives you programmatic
 control over what to do when the model can not satisfy your requirements.
 
@@ -351,9 +351,9 @@ call is self-contained.
 | Requirements | Enforces plain-English constraints via IVR |
 | `simple_validate` | Adds deterministic checks (word count, format) |
 | `RejectionSamplingStrategy` | Controls retry budget and exposes `SamplingResult` |
-| `@generative` | Typed functions with LLM-backed implementations ([Tutorial 03](../tutorials/using-generative-stubs)) |
+| `@generative` | Typed functions with LLM-backed implementations ([Tutorial 03](./03-using-generative-stubs.md)) |
 | Composition | Independent typed functions wired into a pipeline |
 
 ---
 
-**See also:** [Tutorial 02: Streaming and Async](../tutorials/streaming-and-async) | [Instruct, Validate, Repair](../concepts/instruct-validate-repair) | [The Requirements System](../concepts/requirements-system) | [Generative Functions](../concepts/generative-functions) | [MObjects and mify](../concepts/mobjects-and-mify) | [Use Images and Vision](../how-to/use-images-and-vision)
+**See also:** [Tutorial 02: Streaming and Async](./02-streaming-and-async.md) | [Instruct, Validate, Repair](../concepts/instruct-validate-repair.md) | [The Requirements System](../concepts/requirements-system.md) | [Generative Functions](../concepts/generative-functions.md) | [MObjects and mify](../concepts/mobjects-and-mify.md) | [Use Images and Vision](../how-to/use-images-and-vision.md)

@@ -301,7 +301,7 @@ m = MelleaSession(
 > **Note (review needed):** Direct Anthropic API compatibility via this path has not
 > been verified against the current Mellea version. If you are using Anthropic,
 > LiteLLM provides a verified integration — see
-> [Backends and Configuration](../how-to/backends-and-configuration).
+> [Backends and Configuration](../how-to/backends-and-configuration.md).
 
 ## Adapter functions with Granite Switch
 
@@ -453,6 +453,6 @@ reasoning trace from `result.thinking` rather than `result.value`.
 
 ---
 
-**See also:** [Backends and Configuration](../how-to/backends-and-configuration) |
-[Enforce Structured Output](../how-to/enforce-structured-output) |
+**See also:** [Backends and Configuration](../how-to/backends-and-configuration.md) |
+[Enforce Structured Output](../how-to/enforce-structured-output.md) |
 [Official Granite Switch Documentation](https://github.com/generative-computing/granite-switch)

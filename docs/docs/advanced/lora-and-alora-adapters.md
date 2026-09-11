@@ -206,6 +206,6 @@ Set it back to `True` to re-enable. This flag is per-backend instance and does n
 affect other sessions.
 
 **See also:** [Adapter functions](./intrinsics.md) |
-[The Requirements System](../concepts/requirements-system) |
-[Write Custom Verifiers](../how-to/write-custom-verifiers) |
-[CLI Reference](../reference/cli)
+[The Requirements System](../concepts/requirements-system.md) |
+[Write Custom Verifiers](../how-to/write-custom-verifiers.md) |
+[CLI Reference](../reference/cli.md)

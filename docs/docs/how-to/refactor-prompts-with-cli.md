@@ -335,9 +335,9 @@ and `"llm"` for quality checks that require LLM-as-a-judge evaluation.
 
 ## Next steps
 
-- [Generative Functions](../concepts/generative-functions) — add `@generative`,
+- [Generative Functions](../concepts/generative-functions.md) — add `@generative`,
   typed returns, and context steering to the generated pipeline
-- [Enforce Structured Output](../how-to/enforce-structured-output) — constrain
+- [Enforce Structured Output](./enforce-structured-output.md) — constrain
   subtask outputs to Pydantic models or `Literal` values
-- [CLI Reference](../reference/cli) — complete flag and option reference for
+- [CLI Reference](../reference/cli.md) — complete flag and option reference for
   all `m` subcommands

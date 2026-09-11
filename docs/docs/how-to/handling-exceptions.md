@@ -4,8 +4,8 @@ description: "Handle SamplingResult failures, PreconditionException, and parse e
 # diataxis: how-to
 ---
 
-**Prerequisites:** [The Requirements System](../concepts/requirements-system),
-[Quick Start](../getting-started/quickstart) complete, `pip install mellea`.
+**Prerequisites:** [The Requirements System](../concepts/requirements-system.md),
+[Quick Start](../getting-started/quickstart.md) complete, `pip install mellea`.
 
 Mellea programs encounter two categories of failure: **expected failures** (IVR
 exhaustion, precondition violations) that are part of normal operation, and
@@ -278,7 +278,7 @@ def instruct_with_fallback(text: str) -> str:
 
 This is the basis of the SOFAI (System 1 / System 2) pattern — fast model first,
 strong model only when needed. Mellea provides `SOFAISamplingStrategy` as a
-built-in implementation. See [Inference-Time Scaling](../advanced/inference-time-scaling).
+built-in implementation. See [Inference-Time Scaling](../advanced/inference-time-scaling.md).
 
 ## Logging failures
 
@@ -314,9 +314,9 @@ if not result.success:
 ```
 
 For structured telemetry across all calls, see
-[Telemetry](../observability/telemetry).
+[Telemetry](../observability/telemetry.md).
 
 ---
 
-**See also:** [The Requirements System](../concepts/requirements-system) |
-[Write Custom Verifiers](../how-to/write-custom-verifiers)
+**See also:** [The Requirements System](../concepts/requirements-system.md) |
+[Write Custom Verifiers](./write-custom-verifiers.md)

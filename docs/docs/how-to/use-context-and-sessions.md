@@ -5,10 +5,10 @@ description: "Extend MelleaSession to add custom validation, logging, and filter
 # diataxis: how-to
 ---
 
-**Prerequisites:** [Quick Start](../getting-started/quickstart) complete,
+**Prerequisites:** [Quick Start](../getting-started/quickstart.md) complete,
 `pip install mellea`, Ollama running locally.
 
-> **Concept overview:** [Context and Sessions](../concepts/context-and-sessions) explains the architecture and design.
+> **Concept overview:** [Context and Sessions](../concepts/context-and-sessions.md) explains the architecture and design.
 
 `MelleaSession` is a regular Python class. You can subclass it to add custom behavior
 to any session method — input filtering, output validation, logging, rate limiting, or

@@ -4,7 +4,7 @@ description: "Use async methods, parallel generation, and streaming output with 
 # diataxis: how-to
 ---
 
-**Prerequisites:** [Quick Start](../getting-started/quickstart) complete,
+**Prerequisites:** [Quick Start](../getting-started/quickstart.md) complete,
 `pip install mellea`, Ollama running locally.
 
 ## Async methods
@@ -204,7 +204,7 @@ mot = await m.ainstruct(
 )
 ```
 
-See [Configure model options — Streaming timeout](../how-to/configure-model-options#streaming-timeout)
+See [Configure model options — Streaming timeout](./configure-model-options.md#streaming-timeout)
 for the full reference.
 
 ## Async and context
@@ -375,8 +375,8 @@ so each requirement re-chunks the raw deltas independently. See
 [`docs/examples/streaming/per_requirement_chunking.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/streaming/per_requirement_chunking.py)
 for two requirements validating one stream at different granularities.
 
-> **See also:** [The Requirements System — Streaming validation](../concepts/requirements-system#streaming-validation)
+> **See also:** [The Requirements System — Streaming validation](../concepts/requirements-system.md#streaming-validation)
 
 ---
 
-**See also:** [Tutorial 02: Streaming and Async](../tutorials/streaming-and-async) | [act() and aact()](../how-to/act-and-aact)
+**See also:** [Tutorial 02: Streaming and Async](../tutorials/02-streaming-and-async.md) | [act() and aact()](./act-and-aact.md)

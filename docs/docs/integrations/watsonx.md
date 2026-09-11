@@ -5,8 +5,8 @@ description: "Run Mellea with IBM WatsonX AI using the WatsonxAIBackend."
 ---
 
 > **Deprecated:** The native WatsonX backend is deprecated since v0.4. Use the
-> [LiteLLM](../how-to/backends-and-configuration#litellm-backend) or
-> [OpenAI](../how-to/backends-and-configuration#openai-backend) backend with a
+> [LiteLLM](../how-to/backends-and-configuration.md#litellm-backend) or
+> [OpenAI](../how-to/backends-and-configuration.md#openai-backend) backend with a
 > WatsonX-compatible endpoint instead.
 
 The WatsonX backend connects to IBM's managed AI platform. It requires an API key,
@@ -30,7 +30,7 @@ Obtain these from the IBM Cloud console:
 
 ## Connecting
 
-The quickest path is [`start_session()`](../reference/glossary#melleasession) with `backend_name="watsonx"`:
+The quickest path is [`start_session()`](../reference/glossary.md#melleasession) with `backend_name="watsonx"`:
 
 ```python
 # Requires: mellea[watsonx]
@@ -46,7 +46,7 @@ print(str(result))
 # Output will vary — LLM responses depend on model and temperature.
 ```
 
-Or construct the [`Backend`](../reference/glossary#backend) directly for full control:
+Or construct the [`Backend`](../reference/glossary.md#backend) directly for full control:
 
 ```python
 # Requires: mellea[watsonx]
@@ -113,8 +113,8 @@ pip install 'mellea[watsonx]'
 
 > **Note:** `WatsonxAIBackend` does not currently support image input. Passing
 > `images=[...]` to `instruct()` or `chat()` will raise an error. Use the
-> [OpenAI backend](./openai) or [Ollama](./ollama) for vision tasks.
+> [OpenAI backend](./openai.md) or [Ollama](./ollama.md) for vision tasks.
 
 ---
 
-**See also:** [Backends and Configuration](../how-to/backends-and-configuration)
+**See also:** [Backends and Configuration](../how-to/backends-and-configuration.md)

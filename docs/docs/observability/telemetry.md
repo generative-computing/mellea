@@ -4,7 +4,7 @@ description: "Add OpenTelemetry tracing, metrics, and logging to Mellea programs
 # diataxis: how-to
 ---
 
-**Prerequisites:** [Quick Start](../getting-started/quickstart) complete,
+**Prerequisites:** [Quick Start](../getting-started/quickstart.md) complete,
 `pip install "mellea[telemetry]"`, Ollama running locally.
 
 Mellea provides built-in [OpenTelemetry](https://opentelemetry.io/) instrumentation
@@ -107,7 +107,7 @@ session                  (mellea.application)
     └── chat             (mellea.backend) [gen_ai.provider.name=openai]
 ```
 
-See [Tracing](../observability/tracing) for span attributes,
+See [Tracing](./tracing.md) for span attributes,
 exporter configuration (Jaeger, Grafana Tempo, etc.), and debugging guidance.
 
 ## Metrics
@@ -138,7 +138,7 @@ Mellea supports three exporters that can run simultaneously:
 - **OTLP** — export to production observability platforms
 - **Prometheus** — register with `prometheus_client` for scraping
 
-See [Metrics](../observability/metrics) for the full list of
+See [Metrics](./metrics.md) for the full list of
 metrics, backend support matrix, exporter setup, custom instruments, and
 troubleshooting.
 
@@ -148,7 +148,7 @@ Mellea uses a color-coded console logger (`MelleaLogger`) by default. When the
 `[telemetry]` extra is installed and `MELLEA_LOGS_OTLP=true` is set, Mellea
 also exports logs to an OTLP collector alongside existing console output.
 
-See [Logging](../observability/logging) for console logging
+See [Logging](./logging.md) for console logging
 configuration, OTLP log export setup, and programmatic access via
 `get_otlp_log_handler()`.
 
@@ -158,9 +158,9 @@ configuration, OTLP log export setup, and programmatic access via
 
 **See also:**
 
-- [Tracing](../observability/tracing) — distributed traces
+- [Tracing](./tracing.md) — distributed traces
   with Gen-AI semantic conventions.
-- [Metrics](../observability/metrics) — metrics, exporters,
+- [Metrics](./metrics.md) — metrics, exporters,
   and custom instruments.
-- [Logging](../observability/logging) — console logging and OTLP
+- [Logging](./logging.md) — console logging and OTLP
   log export.

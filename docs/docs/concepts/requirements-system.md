@@ -4,7 +4,7 @@ description: "How Requirement, ValidationResult, and the IVR loop work together 
 # diataxis: explanation
 ---
 
-> **Looking to use this in code?** See [Write Custom Verifiers](../how-to/write-custom-verifiers) for practical examples and API details.
+> **Looking to use this in code?** See [Write Custom Verifiers](../how-to/write-custom-verifiers.md) for practical examples and API details.
 
 Requirements are Mellea's mechanism for enforcing constraints on generative output.
 They serve two roles simultaneously: they appear in the prompt so the model knows what
@@ -12,12 +12,12 @@ to aim for, and they are evaluated after generation so Mellea can detect and rep
 failures automatically.
 
 This page explains the requirements system in depth. For a quick introduction,
-see [The Instruction Model](./instruct-validate-repair).
+see [The Instruction Model](./instruct-validate-repair.md).
 
 ## What a requirement is
 
-A [`Requirement`](../reference/glossary#requirement) is a [`Component`](../reference/glossary#component) that wraps a natural-language description and an
-optional validation function. During the [instruct–validate–repair (IVR)](../reference/glossary#ivr-instruct-validate-repair) loop:
+A [`Requirement`](../reference/glossary.md#requirement) is a [`Component`](../reference/glossary.md#component) that wraps a natural-language description and an
+optional validation function. During the [instruct–validate–repair (IVR)](../reference/glossary.md#ivr-instruct-validate-repair) loop:
 
 1. Mellea renders the requirement descriptions into the prompt alongside the instruction.
 2. After the model generates output, each requirement is validated against that output.
@@ -169,9 +169,9 @@ model make a targeted repair rather than regenerating blindly.
 
 ## Preconditions in generative functions
 
-The [`@generative`](../reference/glossary#generative) decorator supports `precondition_requirements` alongside the
+The [`@generative`](../reference/glossary.md#generative) decorator supports `precondition_requirements` alongside the
 standard `requirements`. Preconditions are validated against the *inputs* to the
-function before generation starts. If they fail, Mellea raises [`PreconditionException`](../reference/glossary#preconditionexception)
+function before generation starts. If they fail, Mellea raises [`PreconditionException`](../reference/glossary.md#preconditionexception)
 immediately — no generation attempt is made and no IVR loop runs.
 
 ```python
@@ -221,8 +221,8 @@ requirement that failed, giving you a complete picture of what went wrong.
 
 ## Inspecting validation results
 
-When you use `return_sampling_results=True`, `instruct()` returns a [`SamplingResult`](../reference/glossary#samplingresult)
-instead of a [`ModelOutputThunk`](../reference/glossary#modeloutputthunk). This exposes per-attempt validation results:
+When you use `return_sampling_results=True`, `instruct()` returns a [`SamplingResult`](../reference/glossary.md#samplingresult)
+instead of a [`ModelOutputThunk`](../reference/glossary.md#modeloutputthunk). This exposes per-attempt validation results:
 
 ```python
 from mellea import start_session
@@ -293,9 +293,9 @@ reserve LLM-based requirements for subjective criteria that cannot be coded dire
 
 > **Advanced:** `ALoraRequirement` (from `mellea.stdlib.requirements`) uses a fine-tuned
 > LoRA adapter for validation instead of LLM-as-a-judge. It falls back to LLM-as-a-judge
-> if the adapter is unavailable. See [LoRA and aLoRA Adapters](../advanced/lora-and-alora-adapters).
+> if the adapter is unavailable. See [LoRA and aLoRA Adapters](../advanced/lora-and-alora-adapters.md).
 
-For a full walkthrough of using LLM-as-a-judge for output quality evaluation, see [Evaluate with LLM-as-a-Judge](../how-to/evaluate-with-llm-as-a-judge).
+For a full walkthrough of using LLM-as-a-judge for output quality evaluation, see [Evaluate with LLM-as-a-Judge](../how-to/evaluate-with-llm-as-a-judge.md).
 
 ## Composing requirements
 
@@ -374,4 +374,4 @@ on the stream whenever a requirement carries its own `chunking`, and each requir
 chunks the raw deltas independently. A custom chunking strategy that preserves its separator can
 still compose across granularities; the constraint is specific to the built-in three.
 
-> **See also:** [Streaming with per-chunk validation](../how-to/use-async-and-streaming#streaming-with-per-chunk-validation)
+> **See also:** [Streaming with per-chunk validation](../how-to/use-async-and-streaming.md#streaming-with-per-chunk-validation)
