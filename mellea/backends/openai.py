@@ -132,8 +132,9 @@ def derive_delta(prev_ids: list[int], full_ids: list[int]) -> list[int]:
 
     Two independent reasons a re-render diverges from what was sent. (1) Template:
     for `ibm-granite/granite-switch-4.1-3b-preview`, an adapter control token
-    substitutes for the role marker (`100356` in place of `100264`) -- same length,
-    so a length check misses it, yet every cache block after it is invalidated.
+    substitutes for the role marker: `100356` `<|answerability|>` in place of `100264`
+    `<|start_of_role|>`. Same length, so a length check misses it, yet every cache
+    block after it is invalidated.
     (2) Tokenizer: `encode(decode(ids))` is not the identity -- the model can emit
     `[71, 4896]` (`'h'`,`'ello'`) where canonical `'hello'` is `[15339]`.
 
@@ -1716,8 +1717,8 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         # and both sides of `derive_delta` come through this same reader, so a consistent
         # corruption cancels out of the subtraction and reaches the server with every
         # guard passing. Same rule `PreTokenizedCBlock` applies on the way out
-        # (`core/base.py`):
-        # an int, and `bool` is not one despite subclassing it.
+        # (`core/base.py`): every entry must be exactly an int, and `bool` is not one
+        # despite subclassing it.
         non_ids = [t for t in tokens if not isinstance(t, int) or isinstance(t, bool)]
         if non_ids:
             raise TokenizeUnavailable(
@@ -2442,8 +2443,9 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             # Every rendered message PLUS the assistant turn just produced -- serialized
             # through the same `to_chat_messages` -> `message_to_openai_message` pipeline
             # the next turn renders its history with, so its fingerprint matches then.
-            # (`_prompt_digest` projects only role/content/tool_calls, so a differing
-            # `replay_reasoning` decision on the next turn cannot perturb it.)
+            # (`_prompt_digest` fingerprints every field, so the two serializers must
+            # agree on all of them; it canonicalizes values and drops empty ones so an
+            # absent key and a `None` key still match.)
             retained_messages = list(conversation) + [
                 message_to_openai_message(m, self.formatter, provider=self._provider)
                 for m in self.formatter.to_chat_messages([output])
