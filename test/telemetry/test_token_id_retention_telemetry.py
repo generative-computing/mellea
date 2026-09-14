@@ -134,7 +134,7 @@ def _duration_points(reader: InMemoryMetricReader):
     for rm in data.resource_metrics:
         for sm in rm.scope_metrics:
             for metric in sm.metrics:
-                if metric.name == "gen_ai.client.operation.duration":
+                if metric.name == "mellea.llm.request.duration":
                     points.extend(metric.data.data_points)
     return points
 
