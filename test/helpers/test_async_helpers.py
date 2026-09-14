@@ -320,5 +320,74 @@ class TestClientCache:
         assert cache.current_size() == 1
 
 
+class TestClientCacheClose:
+    def test_put_evicts_and_closes_via_callback(self):
+        closed = []
+
+        async def aclose(client):
+            closed.append(client)
+
+        cache = ClientCache(capacity=2, aclose=aclose)
+        cache.put(1, "a")
+        cache.put(2, "b")
+        cache.put(3, "c")  # evicts key 1
+
+        assert closed == ["a"]
+
+    def test_put_without_aclose_does_not_error_on_eviction(self):
+        cache = ClientCache(capacity=1)
+        cache.put(1, "a")
+        cache.put(2, "b")  # evicts "a"; no aclose configured, nothing to close
+        assert cache.get(2) == "b"
+
+    def test_clear_closes_every_entry(self):
+        closed = []
+
+        async def aclose(client):
+            closed.append(client)
+
+        cache = ClientCache(capacity=3, aclose=aclose)
+        cache.put(1, "a")
+        cache.put(2, "b")
+        cache.clear()
+
+        assert sorted(closed) == ["a", "b"]
+        assert cache.current_size() == 0
+
+    def test_clear_empties_cache_even_if_closer_raises(self):
+        """A raising closer must not leave a stale entry behind."""
+
+        async def aclose(client):
+            raise RuntimeError("boom")
+
+        cache = ClientCache(capacity=1, aclose=aclose)
+        cache.put(1, "a")
+        cache.clear()  # the closer's error is caught and logged, not raised
+
+        assert cache.current_size() == 0
+
+    def test_clear_without_aclose_just_empties(self):
+        cache = ClientCache(capacity=2)
+        cache.put(1, "a")
+        cache.put(2, "b")
+        cache.clear()
+        assert cache.current_size() == 0
+
+    async def test_aclear_closes_current_loop_and_unbound_entries(self):
+        closed = []
+
+        async def aclose(client):
+            closed.append(client)
+
+        loop = asyncio.get_running_loop()
+        cache = ClientCache(capacity=2, aclose=aclose)
+        cache.put(loop, "a")
+        cache.put(None, "b")
+        await cache.aclear()
+
+        assert sorted(closed) == ["a", "b"]
+        assert cache.current_size() == 0
+
+
 if __name__ == "__main__":
     pytest.main([__file__])

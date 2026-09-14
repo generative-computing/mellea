@@ -299,7 +299,9 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             base_url=str(self._client.base_url), headers=self._client._custom_headers
         )
 
-        self._client_cache = ClientCache(2)
+        self._client_cache: ClientCache = ClientCache(
+            2, aclose=lambda client: client.close()
+        )
 
         # EmbeddedIntrinsicAdapter is itself an _AdapterCore subclass, so this
         # single type covers both the shim and composed-Adapter realities.
@@ -563,7 +565,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
     @property
     def _async_client(self) -> openai.AsyncOpenAI:
         """OpenAI's client usually handles changing event loops but explicitly handle it here for edge cases."""
-        key = id(get_current_event_loop())
+        key = get_current_event_loop()
 
         _async_client = self._client_cache.get(key)
         if _async_client is None:
@@ -574,6 +576,28 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             )
             self._client_cache.put(key, _async_client)
         return _async_client
+
+    def close(self) -> None:
+        """Close the sync and cached async OpenAI clients, releasing their connections.
+
+        Safe to call more than once; subsequent calls close nothing further.
+        """
+        try:
+            self._client.close()
+        except Exception as e:
+            MelleaLogger.get_logger().debug(f"Failed to close OpenAI client: {e}")
+        self._client_cache.clear()
+
+    async def aclose(self) -> None:
+        """Async counterpart to `close`.
+
+        Safe to call more than once; subsequent calls close nothing further.
+        """
+        try:
+            self._client.close()
+        except Exception as e:
+            MelleaLogger.get_logger().debug(f"Failed to close OpenAI client: {e}")
+        await self._client_cache.aclear()
 
     @staticmethod
     def filter_openai_client_kwargs(**kwargs) -> dict:

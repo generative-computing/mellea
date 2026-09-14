@@ -45,32 +45,71 @@ class _EventLoopHandler:
             self._event_loop_setup()
 
     def __del__(self):
-        """Delete the event loop handler."""
-        self._close_event_loop()
+        """Delete the event loop handler.
 
-    def _close_event_loop(self) -> None:
-        """Called when deleting the event loop handler. Cleans up the event loop and thread."""
-        if self._event_loop:
+        Uses a short join timeout: `__del__` can run during interpreter
+        finalization, where blocking on a thread that may never be rescheduled
+        would stall process exit.
+        """
+        self._close_event_loop(join_timeout=1.0)
+
+    def _close_event_loop(self, join_timeout: float = 5.0) -> None:
+        """Shut down the event loop and its thread, releasing the loop's file descriptors.
+
+        Idempotent: the loop reference is cleared up front, so a second call (or a
+        `__del__` following an explicit call) is a no-op.
+
+        The ordering matters. `loop.stop()` is not thread-safe and on its own often
+        fails to wake the selector, leaving `run_forever` blocked and the thread
+        alive for the life of the process; `call_soon_threadsafe` does wake it.
+        `loop.close()` can only run once `run_forever` has returned, hence the join
+        in between — without it the loop's selector and self-pipe descriptors leak.
+
+        Args:
+            join_timeout: Seconds to wait for the loop thread to exit before giving
+                up and leaving the loop unclosed.
+        """
+        loop = self._event_loop
+        if loop is None:
+            return
+        # Clear first so this is idempotent even if a step below raises.
+        self._event_loop = None  # type: ignore[assignment]
+        thread = getattr(self, "_thread", None)
+
+        async def finalize_tasks() -> None:
+            # Runs on `loop`, so all_tasks()/current_task() are safe to call here.
+            # TODO: We can log errors here if needed.
+            tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            await loop.shutdown_asyncgens()
+
+        if loop.is_running():
             try:
-                tasks = asyncio.all_tasks(self._event_loop)
-                for task in tasks:
-                    task.cancel()
-
-                async def finalize_tasks() -> None:
-                    # TODO: We can log errors here if needed.
-                    await asyncio.gather(*tasks, return_exceptions=True)
-
-                out = asyncio.run_coroutine_threadsafe(
-                    finalize_tasks(), self._event_loop
+                asyncio.run_coroutine_threadsafe(finalize_tasks(), loop).result(
+                    join_timeout
                 )
-
-                # Timeout if needed.
-                out.result(5)
+            except Exception:
+                pass
+            try:
+                loop.call_soon_threadsafe(loop.stop)
             except Exception:
                 pass
 
-            # Finally stop the event loop for this session.
-            self._event_loop.stop()
+        if thread is not None:
+            try:
+                if thread.is_alive():
+                    thread.join(timeout=join_timeout)
+            except Exception:
+                pass
+
+        # A still-running loop would raise; leave it rather than mask the join failure.
+        try:
+            if not loop.is_closed() and not loop.is_running():
+                loop.close()
+        except Exception:
+            pass
 
     def __call__(self, co: Coroutine[Any, Any, R]) -> R:
         """Run the coroutine in the event loop, propagating the calling thread's contextvars.
@@ -110,7 +149,15 @@ class _EventLoopHandler:
             self._reinit_if_forked()
             if self._event_loop == get_current_event_loop():
                 # If this gets called from the same event loop, launch in a separate thread to prevent blocking.
-                return _EventLoopHandler()(co)
+                # The nested handler owns an event loop and a thread, so tear it down
+                # explicitly rather than leaving it to __del__: a dropped handler's
+                # thread stays parked in run_forever, leaking a thread, a loop, and
+                # the loop's descriptors on every nested call.
+                nested = _EventLoopHandler()
+                try:
+                    return nested(co)
+                finally:
+                    nested._close_event_loop()
 
             parent_ctx = contextvars.copy_context()
 

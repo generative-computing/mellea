@@ -22,6 +22,7 @@ pytestmark = [pytest.mark.ollama, pytest.mark.e2e]
 def m_session(gh_run):
     m = start_session(model_options={ModelOption.MAX_NEW_TOKENS: 5})
     yield m
+    m.backend.close()
     del m
 
 

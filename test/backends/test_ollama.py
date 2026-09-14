@@ -93,6 +93,7 @@ def session():
     session = _start_ollama_session(thinking=False)
     yield session
     session.reset()
+    session.backend.close()
 
 
 @pytest.fixture(scope="function")
@@ -106,6 +107,7 @@ def thinking_session():
     thinking_session = _start_ollama_session(thinking=True)
     yield thinking_session
     thinking_session.reset()
+    thinking_session.backend.close()
 
 
 @pytest.mark.qualitative

@@ -6,9 +6,10 @@
 Provides `send_to_queue`, which feeds a backend response coroutine or async iterator
 into an `asyncio.Queue` (including sentinel and error forwarding); `wait_for_all_mots`,
 which gathers multiple `ModelOutputThunk` computations in a single `asyncio.gather`
-call; and `get_current_event_loop`, a safe wrapper that returns `None` instead of
-raising when no event loop is running. These utilities are used internally by backends
-that operate in async contexts.
+call; `get_current_event_loop`, a safe wrapper that returns `None` instead of
+raising when no event loop is running; and `close_client_for_loop` /
+`aclose_client_for_loop`, which close a loop-bound async client on the loop that owns
+it. These utilities are used internally by backends that operate in async contexts.
 """
 
 from __future__ import annotations
@@ -16,11 +17,14 @@ from __future__ import annotations
 import asyncio
 import time
 from collections import OrderedDict
-from collections.abc import AsyncIterator, Callable, Coroutine
+from collections.abc import AsyncIterator, Callable, Coroutine, Hashable
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from ..core import ModelOutputThunk
+
+CLIENT_CLOSE_TIMEOUT: float = 5.0
+"""Seconds to wait for an async client to finish closing before giving up."""
 
 
 DEFAULT_CHUNK_TIMEOUT: float = 120.0
@@ -173,23 +177,129 @@ def get_current_event_loop() -> None | asyncio.AbstractEventLoop:
     return loop
 
 
+def close_client_for_loop(
+    client: Any,
+    loop: asyncio.AbstractEventLoop | None,
+    aclose: Callable[[Any], Coroutine[Any, Any, None]],
+) -> None:
+    """Close an async client from synchronous code, on whichever loop owns it.
+
+    Async HTTP clients bind their transports to the event loop that first drove
+    them, so `aclose()` has to run on that same loop. Which loop it is decides
+    what is possible here:
+
+    - `loop` is `None` (client never used, so never bound): run the coroutine on
+      Mellea's own background loop.
+    - `loop` is running on another thread: schedule it there and wait up to
+      `CLIENT_CLOSE_TIMEOUT`.
+    - `loop` exists but was never started: drive it with `run_until_complete`.
+    - `loop` is already closed: nothing can await on it, so the client's sockets
+      cannot be reclaimed. Logged at debug and skipped.
+
+    Never raises — cleanup runs on teardown paths where a failure to close is not
+    worth masking the caller's own outcome.
+
+    Args:
+        client: The async client to close.
+        loop: The event loop the client is bound to, or `None` if it was never used.
+        aclose: Callable returning the coroutine that closes `client`, e.g.
+            `lambda c: c.aclose()`.
+    """
+    from ..core import MelleaLogger
+    from .event_loop_helper import _run_async_in_thread
+
+    logger = MelleaLogger.get_logger()
+    try:
+        if loop is None:
+            _run_async_in_thread(aclose(client))
+        elif loop.is_closed():
+            logger.debug(
+                f"Cannot close {type(client).__name__}: the event loop it was bound "
+                "to is already closed, so its connections cannot be reclaimed."
+            )
+        elif loop.is_running():
+            if loop is get_current_event_loop():
+                # Blocking on the running loop from inside it would deadlock.
+                logger.debug(
+                    f"Cannot close {type(client).__name__} synchronously from inside "
+                    "its own event loop; use the async close path instead."
+                )
+            else:
+                asyncio.run_coroutine_threadsafe(aclose(client), loop).result(
+                    CLIENT_CLOSE_TIMEOUT
+                )
+        else:
+            loop.run_until_complete(aclose(client))
+    except Exception as e:
+        logger.debug(f"Failed to close {type(client).__name__}: {e}")
+
+
+async def aclose_client_for_loop(
+    client: Any,
+    loop: asyncio.AbstractEventLoop | None,
+    aclose: Callable[[Any], Coroutine[Any, Any, None]],
+) -> None:
+    """Close an async client from async code, on whichever loop owns it.
+
+    The async counterpart to `close_client_for_loop`. When `client` is bound to the
+    running loop it is awaited directly — the one case the synchronous helper cannot
+    handle, since blocking on the current loop from inside it would deadlock. Any
+    other loop is delegated to `close_client_for_loop`.
+
+    Never raises, for the same reason `close_client_for_loop` doesn't.
+
+    Args:
+        client: The async client to close.
+        loop: The event loop the client is bound to, or `None` if it was never used.
+        aclose: Callable returning the coroutine that closes `client`, e.g.
+            `lambda c: c.aclose()`.
+    """
+    current = get_current_event_loop()
+    if loop is not None and loop is current:
+        from ..core import MelleaLogger
+
+        try:
+            await aclose(client)
+        except Exception as e:
+            MelleaLogger.get_logger().debug(
+                f"Failed to close {type(client).__name__}: {e}"
+            )
+        return
+    close_client_for_loop(client, loop, aclose)
+
+
 class ClientCache:
     """A simple [LRU](https://en.wikipedia.org/wiki/Cache_replacement_policies#Least_Recently_Used_(LRU)) cache.
 
-    Used to keep track of clients for backends where the client is tied to a specific event loop.
+    Used to keep track of clients for backends where the client is tied to a specific
+    event loop. Keys are the event loop each client is bound to (or `None` for a client
+    created outside any loop), so an entry can be closed on the right loop when it is
+    evicted or cleared. Holding the loop object rather than its `id()` also stops a
+    recycled address from handing a fresh loop a client bound to a dead one.
 
     Args:
         capacity (int): Maximum number of entries to hold before evicting the least recently used.
+        aclose (Callable[[Any], Coroutine[Any, Any, None]] | None): Optional callable
+            returning the coroutine that closes a cached client, e.g.
+            `lambda c: c.aclose()`. When set, it is invoked on eviction and by
+            `clear()`; without it, evicted clients keep their connections open until
+            garbage collection.
 
     Attributes:
         cache (OrderedDict): Ordered dictionary storing cached key-value pairs in LRU
             order; always initialised empty at construction.
     """
 
-    def __init__(self, capacity: int):
-        """Initialize the client LRU cache with the given capacity."""
+    def __init__(
+        self,
+        capacity: int,
+        *,
+        aclose: Callable[[Any], Coroutine[Any, Any, None]] | None = None,
+    ):
+        """Initialize the client LRU cache with the given capacity and optional close callback."""
         self.capacity = capacity
         self.cache: OrderedDict = OrderedDict()
+        self.aclose = aclose
 
     def current_size(self) -> int:
         """Just return the size of the key set. This isn't necessarily safe.
@@ -199,11 +309,11 @@ class ClientCache:
         """
         return len(self.cache.keys())
 
-    def get(self, key: int) -> Any | None:
+    def get(self, key: Hashable) -> Any | None:
         """Gets a value from the cache.
 
         Args:
-            key: Integer cache key.
+            key: Cache key; the event loop the client is bound to, or `None`.
 
         Returns:
             The cached value, or `None` if the key is not present.
@@ -216,11 +326,11 @@ class ClientCache:
             self.cache[key] = value
             return value
 
-    def put(self, key: int, value: Any) -> None:
-        """Put a value into the cache.
+    def put(self, key: Hashable, value: Any) -> None:
+        """Put a value into the cache, closing the evicted entry if one is displaced.
 
         Args:
-            key: Integer cache key.
+            key: Cache key; the event loop the client is bound to, or `None`.
             value: Value to store.
         """
         if key in self.cache:
@@ -228,6 +338,58 @@ class ClientCache:
             self.cache.pop(key)
         elif len(self.cache) >= self.capacity:
             # If the cache is full, remove the least recently used item
-            self.cache.popitem(last=False)
+            evicted_key, evicted_value = self.cache.popitem(last=False)
+            self._close_entry(evicted_key, evicted_value)
         # Add the new key-value pair to the end (most recent)
         self.cache[key] = value
+
+    def clear(self) -> None:
+        """Close every cached client and empty the cache.
+
+        Entries are dropped from the cache before being closed, so a failure to close
+        one client cannot leave a stale entry behind.
+        """
+        entries = list(self.cache.items())
+        self.cache.clear()
+        for key, value in entries:
+            self._close_entry(key, value)
+
+    async def aclear(self) -> None:
+        """Close every cached client and empty the cache, from async code.
+
+        The async counterpart to `clear()`. Prefer this when a running event loop owns
+        one of the cached clients: that client is awaited directly, which `clear()`
+        cannot do without deadlocking on its own loop.
+        """
+        entries = list(self.cache.items())
+        self.cache.clear()
+        if self.aclose is None:
+            return
+        for key, value in entries:
+            await aclose_client_for_loop(value, self._loop_of(key), self.aclose)
+
+    def _close_entry(self, key: Hashable, value: Any) -> None:
+        """Close a single evicted or cleared entry, if a close callback is configured.
+
+        Args:
+            key: The entry's cache key.
+            value: The client that was stored under `key`.
+        """
+        if self.aclose is None:
+            return
+        close_client_for_loop(value, self._loop_of(key), self.aclose)
+
+    @staticmethod
+    def _loop_of(key: Hashable) -> asyncio.AbstractEventLoop | None:
+        """Return the event loop a cache key refers to, or `None` if it isn't one.
+
+        Keys are normally loops (or `None`), but `ClientCache` is public and accepts
+        any hashable, so a non-loop key is treated as unbound rather than an error.
+
+        Args:
+            key: The cache key to interpret.
+
+        Returns:
+            The event loop `key` refers to, or `None`.
+        """
+        return key if isinstance(key, asyncio.AbstractEventLoop) else None

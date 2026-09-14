@@ -146,7 +146,9 @@ class WatsonxAIBackend(FormatterBackend):
         self._creds = Credentials(url=base_url, api_key=api_key)
         self._kwargs = kwargs
 
-        self._client_cache = ClientCache(2)
+        self._client_cache: ClientCache = ClientCache(
+            2, aclose=lambda model: model.aclose_persistent_connection()
+        )
 
         # Call once to set up the model inference and prepopulate the cache.
         _ = self._model
@@ -202,7 +204,7 @@ class WatsonxAIBackend(FormatterBackend):
     @property
     def _model(self) -> ModelInference:
         """Watsonx's client gets tied to a specific event loop. Reset it if needed here."""
-        key = id(get_current_event_loop())
+        key = get_current_event_loop()
 
         _model_inference = self._client_cache.get(key)
         if _model_inference is None:
@@ -217,6 +219,20 @@ class WatsonxAIBackend(FormatterBackend):
             )
             self._client_cache.put(key, _model_inference)
         return _model_inference
+
+    def close(self) -> None:
+        """Close every cached watsonx `ModelInference`'s persistent connection.
+
+        Safe to call more than once; subsequent calls close nothing further.
+        """
+        self._client_cache.clear()
+
+    async def aclose(self) -> None:
+        """Async counterpart to `close`.
+
+        Safe to call more than once; subsequent calls close nothing further.
+        """
+        await self._client_cache.aclear()
 
     def filter_chat_completions_kwargs(self, model_options: dict) -> dict:
         """Filter kwargs to only include valid watsonx chat.completions.create parameters.

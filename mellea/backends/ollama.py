@@ -213,7 +213,9 @@ class OllamaModelBackend(FormatterBackend):
         self._client_kwargs = client_kwargs
         self._client = ollama.Client(base_url, **client_kwargs)
 
-        self._client_cache = ClientCache(2)
+        self._client_cache: ClientCache = ClientCache(
+            2, aclose=lambda client: client._client.aclose()
+        )
 
         # Call once to set up an async client and prepopulate the cache.
         _ = self._async_client
@@ -327,13 +329,39 @@ class OllamaModelBackend(FormatterBackend):
     @property
     def _async_client(self) -> ollama.AsyncClient:
         """Ollama's client gets tied to a specific event loop. Reset it if needed here."""
-        key = id(get_current_event_loop())
+        key = get_current_event_loop()
 
         _async_client = self._client_cache.get(key)
         if _async_client is None:
             _async_client = ollama.AsyncClient(self._base_url, **self._client_kwargs)
             self._client_cache.put(key, _async_client)
         return _async_client
+
+    def close(self) -> None:
+        """Close the sync and cached async Ollama clients, releasing their sockets.
+
+        Safe to call more than once; subsequent calls close nothing further.
+        """
+        sync_client = getattr(self._client, "_client", None)
+        if sync_client is not None:
+            try:
+                sync_client.close()
+            except Exception as e:
+                MelleaLogger.get_logger().debug(f"Failed to close Ollama client: {e}")
+        self._client_cache.clear()
+
+    async def aclose(self) -> None:
+        """Async counterpart to `close`.
+
+        Safe to call more than once; subsequent calls close nothing further.
+        """
+        sync_client = getattr(self._client, "_client", None)
+        if sync_client is not None:
+            try:
+                sync_client.close()
+            except Exception as e:
+                MelleaLogger.get_logger().debug(f"Failed to close Ollama client: {e}")
+        await self._client_cache.aclear()
 
     def _simplify_and_merge(
         self, model_options: dict[str, Any] | None

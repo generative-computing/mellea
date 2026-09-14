@@ -62,6 +62,27 @@ class Backend(abc.ABC):
     _provider: str
     """Provider name (e.g. 'openai', 'ollama'). Must be set by every backend implementation."""
 
+    def close(self) -> None:
+        """Release any resources this backend holds open (clients, cached connections).
+
+        The default implementation is a no-op. Backends that own long-lived
+        clients (e.g. `OllamaBackend`, `OpenAIBackend`) override this to close
+        them; backends without closeable resources can rely on this default.
+        Safe to call more than once.
+        """
+        return None
+
+    async def aclose(self) -> None:
+        """Async counterpart to `close`.
+
+        Prefer this over `close` when already inside a running event loop
+        that owns one of the backend's async clients: `close` would need to
+        hop to a different thread to reach it, while this can await it
+        directly. The default implementation is a no-op. Safe to call more
+        than once.
+        """
+        return None
+
     @final
     async def generate_from_context(
         self,

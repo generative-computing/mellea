@@ -4,6 +4,7 @@
 import contextvars
 import gc
 import multiprocessing
+import threading
 import warnings
 from unittest import mock
 
@@ -83,6 +84,46 @@ def test_event_loop_handler_init_and_del():
 
     # Make sure this didn't delete the actual singleton.
     assert elh.__event_loop_handler is not None
+
+
+def test_nested_call_does_not_leak_threads():
+    """Repeated same-loop nested calls must not leave threads running.
+
+    Regression guard for issue #349: the nested branch in
+    `_EventLoopHandler.__call__` used to build a fresh `_EventLoopHandler()`
+    per call and drop it, leaking a thread (plus its loop and fds) each time.
+    """
+
+    async def inner() -> int:
+        return 1
+
+    async def outer() -> int:
+        # Runs on the singleton's event loop; a nested call from here takes
+        # the same-loop branch in _EventLoopHandler.__call__.
+        return elh._run_async_in_thread(inner())
+
+    baseline = threading.active_count()
+    for _ in range(5):
+        assert elh._run_async_in_thread(outer()) == 1
+    assert threading.active_count() == baseline
+
+
+def test_close_event_loop_closes_thread_and_loop_and_is_idempotent():
+    # Do not ever instantiate this manually. Only doing here for testing.
+    handler = elh._EventLoopHandler()
+    loop = handler._event_loop
+    thread = handler._thread
+
+    handler._close_event_loop()
+
+    assert loop.is_closed()
+    assert not thread.is_alive()
+    assert handler._event_loop is None
+
+    # A second call (mirrors __del__ running after an explicit close) must
+    # be a no-op, not raise, and not attempt to close the loop again.
+    handler._close_event_loop()
+    assert loop.is_closed()
 
 
 def test_run_async_in_thread_closes_coroutine_on_scheduling_failure():

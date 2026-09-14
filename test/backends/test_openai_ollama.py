@@ -27,13 +27,15 @@ from mellea.stdlib.context import ChatContext, SimpleContext
 @pytest.fixture(scope="module")
 def backend(gh_run: int):
     """Shared OpenAI backend configured for Ollama."""
-    return OpenAIBackend(
+    backend = OpenAIBackend(
         model_id=IBM_GRANITE_4_2_3B.ollama_name,  # type: ignore
         formatter=TemplateFormatter(model_id=IBM_GRANITE_4_2_3B.hf_model_name),  # type: ignore
         base_url=f"http://{os.environ.get('OLLAMA_HOST', 'localhost:11434')}/v1",
         api_key="ollama",
         default_extra_body={"chat_template_kwargs": {"enable_thinking": False}},
     )
+    yield backend
+    backend.close()
 
 
 @pytest.fixture(scope="function")
@@ -378,6 +380,8 @@ async def test_reasoning_effort_conditional_passing(gh_run: int) -> None:
         assert ctk.get("adapter_name") == "foo", (
             "user chat_template_kwargs keys must be preserved alongside enable_thinking"
         )
+
+    await backend.aclose()
 
 
 def test_api_key_and_base_url_from_parameters() -> None:
