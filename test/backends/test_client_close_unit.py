@@ -137,6 +137,7 @@ def test_watsonx_close_closes_model_inference_and_clears_cache(
     backend = _make_watsonx_backend(monkeypatch)
 
     model_inference = backend._client_cache.get(None)
+    assert model_inference is not None
     model_inference.aclose_persistent_connection = AsyncMock()
 
     backend.close()
@@ -153,6 +154,7 @@ async def test_watsonx_aclose_closes_model_inference_and_clears_cache(
     # __init__ ran inside this test's running loop, so the ModelInference it
     # populated the cache with is keyed on that loop, not None.
     model_inference = backend._client_cache.get(get_current_event_loop())
+    assert model_inference is not None
     model_inference.aclose_persistent_connection = AsyncMock()
 
     await backend.aclose()
