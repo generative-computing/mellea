@@ -226,13 +226,20 @@ class ChatContext(Context):
         message_count: int = 0,
         prompt_digest: tuple[str, ...] = (),
         template_kwargs: dict[str, Any] | None = None,
-    ) -> ChatContext:
+    ) -> Self:
         """Return a copy of this context at the same position, holding retained `ids`.
 
         A `Context` is immutable, so recording what the server saw produces a new
         node rather than mutating this one. Built by hand rather than via
         `Context.from_previous`, which asserts `data is not None` and so rejects a
         root node (a root must stay a root).
+
+        Constructed with `type(self).__new__(...)` rather than `type(self)()`, the
+        same way `_make_root` and `Context.from_previous` build theirs: calling the
+        initializer would raise `TypeError` on a subclass with required constructor
+        arguments, and a backend records ids on every retained turn, so that would
+        make id retention unusable for such a subclass. Configuration travels via
+        `_propagated_fields` instead.
 
         Args:
             ids (list[int]): Full id sequence the server has now seen (prompt sent
@@ -247,9 +254,12 @@ class ChatContext(Context):
                 `sent_template_kwargs`.
 
         Returns:
-            ChatContext: A new context at the same position; this one is unchanged.
+            Self: A new context of the same concrete subtype at the same position;
+            this one is unchanged.
         """
-        new = type(self)()
+        cls = type(self)
+        new = cls.__new__(cls)
+        Context.__init__(new)
         for field in self._propagated_fields:
             setattr(new, field, getattr(self, field))
         new._previous = self._previous

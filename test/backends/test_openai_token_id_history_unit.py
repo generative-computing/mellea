@@ -136,6 +136,31 @@ def test_retained_state_propagates_across_add():
     assert child.retains_token_ids is True
 
 
+def test_recording_ids_keeps_a_subclass_with_required_ctor_args():
+    """A `ChatContext` subclass records ids without its initializer being re-run.
+
+    `add()` and `_make_root()` build nodes with `__new__` precisely so a subclass whose
+    `__init__` takes required arguments still works (#1582). Recording ids has to build
+    the same way: a backend calls this on every retained turn, so a `type(self)()` here
+    would raise `TypeError` and make retention unusable for such a subclass.
+    """
+
+    class Tagged(ChatContext):
+        _propagated_fields = (*ChatContext._propagated_fields, "_tag")
+
+        def __init__(self, tag: str, **kwargs):
+            super().__init__(**kwargs)
+            self._tag = tag
+
+    ctx = Tagged("t1", retain_token_ids=True).with_sent_token_ids(
+        [10, 11], model_id="gpt-4o", message_count=2
+    )
+    assert type(ctx) is Tagged
+    assert ctx._tag == "t1"
+    assert ctx.sent_token_ids == (10, 11)
+    assert ctx.retains_token_ids is True
+
+
 def test_root_reset_clears_prompt_digest_but_keeps_policy():
     digest = _prompt_digest([{"role": "user", "content": "U1"}])
     ctx = ChatContext(retain_token_ids=True).with_sent_token_ids(
