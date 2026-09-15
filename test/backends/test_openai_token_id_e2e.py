@@ -15,6 +15,7 @@ the BPE round-trip half.
 import logging
 import os
 import re
+import uuid
 
 import httpx
 import pytest
@@ -31,6 +32,10 @@ pytestmark = [
     pytest.mark.openai,
     pytest.mark.e2e,
     pytest.mark.vllm,
+    # A full pass is a dozen multi-turn generations plus their /tokenize round trips
+    # against a live server, which is past the one-minute bar test/README.md sets for
+    # `slow`. Excluded from the default run by pyproject's addopts.
+    pytest.mark.slow,
     # Same gate as `test_openai_intrinsics.py`, which serves the same
     # `granite-switch-4.1-3b-preview` over vLLM. The endpoint is remote here, so the
     # `VLLM_TEST_BASE_URL` skip below is what actually decides whether these run; this
@@ -54,14 +59,29 @@ _MODEL = os.environ.get(
 
 @pytest.fixture(scope="module")
 def backend() -> OpenAIBackend:
+    """A backend pointed at the live server, with adapter metadata resolvable locally.
+
+    `_MODEL` must match the server's served model name, which for a locally-served
+    checkpoint is a filesystem path INSIDE the server's container. The client cannot
+    read that path, and adapter discovery is client-side (it reads `adapter_index.json`
+    and `io_configs/` to map adapter names and control-token ids), so
+    `VLLM_TEST_ADAPTER_SOURCE` lets the metadata come from a local copy while the
+    request still carries the served name. Point it at a directory holding that
+    checkpoint's metadata -- no weights needed. Without it, adapter discovery falls
+    back to treating the served name as a Hub repo id and raises
+    `HFValidationError` on any path with more than one `/`.
+    """
     base_url = os.environ["VLLM_TEST_BASE_URL"].rstrip("/")
     if not base_url.endswith("/v1"):
         base_url += "/v1"
+    adapter_source = os.environ.get("VLLM_TEST_ADAPTER_SOURCE")
     return OpenAIBackend(
         model_id=_MODEL,
         formatter=TemplateFormatter(model_id=_MODEL),
         base_url=base_url,
         api_key="EMPTY",
+        load_embedded_adapters=adapter_source is not None,
+        adapter_source=adapter_source,
     )
 
 
@@ -224,6 +244,11 @@ def test_unextendable_prefix_falls_back_and_the_turn_still_succeeds(
 # for a cache hit (its leading tokens are byte-identical to what the server already
 # saw), not that the server hit its cache. Only the server's own counters show that.
 
+# vLLM's prefix cache is keyed per BLOCK, 16 tokens by default; reuse is therefore
+# reported in 16-token steps and two prompts differing by one token can differ by one
+# whole block.
+_CACHE_BLOCK_TOKENS = 16
+
 _CACHE_METRIC = re.compile(
     r"^vllm:(?:gpu_)?prefix_cache_(queries|hits)_total(?:\{[^}]*\})?\s+([0-9.e+-]+)$",
     re.MULTILINE,
@@ -255,17 +280,28 @@ def _prefix_cache_counters() -> tuple[float, float] | None:
 
 
 def _turn_two_cache_delta(
-    ctx: ChatContext, backend: OpenAIBackend
+    ctx: ChatContext, backend: OpenAIBackend, *, nonce: str = ""
 ) -> tuple[float, float]:
-    """Run a fixed two-turn conversation on `ctx`; return turn 2's `(queries, hits)` delta.
+    """Run a two-turn conversation on `ctx`; return turn 2's `(queries, hits)` delta.
 
     Turn 1 is outside the measurement: it populates the cache, and what is under test is
-    whether turn 2 finds it. Both turns are identical across callers so the only variable
-    is the context's retention policy.
+    whether turn 2 finds it.
+
+    `nonce` goes into turn 1's text so that two arms of a comparison occupy DIFFERENT
+    cache blocks. Without it the arms cross-warm: both send the same transcript, so
+    whichever runs second measures blocks the first one just cached, and the ordering
+    advantage swamps the effect under test. Measured on a live server: with a shared
+    transcript the second (non-retaining) arm read 96.97% against the first arm's
+    94.12%; with per-arm nonces both reused exactly 32 tokens.
     """
     session = MelleaSession(backend, ctx=ctx)
+    # Long enough that vLLM's 16-token block granularity is a small fraction of the
+    # prefix: at a 2-3 block prompt a one-token shift moves a whole block, which is
+    # larger than the effect under test (see the caller's docstring).
+    filler = " ".join(f"Fact {i} is unremarkable." for i in range(40))
+    suffix = f" Context note {nonce}. {filler}" if nonce else ""
     try:
-        session.chat("Name one primary color.")
+        session.chat(f"Name one primary color.{suffix}")
         before = _prefix_cache_counters()
         assert before is not None
         session.chat("Name another one.")
@@ -299,32 +335,57 @@ def test_retained_turn_hits_the_server_prefix_cache(backend: OpenAIBackend) -> N
 
 
 def test_retaining_ids_is_never_worse_than_re_rendering(backend: OpenAIBackend) -> None:
-    """A retaining context hits at least as much of the cache as a non-retaining one.
+    """A retaining context reuses at least as many cached tokens as a non-retaining one.
 
-    The non-retaining control matters because a high hit rate alone does not implicate
-    the policy: vLLM also hits on a plain chat turn whenever re-rendering the transcript
-    happens to reproduce the same tokens. Asserted as `>=` rather than `>` deliberately
-    -- on a model whose text round-trips exactly (no adapter control tokens, no BPE
-    divergence) the two are legitimately equal, and a strict `>` would make this test
-    fail on precisely the servers where the policy is merely redundant rather than wrong.
-    Serving a Granite Switch build is what makes the gap appear.
+    The control matters because a high hit rate alone does not implicate the policy: vLLM
+    also hits on a plain chat turn whenever re-rendering the transcript happens to
+    reproduce the same tokens.
+
+    Compared as absolute reused TOKENS, not as a hit rate. The retained prompt can be a
+    token or two longer than the re-rendered one (it carries the turn terminator the
+    template would re-emit), which changes the denominator without changing what was
+    reused: measured live, the two arms reused exactly 32 tokens each while querying 49
+    and 48, so a rate comparison reported the retaining arm as WORSE (65.31% vs 66.67%)
+    on identical reuse.
+
+    `>=` rather than `>`, deliberately: this transcript contains no adapter turn, so
+    nothing in the history carries a control token and re-rendering reproduces the same
+    ids. Equality is the correct outcome here, and it is what the live run shows. The
+    strict gap only appears once an adapter turn is part of the retained prefix -- see
+    `test_adapter_to_base_transition_hits_the_server_prefix_cache`, which measures that
+    case directly.
     """
     if _prefix_cache_counters() is None:
         pytest.skip("server exports no prefix_cache_{queries,hits}_total counters")
 
+    # Fresh nonces per RUN, not fixed strings: a fixed transcript is still resident
+    # from the previous invocation against a long-lived server, so the arms get warmed
+    # by history rather than by each other. Observed with fixed nonces: alternating
+    # 32-vs-48 reuse on consecutive runs of this one test.
+    run_id = uuid.uuid4().hex[:8]
     retained_queries, retained_hits = _turn_two_cache_delta(
-        ChatContext(retain_token_ids=True, model_id=_MODEL), backend
+        ChatContext(retain_token_ids=True, model_id=_MODEL),
+        backend,
+        nonce=f"retain-{run_id}",
     )
     plain_queries, plain_hits = _turn_two_cache_delta(
-        ChatContext(model_id=_MODEL), backend
+        ChatContext(model_id=_MODEL), backend, nonce=f"plain-{run_id}"
     )
 
-    assert retained_queries > 0 and plain_queries > 0
-    retained_rate = retained_hits / retained_queries
-    plain_rate = plain_hits / plain_queries
-    assert retained_rate >= plain_rate, (
-        f"retaining ids hit {retained_rate:.2%} of queried blocks but re-rendering hit "
-        f"{plain_rate:.2%} -- the policy is costing cache hits rather than preserving them"
+    assert retained_queries > 0 and plain_queries > 0, (
+        "neither arm queried the cache; the counters are not moving"
+    )
+    # One block of tolerance. vLLM caches in 16-token blocks, and the retained prompt
+    # legitimately differs from the re-rendered one by a token or two (it carries the
+    # turn terminator the template would re-emit), so a boundary shift can move exactly
+    # one block in either direction. Observed while building this test: consecutive runs
+    # reporting 32-vs-48 and 16-vs-32, always a single block apart, on a transcript
+    # where the true difference is zero. The tolerance is meaningful only because the
+    # transcript above is long enough that one block is a small fraction of the prefix.
+    assert retained_hits >= plain_hits - _CACHE_BLOCK_TOKENS, (
+        f"retaining ids reused {retained_hits:.0f} cached tokens but re-rendering reused "
+        f"{plain_hits:.0f}, a gap wider than one {_CACHE_BLOCK_TOKENS}-token block -- "
+        "the policy is costing reuse rather than preserving it"
     )
 
 
@@ -380,3 +441,176 @@ def test_documents_turn_reuses_its_prefix_and_hits_the_cache(
         )
     finally:
         session.reset()
+
+
+def test_adapter_to_base_transition_keeps_the_retained_prefix(
+    session: MelleaSession, backend: OpenAIBackend
+) -> None:
+    """A base turn after an adapter turn still splices the exact retained prefix.
+
+    The transition is where the two divergence causes meet. Turn 1's render carries the
+    adapter's control token in place of a role marker; the base turn that follows passes
+    no `adapter_name`, so a re-render would emit `<|start_of_role|>` there instead and
+    invalidate every block from that position on. Splicing the retained ids is what keeps
+    the earlier turn byte-identical, control token included, across the transition.
+
+    Asserted in both directions: the retained prefix grows verbatim, AND the ids the
+    adapter turn contributed are still present after the base turn -- so a silent
+    fallback to a chat render (which would drop them) fails here rather than passing as
+    a plain cache miss.
+    """
+    from mellea.stdlib.components.intrinsic import core
+
+    session.chat("The capital of France is Paris.")
+    after_chat = _chat_ctx(session).sent_token_ids
+    assert after_chat, (
+        "no ids retained: server did not report token_ids (need vLLM >= 0.10.2)"
+    )
+
+    # Adapter turn: reuses the prefix, commits nothing of its own.
+    score = core.check_certainty(_chat_ctx(session), backend)
+    assert 0.0 <= float(score) <= 1.0
+    assert _chat_ctx(session).sent_token_ids == after_chat
+
+    # Base turn immediately after: must extend, not re-render.
+    session.chat("And the capital of Germany?")
+    after_base = _chat_ctx(session).sent_token_ids
+    assert after_base[: len(after_chat)] == after_chat, (
+        "the base turn re-rendered history instead of splicing the retained prefix"
+    )
+    assert len(after_base) > len(after_chat)
+
+    # One more adapter call on the grown history, to prove the transition is not
+    # one-directional: base -> adapter must reuse the base turn's ids too.
+    score_again = core.check_certainty(_chat_ctx(session), backend)
+    assert 0.0 <= float(score_again) <= 1.0
+    assert _chat_ctx(session).sent_token_ids == after_base
+
+
+def test_adapter_to_base_transition_hits_the_server_prefix_cache(
+    backend: OpenAIBackend,
+) -> None:
+    """The adapter-to-base transition is a server cache HIT, not merely eligible.
+
+    Client-side splicing can be exact and still miss if the server never cached the
+    blocks the adapter turn produced. Measured as a delta around the base turn that
+    follows the adapter call.
+    """
+    if _prefix_cache_counters() is None:
+        pytest.skip("server exports no prefix_cache_{queries,hits}_total counters")
+
+    from mellea.stdlib.components.intrinsic import core
+
+    session = MelleaSession(
+        backend, ctx=ChatContext(retain_token_ids=True, model_id=_MODEL)
+    )
+    try:
+        session.chat("The capital of France is Paris.")
+        core.check_certainty(_chat_ctx(session), backend)
+        before = _prefix_cache_counters()
+        assert before is not None
+        session.chat("And the capital of Germany?")
+        after = _prefix_cache_counters()
+        assert after is not None
+    finally:
+        session.reset()
+
+    queries = after[0] - before[0]
+    hits = after[1] - before[1]
+    assert queries > 0, "the base turn queried no cache blocks; counters are not moving"
+    assert hits / queries > 0.5, (
+        f"only {hits}/{queries} blocks hit across the adapter-to-base transition; "
+        "the retained prefix is not being reused"
+    )
+
+
+_GREEDY = {ModelOption.TEMPERATURE: 0.0, ModelOption.MAX_NEW_TOKENS: 200}
+"""Deterministic and LONG. Both properties are load-bearing for the test below."""
+
+_UNDER_ADAPTER = {
+    **_GREEDY,
+    "extra_body": {"chat_template_kwargs": {"adapter_name": "uncertainty"}},
+}
+"""Generate the turn under an adapter, so its rendered prompt carries a control token."""
+
+
+def _adapter_conversation_cache_delta(
+    ctx: ChatContext, backend: OpenAIBackend, nonce: str, turns: int = 5
+) -> tuple[float, float]:
+    """Run `turns` adapter turns on `ctx`; return `(queries, hits)` summed over turns 2..n.
+
+    Turn 1 is outside the measurement (it populates the cache). Every turn is generated
+    under an adapter, so each one's prompt ends with a control token that a later
+    re-render replaces with the plain role marker.
+    """
+    session = MelleaSession(backend, ctx=ctx)
+    total_queries = total_hits = 0.0
+    try:
+        session.chat(
+            f"Seed {nonce}: explain in detail why the sky appears blue, at length.",
+            model_options=_UNDER_ADAPTER,
+        )
+        for i in range(turns - 1):
+            before = _prefix_cache_counters()
+            assert before is not None
+            session.chat(
+                f"Turn {i}: now explain sunsets, at length.",
+                model_options=_UNDER_ADAPTER,
+            )
+            after = _prefix_cache_counters()
+            assert after is not None
+            total_queries += after[0] - before[0]
+            total_hits += after[1] - before[1]
+    finally:
+        session.reset()
+    return total_queries, total_hits
+
+
+def test_retaining_ids_reuses_more_cache_than_re_rendering(
+    backend: OpenAIBackend,
+) -> None:
+    """Over multi-turn ADAPTER conversation, retaining ids reuses strictly more cache.
+
+    This is the outcome the policy exists for, measured on the server's own counters
+    rather than inferred from client-side ids.
+
+    Three things have to be true at once for the gap to be visible, and each was
+    established by measurement:
+
+    1. Every turn is generated under an adapter. Control tokens accumulate one per turn
+       in the RETAINED sequence (1, 2, 3 measured over three turns) while a re-render
+       carries exactly one, at the current generation prompt. Without adapter turns the
+       two transports send the same ids and reuse is legitimately equal.
+    2. Replies must be LONG. vLLM caches whole 16-token blocks and never a trailing
+       partial one. The divergent control token sits at the end of each turn's prompt,
+       so with short replies it lands in a partial block that was never cached and the
+       re-rendering arm loses nothing it could have hit: at `MAX_NEW_TOKENS=16` both arms
+       reused exactly 224 tokens. At 200 the divergence falls inside complete blocks and
+       the gap appears (272 vs 240 hits on equal queries, repeatably).
+    3. Decoding must be greedy, or the arms' transcripts differ in length and the
+       comparison is meaningless -- an early version measured 376 vs 465 queried tokens
+       purely from reply-length variance.
+
+    Asserted on absolute reused tokens, not a rate: the retained prompt can differ from
+    the re-rendered one by a token or two, which moves the denominator without changing
+    what was reused.
+    """
+    if _prefix_cache_counters() is None:
+        pytest.skip("server exports no prefix_cache_{queries,hits}_total counters")
+
+    run_id = uuid.uuid4().hex[:8]
+    retained_queries, retained_hits = _adapter_conversation_cache_delta(
+        ChatContext(retain_token_ids=True, model_id=_MODEL), backend, f"ret-{run_id}"
+    )
+    plain_queries, plain_hits = _adapter_conversation_cache_delta(
+        ChatContext(model_id=_MODEL), backend, f"plain-{run_id}"
+    )
+
+    assert retained_queries > 0 and plain_queries > 0, (
+        "neither arm queried the cache; the counters are not moving"
+    )
+    assert retained_hits > plain_hits, (
+        f"retaining ids reused {retained_hits:.0f} cached tokens over the adapter "
+        f"conversation but re-rendering reused {plain_hits:.0f} -- the retained control "
+        "tokens are not buying any prefix-cache reuse"
+    )
