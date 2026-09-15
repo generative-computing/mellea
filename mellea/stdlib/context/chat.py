@@ -256,6 +256,13 @@ class ChatContext(Context):
         Returns:
             Self: A new context of the same concrete subtype at the same position;
             this one is unchanged.
+
+        Raises:
+            TypeError: If an entry of `ids` is not convertible to `int` (e.g. `None`).
+            ValueError: If an entry is a string that does not name an integer. Note
+                that a float is silently truncated rather than refused; the backend
+                that produces these ids validates them on the way in
+                (`_tokenize_chat`), so this is a backstop, not the guard.
         """
         cls = type(self)
         new = cls.__new__(cls)
