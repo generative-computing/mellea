@@ -19,6 +19,7 @@ from typing import Any
 from ..core import Context, MelleaLogger, ModelToolCall, Span
 from ..core.base import AbstractMelleaTool, ModelOutputThunk
 from ..formatters import ChatFormatter
+from ..helpers import merge_provider_fields
 from ..stdlib.components import Message
 from .tools import parse_tools, validate_tool_arguments
 
@@ -112,6 +113,9 @@ def to_chat(
             msg_dict["tool_calls"] = m.tool_calls
         if m.tool_call_id:
             msg_dict["tool_call_id"] = m.tool_call_id
+        # Merge any author-declared provider fields (Mellea's known fields win;
+        # a mismatched target raises). Must run after the known fields are set.
+        msg_dict = merge_provider_fields(msg_dict, m.provider_fields, "huggingface")
         ctx_as_conversation.append(msg_dict)
 
     # Check that we ddin't accidentally end up with CBlocks. Only string values can

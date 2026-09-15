@@ -18,7 +18,8 @@ from mellea.stdlib.components import Message
 from mellea.stdlib.context import SimpleContext
 from mellea.stdlib.sampling import RejectionSamplingStrategy
 
-_MODEL_ID = f"ollama_chat/{model_ids.IBM_GRANITE_4_1_3B.ollama_name}"
+assert model_ids.IBM_GRANITE_4_2_3B.ollama_name is not None
+_MODEL_ID = f"ollama_chat/{model_ids.IBM_GRANITE_4_2_3B.ollama_name}"
 
 
 @pytest.fixture(scope="function")

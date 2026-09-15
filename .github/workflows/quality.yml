@@ -105,29 +105,38 @@ jobs:
       - name: Download NLTK data
         run: uv run python -m nltk.downloader punkt_tab
       - name: Install Ollama
-        # Pinned to a GCC-13 build to fix a segfault loading granite4.1:3b on
-        # AMX-capable ubuntu-latest runners (#1388). Ollama's Linux builds through
-        # 0.32.1 were compiled with GCC 11, which miscompiles the AMX CPU kernels in
-        # libggml-cpu-sapphirerapids.so -- so ~1/3 of runs (the AMX-capable runner
-        # draws) crashed during model warmup, independent of ollama version and
-        # unreachable by any env var (the code path is correct; the machine code was
-        # not). Ollama PR #17244 ("bump Linux toolchain to GCC 13", Fixes ollama#17006
-        # / #17205) first shipped in the 0.32.2 line. The rc0 tag has since been
-        # removed (promoted to the v0.32.2 release), so its download URL now 404s and
-        # the pin is bumped to 0.32.2. Drop this pin once a stable (non-prerelease)
-        # release includes the GCC-13 build. NB: OLLAMA_VERSION must omit the leading
-        # "v" -- install.sh prepends it (a "v" yields a broken .../download/vv0.32.2/...
-        # path).
-        run: curl -fsSL https://ollama.com/install.sh | OLLAMA_VERSION=0.32.2 sh
+        # GCC-13 build: fixes a segfault loading Granite models on AMX-capable
+        # runners (Ollama miscompiled AMX kernels through 0.32.1, #1388).
+        # Pinned to 0.33.1 (current stable with the fix); also required for
+        # the reasoning_effort="none" thinking-off support used below.
+        # NB: OLLAMA_VERSION must omit the leading "v" (install.sh prepends it).
+        run: curl -fsSL https://ollama.com/install.sh | OLLAMA_VERSION=0.33.1 sh
       - name: Start serving ollama
-        run: nohup ollama serve &
+        # Debug + per-request logging, dumped on failure below: needed to tell
+        # "server hung" from "bad request" when a live-model test stalls.
+        run: OLLAMA_DEBUG=1 OLLAMA_DEBUG_LOG_REQUESTS=1 nohup ollama serve > /tmp/ollama-serve.log 2>&1 &
+      - name: Start resource sampler
+        # Memory/swap/CPU every 30s, dumped on failure below — rules out
+        # memory pressure as a cause of live-model stalls.
+        run: |
+          if command -v vmstat >/dev/null; then
+            (vmstat 30 480) > /tmp/ci-resource-sampler.log 2>&1 &
+          else
+            (for i in $(seq 1 480); do
+               echo "sample $i $(date -u +%FT%TZ)"
+               free -m
+               cat /proc/loadavg
+               echo ---
+               sleep 30
+             done) > /tmp/ci-resource-sampler.log 2>&1 &
+          fi
       - name: Pull models
         # granite-vision-4.1 is not in the Ollama library, so it is pulled from
         # IBM's official GGUF repo on Hugging Face (that build ships the mmproj
         # projector Ollama needs for image input). Drop the hf.co prefix if the
         # model is ever published to the Ollama library directly.
         run: |
-          for model in granite4.1:3b hf.co/ibm-granite/granite-vision-4.1-4b-GGUF:Q4_K_M; do
+          for model in granite4.2:3b granite4:micro-h hf.co/ibm-granite/granite-vision-4.1-4b-GGUF:Q4_K_M; do
             pulled=false
             for i in 1 2 3 4 5; do
               ollama pull "$model" && { pulled=true; break; }
@@ -144,6 +153,20 @@ jobs:
           # The names below are what the tests match against; print them so a
           # tag-name mismatch is diagnosable from the log alone.
           ollama list
+      - name: Constrain the granite4.2:3b context for the CI runner
+        # The published tag ships num_ctx=131072, a ~6 GB KV cache at load —
+        # too much for the 16 GB runner and a cause of the CI stalls. Re-point
+        # the local tag at an 8192-context build of the same weights (same tag
+        # name, so no test code changes; 2x what other Ollama tests use).
+        run: |
+          ollama cp granite4.2:3b granite4.2:3b-128k
+          printf 'FROM granite4.2:3b-128k\nPARAMETER num_ctx 8192\n' \
+            > /tmp/MODELFILE-granite42-ci
+          ollama create granite4.2:3b -f /tmp/MODELFILE-granite42-ci
+          # grep exits non-zero (failing the step) if num_ctx did not land at
+          # exactly 8192 — matching only '^PARAMETER' would still pass on the
+          # base tag's untouched 131072 value if `ollama create` silently no-oped.
+          ollama show granite4.2:3b --modelfile | grep -qx 'PARAMETER num_ctx 8192'
       - name: Run Tests
         id: tests
         env:
@@ -156,6 +179,31 @@ jobs:
       - name: Send failure message tests
         if: failure() # This step will only run if a previous step failed
         run: echo "Tests failed. Please verify that tests are working locally."
+      - name: Dump Ollama server log on failure
+        if: failure() # Only the test step can produce a useful server log here.
+        # Raw log is too verbose to dump whole; extract requests/errors/model
+        # events plus a short raw tail.
+        run: |
+          echo "=== ollama serve log: requests (GIN), errors, model events ==="
+          grep -iE 'GIN|error|warn|panic|loading|unload' /tmp/ollama-serve.log | tail -n 500 || echo "(no matching lines)"
+          echo "=== ollama serve log (last 50 raw lines) ==="
+          tail -n 50 /tmp/ollama-serve.log || echo "(no ollama serve log found)"
+          echo "=== resource sampler (30 s: memory, swap si/so, CPU) ==="
+          cat /tmp/ci-resource-sampler.log || echo "(no sampler log found)"
+          echo "=== ollama request debug logs (request bodies + replay curls) ==="
+          reqdir=$(grep -oE '/tmp/ollama-request-logs-[0-9a-z]+' /tmp/ollama-serve.log | head -1)
+          if [ -n "$reqdir" ] && [ -d "$reqdir" ]; then
+            echo "file count: $(find "$reqdir" -maxdepth 1 -type f | wc -l)"
+            # Newest 20 files (mtime-descending, "%T@" epoch + path).
+            find "$reqdir" -maxdepth 1 -type f -printf '%T@ %p\n' \
+              | sort -rn | head -20 | while IFS= read -r line; do
+                f=${line#* }
+                echo "--- $f ---"
+                cat "$f"
+              done
+          else
+            echo "(no request debug dir found in serve log)"
+          fi
       - name: Write job summary
         if: always()
         run: |

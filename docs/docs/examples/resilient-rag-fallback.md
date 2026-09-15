@@ -6,7 +6,7 @@ description: "Build a retrieval-augmented generation pipeline that uses FAISS fo
 
 This example builds a complete RAG pipeline in three stages: embed and index a
 document corpus, retrieve candidates by semantic similarity, then use a
-[`@generative`](../reference/glossary#generative) boolean function to discard irrelevant candidates before passing
+[`@generative`](../reference/glossary.md#generative) boolean function to discard irrelevant candidates before passing
 the survivors to a grounded `m.instruct()` call.
 
 **Source file:** `docs/examples/rag/simple_rag_with_filter.py`
@@ -15,12 +15,12 @@ the survivors to a grounded `m.instruct()` call.
 
 - Building a FAISS flat inner-product index from sentence-transformer embeddings
 - Using `@generative` returning `bool` as a per-document relevance gate
-- Passing filtered documents as [`grounding_context`](../reference/glossary#grounding_context) to `m.instruct()`
+- Passing filtered documents as [`grounding_context`](../reference/glossary.md#grounding_context) to `m.instruct()`
 - Running the example with `uv run` via an inline PEP 723 dependency block
 
 ## Prerequisites
 
-- [Quick Start](../getting-started/quickstart) complete
+- [Quick Start](../getting-started/quickstart.md) complete
 - `faiss-cpu` and `sentence-transformers` installed, **or** run via `uv run`
   which installs them automatically from the inline script block
 - Ollama running locally with `granite4.1:3b` pulled (or a Mistral model — see
@@ -215,7 +215,7 @@ entries. The template variable `{{query}}` is supplied separately via
 prompt correctly and trace each component independently.
 
 **`answer.value`** retrieves the raw string from the
-[`ModelOutputThunk`](../reference/glossary#modeloutputthunk) returned by
+[`ModelOutputThunk`](../reference/glossary.md#modeloutputthunk) returned by
 `m.instruct()`.
 
 ### Full file
@@ -353,8 +353,8 @@ generate from the model's parametric knowledge. Passing documents through
   answer quality.
 - Add `requirements` to the final `m.instruct()` call to enforce length,
   citation, or tone constraints — see the
-  [requirements system concept](../concepts/requirements-system).
+  [requirements system concept](../concepts/requirements-system.md).
 
 ---
 
-**See also:** [Build a RAG Pipeline](../how-to/build-a-rag-pipeline) — step-by-step how-to guide | [Examples Index](../examples)
+**See also:** [Build a RAG Pipeline](../how-to/build-a-rag-pipeline.md) — step-by-step how-to guide | [Examples Index](./index.md)

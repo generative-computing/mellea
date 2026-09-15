@@ -18,7 +18,7 @@
 #   SKIP_WARMUP=1 ./run_tests_with_ollama_and_vllm.sh                 # skip ollama model warmup
 #   WITH_EXAMPLES=1 ./run_tests_with_ollama_and_vllm.sh               # include docs/examples/
 #   WITH_TOOLING_TESTS=1 ./run_tests_with_ollama_and_vllm.sh          # include test/tooling/
-#   WITH_VLLM=1 VLLM_MODEL=ibm-granite/granite-3.3-8b-instruct \
+#   WITH_VLLM=1 VLLM_MODEL=ibm-granite/granite-4.2-3b \
 #     ./run_tests_with_ollama_and_vllm.sh --group-by-backend -v -s
 #
 # LSF example:
@@ -42,9 +42,11 @@ else
     OLLAMA_DIR="$HOME/.ollama"
 fi
 OLLAMA_BIN="${OLLAMA_BIN:-$(command -v ollama 2>/dev/null || echo "$HOME/.local/bin/ollama")}"
+OLLAMA_CONTEXT_LENGTH="${OLLAMA_CONTEXT_LENGTH:-2048}"
 OLLAMA_MODEL_LIST=(
-    "granite4.1:3b"
-    "granite3.2-vision"
+    "granite4.2:3b"
+    "granite4:micro-h"
+    "hf.co/ibm-granite/granite-vision-4.1-4b-GGUF:Q4_K_M"
     "llama3.2"
     "qwen2.5vl:7b"
 )
@@ -61,7 +63,7 @@ if [[ -z "${WITH_VLLM:-}" ]]; then
     fi
 fi
 VLLM_PORT="${VLLM_PORT:-8100}"
-VLLM_MODEL="${VLLM_MODEL:-ibm-granite/granite-4.1-3b}"
+VLLM_MODEL="${VLLM_MODEL:-ibm-granite/granite-4.2-3b}"
 VLLM_GPU_MEM="${VLLM_GPU_MEM:-0.4}"
 VLLM_MAX_MODEL_LEN="${VLLM_MAX_MODEL_LEN:-4096}"
 VLLM_MAX_NUM_SEQS="${VLLM_MAX_NUM_SEQS:-256}"
@@ -107,18 +109,19 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# --- Install ollama binary if missing ---
-if [[ ! -x "$OLLAMA_BIN" ]]; then
-    log "Ollama binary not found at $OLLAMA_BIN — downloading latest release..."
+# --- Install a compatible Ollama binary ---
+OLLAMA_MIN_VERSION="${OLLAMA_MIN_VERSION:-0.32.2}"
+ollama_current_version=""
+if [[ -x "$OLLAMA_BIN" ]]; then
+    ollama_current_version=$("$OLLAMA_BIN" --version 2>/dev/null | awk '{print $NF}' | sed 's/^v//')
+fi
+
+if [[ ! -x "$OLLAMA_BIN" ]] || ! printf '%s\n%s\n' "$OLLAMA_MIN_VERSION" "$ollama_current_version" | sort -V -C; then
+    log "Installing Ollama $OLLAMA_MIN_VERSION (current: ${ollama_current_version:-missing})..."
     OLLAMA_INSTALL_DIR="$(dirname "$OLLAMA_BIN")"
     mkdir -p "$OLLAMA_INSTALL_DIR"
 
-    # Get latest release tag from GitHub API
-    OLLAMA_VERSION=$(curl -fsSL https://api.github.com/repos/ollama/ollama/releases/latest \
-        | grep '"tag_name"' | head -1 | cut -d'"' -f4)
-    log "Latest ollama version: $OLLAMA_VERSION"
-
-    DOWNLOAD_URL="https://github.com/ollama/ollama/releases/download/${OLLAMA_VERSION}/ollama-linux-amd64.tar.zst"
+    DOWNLOAD_URL="https://github.com/ollama/ollama/releases/download/v${OLLAMA_MIN_VERSION}/ollama-linux-amd64.tar.zst"
     log "Downloading from $DOWNLOAD_URL (includes CUDA libs, ~1.9GB)..."
 
     # Extract everything (bin/ollama + lib/ollama/cuda_v*/) into OLLAMA_INSTALL_DIR's parent
@@ -127,7 +130,7 @@ if [[ ! -x "$OLLAMA_BIN" ]]; then
     OLLAMA_PREFIX="$(dirname "$OLLAMA_INSTALL_DIR")"
     curl -fsSL "$DOWNLOAD_URL" | tar --use-compress-program=unzstd -x -C "$OLLAMA_PREFIX"
     chmod +x "$OLLAMA_BIN"
-    log "Installed ollama $OLLAMA_VERSION to $OLLAMA_PREFIX (bin + CUDA libs)"
+    log "Installed Ollama $OLLAMA_MIN_VERSION to $OLLAMA_PREFIX (bin + CUDA libs)"
 fi
 
 # --- Check if ollama is already running ---
@@ -146,6 +149,7 @@ else
     log "Starting ollama server on ${OLLAMA_HOST}:${OLLAMA_PORT}..."
     export OLLAMA_HOST="${OLLAMA_HOST}:${OLLAMA_PORT}"
     export OLLAMA_MODELS="${OLLAMA_DIR}/models"
+    export OLLAMA_CONTEXT_LENGTH
     mkdir -p "$OLLAMA_MODELS"
 
     # Ensure ollama can find system CUDA libraries
@@ -154,6 +158,7 @@ else
         log "Added system CUDA to LD_LIBRARY_PATH"
     fi
 
+    log "Using Ollama default context length: $OLLAMA_CONTEXT_LENGTH"
     "$OLLAMA_BIN" serve > "$LOGDIR/ollama.log" 2>&1 &
     OLLAMA_PID=$!
     log "Ollama server PID: $OLLAMA_PID"
@@ -225,7 +230,7 @@ if [[ "$WITH_VLLM" == "1" ]]; then
             log "Reusing existing vLLM venv at $VLLM_VENV (KEEP_VLLM_VENV=1)"
         else
             log "Creating isolated vLLM venv at $VLLM_VENV ..."
-            uv venv "$VLLM_VENV" --python 3.11 --clear
+            uv venv "$VLLM_VENV" --python 3.12 --clear
             log "Installing vllm into $VLLM_VENV ..."
             uv pip install --python "$VLLM_VENV/bin/python" vllm \
                 > "$LOGDIR/vllm_install.log" 2>&1 \
@@ -281,16 +286,22 @@ else
 fi
 
 # WITH_TOOLING_TESTS=1 includes test/tooling/ (ignored by default)
-IGNORE_TOOLING=""
+PYTEST_ARGS=()
 if [[ "${WITH_TOOLING_TESTS:-0}" != "1" ]]; then
-    IGNORE_TOOLING="--ignore=tooling"
+    PYTEST_ARGS+=("--ignore=tooling")
     log "Tooling tests disabled (WITH_TOOLING_TESTS=0). Pass WITH_TOOLING_TESTS=1 to include test/tooling/."
+fi
+
+if [[ "$#" -eq 0 ]]; then
+    PYTEST_ARGS+=("--group-by-backend")
+else
+    PYTEST_ARGS+=("$@")
 fi
 
 # --- Run tests ---
 log "Starting pytest..."
 log "Log directory: $LOGDIR"
-log "Pytest args: ${*---group-by-backend}"
+log "Pytest args: ${PYTEST_ARGS[*]}"
 ${UV_PYTHON:+log "Python version: $UV_PYTHON"}
 
 # Use UV_PYTHON env var if set, otherwise use default Python
@@ -305,7 +316,7 @@ uv run --quiet --frozen --all-groups --all-extras $UV_PYTHON_ARG \
     python -c "import nltk; nltk.download('punkt_tab', quiet=True)" || true
 
 uv run --quiet --frozen --all-groups --all-extras $UV_PYTHON_ARG \
-    pytest "$PYTEST_DIR" $IGNORE_TOOLING ${@---group-by-backend} \
+    pytest "$PYTEST_DIR" "${PYTEST_ARGS[@]}" \
     2>&1 | tee "$LOGDIR/pytest_full.log"
 
 EXIT_CODE=${PIPESTATUS[0]}

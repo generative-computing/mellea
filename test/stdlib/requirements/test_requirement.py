@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from mellea.backends.adapters import AdapterSchemaMismatchError
+from mellea.backends.adapters import AdapterSchemaMismatchError, AdapterType
 from mellea.core import ModelOutputThunk, Requirement, TemplateRepresentation
 from mellea.formatters.template_formatter import TemplateFormatter
 from mellea.stdlib.components import Message
@@ -340,6 +340,7 @@ def test_alora_requirement_default_intrinsic(mock_intrinsic_init):
         r,
         intrinsic_name="requirement-check",
         intrinsic_kwargs={"requirement": "must be valid"},
+        adapter_types=None,
     )
 
 
@@ -352,15 +353,38 @@ def test_alora_requirement_custom_intrinsic(mock_intrinsic_init):
         r,
         intrinsic_name="custom_check",
         intrinsic_kwargs={"requirement": "must be valid"},
+        adapter_types=None,
     )
 
 
 @patch("mellea.stdlib.requirements.requirement.Intrinsic.__init__")
-async def test_alora_validate_propagates_schema_mismatch(mock_intrinsic_init):
-    """AdapterSchemaMismatchError from output_to_bool propagates uncaught through validate().
+def test_alora_requirement_forwards_adapter_types(mock_intrinsic_init):
+    """adapter_types is required to use a custom, non-catalog intrinsic_name
+    (Epic #929, issue #1144) — ALoraRequirement must forward it to Intrinsic.
+    """
+    mock_intrinsic_init.return_value = None
+    r = ALoraRequirement(
+        "must be valid",
+        intrinsic_name="custom_check",
+        adapter_types=(AdapterType.ALORA,),
+    )
+    mock_intrinsic_init.assert_called_once_with(
+        r,
+        intrinsic_name="custom_check",
+        intrinsic_kwargs={"requirement": "must be valid"},
+        adapter_types=(AdapterType.ALORA,),
+    )
 
-    This documents that the LLMaJ fallback in ALoraRequirement covers only
-    generation errors, not output-parsing schema mismatches.
+
+@patch("mellea.stdlib.requirements.requirement.Intrinsic.__init__")
+async def test_alora_validate_surfaces_schema_mismatch_as_error(mock_intrinsic_init):
+    """AdapterSchemaMismatchError from output_to_bool is surfaced on the result, not raised.
+
+    `validate()` catches the parse error, stores it on `result.error`, and
+    returns a fail-closed result rather than propagating. This lets callers
+    distinguish "requirement not met" from "adapter produced unrecognizable
+    output" (issue #1358). The LLMaJ fallback in ALoraRequirement still covers
+    only generation errors, not output-parsing schema mismatches.
     """
     mock_intrinsic_init.return_value = None
     req = ALoraRequirement("must satisfy requirement")
@@ -373,8 +397,10 @@ async def test_alora_validate_propagates_schema_mismatch(mock_intrinsic_init):
     mock_backend = MagicMock()
     mock_backend.generate_from_context = AsyncMock(return_value=(mock_thunk, ctx))
 
-    with pytest.raises(AdapterSchemaMismatchError):
-        await req.validate(mock_backend, ctx=ctx)
+    result = await req.validate(mock_backend, ctx=ctx)
+
+    assert isinstance(result.error, AdapterSchemaMismatchError)
+    assert bool(result) is False
 
 
 if __name__ == "__main__":

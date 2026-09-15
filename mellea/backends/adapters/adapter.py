@@ -16,12 +16,15 @@ support runtime adapter loading and unloading.
 
 import abc
 import contextlib
+import hashlib
 import pathlib
 import re
+import shutil
+import tempfile
 import time
 import warnings
 from collections.abc import Callable
-from typing import Literal, TypeAlias, TypeVar, cast
+from typing import ClassVar, Literal, TypeAlias, TypeVar, cast
 
 import yaml
 
@@ -295,6 +298,87 @@ class IntrinsicAdapter(LocalHFAdapter, _AdapterCore):
 T = TypeVar("T")
 
 
+def _composed_adapter_key(adapter: "_AdapterCore") -> str:
+    """Return the registry key for a composed `Adapter`, mirroring `qualified_name`.
+
+    A composed `Adapter` (unlike the deprecated shims) has no `qualified_name`
+    of its own; backends key their registries on this instead. For a
+    LocalFile/PEFT composed adapter, this must produce the same string as
+    `adapter.weights.qualified_name` (`LocalFileBinding`'s own key) so a
+    backend's `_added_adapters` (keyed on the binding) and `_composed_adapters`
+    (keyed on this function) agree — which holds because `Identity.adapter_type`
+    is the `Literal["lora", "alora"]` string and `AdapterType.LORA.value`/
+    `AdapterType.ALORA.value` are those same two strings. `LocalHFBackend.add_adapter`
+    enforces this at registration time for a `LocalFileBinding` (see the
+    `NOTE(#1516)` on the `Adapter` dataclass); a composed `Adapter` whose
+    `identity.adapter_type` disagrees with its own `weights.adapter_type`
+    otherwise produces two different keys instead of one.
+
+    Args:
+        adapter: The composed adapter to key.
+
+    Returns:
+        str: `"<identity.name>_<identity.adapter_type>"`.
+    """
+    return f"{adapter.identity.name}_{adapter.identity.adapter_type}"
+
+
+def _discover_embedded_adapters(
+    source: str,
+    *,
+    revision: str = "main",
+    cache_dir: str | None = None,
+    intrinsic_name: str | None = None,
+) -> list[tuple["_AdapterCore", dict]]:
+    """Discover embedded adapter functions from a Granite Switch source.
+
+    Non-shim equivalent of `EmbeddedIntrinsicAdapter.from_source()`: returns
+    composed `Adapter` instances instead of the deprecated shim (Epic #929,
+    issue #1144). Reuses the shim's discovery, `adapter_index.json`/`io.yaml`
+    parsing, and hub-snapshot materialization internally — including its
+    path-escape guard — rather than duplicating that logic, and lifts out the
+    already-correct `identity`/`io_contract`/`weights` triple each shim
+    instance built.
+
+    The raw parsed `io.yaml` config is returned alongside each adapter because
+    a composed `Adapter` has no field for it (that's shim-only state) and it
+    cannot be cheaply re-derived later — callers that need it at generation
+    time (see `LocalHFBackend`/`OpenAIBackend`'s `_generate_from_intrinsic`)
+    must cache it themselves, keyed by `_composed_adapter_key`.
+
+    Args:
+        source (str): Local path to a model directory, or a Hugging Face Hub
+            repo ID (e.g. `"ibm-granite/granite-switch-micro"`).
+        revision (str): Git revision (only used for Hub downloads).
+        cache_dir (str | None): Cache directory (only used for Hub downloads).
+        intrinsic_name (str | None): If provided, only load the adapter
+            matching this adapter function name. `None` loads all adapters.
+
+    Returns:
+        list[tuple[_AdapterCore, dict]]: One `(adapter, io_yaml_config)` pair
+            per entry in the index.
+    """
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        shims = EmbeddedIntrinsicAdapter.from_source(
+            source,
+            revision=revision,
+            cache_dir=cache_dir,
+            intrinsic_name=intrinsic_name,
+        )
+    return [
+        (
+            _AdapterCore(
+                identity=shim.identity,
+                io_contract=shim.io_contract,
+                weights=shim.weights,
+            ),
+            shim.config,
+        )
+        for shim in shims
+    ]
+
+
 def get_adapter_for_intrinsic(
     intrinsic_name: str,
     intrinsic_adapter_types: list[AdapterType] | tuple[AdapterType, ...],
@@ -444,6 +528,21 @@ class AdapterMixin(Backend, abc.ABC):
             `"ibm-granite/granite-3.3-8b-instruct"`).
     """
 
+    _supports_composed_adapters: ClassVar[bool] = False
+    """Whether this backend's `add_adapter` understands a composed `Adapter`.
+
+    Opt-in, defaulting to `False`: `_uses_embedded_adapters` predates the
+    composed `Adapter` contract (Epic #929, issue #1144), so a third-party
+    subclass can already be reachable from `resolve_adapter()`'s embedded
+    branch while its `add_adapter` only knows the deprecated
+    `EmbeddedIntrinsicAdapter` shim's attribute shape. Signature inspection
+    cannot distinguish "modern" from "legacy" here — a `**kwargs` catch-all
+    present for unrelated reasons, or a pre-existing `config` parameter
+    meaning something else entirely, both read as "accepts config=". Only an
+    explicit declaration can carry that fact; `LocalHFBackend` and
+    `OpenAIBackend` both set this to `True`.
+    """
+
     # ---- Universal verbs (every adapter reality) ----
 
     @property
@@ -456,7 +555,7 @@ class AdapterMixin(Backend, abc.ABC):
         """
 
     @abc.abstractmethod
-    def add_adapter(self, adapter: AdapterInput) -> None:
+    def add_adapter(self, adapter: AdapterInput, *, config: dict | None = None) -> None:
         """Register an adapter with this backend so it can be loaded later.
 
         The adapter must not already have been added to a different backend.
@@ -465,12 +564,25 @@ class AdapterMixin(Backend, abc.ABC):
         backend rejects an embedded adapter), so a statically valid call may
         still be rejected at runtime.
 
+        `config` is the raw io.yaml mapping for a composed `Adapter`/
+        `_AdapterCore` whose `weights` is an `EmbeddedBinding` — that reality's
+        config cannot be cheaply re-derived later, so it must be supplied here
+        (see `_discover_embedded_adapters`/`resolve_adapter`), rather than
+        being fetched lazily the way a `LocalFileBinding`'s io.yaml is.
+
         Args:
             adapter (AdapterInput): The adapter to register with this backend.
+            config (dict | None): Raw io.yaml config for a composed
+                `EmbeddedBinding` adapter. Ignored (and rejected) for every
+                other adapter reality.
 
         Raises:
             TypeError: If `adapter` belongs to a reality this backend does not
-                support.
+                support, or `config` is given for a reality other than a
+                composed `EmbeddedBinding` adapter.
+            ValueError: If `adapter.weights` is an `EmbeddedBinding` and
+                `config` is not given — registering it without a config would
+                make it discoverable but permanently unable to generate.
         """
 
     @abc.abstractmethod
@@ -585,15 +697,110 @@ class AdapterMixin(Backend, abc.ABC):
     def _adapter_activation_lock(
         self,
     ) -> contextlib.AbstractContextManager[bool | None]:
-        """Exclusivity lock to hold while calling activate/deactivate verbs.
+        """Exclusivity lock to hold while calling activate/deactivate and dict writes.
 
         Default is a no-op (`contextlib.nullcontext()`). Backends whose
         activation verbs mutate shared, non-thread-safe state (e.g.
         `LocalHFBackend`'s underlying PEFT model) override this to return
         their own lock, so callers like `LocalFileBinding.activate()` get
         the same exclusivity `_generate_with_adapter_lock` relies on.
+        `add_adapter()`'s registration-dict writes also hold it, briefly.
+
+        Innermost in the adapter lock order
+        (`_adapter_resolve_lock` -> `binding._lifecycle_lock` ->
+        `_adapter_activation_lock`). Never hold this lock across a
+        `WeightsBinding` lifecycle verb (`prepare`/`activate`/`deactivate`/
+        `release`) or across any I/O — those take `_lifecycle_lock`, and
+        holding activation across them inverts the order and can deadlock
+        against a concurrent lifecycle call on the same binding.
+
+        A code path already holding this lock can re-enter it: on
+        `LocalHFBackend`, `_generate_intrinsic_with_adapter_scope` holds
+        `_generation_lock` for the whole generation, and the
+        `_IntrinsicPeftBinding` verbs it drives through `adapter_scope()`
+        take `_adapter_activation_lock()` again on the same thread. An
+        override must therefore return a reentrant lock (`threading.RLock`,
+        as `LocalHFBackend` does) — a plain `threading.Lock` here is a real
+        deadlock hazard.
         """
         return contextlib.nullcontext()
+
+    def _adapter_resolve_lock(self) -> contextlib.AbstractContextManager[bool | None]:
+        """Exclusivity lock for discovery-plus-registration orchestration.
+
+        Default is a no-op (`contextlib.nullcontext()`). Held by
+        `resolve_adapter()` and `register_embedded_adapter_model()` across
+        their catalogue/Hugging Face Hub discovery I/O and their
+        `add_adapter()` calls.
+
+        Outermost in the adapter lock order
+        (`_adapter_resolve_lock` -> `binding._lifecycle_lock` ->
+        `_adapter_activation_lock`). Deliberately a separate lock from
+        `_adapter_activation_lock`, not a reuse of it: the activation lock is
+        taken *inside* every `WeightsBinding` lifecycle verb, so holding it
+        across `add_adapter()` — which can call those verbs — would invert
+        the order and deadlock against a concurrent `prepare()`/`release()`
+        on the same binding.
+
+        Must not be acquired while already holding
+        `_adapter_activation_lock()` — that reverses the order. No
+        production caller does: `resolve_adapter()` runs before the backend
+        takes its generation lock, not after (see
+        `mellea/stdlib/components/intrinsic/_util.py`).
+
+        An override must return a reentrant lock (`threading.RLock`) for the
+        same same-thread-reentry reason `_adapter_activation_lock()`
+        documents.
+
+        Known limitation: a `HookType.ADAPTER_FUNCTION_PHASE_COMPLETE`
+        subscriber must not synchronously call `resolve_adapter()`,
+        `register_embedded_adapter_model()`, or `add_adapter()` with a
+        composed `Adapter` on this same backend. `LocalFileBinding.prepare()`
+        fires that hook via `_run_async_in_thread`, which blocks the calling
+        thread on a dedicated event-loop thread's result — if this lock is
+        held at that point (as it is for the whole body of the three methods
+        above) and the hook's handler re-enters one of them on the same
+        backend, the event-loop thread blocks on this lock while the original
+        thread blocks waiting for the event-loop thread: deadlock. No shipped
+        caller does this today.
+        """
+        return contextlib.nullcontext()
+
+    def _add_embedded_adapter_compat(
+        self, adapter: "_AdapterCore", config: dict
+    ) -> None:
+        """Register a composed embedded Adapter, tolerating a pre-#1144 `add_adapter`.
+
+        `AdapterMixin.add_adapter` gained a `config` keyword-only parameter in
+        Epic #929, issue #1144 (needed because a composed `Adapter` has no
+        field to carry a shim's `.config`). `_uses_embedded_adapters` predates
+        that: a third-party `AdapterMixin` subclass written before this
+        parameter existed, but already supporting the Embedded reality, is
+        reachable here and would raise
+        `TypeError: add_adapter() got an unexpected keyword argument 'config'`
+        — or worse, silently misbehave, if it happens to already accept a
+        `config=`/`**kwargs` for unrelated reasons and gets handed a composed
+        `Adapter` its body doesn't know how to read (it has no
+        `.qualified_name`/`.config`/`.technology`, unlike the shim). Gated on
+        `_supports_composed_adapters`, not signature inspection, for exactly
+        that reason: a parameter name can't tell you whether the method body
+        understands the new object shape.
+
+        Args:
+            adapter: The composed `Adapter` to register.
+            config: Raw io.yaml config for `adapter`.
+        """
+        if self._supports_composed_adapters:
+            self.add_adapter(adapter, config=config)
+            return
+        # Legacy subclass predating the composed-Adapter contract: it only
+        # knows the deprecated EmbeddedIntrinsicAdapter shim, which carries
+        # its own .config and needs no config= parameter.
+        self.add_adapter(
+            EmbeddedIntrinsicAdapter(
+                adapter.identity.name, config, technology=adapter.identity.adapter_type
+            )
+        )
 
     def resolve_adapter(self, name: str) -> _AdapterCore:
         """Find or lazily register an adapter by capability name.
@@ -611,6 +818,18 @@ class AdapterMixin(Backend, abc.ABC):
         Raises:
             ValueError: If the backend has no model ID.
             KeyError: If the adapter cannot be found after registration.
+
+        Note:
+            A cold first resolve holds `_adapter_resolve_lock()` across any
+            Hugging Face Hub download it triggers, so it can stall every
+            other caller of *that* lock (other resolves,
+            `register_embedded_adapter_model()`) — including a resolve on
+            the asyncio event-loop thread inside a gathered set of
+            coroutines. It does **not** stall generation or activation:
+            `_adapter_resolve_lock` is a separate lock from
+            `_adapter_activation_lock`, deliberately (see the lock-order note
+            on `_adapter_activation_lock()`). A warm cache after the first
+            resolve avoids the download either way.
         """
         found = self._find_adapter(name)
         if found is not None:
@@ -622,15 +841,29 @@ class AdapterMixin(Backend, abc.ABC):
                 f"Backend has no model ID; cannot resolve adapter {name!r}"
             )
 
-        # warnings.catch_warnings() modifies the process-global filter state and is not
-        # async/thread-safe.  Concurrent first-time resolves race on filter restoration;
-        # add_adapter is idempotent so the double-registration hazard is benign, but the
-        # filter race is a known Phase-1 gap: two concurrent first-time call_intrinsic
-        # calls can interleave their catch_warnings contexts, causing a DeprecationWarning
-        # to surface in user code during lazy-registration.  Phase 2 (see epic #929) adds a lock.
+        # add_adapter()'s own duplicate check is an unguarded read-then-write on
+        # _added_adapters, and catch_warnings() below mutates thread-unsafe global
+        # filter state — both race under concurrent first-time resolves for the
+        # same name. `_adapter_resolve_lock()` closes both: a no-op by default,
+        # and each concrete backend's reentrant lock otherwise. Deliberately not
+        # `_adapter_activation_lock()`: that lock is taken *inside*
+        # `add_adapter()`'s composed-LocalFileBinding branch around the dict
+        # writes only, and inside every `WeightsBinding` lifecycle verb — holding
+        # it here, across the whole discover-and-register loop below (which calls
+        # `add_adapter()`, which can call `binding.prepare()`), would invert the
+        # adapter lock order and deadlock against a concurrent
+        # `prepare()`/`release()` on the same binding.
         # Suppress DeprecationWarning: the shim constructors warn user-facing code,
         # not internal registration paths.
-        with warnings.catch_warnings():
+        with self._adapter_resolve_lock(), warnings.catch_warnings():
+            # Re-check now the lock is held: a concurrent resolve may have already
+            # registered this name. Without this, the loser redundantly re-fetches
+            # and then hits the backend's own duplicate guard, which logs a
+            # misleading "client code ... not idempotent" warning.
+            found = self._find_adapter(name)
+            if found is not None:
+                return found
+
             warnings.simplefilter("ignore", DeprecationWarning)
             if getattr(self, "_uses_embedded_adapters", False):
                 repo_id = (
@@ -638,23 +871,64 @@ class AdapterMixin(Backend, abc.ABC):
                     or getattr(self, "_model_id", None)
                     or base
                 )
-                for a in EmbeddedIntrinsicAdapter.from_source(
+                # Composed Adapter, not the deprecated EmbeddedIntrinsicAdapter
+                # shim (Epic #929, issue #1144). Valid only for backends whose
+                # add_adapter supports the Embedded/Granite Switch reality
+                # (currently OpenAIBackend and LocalHFBackend when configured
+                # with load_embedded_adapters=True).
+                #
+                # Passing config= lets add_adapter() cache it atomically with
+                # registration, gated behind its own duplicate-key guard — a
+                # refused duplicate (a different object already holds the
+                # key) therefore never reaches the config write, so this
+                # can't clobber a live adapter's cached config the way a
+                # register-then-separately-cache sequence could. Routed
+                # through _add_embedded_adapter_compat, not called directly,
+                # for a third-party AdapterMixin subclass whose add_adapter
+                # predates config= (see that method's docstring).
+                for a, config in _discover_embedded_adapters(
                     repo_id, intrinsic_name=name
                 ):
-                    # EmbeddedIntrinsicAdapter is only valid for backends whose
-                    # add_adapter accepts the full Adapter type (e.g. OpenAIBackend).
-                    # LocalHFBackend.add_adapter expects LocalHFAdapter; HF backends
-                    # never set _uses_embedded_adapters=True.
-                    self.add_adapter(a)
+                    self._add_embedded_adapter_compat(a, config)
             else:
                 # AdapterType.LORA is the pre-Phase-1 default (mirrors old _util.py).
                 # Every current catalog entry supports LORA.  Phase 2 (see epic #929)
                 # will select the type from catalog availability instead of hardcoding.
-                self.add_adapter(
-                    IntrinsicAdapter(
-                        name, adapter_type=AdapterType.LORA, base_model_name=base
+                metadata = fetch_intrinsic_metadata(name)
+                if self._supports_composed_adapters:
+                    # Composed Adapter, not the deprecated IntrinsicAdapter shim
+                    # (Epic #929, issue #1144).
+                    self.add_adapter(
+                        _AdapterCore(
+                            identity=Identity(
+                                name=name,
+                                adapter_type="lora",
+                                capability=metadata.effective_capability,
+                            ),
+                            io_contract=get_io_contract(name),
+                            weights=LocalFileBinding(
+                                name=name,
+                                adapter_type=AdapterType.LORA,
+                                repo_id=metadata.repo_id,
+                                revision=metadata.revision,
+                            ),
+                        )
                     )
-                )
+                else:
+                    # Legacy subclass predating the composed-Adapter contract
+                    # (same reasoning as _add_embedded_adapter_compat): its
+                    # add_adapter only knows the deprecated IntrinsicAdapter
+                    # shim's attribute shape, not a composed Adapter's. This
+                    # is exactly what this branch passed before Epic #929,
+                    # issue #1144 — IntrinsicAdapter is dual-shaped (both
+                    # LocalHFAdapter, for `.qualified_name`/`.backend`/`.path`,
+                    # and _AdapterCore, so `_find_adapter` below and this
+                    # method's own `-> _AdapterCore` return type still hold).
+                    self.add_adapter(
+                        IntrinsicAdapter(
+                            name, adapter_type=AdapterType.LORA, base_model_name=base
+                        )
+                    )
 
         found = self._find_adapter(name)
         if found is not None:
@@ -896,6 +1170,16 @@ class AdapterMixin(Backend, abc.ABC):
         # or binding — can be popped: re-check that invariant when #1465 moves
         # generation inside `adapter_scope`.
         adapters = list(getattr(self, "_added_adapters", {}).values())
+        # LocalFile/PEFT composed Adapters (Epic #929, issue #1144) don't live
+        # in _added_adapters — that dict holds their LocalFileBinding, keyed
+        # for the PEFT lifecycle (see LocalHFBackend.add_adapter); only
+        # _composed_adapters carries the _AdapterCore object this method
+        # matches on. Embedded composed adapters may live in either, per
+        # backend (LocalHFBackend uses _composed_adapters; OpenAIBackend
+        # stores them directly in _added_adapters), so checking both here
+        # keeps this method backend-agnostic without either backend needing
+        # to override it.
+        adapters += list(getattr(self, "_composed_adapters", {}).values())
         if adapter_types is None:
             for a in adapters:
                 if isinstance(a, _AdapterCore) and (
@@ -1096,8 +1380,20 @@ class EmbeddedIntrinsicAdapter(_AdapterCore):
     ) -> list["EmbeddedIntrinsicAdapter"]:
         """Load embedded adapters from a Granite Switch model on Hugging Face Hub.
 
-        Downloads `adapter_index.json` and the `io_configs/` directory, then
-        delegates to :meth:`from_model_directory`.
+        Downloads `adapter_index.json` and the `io_configs/` directory into a
+        persistent self-contained local directory, then delegates to
+        `from_model_directory`.
+
+        `huggingface_hub.snapshot_download`'s default cache-backed snapshot
+        directory populates `io_configs/` with symlinks that resolve into a
+        sibling `blobs/` directory *outside* the snapshot root. That breaks the
+        contract `from_model_directory` expects (a self-contained model
+        directory) and trips its path-escape check. To satisfy that contract,
+        the downloaded snapshot is materialised under the Hugging Face cache
+        into a self-contained directory keyed by its immutable revision, so
+        `io_configs/` contains real files rather than symlinks escaping the
+        directory. This preserves standard Hugging Face Hub cache reuse and
+        offline loading while preventing stale files from a mutable revision.
 
         Args:
             repo_id (str): Hugging Face Hub repository ID
@@ -1118,10 +1414,11 @@ class EmbeddedIntrinsicAdapter(_AdapterCore):
                 `adapter_index.json` (wrong repo/revision, not a Granite Switch
                 model, or a stale cache).
             ValueError: If no adapters are found (delegated from
-                :meth:`from_model_directory`).
+                `from_model_directory`).
         """
         try:
             import huggingface_hub
+            from huggingface_hub.constants import HF_HUB_CACHE
             from huggingface_hub.errors import GatedRepoError, RepositoryNotFoundError
         except ImportError as e:
             raise ImportError(
@@ -1130,11 +1427,13 @@ class EmbeddedIntrinsicAdapter(_AdapterCore):
             ) from e
 
         try:
-            local_root = huggingface_hub.snapshot_download(
-                repo_id=repo_id,
-                allow_patterns=["adapter_index.json", "io_configs/**"],
-                cache_dir=cache_dir,
-                revision=revision,
+            snapshot_root = pathlib.Path(
+                huggingface_hub.snapshot_download(
+                    repo_id=repo_id,
+                    allow_patterns=["adapter_index.json", "io_configs/**"],
+                    cache_dir=cache_dir,
+                    revision=revision,
+                )
             )
         except (GatedRepoError, RepositoryNotFoundError) as e:
             auth_hint = (
@@ -1146,7 +1445,57 @@ class EmbeddedIntrinsicAdapter(_AdapterCore):
             )
             raise PermissionError(auth_hint) from e
 
+        cache_root = pathlib.Path(cache_dir or HF_HUB_CACHE)
+        cache_key = hashlib.sha256(
+            f"{repo_id}\0{snapshot_root.name}".encode()
+        ).hexdigest()
+        local_root = cache_root / "mellea" / "embedded-adapter-configs" / cache_key
+
         try:
+            if not local_root.is_dir():
+                local_root.parent.mkdir(parents=True, exist_ok=True)
+                temporary_dir = pathlib.Path(
+                    tempfile.mkdtemp(dir=local_root.parent, prefix=f"{cache_key}-")
+                )
+                try:
+                    import json as _json
+
+                    index_path = snapshot_root / "adapter_index.json"
+                    with open(index_path, encoding="utf-8") as f:
+                        index = _json.load(f)
+                    shutil.copyfile(index_path, temporary_dir / "adapter_index.json")
+
+                    snapshot_cache_root = snapshot_root.parent.parent.resolve()
+                    for entry in index.get("adapters", []):
+                        io_config_rel = entry.get("io_config")
+                        if io_config_rel is None:
+                            continue
+                        io_config_path = (snapshot_root / io_config_rel).resolve(
+                            strict=True
+                        )
+                        if not io_config_path.is_relative_to(snapshot_cache_root):
+                            raise ValueError(
+                                f"io_config path '{io_config_rel}' escapes "
+                                "the downloaded Hugging Face snapshot"
+                            )
+                        destination = temporary_dir / io_config_rel
+                        destination.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copyfile(io_config_path, destination)
+
+                    adapters = EmbeddedIntrinsicAdapter.from_model_directory(
+                        temporary_dir, intrinsic_name=intrinsic_name
+                    )
+                    try:
+                        temporary_dir.replace(local_root)
+                    except OSError:
+                        if not local_root.is_dir():
+                            raise
+                    else:
+                        return adapters
+                finally:
+                    if temporary_dir.exists():
+                        shutil.rmtree(temporary_dir)
+
             return EmbeddedIntrinsicAdapter.from_model_directory(
                 local_root, intrinsic_name=intrinsic_name
             )

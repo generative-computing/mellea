@@ -24,6 +24,7 @@ torch = pytest.importorskip("torch", reason="torch not installed — install mel
 
 from mellea.backends import ModelOption
 from mellea.backends.huggingface import (
+    _CHAT_TEMPLATE_THINKING_VARS,
     _GENERATE_KWARGS_ALLOWLIST,
     _HF_INTERNAL_TEMPLATE_VARS,
     LocalHFBackend,
@@ -44,6 +45,15 @@ def _make_backend(template: object) -> LocalHFBackend:
     b: LocalHFBackend = LocalHFBackend.__new__(LocalHFBackend)
     object.__setattr__(b, "_tokenizer", _FakeTokenizer())
     b._model_id = "test-org/test-model"
+    b.model_options = {}
+    # Mirrors LocalHFBackend.__init__'s real to_mellea_model_opts_map (huggingface.py)
+    # rather than an empty stand-in — the thinking aliases are load-bearing for
+    # _simplify_and_merge's precedence behaviour, exercised by the tests below.
+    b.to_mellea_model_opts_map = {
+        "think": ModelOption.THINKING,
+        "thinking": ModelOption.THINKING,
+        "enable_thinking": ModelOption.THINKING,
+    }
     b.from_mellea_model_opts_map = {ModelOption.MAX_NEW_TOKENS: "max_new_tokens"}
     return b
 
@@ -287,6 +297,149 @@ def test_filter_for_chat_template_renames_sentinel() -> None:
     assert result == {"max_new_tokens": 256}
 
 
+@pytest.mark.parametrize(
+    "template", ["{{ think }}", "{{ thinking }}", "{{ enable_thinking }}"]
+)
+def test_filter_for_chat_template_maps_thinking_to_template_variable(
+    template: str,
+) -> None:
+    """THINKING reaches the thinking variable detected from the template."""
+    b = _make_backend(template)
+    expected_key = next(
+        variable
+        for variable in _CHAT_TEMPLATE_THINKING_VARS
+        if variable in b._chat_template_allowlist
+    )
+
+    result = b._filter_for_chat_template({ModelOption.THINKING: True})
+
+    assert result == {expected_key: True}
+
+
+def test_filter_for_chat_template_drops_thinking_without_template_variable() -> None:
+    """THINKING does not invent a chat-template variable when none is recognised."""
+    b = _make_backend("{{ custom_tools }}")
+
+    result = b._filter_for_chat_template({ModelOption.THINKING: True})
+
+    assert result == {}
+
+
+def test_filter_for_chat_template_uses_per_call_thinking_alias_over_default() -> None:
+    """A per-call alias overrides a backend THINKING default before template filtering."""
+    b = _make_backend("{{ thinking }}")
+    b.model_options = {ModelOption.THINKING: False}
+
+    model_options = b._simplify_and_merge({"thinking": True})
+    result = b._filter_for_chat_template(model_options)
+
+    assert result == {"thinking": True}
+
+
+def test_filter_for_chat_template_drops_thinking_effort_level() -> None:
+    """HF does not send string THINKING levels to boolean chat-template variables."""
+    b = _make_backend("{{ thinking }}")
+
+    result = b._filter_for_chat_template({ModelOption.THINKING: "low"})
+
+    assert result == {}
+
+
+@pytest.mark.parametrize("thinking_value", ["low", "medium", "high"])
+def test_filter_for_chat_template_forwards_string_thinking_as_reasoning_effort(
+    thinking_value: str,
+) -> None:
+    """A string THINKING level is forwarded verbatim as `reasoning_effort`.
+
+    Regression test for issue #1636: Granite 4.2's chat template derives its
+    boolean `low_effort` variable from `reasoning_effort == "low"`
+    (chat_template.jinja), and gpt-oss's HF chat template reads
+    `reasoning_effort` directly — so the string must be forwarded as-is,
+    mirroring the OpenAI backend's `reasoning_effort` handling, rather than
+    translated into a template-specific boolean.
+    """
+    b = _make_backend("{{ reasoning_effort }}")
+
+    result = b._filter_for_chat_template({ModelOption.THINKING: thinking_value})
+
+    assert result == {"reasoning_effort": thinking_value}
+
+
+def test_filter_for_chat_template_drops_string_thinking_without_reasoning_effort_var() -> (
+    None
+):
+    """A string THINKING level is a no-op when the template has no reasoning_effort var."""
+    b = _make_backend("{{ thinking }}")
+
+    result = b._filter_for_chat_template({ModelOption.THINKING: "low"})
+
+    assert "reasoning_effort" not in result
+
+
+def test_filter_for_chat_template_string_thinking_sentinel_overrides_raw_reasoning_effort() -> (
+    None
+):
+    """The resolved THINKING sentinel wins over an already-present raw `reasoning_effort` key.
+
+    Regression guard: a caller passing both ModelOption.THINKING="low" and a
+    conflicting raw `reasoning_effort="high"` must not have the sentinel's
+    intent silently overridden — matching the existing bool-THINKING
+    precedence behaviour (see
+    test_filter_for_chat_template_sentinel_overrides_conflicting_alias_key).
+    """
+    b = _make_backend("{{ reasoning_effort }}")
+
+    result = b._filter_for_chat_template(
+        {ModelOption.THINKING: "low", "reasoning_effort": "high"}
+    )
+
+    assert result == {"reasoning_effort": "low"}
+
+
+def test_filter_for_chat_template_bool_thinking_does_not_set_reasoning_effort() -> None:
+    """A bool THINKING value sets the bool template var, not reasoning_effort."""
+    b = _make_backend("{{ reasoning_effort }}{{ thinking }}")
+
+    result = b._filter_for_chat_template({ModelOption.THINKING: True})
+
+    assert result == {"thinking": True}
+
+
+def test_filter_for_chat_template_drops_thinking_effort_level_via_alias() -> None:
+    """A recognised alias (`thinking`) folds into THINKING and is bool-gated too.
+
+    `to_mellea_model_opts_map` maps `thinking` to `ModelOption.THINKING`, so a
+    non-boolean value supplied via the alias is subject to the same
+    boolean-only restriction as one supplied via the sentinel directly
+    (see `test_filter_for_chat_template_drops_thinking_effort_level`) — there
+    is no separate unconstrained "native" path once the alias is recognised.
+    """
+    b = _make_backend("{{ thinking }}")
+
+    model_options = b._simplify_and_merge({"thinking": "low"})
+    result = b._filter_for_chat_template(model_options)
+
+    assert result == {}
+
+
+def test_filter_for_chat_template_sentinel_overrides_conflicting_alias_key() -> None:
+    """ModelOption.THINKING wins over an already-resolved alias key in backend_opts.
+
+    Regression test for an ordering bug: if a caller-supplied model_options
+    dict already contains both the ModelOption.THINKING sentinel and a
+    backend-specific alias key with a conflicting value, the sentinel must
+    still take precedence, matching the other backends (e.g. Ollama reads
+    ModelOption.THINKING directly at the generate call site).
+    """
+    b = _make_backend("{{ thinking }}")
+
+    result = b._filter_for_chat_template(
+        {ModelOption.THINKING: True, "thinking": False}
+    )
+
+    assert result == {"thinking": True}
+
+
 def test_filter_for_chat_template_empty_input() -> None:
     """Empty model_options produces an empty dict."""
     b = _make_backend("{{ think }}")
@@ -468,18 +621,30 @@ def test_generate_kwargs_allowlist_includes_known_generate_kwargs() -> None:
 # ---------------------------------------------------------------------------
 
 _GRANITE_MODEL_ID = "ibm-granite/granite-3.3-8b-instruct"
+_GRANITE_THINKING_MODEL_ID = "ibm-granite/granite-4.2-3b"
 
 
-def _try_load_granite_tokenizer():
-    """Return the Granite tokenizer if cached locally, else None."""
+def _try_load_granite_tokenizer(model_id: str):
+    """Return a Granite tokenizer from the local cache, or None.
+
+    A cached `config.json` does not guarantee the tokenizer's own files
+    (`tokenizer.json`, etc.) are also cached — e.g. after an interrupted or
+    partial download. `local_files_only=True` raises `OSError` in that case;
+    treat it the same as an absent cache rather than letting the test error.
+    """
+    from huggingface_hub import _CACHED_NO_EXIST, try_to_load_from_cache
+    from transformers import AutoTokenizer
+
+    cached_config = try_to_load_from_cache(model_id, "config.json")
+    if cached_config is None or cached_config is _CACHED_NO_EXIST:
+        return None
     try:
-        from transformers import AutoTokenizer
-
-        return AutoTokenizer.from_pretrained(_GRANITE_MODEL_ID, local_files_only=True)
-    except Exception:
+        return AutoTokenizer.from_pretrained(model_id, local_files_only=True)
+    except OSError:
         return None
 
 
+@pytest.mark.integration
 @pytest.mark.huggingface
 def test_granite_allowlist_includes_known_template_vars() -> None:
     """Granite's chat template exposes 'thinking' as a Jinja var.
@@ -492,7 +657,7 @@ def test_granite_allowlist_includes_known_template_vars() -> None:
     it means either the Granite template changed or _HF_INTERNAL_TEMPLATE_VARS
     is now incorrectly excluding something it should not.
     """
-    tok = _try_load_granite_tokenizer()
+    tok = _try_load_granite_tokenizer(_GRANITE_MODEL_ID)
     if tok is None:
         pytest.skip(
             f"{_GRANITE_MODEL_ID} not in local HF cache — run qualitative tests first"
@@ -512,6 +677,7 @@ def test_granite_allowlist_includes_known_template_vars() -> None:
     )
 
 
+@pytest.mark.integration
 @pytest.mark.huggingface
 def test_granite_allowlist_excludes_generate_only_options() -> None:
     """The Granite template does not reference GenerationConfig param names as Jinja vars.
@@ -523,7 +689,7 @@ def test_granite_allowlist_excludes_generate_only_options() -> None:
     Failure here means the Granite template now references a GenerationConfig
     parameter name as a Jinja variable, which would require revisiting the design.
     """
-    tok = _try_load_granite_tokenizer()
+    tok = _try_load_granite_tokenizer(_GRANITE_MODEL_ID)
     if tok is None:
         pytest.skip(
             f"{_GRANITE_MODEL_ID} not in local HF cache — run qualitative tests first"
@@ -553,6 +719,7 @@ def test_granite_allowlist_excludes_generate_only_options() -> None:
         )
 
 
+@pytest.mark.integration
 @pytest.mark.huggingface
 def test_granite_allowlist_excludes_hf_internal_vars() -> None:
     """HF-internal vars are excluded from the Granite allowlist.
@@ -562,7 +729,7 @@ def test_granite_allowlist_excludes_hf_internal_vars() -> None:
     leaks into the allowlist, forwarding it from model_options would duplicate
     a kwarg that apply_chat_template already provides, causing a TypeError.
     """
-    tok = _try_load_granite_tokenizer()
+    tok = _try_load_granite_tokenizer(_GRANITE_MODEL_ID)
     if tok is None:
         pytest.skip(
             f"{_GRANITE_MODEL_ID} not in local HF cache — run qualitative tests first"
@@ -579,6 +746,81 @@ def test_granite_allowlist_excludes_hf_internal_vars() -> None:
             f"HF-internal var '{var}' leaked into Granite allowlist — "
             f"check _HF_INTERNAL_TEMPLATE_VARS against the installed transformers version"
         )
+
+
+@pytest.mark.integration
+@pytest.mark.huggingface
+def test_granite_thinking_option_uses_detected_template_variable() -> None:
+    """Granite 4.2 receives THINKING under its detected template variable."""
+    tok = _try_load_granite_tokenizer(_GRANITE_THINKING_MODEL_ID)
+    if tok is None:
+        pytest.skip(
+            f"{_GRANITE_THINKING_MODEL_ID} not in local HF cache — "
+            "run the Granite 4.2 HF test lane first"
+        )
+
+    b: LocalHFBackend = LocalHFBackend.__new__(LocalHFBackend)
+    b._tokenizer = tok
+    b._model_id = _GRANITE_THINKING_MODEL_ID
+    b.from_mellea_model_opts_map = {ModelOption.MAX_NEW_TOKENS: "max_new_tokens"}
+
+    expected_key = next(
+        (
+            variable
+            for variable in _CHAT_TEMPLATE_THINKING_VARS
+            if variable in b._chat_template_allowlist
+        ),
+        None,
+    )
+
+    assert expected_key is not None, (
+        f"no recognised thinking variable in {sorted(b._chat_template_allowlist)}"
+    )
+    assert b._filter_for_chat_template({ModelOption.THINKING: False}) == {
+        expected_key: False
+    }
+
+
+@pytest.mark.integration
+@pytest.mark.huggingface
+def test_granite_reasoning_effort_option_reaches_real_template() -> None:
+    """Regression test for issue #1636 against the real Granite 4.2 chat template.
+
+    THINKING="low" must reach `reasoning_effort="low"` in the kwargs passed to
+    `apply_chat_template` — previously this was silently dropped because
+    `_filter_for_chat_template` only handled bool THINKING values. Forwarding
+    the string verbatim (rather than translating it into the template's
+    derived boolean `low_effort` variable) is the mechanism the template
+    itself expects (`{%- set low_effort = reasoning_effort == "low" %}` in
+    chat_template.jinja) and matches the OpenAI backend's `reasoning_effort`
+    handling.
+    """
+    tok = _try_load_granite_tokenizer(_GRANITE_THINKING_MODEL_ID)
+    if tok is None:
+        pytest.skip(
+            f"{_GRANITE_THINKING_MODEL_ID} not in local HF cache — "
+            "run the Granite 4.2 HF test lane first"
+        )
+
+    b: LocalHFBackend = LocalHFBackend.__new__(LocalHFBackend)
+    b._tokenizer = tok
+    b._model_id = _GRANITE_THINKING_MODEL_ID
+    b.from_mellea_model_opts_map = {ModelOption.MAX_NEW_TOKENS: "max_new_tokens"}
+
+    assert "reasoning_effort" in b._chat_template_allowlist, (
+        f"'reasoning_effort' missing from real Granite 4.2 allowlist; "
+        f"got: {sorted(b._chat_template_allowlist)}"
+    )
+    result = b._filter_for_chat_template({ModelOption.THINKING: "low"})
+    assert result == {"reasoning_effort": "low"}
+
+    # The template must actually render differently with this kwarg — proves
+    # the fix changes real model input, not just an internal dict.
+    messages = [{"role": "user", "content": "hi"}]
+    without_reasoning_effort = tok.apply_chat_template(messages, tokenize=False)
+    with_reasoning_effort = tok.apply_chat_template(messages, tokenize=False, **result)
+    assert "reasoning effort: low" in with_reasoning_effort
+    assert "reasoning effort: low" not in without_reasoning_effort
 
 
 if __name__ == "__main__":

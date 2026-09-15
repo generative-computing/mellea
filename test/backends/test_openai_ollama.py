@@ -17,7 +17,7 @@ pytestmark = [pytest.mark.openai, pytest.mark.ollama, pytest.mark.e2e]
 
 from mellea import MelleaSession
 from mellea.backends import ModelOption
-from mellea.backends.model_ids import IBM_GRANITE_4_1_3B
+from mellea.backends.model_ids import IBM_GRANITE_4_2_3B
 from mellea.backends.openai import OpenAIBackend
 from mellea.core import CBlock, ModelOutputThunk
 from mellea.formatters import TemplateFormatter
@@ -28,10 +28,11 @@ from mellea.stdlib.context import ChatContext, SimpleContext
 def backend(gh_run: int):
     """Shared OpenAI backend configured for Ollama."""
     return OpenAIBackend(
-        model_id=IBM_GRANITE_4_1_3B.ollama_name,  # type: ignore
-        formatter=TemplateFormatter(model_id=IBM_GRANITE_4_1_3B.hf_model_name),  # type: ignore
+        model_id=IBM_GRANITE_4_2_3B.ollama_name,  # type: ignore
+        formatter=TemplateFormatter(model_id=IBM_GRANITE_4_2_3B.hf_model_name),  # type: ignore
         base_url=f"http://{os.environ.get('OLLAMA_HOST', 'localhost:11434')}/v1",
         api_key="ollama",
+        default_extra_body={"chat_template_kwargs": {"enable_thinking": False}},
     )
 
 
@@ -240,9 +241,22 @@ def test_client_cache(backend) -> None:
     assert len(backend._client_cache.cache.values()) == 2
 
 
-async def test_reasoning_effort_conditional_passing(backend) -> None:
+async def test_reasoning_effort_conditional_passing(gh_run: int) -> None:
     """Test that reasoning_effort is only passed to API when not None."""
     from unittest.mock import AsyncMock, MagicMock, patch
+
+    # A dedicated backend (mocked below, never actually calls Ollama) rather
+    # than the shared module `backend` fixture: that fixture sets
+    # default_extra_body={"chat_template_kwargs": {"enable_thinking": False}},
+    # which would force enable_thinking=False in every request regardless of
+    # what the THINKING-mapping code under test does, making the
+    # enable_thinking assertions below pass unconditionally.
+    backend = OpenAIBackend(
+        model_id=IBM_GRANITE_4_2_3B.ollama_name,  # type: ignore
+        formatter=TemplateFormatter(model_id=IBM_GRANITE_4_2_3B.hf_model_name),  # type: ignore
+        base_url=f"http://{os.environ.get('OLLAMA_HOST', 'localhost:11434')}/v1",
+        api_key="ollama",
+    )
 
     ctx = ChatContext()
     ctx = ctx.add(CBlock(value="Test"))
@@ -296,7 +310,10 @@ async def test_reasoning_effort_conditional_passing(backend) -> None:
             is True
         )
 
-    # Test 4: THINKING=False sets chat_template_kwargs but NOT reasoning_effort
+    # Test 4: THINKING=False sets both chat_template_kwargs and
+    # reasoning_effort="none" (Ollama /v1 disables thinking only via
+    # reasoning_effort; absence means the model default, which is ON for
+    # e.g. granite4.2)
     with patch.object(
         backend._async_client.chat.completions, "create", new_callable=AsyncMock
     ) as mock_create:
@@ -305,8 +322,9 @@ async def test_reasoning_effort_conditional_passing(backend) -> None:
             CBlock(value="Hi"), ctx, model_options={ModelOption.THINKING: False}
         )
         call_kwargs = mock_create.call_args.kwargs
-        assert "reasoning_effort" not in call_kwargs, (
-            "reasoning_effort must not be sent for THINKING=False (invalid for OpenAI)"
+        assert call_kwargs.get("reasoning_effort") == "none", (
+            "reasoning_effort should be 'none' for THINKING=False "
+            "(disables thinking on Ollama /v1, which defaults it on)"
         )
         assert (
             call_kwargs.get("extra_body", {})

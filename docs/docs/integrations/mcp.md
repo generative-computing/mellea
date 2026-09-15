@@ -9,7 +9,7 @@ for exposing tools to AI clients. Mellea integrates with MCP via
 [FastMCP](https://github.com/jlowin/fastmcp): wrap any Mellea function as an MCP tool
 and call it from Claude Desktop, Cursor, or any MCP-compatible client.
 
-> Looking to **call** tools from an MCP server? See [MCP tools](../how-to/tools-and-agents#mcp-tools) in Tools and Agents.
+> Looking to **call** tools from an MCP server? See [MCP tools](../how-to/tools-and-agents.md#mcp-tools) in Tools and Agents.
 
 **Prerequisites:** `pip install mellea`, `pip install "mcp[cli]"`, Ollama running locally.
 
@@ -121,4 +121,4 @@ uv run your_server.py
 
 ---
 
-**See also:** [Backends and Configuration](../how-to/backends-and-configuration)
+**See also:** [Backends and Configuration](../how-to/backends-and-configuration.md)

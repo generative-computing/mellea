@@ -6,7 +6,7 @@
 from collections.abc import Callable
 from typing import Any, cast, overload
 
-from ...backends.adapters import get_io_contract
+from ...backends.adapters import AdapterType, get_io_contract
 from ...core import (
     CBlock,
     Context,
@@ -72,21 +72,39 @@ class ALoraRequirement(Requirement, Intrinsic):
 
     If the adapter generates output but the output **fails schema validation**
     (`requirement_check_to_bool` raises `AdapterSchemaMismatchError`), the
-    exception propagates to the caller — it is not caught and does not trigger
-    the LLMaJ fallback.  This is intentional: schema drift should surface
-    loudly rather than silently return a wrong result.
+    error is surfaced on the returned `ValidationResult.error` by
+    `Requirement.validate` — it is not caught here and does not trigger the
+    LLMaJ fallback, which covers only generation errors.  The result fails
+    closed (`bool(result)` is `False`), so schema drift is neither silently
+    treated as a pass nor raised as an unexpected exception; callers can inspect
+    `result.error` to tell it apart from an ordinary "requirement not met".
 
     Args:
         description (str): Human-readable requirement description.
         intrinsic_name (str | None): Name of the ALoRA intrinsic to use.
             Defaults to `"requirement-check"`.
+        adapter_types (tuple[AdapterType, ...] | None): Adapter types to look
+            up for `intrinsic_name`. Required when `intrinsic_name` is a
+            custom, non-catalog adapter function (see `Intrinsic`). Optional
+            for a catalog name, which otherwise supplies its own — but an
+            explicit value here overrides the catalog's, it is not ignored.
 
     Attributes:
         use_aloras (bool): Always `True`; this class always attempts to use
             ALoRA adapters for validation.
+
+    Raises:
+        ValueError: `intrinsic_name` is a custom, non-catalog adapter
+            function and `adapter_types` was not provided.
     """
 
-    def __init__(self, description: str, intrinsic_name: str | None = None):
+    def __init__(
+        self,
+        description: str,
+        intrinsic_name: str | None = None,
+        *,
+        adapter_types: tuple[AdapterType, ...] | None = None,
+    ):
         """Initialize ALoraRequirement with a description and optional intrinsic adapter name."""
         # TODO: We may want to actually do the validation_fn here so that we can set the score.
         super().__init__(
@@ -102,6 +120,7 @@ class ALoraRequirement(Requirement, Intrinsic):
             self,
             intrinsic_name=intrinsic_name,
             intrinsic_kwargs={"requirement": f"{self.description}"},
+            adapter_types=adapter_types,
         )
 
 

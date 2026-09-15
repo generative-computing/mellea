@@ -6,13 +6,12 @@ import gc
 import os
 import subprocess
 import sys
-from urllib.parse import urlsplit
 
 import pytest
 import requests
 
 from mellea.core import MelleaLogger
-from test._ollama_utils import evict_all_loaded_ollama_models
+from test._ollama_utils import evict_all_loaded_ollama_models, resolve_ollama_base_url
 
 # ============================================================================
 # HuggingFace Hub Skip Helper
@@ -63,7 +62,8 @@ def _check_ollama_available():
     """Check if Ollama is available by checking if port 11434 is listening.
 
     Note: This only checks if Ollama is running, not which models are loaded.
-    Tests may still fail if required models (e.g., granite4.1:3b) are not pulled.
+    Tests may still fail if required models (e.g., granite4.2:3b) are
+    not pulled.
     """
     import socket
 
@@ -204,7 +204,7 @@ BACKEND_GROUPS = {
 }
 
 # Execution order when --group-by-backend is used
-BACKEND_GROUP_ORDER = ["huggingface", "openai_vllm", "ollama", "api"]
+BACKEND_GROUP_ORDER = ["huggingface", "ollama", "openai_vllm", "api"]
 
 
 # ============================================================================
@@ -473,6 +473,16 @@ def cleanup_gpu_backend(backend, backend_name="unknown"):
 # Test Collection Filtering
 # ============================================================================
 
+# Transient Ollama-timeout shapes that the flaky retry net covers (matched
+# against `f"{excinfo.type.__name__}: {excinfo.value}"`):
+#   - "ReadTimeout"     native OllamaModelBackend (httpx.ReadTimeout)
+#   - "APITimeoutError" LiteLLM /v1 path (litellm.Timeout message)
+#   - "TimeoutError"    streaming stream-guard abort (stalled-chunk timeout)
+# Deliberately NOT matched: pytest-timeout's watchdog kill — it already spent
+# the attempt's whole time budget, so retrying it just burns the next one.
+# See test/test_flaky_ollama_rerun.py for the pinned match behaviour.
+OLLAMA_TIMEOUT_RERUN_PATTERNS = ["ReadTimeout", "APITimeoutError", "TimeoutError"]
+
 
 def pytest_collection_modifyitems(config, items):
     """Skip tests at collection time based on markers and optionally reorder by backend.
@@ -485,6 +495,7 @@ def pytest_collection_modifyitems(config, items):
     skip_ollama = pytest.mark.skip(
         reason="Ollama not available (port 11434 not listening)"
     )
+    skip_vllm = pytest.mark.skip(reason="vLLM disabled by WITH_VLLM=0")
 
     # Auto-apply 'unit' marker to tests without explicit granularity markers.
     # This enables `pytest -m unit` without per-file maintenance burden.
@@ -497,12 +508,18 @@ def pytest_collection_modifyitems(config, items):
                 item.add_marker(skip_ollama)
             else:
                 # Ollama stalls a request past its read timeout on loaded
-                # runners; retry only that transient error, not real failures.
+                # runners; retry only those transient timeout shapes (see
+                # OLLAMA_TIMEOUT_RERUN_PATTERNS), not real failures.
                 item.add_marker(
                     pytest.mark.flaky(
-                        reruns=2, reruns_delay=5, only_rerun="ReadTimeout"
+                        reruns=2,
+                        reruns_delay=5,
+                        only_rerun=OLLAMA_TIMEOUT_RERUN_PATTERNS,
                     )
                 )
+
+        if os.environ.get("WITH_VLLM") == "0" and item.get_closest_marker("vllm"):
+            item.add_marker(skip_vllm)
 
         # Auto-apply unit marker
         if not any(item.get_closest_marker(m) for m in _NON_UNIT):
@@ -563,7 +580,8 @@ def pytest_runtest_setup(item):
     # Track backend group transitions when --group-by-backend is used
     if config.getoption("--group-by-backend", default=False):
         current_group = None
-        for group_name, group_info in BACKEND_GROUPS.items():
+        for group_name in BACKEND_GROUP_ORDER:
+            group_info = BACKEND_GROUPS[group_name]
             markers = group_info.get("markers") or [group_info["marker"]]
             if any(item.get_closest_marker(m) for m in markers):
                 current_group = group_name
@@ -583,29 +601,26 @@ def pytest_runtest_setup(item):
         # Warm up Ollama models when entering Ollama group
         if current_group == "ollama" and prev_group != "ollama":
             logger = MelleaLogger.get_logger()
-            host_str = os.environ.get("OLLAMA_HOST", "127.0.0.1:11434")
-            parsed_host_str = urlsplit(host_str)
-            if parsed_host_str.port:
-                ollama_base = (
-                    f"http://{host_str}" if not parsed_host_str.scheme else host_str
-                )
-            else:
-                port = os.environ.get("OLLAMA_PORT", "11434")
-                ollama_base = (
-                    f"http://{host_str}:{port}"
-                    if not parsed_host_str.scheme
-                    else host_str
-                )
+            ollama_base = resolve_ollama_base_url()
             logger.info(
                 "Warming up ollama models before ollama group (keep_alive=-1)..."
             )
-            for model in ["granite4.1:3b", "granite3.2-vision"]:
+            # Warm each model at the num_ctx its live tests actually use: a
+            # later request needing a bigger context forces a runner reload,
+            # and Ollama 0.33.1 (x86) can ignore num_predict after one.
+            warmup_models = {
+                "granite4.2:3b": 8192,
+                "granite4:micro-h": 2048,
+                "hf.co/ibm-granite/granite-vision-4.1-4b-GGUF:Q4_K_M": 4096,
+            }
+            for model, num_ctx in warmup_models.items():
                 try:
                     requests.post(
                         f"{ollama_base}/api/generate",
                         json={
                             "model": model,
                             "prompt": "hi",
+                            "options": {"num_ctx": num_ctx, "num_predict": 1},
                             "stream": False,
                             "keep_alive": -1,
                         },
@@ -618,14 +633,13 @@ def pytest_runtest_setup(item):
         # Evict Ollama models when leaving Ollama group
         if prev_group == "ollama" and current_group != "ollama":
             logger = MelleaLogger.get_logger()
-            host_str = os.environ.get("OLLAMA_HOST", "127.0.0.1:11434")
-            if ":" in host_str:
-                ollama_base = f"http://{host_str}"
-            else:
-                port = os.environ.get("OLLAMA_PORT", "11434")
-                ollama_base = f"http://{host_str}:{port}"
+            ollama_base = resolve_ollama_base_url()
             logger.info("Evicting ollama models from VRAM after ollama group...")
-            for model in ["granite4.1:3b", "granite3.2-vision"]:
+            for model in [
+                "granite4.2:3b",
+                "granite4:micro-h",
+                "hf.co/ibm-granite/granite-vision-4.1-4b-GGUF:Q4_K_M",
+            ]:
                 try:
                     requests.post(
                         f"{ollama_base}/api/generate",

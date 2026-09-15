@@ -25,7 +25,7 @@ async def test_astream_returns_incremental_chunks():
     astream() and the return value is sliced to only include new content.
     """
     session = start_session()
-    model_opts = {ModelOption.STREAM: True}
+    model_opts = {ModelOption.STREAM: True, ModelOption.THINKING: False}
 
     mot, _ = await session.backend.generate_from_context(
         CBlock("Count from 1 to 5 slowly."), SimpleContext(), model_options=model_opts

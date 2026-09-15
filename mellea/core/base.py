@@ -25,7 +25,7 @@ import enum
 import logging
 import os
 import threading
-from collections import OrderedDict
+from collections import OrderedDict, deque
 from collections.abc import Callable, Coroutine, Iterable, Mapping
 from copy import copy, deepcopy
 from dataclasses import dataclass, field
@@ -740,6 +740,10 @@ class _CallInfo:
     generation_id: str | None = None
 
 
+# Max chunks buffered per stream before the producer blocks; bounded for memory.
+_STREAM_QUEUE_MAXSIZE = 20
+
+
 @dataclass
 class _GenerationState:
     """In-flight computation machinery for a `ModelOutputThunk`.
@@ -770,12 +774,13 @@ class _GenerationState:
         post_process: Backend coroutine run once after the value is complete.
         on_computed: Coroutine run when the thunk becomes computed.
         start: Wall-clock start time of generation, for latency metrics.
-        last_chunk_time: Wall-clock time the previous streamed chunk was
-            processed, for per-chunk inter-arrival timing. `None` until the
-            first chunk is processed.
+        chunk_intervals: Per-chunk receipt intervals in milliseconds (`None` for
+            the first chunk), captured in `send_to_queue` and drained by `astream`.
     """
 
-    queue: asyncio.Queue = field(default_factory=lambda: asyncio.Queue(maxsize=20))
+    queue: asyncio.Queue = field(
+        default_factory=lambda: asyncio.Queue(maxsize=_STREAM_QUEUE_MAXSIZE)
+    )
     chunk_size: int = 3
     first_chunk_received: bool = False
     processed_chunk_index: int = 0
@@ -787,7 +792,7 @@ class _GenerationState:
     post_process: Callable[[ModelOutputThunk], Coroutine] | None = None
     on_computed: Callable[[ModelOutputThunk], Coroutine] | None = None
     start: datetime.datetime | None = None
-    last_chunk_time: datetime.datetime | None = None
+    chunk_intervals: deque[float | None] = field(default_factory=deque)
 
 
 class ModelOutputThunk(Generic[S]):
@@ -860,12 +865,8 @@ class ModelOutputThunk(Generic[S]):
         return (datetime.datetime.now() - self._gen.start).total_seconds() * 1000
 
     def _record_ttfb(self) -> None:
-        """Record time-to-first-byte if streaming and not yet recorded."""
-        if (
-            self.generation.streaming
-            and not self._gen.first_chunk_received
-            and self._gen.start is not None
-        ):
+        """Record time-to-first-byte if not yet recorded."""
+        if not self._gen.first_chunk_received and self._gen.start is not None:
             self.generation.ttfb_ms = self._elapsed_ms()
             self._gen.first_chunk_received = True
 
@@ -893,7 +894,7 @@ class ModelOutputThunk(Generic[S]):
 
         Draining the internal queue after cancellation is necessary to release
         any `asyncio.Queue.put()` call that the generation task was blocked on
-        (queue maxsize=20).
+        (the queue is bounded).
 
         Args:
             error: Optional cause attached to the `generation_error` hook
@@ -1137,7 +1138,6 @@ class ModelOutputThunk(Generic[S]):
             try:
                 item = self._gen.queue.get_nowait()
                 chunks.append(item)
-                self._record_ttfb()
             except asyncio.QueueEmpty:
                 # We've exhausted the current items in the queue.
                 break
@@ -1153,7 +1153,6 @@ class ModelOutputThunk(Generic[S]):
 
             item = await self._gen.queue.get()
             chunks.append(item)
-            self._record_ttfb()
 
         # Process the sentinel value if it's there.
         if chunks[-1] is None:
@@ -1193,19 +1192,19 @@ class ModelOutputThunk(Generic[S]):
             assert self._gen.process is not None
             prev_len = len(str(self._underlying_value or ""))
             await self._gen.process(self, chunk)
+            # Drain this chunk's receipt interval (from send_to_queue) 1:1 with
+            # processed chunks, even when events are off, to keep it bounded.
+            interval_ms = (
+                self._gen.chunk_intervals.popleft()
+                if self._gen.chunk_intervals
+                else None
+            )
             if emit_chunk_events:
-                now = datetime.datetime.now()
-                time_since_last_chunk_ms = (
-                    (now - self._gen.last_chunk_time).total_seconds() * 1000
-                    if self._gen.last_chunk_time is not None
-                    else None
-                )
-                self._gen.last_chunk_time = now
                 await self._emit_event(
                     "chunk_processed",
                     chunk_index=self._gen.processed_chunk_index,
                     chunk_text_length=len(str(self._underlying_value or "")) - prev_len,
-                    time_since_last_chunk_ms=time_since_last_chunk_ms,
+                    time_since_last_chunk_ms=interval_ms,
                 )
             self._gen.processed_chunk_index += 1
 
@@ -1679,6 +1678,32 @@ class ContextTurn:
 ContextT = TypeVar("ContextT", bound="Context")
 
 
+class ContextTypeMismatchError(TypeError):
+    """Raised when a function returns a different `Context` subtype than it was given.
+
+    Mellea's convention is that the context type flowing out of a function equals
+    the context type flowing in (see issue #1522). This error enforces that
+    invariant. It is raised by the functional layer when a backend or sampling
+    strategy produces a context whose type differs from the input context's type,
+    unless the caller opted in to a deliberate type change via
+    `allow_context_type_change=True`.
+
+    Args:
+        input_type (type): The type of the context passed into the function.
+        output_type (type): The type of the context the function produced.
+    """
+
+    def __init__(self, input_type: type, output_type: type) -> None:
+        """Build the error message from the mismatched input and output context types."""
+        super().__init__(
+            f"Context type changed during generation: input was "
+            f"{input_type.__name__!r} but output is {output_type.__name__!r}. "
+            "Mellea functions must return the same Context subtype they were "
+            "given. If this change is deliberate (e.g. switching the context type "
+            "associated with a session), pass allow_context_type_change=True."
+        )
+
+
 class Context(abc.ABC):
     """A `Context` is used to track the state of a `MelleaSession`.
 
@@ -1691,12 +1716,23 @@ class Context(abc.ABC):
         node_data (Span | None): The data associated with this context node,
             or `None` for the root node.
         is_chat_context (bool): Whether this context operates in chat (multi-turn) mode.
+
+    Class Attributes:
+        _propagated_fields: Instance-attribute names copied from the source node
+            onto every node built by `from_previous()` (and, for `ChatContext`,
+            `_make_root()` / `_rebuild_chat_context()`). Because those factories
+            build via `cls.__new__(cls)` and never re-run `__init__`, a subclass
+            that stores state in its constructor must register the attribute here
+            or it is lost on the next `add()`. Empty on the base `Context`;
+            subclasses override with their own tuple (extend the parent's rather
+            than replacing it, e.g. `(*Context._propagated_fields, "my_field")`).
     """
 
     _previous: Context | None
     _data: Span | None
     _is_root: bool
     _is_chat_context: bool = True
+    _propagated_fields: tuple[str, ...] = ()
 
     def __init__(self) -> None:
         """Constructs a new root context with no content."""
@@ -1710,23 +1746,41 @@ class Context(abc.ABC):
     def from_previous(cls: type[ContextT], previous: Context, data: Span) -> ContextT:
         """Constructs a new context node linked to an existing context node.
 
+        The node is built with `cls.__new__(cls)` and its linked-list fields are
+        set directly, rather than by calling `cls()`. This deliberately does not
+        re-run the subclass `__init__`, so a subclass with required constructor
+        arguments (e.g. `def __init__(self, tag: str)`) still works when `add()`
+        reaches this factory — calling `cls()` would raise `TypeError`. Because
+        `__init__` is skipped, any subclass state that would otherwise be set
+        there must be registered in `_propagated_fields`; every such attribute is
+        copied from `previous` onto the new node here, so subclasses that carry
+        configuration keep it across `add()` without relying on `__init__`
+        re-running.
+
         Args:
             previous (Context): The existing context to extend.
             data (Span): The component, content block, or model output to associate with the new node.
 
         Returns:
             ContextT: A new context instance whose `previous_node` is `previous`.
+
+        Raises:
+            AssertionError: If `previous` is not a `Context`, or if `data` is `None`.
         """
         assert isinstance(previous, Context), (
             "Cannot create a new context from a non-Context object."
         )
         assert data is not None, "Cannot create a new context from None data."
 
-        x = cls()
+        x = cls.__new__(cls)
         x._previous = previous
         x._data = data
         x._is_root = False
         x._is_chat_context = previous._is_chat_context
+        # Skipping `__init__` (above) means subclass-owned state would be lost;
+        # copy every registered field from the source node so it survives.
+        for field_name in cls._propagated_fields:
+            setattr(x, field_name, getattr(previous, field_name))
         return x
 
     @classmethod
@@ -1746,8 +1800,16 @@ class Context(abc.ABC):
         configuration (e.g. `ChatContext` with `model_id` and `window_size`)
         should override this to propagate their config into the fresh instance.
 
+        The base signature returns `Context` (not `Self`) so that existing typed
+        third-party subclasses whose override is annotated `-> Context` — the
+        previous base contract, which the docstring invites — continue to satisfy
+        mypy's override check. Built-in contexts narrow the return to their own
+        type on their concrete overrides (e.g. `ChatContext.new_instance` returns
+        `ChatContext`), preserving subtype inference for callers.
+
         Returns:
-            Context: A freshly initialised root context of the same type.
+            Context: A freshly initialised root context of the same runtime type.
+            Concrete built-in subclasses narrow this to their own type.
         """
         return self.reset_to_new()
 
@@ -1880,11 +1942,20 @@ class Context(abc.ABC):
     def add(self, c: Span) -> Context:
         """Returns a new context obtained by appending `c` to this context.
 
+        The abstract signature returns the base `Context` so that existing typed
+        third-party subclasses whose override is annotated `-> Context` continue
+        to satisfy mypy's override check (changing this to `Self` would be a
+        breaking API change for them). Built-in contexts narrow the return to
+        `Self` on their concrete overrides, so `ChatContext.add(...)` statically
+        yields a `ChatContext` and a subclass yields its own type.
+
         Args:
             c (Span): The component, content block, or model output to add to the context.
 
         Returns:
-            Context: A new context node with `c` as its data and this context as its previous node.
+            Context: A new context node of the same runtime type with `c` as its
+            data and this context as its previous node. Concrete built-in
+            subclasses narrow this to `Self`.
         """
         # something along ....from_previous(self, c)
         ...
@@ -1970,6 +2041,13 @@ class TemplateRepresentation:
         tool_name (str | None): For a `role="tool"` component, the name of the tool
             whose result this message carries (e.g. Ollama's tool-result turn keys on
             it). Defaults to `None`.
+        provider_fields (dict[str, dict[str, Any]] | None): Optional author-declared
+            extra wire fields, keyed by provider target. Each outer key is a provider
+            (matched against the backend's provider string, with the `"openai"`
+            wire-family alias and a `"*"` wildcard); each inner dict holds fields
+            merged into the wire message for that target. Mellea's known fields always
+            win on a key collision. A named target that the request does not hit (and
+            no `"*"`) is a hard error at serialization. Defaults to `None`.
 
     """
 
@@ -1998,6 +2076,7 @@ class TemplateRepresentation:
     tool_calls: list[dict[str, Any]] | None = None
     tool_call_id: str | None = None
     tool_name: str | None = None
+    provider_fields: dict[str, dict[str, Any]] | None = None
 
 
 @dataclass
