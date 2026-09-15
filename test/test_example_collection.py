@@ -7,17 +7,20 @@ These hooks have regressed twice (#794, #796). This test ensures:
 - Support files (__init__.py, helpers.py, conftest.py) are never collected
 - Real examples with markers ARE collected
 - No example is collected twice (duplicate guard)
+- Every notebook is listed in the NOTEBOOKS registry (#89)
 """
 
 import importlib.util
 import pathlib
 import subprocess
 import sys
+import tomllib
 
 import pytest
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 EXAMPLE_CONFTEST_PATH = REPO_ROOT / "docs" / "examples" / "conftest.py"
+NOTEBOOK_DIR = REPO_ROOT / "docs" / "examples" / "notebooks"
 # Keep this fixture capability-gated but free of skip, slow, and qualitative gates.
 DIRECT_EXAMPLE = "docs/examples/tutorial/simple_email.py"
 DIRECT_NODEID = f"{DIRECT_EXAMPLE}::simple_email.py"
@@ -292,3 +295,85 @@ def test_ignore_all_preserves_non_capability_gates(monkeypatch):
         assert should_skip
         assert reason
     assert capability_probes == []
+
+
+def test_notebook_registry_covers_every_notebook():
+    """Verify each notebook on disk has a NOTEBOOKS entry, and no entry is stale."""
+    on_disk = {path.name for path in NOTEBOOK_DIR.glob("*.ipynb")}
+    registered = set(example_conftest.NOTEBOOKS)
+
+    assert on_disk, f"no notebooks found under {NOTEBOOK_DIR}"
+    assert not on_disk - registered, (
+        f"notebooks missing from NOTEBOOKS in {EXAMPLE_CONFTEST_PATH}: "
+        f"{sorted(on_disk - registered)}. Add an entry so the notebook is tested, "
+        "or delete it."
+    )
+    assert not registered - on_disk, (
+        f"stale NOTEBOOKS entries in {EXAMPLE_CONFTEST_PATH}: "
+        f"{sorted(registered - on_disk)}"
+    )
+
+
+def test_notebook_registry_uses_registered_markers():
+    """Verify NOTEBOOKS marker names are declared in pyproject.toml."""
+    with open(REPO_ROOT / "pyproject.toml", "rb") as f:
+        declared_markers = {
+            line.split(":", 1)[0]
+            for line in tomllib.load(f)["tool"]["pytest"]["ini_options"]["markers"]
+        }
+
+    for name, entry in example_conftest.NOTEBOOKS.items():
+        assert entry["markers"], f"{name} has no markers"
+        unknown = set(entry["markers"]) - declared_markers
+        assert not unknown, f"{name} uses undeclared markers: {sorted(unknown)}"
+
+
+def test_unregistered_notebook_is_skipped():
+    """Verify an unlisted notebook is never executed, even with checks disabled."""
+    should_skip, reason = example_conftest._should_skip_notebook(
+        "not_a_real_notebook.ipynb", _Config("--ignore-all-checks")
+    )
+    assert should_skip
+    assert "NOTEBOOKS" in reason
+
+
+def test_notebook_skipped_when_package_missing(monkeypatch):
+    """Verify the registry's `packages` requirement gates a notebook."""
+    monkeypatch.setitem(
+        example_conftest.NOTEBOOKS,
+        "fake.ipynb",
+        {"markers": ["e2e", "ollama"], "packages": ["definitely_not_installed_pkg"]},
+    )
+    should_skip, reason = example_conftest._should_skip_notebook(
+        "fake.ipynb", _Config("--ignore-all-checks")
+    )
+    assert should_skip
+    assert "definitely_not_installed_pkg" in reason
+
+
+def test_notebooks_not_collected_without_nbmake():
+    """Verify notebooks stay out of a plain pytest run (they need --nbmake)."""
+    result = subprocess.run(
+        [
+            "uv",
+            "run",
+            "pytest",
+            "docs/examples/notebooks",
+            "--collect-only",
+            "-q",
+            "--no-cov",
+            "--rootdir=.",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        cwd=REPO_ROOT,
+    )
+
+    # Exit 5 == "no tests collected", which is the expected outcome here.
+    assert result.returncode in (0, 5), (
+        f"unexpected exit {result.returncode}:\n{result.stdout}\n{result.stderr}"
+    )
+    assert ".ipynb::" not in result.stdout, (
+        f"notebooks collected without --nbmake:\n{result.stdout}"
+    )

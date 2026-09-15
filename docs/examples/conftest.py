@@ -1,6 +1,10 @@
 """Allows you to use `pytest docs` to run the examples.
 
-To run notebooks, use: uv run --with 'mcp' pytest --nbmake docs/examples/notebooks/
+Python examples opt in with a `# pytest: <markers>` comment near the top of the file.
+Notebooks opt in through the `NOTEBOOKS` registry below and are only collected when
+`--nbmake` is passed:
+
+    uv run pytest --nbmake docs/examples/notebooks
 """
 
 import ast
@@ -61,6 +65,96 @@ def get_system_capabilities():
 
 
 examples_to_skip: dict[str, str] = {}
+
+# Notebooks under docs/examples/notebooks/ that pytest may execute, and what each one
+# needs. Notebooks are only collected when `--nbmake` is passed; an unlisted notebook is
+# never collected (mirrors the `# pytest:` opt-in for .py examples).
+#
+#   markers:  pytest markers to attach, so `-m ollama` / `-m "not slow"` select correctly
+#             and the capability gates in `_should_skip_collection` apply.
+#   packages: optional imports the notebook needs; the notebook is skipped when missing.
+#
+# Notebooks are deliberately not marked `qualitative` — they assert nothing, they just
+# have to run without raising, and `CICD=1` skips qualitative items.
+#
+# `slow` means over ~2 minutes or a heavyweight download; those run nightly, not on PRs.
+NOTEBOOKS: dict[str, dict[str, list[str]]] = {
+    "compositionality_with_generative_stubs.ipynb": {"markers": ["e2e", "ollama"]},
+    "context_example.ipynb": {"markers": ["e2e", "ollama"]},
+    "example.ipynb": {"markers": ["e2e", "ollama"]},
+    "instruct_validate_repair.ipynb": {"markers": ["e2e", "ollama"]},
+    "m_serve_example.ipynb": {"markers": ["e2e", "ollama"]},
+    "mcp_example.ipynb": {"markers": ["e2e", "ollama"], "packages": ["mcp"]},
+    "model_options_example.ipynb": {"markers": ["e2e", "ollama"]},
+    "sentiment_classifier.ipynb": {"markers": ["e2e", "ollama"]},
+    "table_mobject.ipynb": {"markers": ["e2e", "ollama"]},
+    # Rejection sampling with LLM-validated requirements; blows past nbmake's default
+    # 300s per-cell budget.
+    "simple_email.ipynb": {"markers": ["e2e", "ollama", "slow"]},
+    # Downloads docling model weights plus a PDF from arxiv, then loops over 5 seeds.
+    "document_mobject.ipynb": {
+        "markers": ["e2e", "ollama", "slow"],
+        "packages": ["docling"],
+    },
+    # Two Ollama models, docling weights, and a long multi-step pipeline.
+    "georgia_tech.ipynb": {
+        "markers": ["e2e", "ollama", "slow"],
+        "packages": ["docling"],
+    },
+}
+
+
+def _missing_packages(packages: list[str]) -> list[str]:
+    """Return the subset of `packages` that cannot be imported.
+
+    Mirrors `test.predicates.require_package` for notebooks, which cannot carry
+    decorators.
+    """
+    missing = []
+    for package in packages:
+        try:
+            __import__(package)
+        except ImportError:
+            missing.append(package)
+    return missing
+
+
+def _notebook_name(path) -> str:
+    """Return the registry key (bare filename) for a notebook path or pytest item."""
+    return pathlib.Path(str(path)).name
+
+
+def _is_notebook_item(item) -> bool:
+    """Whether `item` is an nbmake NotebookItem.
+
+    nbmake tags its items with a class attribute rather than exposing the class, so
+    checking that attribute avoids importing nbmake (which is only installed with the
+    test dependencies).
+    """
+    return getattr(item, "nbmake", False) is True
+
+
+def _should_skip_notebook(name: str, config=None) -> tuple[bool, str | None]:
+    """Decide whether a notebook should be skipped, and why.
+
+    Applies the same capability gates as `.py` examples, plus the registry's optional
+    `packages` requirement. Used both at collection time and at runtime (a notebook
+    named directly on the command line bypasses `pytest_ignore_collect`).
+
+    Returns (should_skip, reason) tuple.
+    """
+    entry = NOTEBOOKS.get(name)
+    if entry is None:
+        return (
+            True,
+            "Notebook not listed in NOTEBOOKS registry (docs/examples/conftest.py)",
+        )
+
+    missing = _missing_packages(entry.get("packages", []))
+    if missing:
+        return True, f"missing packages: {', '.join(missing)}"
+
+    return _should_skip_collection(entry["markers"], config)
 
 
 def _extract_markers_from_file(file_path):
@@ -392,6 +486,22 @@ def pytest_ignore_collect(collection_path, config):
     # (pytest may pass relative paths)
     abs_path = collection_path.resolve()
 
+    # Notebooks: registry-driven opt-in plus the usual capability gates. Gated on
+    # --nbmake because this hook fires during directory traversal whether or not
+    # anything would collect the file, and reporting notebook skips in a run that was
+    # never going to execute notebooks is just noise.
+    if collection_path.suffix == ".ipynb" and "notebooks" in abs_path.parts:
+        if not config.getoption("nbmake", False):
+            return True
+        should_skip, reason = _should_skip_notebook(
+            _notebook_name(collection_path), config
+        )
+        if should_skip:
+            if reason:
+                examples_to_skip[str(collection_path)] = reason
+            return True
+        return False
+
     # Only check Python files in docs/examples
     if (
         collection_path.suffix == ".py"
@@ -581,7 +691,19 @@ def pytest_runtest_setup(item):
 
     This ensures examples respect the same capability checks as regular tests
     (RAM, GPU, Ollama, API keys, etc.).
+
+    Notebooks are gated here as well as at collection time: `pytest_ignore_collect` only
+    fires during directory traversal, so a notebook named directly on the command line
+    would otherwise bypass the checks and fail instead of skipping.
     """
+    if _is_notebook_item(item):
+        should_skip, reason = _should_skip_notebook(
+            _notebook_name(item.path), item.config
+        )
+        if should_skip:
+            pytest.skip(reason or "Notebook skipped")
+        return
+
     if not isinstance(item, ExampleItem):
         return
 
@@ -643,13 +765,13 @@ def pytest_runtest_setup(item):
 
 
 def pytest_runtest_teardown(item, nextitem):
-    """Evict Ollama models after each ollama-marked example.
+    """Evict Ollama models after each ollama-marked example or notebook.
 
-    Examples run as subprocesses, so Ollama's default keep_alive keeps
-    models resident after exit. Evict after every example to prevent
-    heavyweight models from starving subsequent examples of memory (#798).
+    Examples run as subprocesses and notebooks run in a Jupyter kernel, so Ollama's
+    default keep_alive keeps models resident after exit. Evict after every one to
+    prevent heavyweight models from starving what follows of memory (#798).
     """
-    if not isinstance(item, ExampleItem):
+    if not (isinstance(item, ExampleItem) or _is_notebook_item(item)):
         return
     if not item.get_closest_marker("ollama"):
         return
@@ -675,8 +797,18 @@ def pytest_collection_modifyitems(items):
         # pytest: marker1, marker2, marker3
 
     This keeps examples clean while allowing intelligent test skipping.
+
+    Notebook items get their markers from the `NOTEBOOKS` registry instead, so that
+    `-m ollama` and the default `-m "not slow"` select them correctly.
     """
     for item in items:
+        if _is_notebook_item(item):
+            entry = NOTEBOOKS.get(_notebook_name(item.path))
+            if entry:
+                for marker_name in entry["markers"]:
+                    item.add_marker(getattr(pytest.mark, marker_name))
+            continue
+
         if isinstance(item, ExampleItem):
             # Read the file and look for comment-based markers
             try:

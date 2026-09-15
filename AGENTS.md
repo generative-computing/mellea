@@ -57,6 +57,8 @@ See **[test/README.md](test/README.md)** for classification rules, authoring gui
 """Example description..."""
 ```
 
+**Notebooks in `docs/examples/notebooks/`** opt in through the `NOTEBOOKS` registry in `docs/examples/conftest.py` (a notebook has nowhere to put a `# pytest:` comment). They are collected only when `--nbmake` is passed: `uv run poe nbtest`. A new notebook without a registry entry is skipped, and `test/test_example_collection.py` fails.
+
 ⚠️ Don't add `qualitative` to trivial tests — keep the fast loop fast.
 ⚠️ Mark tests taking >1 minute with `slow`.
 

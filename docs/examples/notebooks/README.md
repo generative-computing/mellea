@@ -53,6 +53,32 @@ jupyter notebook docs/examples/notebooks/
 jupyter lab docs/examples/notebooks/
 ```
 
+## Testing These Notebooks
+
+CI executes these notebooks so that the Colab onboarding path cannot silently
+break. Locally:
+
+```bash
+uv run poe nbtest                                        # the subset PR CI runs
+uv run pytest --nbmake docs/examples/notebooks -m e2e    # everything, incl. slow
+```
+
+Three things to know before editing or adding one:
+
+- **Every notebook needs an entry in the `NOTEBOOKS` registry** in
+  [`docs/examples/conftest.py`](../conftest.py), which carries its markers and any
+  optional packages it needs. Without an entry the notebook is skipped and a unit
+  test fails. Notebooks are collected only when `--nbmake` is passed.
+- **The Colab setup cells are tagged `skip-execution`** (installing ollama,
+  `uv pip install mellea`), so a test run exercises the working tree rather than
+  the released package. Keep that tag on any new setup cell, and keep such cells
+  free of anything the rest of the notebook depends on.
+- **Prefer the default session model** (`mellea.start_session()`), or a model CI
+  already pulls. Naming another model makes the Ollama backend download it
+  mid-cell, which usually just exhausts the per-cell timeout.
+
+Full detail: [test/README.md → Notebooks](../../../test/README.md#notebooks).
+
 ## Benefits of Notebooks
 
 - **Interactive Learning**: Experiment with code in real-time
