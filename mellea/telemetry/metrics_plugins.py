@@ -601,6 +601,42 @@ class AdapterFunctionMetricsPlugin(
         )
 
 
+class TokenIdRetentionMetricsPlugin(
+    Plugin, name="token_id_retention_metrics", priority=1058
+):
+    """Records client-side token-id reuse from generation outputs.
+
+    Hooks into `generation_post_call` and reads
+    `GenerationMetadata.token_id_retention`, which only a backend that retains token
+    ids populates. Turns that did not go through such a path record nothing, so the
+    metric's cardinality is bounded by actual usage of the feature.
+    """
+
+    @hook("generation_post_call", mode=PluginMode.FIRE_AND_FORGET)
+    async def record_token_id_retention_metrics(
+        self, payload: GenerationPostCallPayload, context: dict[str, Any]
+    ) -> None:
+        """Record one turn's token-id reuse after generation completes.
+
+        Args:
+            payload: Contains the model_output whose `generation.token_id_retention`
+                carries the reuse counts, or `None` on a turn that did not retain.
+            context: Plugin context (unused).
+        """
+        from mellea.telemetry.metrics import record_token_id_retention
+
+        gen = payload.model_output.generation
+        retention = gen.token_id_retention
+        if not isinstance(retention, dict):
+            return
+
+        record_token_id_retention(
+            reused_prompt_tokens=retention.get("reused_prompt_tokens", 0),
+            model=gen.model or "unknown",
+            provider=gen.provider or "unknown",
+        )
+
+
 # All metrics plugins to auto-register when metrics are enabled
 _METRICS_PLUGIN_CLASSES = (
     TokenMetricsPlugin,
@@ -611,4 +647,5 @@ _METRICS_PLUGIN_CLASSES = (
     RequirementMetricsPlugin,
     ToolMetricsPlugin,
     AdapterFunctionMetricsPlugin,
+    TokenIdRetentionMetricsPlugin,
 )

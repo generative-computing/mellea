@@ -664,6 +664,7 @@ class GenerationMetadata:
         response_id: Provider-assigned identifier for the response.
         logits: Per-token processed logit scores (post-LogitsProcessor); None if not requested or unavailable.
         raw_logits: Per-token raw LM-head logits (pre-LogitsProcessor); None if not requested or unavailable.
+        token_id_retention: Client-side token-id reuse for this turn; None when the turn did not go through an id-retaining path.
     """
 
     usage: dict[str, Any] | None = None
@@ -740,6 +741,22 @@ class GenerationMetadata:
     1-D tensors of shape `(vocab_size,)`, one per generated token. `None` if not
     requested, if the backend does not support raw logits, or when
     `ModelOption.STREAM=True`.
+    """
+
+    token_id_retention: dict[str, Any] | None = None
+    """How much of this turn's prompt was sent as token ids the server had already seen.
+
+    Populated only by a backend that retains token ids (see
+    `ChatContext(retain_token_ids=True)`); `None` on every other turn, including a
+    retaining turn that fell back to a chat send.
+
+    Keys: `reused_prompt_tokens` (ids spliced from the retained prefix),
+    `new_prompt_tokens` (ids derived for this turn), `prompt_tokens` (the two summed,
+    the length actually sent).
+
+    This is a CLIENT-side measurement of what Mellea sent, not evidence that the
+    server's prefix cache hit: whether the server reused those blocks is only visible
+    in its own cache counters.
     """
 
 

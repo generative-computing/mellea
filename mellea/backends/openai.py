@@ -1357,6 +1357,13 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         # --- wire up ModelOutputThunk with intrinsic post-processing ------
         output = ModelOutputThunk(None)
         output._gen.start = datetime.datetime.now()
+        # Client-side retention for the intrinsic transport, same meaning as on the chat
+        # path: what Mellea sent, not a claim about the server's cache. Left `None` when
+        # the turn went out as chat messages, so a reader can tell reuse from fallback.
+        if reuse_prompt_ids is not None and isinstance(ctx, ChatContext):
+            output.generation.token_id_retention = self._retention_stats(
+                reuse_prompt_ids, ctx.sent_token_ids
+            )
         output._call.context = linearized_context
         output._call.action = action
         output._call.model_options = model_options
@@ -2233,6 +2240,37 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 break
         return sequence + list(terminator[overlap:])
 
+    @staticmethod
+    def _retention_stats(
+        prompt_ids: list[int], sent_token_ids: tuple[int, ...]
+    ) -> dict[str, int]:
+        """Return how much of `prompt_ids` came from ids the server had already seen.
+
+        Measured from the prompt actually built rather than from a flag, so the
+        re-baseline case reports honestly: when the control-token ceiling forced the
+        retained prefix to be dropped, `prompt_ids` no longer starts with the retained
+        ids and `reused_prompt_tokens` is 0.
+
+        Args:
+            prompt_ids (list[int]): The ids about to be sent.
+            sent_token_ids (tuple[int, ...]): Ids the context says the server has seen.
+
+        Returns:
+            dict[str, int]: `reused_prompt_tokens`, `new_prompt_tokens`, and
+                `prompt_tokens` (their sum, i.e. what is being sent).
+        """
+        reused = (
+            len(sent_token_ids)
+            if sent_token_ids
+            and prompt_ids[: len(sent_token_ids)] == list(sent_token_ids)
+            else 0
+        )
+        return {
+            "reused_prompt_tokens": reused,
+            "new_prompt_tokens": len(prompt_ids) - reused,
+            "prompt_tokens": len(prompt_ids),
+        }
+
     async def _generate_via_token_ids(
         self,
         ctx: ChatContext,
@@ -2388,6 +2426,11 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         )
         output = results[0]
         output._gen.start = gen_start
+        # Client-side retention, for a caller with no access to the server's cache
+        # counters. Says what Mellea sent, never that the server's cache hit.
+        output.generation.token_id_retention = self._retention_stats(
+            prompt_ids, ctx.sent_token_ids
+        )
 
         # `_generate_from_raw` builds a thunk shaped for batch use; repair three things
         # for a chat turn.

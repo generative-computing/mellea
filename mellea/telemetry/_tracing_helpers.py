@@ -161,6 +161,16 @@ def set_mellea_attrs(span: Any, mot: Any) -> None:
     ctx = getattr(call, "context", None)
     span.set_attribute("mellea.request.context_size", len(ctx) if ctx else 0)
 
+    # Client-side token-id retention, absent on every turn that did not reuse ids, so
+    # the attribute's presence is itself the signal. Deliberately not named
+    # `*.cache_hit`: this is what Mellea sent, not what the server reused.
+    retention = getattr(getattr(mot, "generation", None), "token_id_retention", None)
+    if isinstance(retention, dict):
+        for key in ("reused_prompt_tokens", "new_prompt_tokens", "prompt_tokens"):
+            value = retention.get(key)
+            if value is not None:
+                span.set_attribute(f"mellea.token_id_retention.{key}", value)
+
 
 def set_conversation_id(span: Any) -> None:
     """Emit `gen_ai.conversation.id` from the current telemetry context, if set."""

@@ -64,6 +64,7 @@ Built-in metrics (auto-recorded via plugins when metrics are enabled):
 - Sampling counters: mellea.sampling.attempts, mellea.sampling.successes, mellea.sampling.failures (unit: {attempt}/{sample}/{failure})
 - Requirement counters: mellea.requirement.checks (unit: {check}), mellea.requirement.failures (unit: {failure})
 - Tool counter: mellea.tool.calls (unit: {call}), tagged by tool name and status
+- Token-id retention: mellea.token_id_retention.turns (unit: {turn}, tagged reused=true/false), mellea.token_id_retention.reused_prompt_tokens (unit: {token}) -- client-side id reuse, not a server cache hit
 
 Programmatic usage:
     from mellea.telemetry.metrics import create_counter, create_histogram
@@ -1292,6 +1293,73 @@ def record_adapter_function_parse_failure(name: str, revision: str | None) -> No
     )
 
 
+_token_id_retention_counter: Any = None
+_token_id_reused_prompt_tokens_histogram: Any = None
+
+
+def _get_token_id_retention_counter() -> Any:
+    """Get or create the token-id retention counter (internal use only)."""
+    global _token_id_retention_counter
+
+    if _token_id_retention_counter is None:
+        _token_id_retention_counter = create_counter(
+            "mellea.token_id_retention.turns",
+            description=(
+                "Turns sent as token ids, split by whether a retained prefix was reused"
+            ),
+            unit="{turn}",
+        )
+    return _token_id_retention_counter
+
+
+def _get_token_id_reused_prompt_tokens_histogram() -> Any:
+    """Get or create the reused-prefix-size histogram (internal use only)."""
+    global _token_id_reused_prompt_tokens_histogram
+
+    if _token_id_reused_prompt_tokens_histogram is None:
+        _token_id_reused_prompt_tokens_histogram = create_histogram(
+            "mellea.token_id_retention.reused_prompt_tokens",
+            description="Prompt ids reused from a retained prefix, per turn",
+            unit="{token}",
+        )
+    return _token_id_reused_prompt_tokens_histogram
+
+
+def record_token_id_retention(
+    reused_prompt_tokens: int, model: str, provider: str
+) -> None:
+    """Record one turn's client-side token-id reuse.
+
+    Reports what the client sent, not whether the server's prefix cache hit: a caller
+    without access to the server's cache counters can still see that Mellea reused ids
+    and how many. This is a no-op when metrics are disabled.
+
+    Args:
+        reused_prompt_tokens: Prompt ids spliced from the retained prefix. `0` means the
+            turn was sent as ids but built no reuse (a first turn, or a re-baseline).
+        model: Requested model identifier.
+        provider: Provider name.
+    """
+    if _meter is None:
+        return
+
+    _get_token_id_retention_counter().add(
+        1,
+        {
+            "model": model,
+            "provider": provider,
+            "reused": "true" if reused_prompt_tokens > 0 else "false",
+        },
+    )
+    # `prompt_tokens` is deliberately not an attribute: it varies per request, so it
+    # would add one time series per distinct prompt length. The per-turn pairing of
+    # reused-to-total lives on the generation span instead
+    # (`mellea.token_id_retention.*` in `_tracing_helpers.py`).
+    _get_token_id_reused_prompt_tokens_histogram().record(
+        reused_prompt_tokens, {"model": model, "provider": provider}
+    )
+
+
 __all__ = [
     "classify_error",
     "create_counter",
@@ -1308,6 +1376,7 @@ __all__ = [
     "record_requirement_failure",
     "record_sampling_attempt",
     "record_sampling_outcome",
+    "record_token_id_retention",
     "record_token_usage_metrics",
     "record_tool_call",
     "record_ttfb",
