@@ -57,6 +57,23 @@ _MODEL = os.environ.get(
 )
 
 
+_ADAPTER_SOURCE = os.environ.get("VLLM_TEST_ADAPTER_SOURCE")
+
+# Adapter discovery is CLIENT-side: it reads `adapter_index.json` and `io_configs/` to
+# map adapter names to control-token ids. When the served model name is a path inside the
+# server's container (a locally-served checkpoint), the client cannot read it and falls
+# back to treating it as a Hub repo id, which raises `HFValidationError` on any path with
+# more than one "/". Skip rather than fail: the rest of the suite is still meaningful.
+requires_adapter_source = pytest.mark.skipif(
+    _ADAPTER_SOURCE is None,
+    reason=(
+        "set VLLM_TEST_ADAPTER_SOURCE to a local directory holding the served "
+        "checkpoint's adapter metadata (adapter_index.json, io_configs/, config.json; "
+        "no weights needed) to run the adapter cases"
+    ),
+)
+
+
 @pytest.fixture(scope="module")
 def backend() -> OpenAIBackend:
     """A backend pointed at the live server, with adapter metadata resolvable locally.
@@ -74,7 +91,7 @@ def backend() -> OpenAIBackend:
     base_url = os.environ["VLLM_TEST_BASE_URL"].rstrip("/")
     if not base_url.endswith("/v1"):
         base_url += "/v1"
-    adapter_source = os.environ.get("VLLM_TEST_ADAPTER_SOURCE")
+    adapter_source = _ADAPTER_SOURCE
     return OpenAIBackend(
         model_id=_MODEL,
         formatter=TemplateFormatter(model_id=_MODEL),
@@ -117,6 +134,7 @@ def test_chat_to_chat_reuses_exact_prefix(session: MelleaSession) -> None:
     assert _chat_ctx(session).sent_message_count > prev_count
 
 
+@requires_adapter_source
 def test_intrinsic_reuses_but_does_not_commit(
     session: MelleaSession, backend: OpenAIBackend
 ) -> None:
@@ -443,6 +461,7 @@ def test_documents_turn_reuses_its_prefix_and_hits_the_cache(
         session.reset()
 
 
+@requires_adapter_source
 def test_adapter_to_base_transition_keeps_the_retained_prefix(
     session: MelleaSession, backend: OpenAIBackend
 ) -> None:
@@ -487,6 +506,7 @@ def test_adapter_to_base_transition_keeps_the_retained_prefix(
     assert _chat_ctx(session).sent_token_ids == after_base
 
 
+@requires_adapter_source
 def test_adapter_to_base_transition_hits_the_server_prefix_cache(
     backend: OpenAIBackend,
 ) -> None:
