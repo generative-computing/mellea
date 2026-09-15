@@ -25,11 +25,22 @@ from mellea.backends.openai import OpenAIBackend
 from mellea.backends.tools import MelleaTool
 from mellea.formatters import TemplateFormatter
 from mellea.stdlib.context import ChatContext
+from test.predicates import require_gpu
 
 pytestmark = [
     pytest.mark.openai,
     pytest.mark.e2e,
     pytest.mark.vllm,
+    # Same gate as `test_openai_intrinsics.py`, which serves the same
+    # `granite-switch-4.1-3b-preview` over vLLM. The endpoint is remote here, so the
+    # `VLLM_TEST_BASE_URL` skip below is what actually decides whether these run; this
+    # keeps the resource declaration consistent with the rest of the vLLM suite for a
+    # runner that serves the model itself.
+    require_gpu(min_vram_gb=12),
+    pytest.mark.skipif(
+        int(os.environ.get("CICD", 0)) == 1,
+        reason="needs a vLLM endpoint that CI does not provide",
+    ),
     pytest.mark.skipif(
         not os.environ.get("VLLM_TEST_BASE_URL"),
         reason="set VLLM_TEST_BASE_URL to a live vLLM >= 0.10.2 endpoint",
