@@ -1,6 +1,7 @@
 # Copyright IBM Corp. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+import asyncio
 import contextvars
 import gc
 import multiprocessing
@@ -24,6 +25,47 @@ def test_run_async_in_thread():
         return True
 
     assert elh._run_async_in_thread(testing()), "somehow the wrong value was returned"
+
+
+def test_schedule_async_in_thread_returns_before_the_coroutine_finishes():
+    """The scheduling variant hands work to the loop without waiting on it."""
+    release = threading.Event()
+    finished = threading.Event()
+
+    async def work() -> str:
+        await asyncio.to_thread(release.wait, 5.0)
+        finished.set()
+        return "done"
+
+    future = elh._schedule_async_in_thread(work())
+    assert not finished.is_set(), "scheduling should not have waited for the coroutine"
+
+    release.set()
+    assert future.result(timeout=5.0) == "done"
+    assert finished.is_set()
+
+
+def test_schedule_async_in_thread_closes_coroutine_on_scheduling_failure():
+    """A failure before the coroutine is scheduled must close it, not leak it."""
+    started = False
+
+    async def never_scheduled() -> None:
+        nonlocal started
+        started = True
+
+    co = never_scheduled()
+
+    with pytest.raises(RuntimeError, match="boom"):
+        with mock.patch.object(
+            elh._EventLoopHandler, "_reinit_if_forked", side_effect=RuntimeError("boom")
+        ):
+            elh._schedule_async_in_thread(co)
+
+    # Same as the blocking variant: a closed-but-never-started coroutine never runs
+    # its body, and re-sending into it raises rather than warning about a leak.
+    assert started is False
+    with pytest.raises(RuntimeError):
+        co.send(None)
 
 
 def test_run_async_in_thread_propagates_calling_thread_contextvars():

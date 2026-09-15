@@ -65,6 +65,30 @@ from .utils import populate_response_metadata_openai_shape
 format: None = None  # typing this variable in order to shadow the global format function and ensure mypy checks for errors
 
 
+async def _aclose_model_inference(model: ModelInference) -> None:
+    """Release both HTTP clients held by a `ModelInference`, closing its sockets.
+
+    The SDK offers no way to release these. `aclose_persistent_connection()` and its
+    sync twin `close_persistent_connection()` are resets: each closes the httpx client
+    and immediately installs a fresh one in its place, so the connection pool is back a
+    moment later. Neither touches the sync `httpx_client` on the `APIClient` that every
+    `ModelInference` holds. Closing both clients on the `APIClient` directly is the only
+    way to hand the sockets back.
+
+    Args:
+        model: The `ModelInference` being evicted from the client cache.
+    """
+    api_client = getattr(model, "_client", None)
+    if api_client is None:
+        return
+    async_client = getattr(api_client, "async_httpx_client", None)
+    if async_client is not None:
+        await async_client.aclose()
+    sync_client = getattr(api_client, "httpx_client", None)
+    if sync_client is not None:
+        sync_client.close()
+
+
 class WatsonxAIBackend(FormatterBackend):
     """A generic backend class for watsonx SDK.
 
@@ -146,9 +170,7 @@ class WatsonxAIBackend(FormatterBackend):
         self._creds = Credentials(url=base_url, api_key=api_key)
         self._kwargs = kwargs
 
-        self._client_cache: ClientCache = ClientCache(
-            2, aclose=lambda model: model.aclose_persistent_connection()
-        )
+        self._client_cache: ClientCache = ClientCache(2, aclose=_aclose_model_inference)
 
         # Call once to set up the model inference and prepopulate the cache.
         _ = self._model
@@ -221,7 +243,7 @@ class WatsonxAIBackend(FormatterBackend):
         return _model_inference
 
     def close(self) -> None:
-        """Close every cached watsonx `ModelInference`'s persistent connection.
+        """Close the HTTP clients held by every cached watsonx `ModelInference`.
 
         Safe to call more than once; subsequent calls close nothing further.
         """

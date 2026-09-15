@@ -66,20 +66,22 @@ class Backend(abc.ABC):
         """Release any resources this backend holds open (clients, cached connections).
 
         The default implementation is a no-op. Backends that own long-lived
-        clients (e.g. `OllamaBackend`, `OpenAIBackend`) override this to close
-        them; backends without closeable resources can rely on this default.
-        Safe to call more than once.
+        clients (e.g. `OllamaModelBackend`, `OpenAIBackend`) override this to
+        close them; backends without closeable resources can rely on this
+        default. Safe to call more than once.
         """
         return None
 
     async def aclose(self) -> None:
         """Async counterpart to `close`.
 
-        Prefer this over `close` when already inside a running event loop
-        that owns one of the backend's async clients: `close` would need to
-        hop to a different thread to reach it, while this can await it
-        directly. The default implementation is a no-op. Safe to call more
-        than once.
+        Prefer this over `close` when already inside a running event loop that
+        owns one of the backend's async clients: `aclose` awaits that client
+        directly, where `close` can only schedule its closing and return.
+        Neither can reach a client bound to an event loop that has *already*
+        been closed — those connections are released only when the client is
+        garbage collected. The default implementation is a no-op. Safe to call
+        more than once.
         """
         return None
 

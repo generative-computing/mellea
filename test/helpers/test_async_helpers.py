@@ -5,6 +5,7 @@
 
 import asyncio
 import datetime
+import threading
 
 import pytest
 
@@ -323,16 +324,39 @@ class TestClientCache:
 class TestClientCacheClose:
     def test_put_evicts_and_closes_via_callback(self):
         closed = []
+        done = threading.Event()
 
         async def aclose(client):
             closed.append(client)
+            done.set()
 
         cache = ClientCache(capacity=2, aclose=aclose)
         cache.put(1, "a")
         cache.put(2, "b")
         cache.put(3, "c")  # evicts key 1
 
+        assert done.wait(timeout=5.0), "evicted client was never closed"
         assert closed == ["a"]
+
+    def test_put_does_not_wait_for_the_evicted_close(self):
+        """Eviction happens on `generate`'s path; it must not stall the caller."""
+        release = threading.Event()
+        started = threading.Event()
+        finished = threading.Event()
+
+        async def aclose(client):
+            started.set()
+            await asyncio.to_thread(release.wait, 5.0)
+            finished.set()
+
+        cache = ClientCache(capacity=1, aclose=aclose)
+        cache.put(1, "a")
+        cache.put(2, "b")  # evicts "a"
+
+        assert started.wait(timeout=5.0), "evicted client's close was never scheduled"
+        assert not finished.is_set(), "put() waited for the close to finish"
+        release.set()
+        assert finished.wait(timeout=5.0)
 
     def test_put_without_aclose_does_not_error_on_eviction(self):
         cache = ClientCache(capacity=1)
@@ -387,6 +411,61 @@ class TestClientCacheClose:
 
         assert sorted(closed) == ["a", "b"]
         assert cache.current_size() == 0
+
+    async def test_clear_from_inside_the_owning_loop_schedules_the_close(self):
+        """The sync path can't await the running loop's own client, but must not drop it."""
+        closed = []
+        done = asyncio.Event()
+
+        async def aclose(client):
+            closed.append(client)
+            done.set()
+
+        cache = ClientCache(capacity=2, aclose=aclose)
+        cache.put(asyncio.get_running_loop(), "a")
+        cache.clear()
+
+        assert cache.current_size() == 0
+        assert closed == [], "clear() cannot await a client owned by the running loop"
+        await asyncio.wait_for(done.wait(), timeout=5.0)
+        assert closed == ["a"]
+
+    async def test_aclear_closes_an_entry_owned_by_a_foreign_loop(self):
+        """A client on another thread's loop closes there, without blocking this one."""
+        ran_on = []
+
+        async def aclose(client):
+            ran_on.append(asyncio.get_running_loop())
+            await asyncio.sleep(0.2)  # holds the foreign loop, not ours
+
+        foreign_loop = asyncio.new_event_loop()
+        thread = threading.Thread(target=foreign_loop.run_forever, daemon=True)
+        thread.start()
+
+        ticks = 0
+
+        async def tick():
+            nonlocal ticks
+            while True:
+                await asyncio.sleep(0.01)
+                ticks += 1
+
+        try:
+            cache = ClientCache(capacity=2, aclose=aclose)
+            cache.put(foreign_loop, "a")
+
+            ticker = asyncio.create_task(tick())
+            await cache.aclear()
+            ticker.cancel()
+
+            assert ran_on == [foreign_loop]
+            assert cache.current_size() == 0
+            # A blocking wait would have parked this thread before `tick` ever ran.
+            assert ticks > 0, "aclear() blocked its own event loop while closing"
+        finally:
+            foreign_loop.call_soon_threadsafe(foreign_loop.stop)
+            thread.join(timeout=5.0)
+            foreign_loop.close()
 
 
 if __name__ == "__main__":

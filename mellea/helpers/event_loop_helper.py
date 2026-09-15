@@ -4,6 +4,7 @@
 """Helper for event loop management. Allows consistently running async generate requests in sync code."""
 
 import asyncio
+import concurrent.futures
 import contextvars
 import os
 import threading
@@ -111,6 +112,41 @@ class _EventLoopHandler:
         except Exception:
             pass
 
+    def submit(self, co: Coroutine[Any, Any, R]) -> concurrent.futures.Future[R]:
+        """Schedule the coroutine on the event loop without waiting for its result.
+
+        The non-blocking counterpart to `__call__`. Safe to call from the loop's own
+        thread precisely because it never blocks on the returned future — doing so
+        from inside the loop would deadlock.
+
+        Contextvars are deliberately not propagated: the caller does not wait for the
+        coroutine, so its snapshot of the calling context may be stale by the time the
+        coroutine runs. Use `__call__` when the coroutine needs the caller's context.
+
+        Args:
+            co: coroutine to schedule.
+
+        Returns:
+            A future for the scheduled coroutine. Callers that never inspect it get
+            fire-and-forget semantics; the coroutine's exceptions are stored on the
+            future rather than raised here.
+
+        Raises:
+            RuntimeError: If the coroutine could not be scheduled, e.g. the loop has
+                already been closed. `co` is closed first, so it does not additionally
+                emit a "coroutine was never awaited" warning.
+        """
+        try:
+            self._reinit_if_forked()
+            return asyncio.run_coroutine_threadsafe(co, self._event_loop)
+        except Exception:
+            # `run_coroutine_threadsafe` only wraps `co` in a task from inside the
+            # callback it hands to the loop, so a raise here means `co` never started
+            # and closing it is a clean no-op. `Exception`, not `BaseException`, for
+            # the same reason as `__call__`: see its docstring.
+            co.close()
+            raise
+
     def __call__(self, co: Coroutine[Any, Any, R]) -> R:
         """Run the coroutine in the event loop, propagating the calling thread's contextvars.
 
@@ -205,4 +241,28 @@ def _run_async_in_thread(co: Coroutine[Any, Any, R]) -> R:
     return __event_loop_handler(co)
 
 
-__all__ = ["_run_async_in_thread"]
+def _schedule_async_in_thread(
+    co: Coroutine[Any, Any, R],
+) -> concurrent.futures.Future[R]:
+    """Schedule async code on Mellea's event loop without waiting for it to finish.
+
+    The non-blocking counterpart to `_run_async_in_thread`, for work whose result the
+    caller does not need — releasing a client that has just been evicted from a cache,
+    for instance. Blocking there would stall whatever loop the caller is running on,
+    and the wait can be unbounded when Mellea's loop is busy with a generate call.
+
+    Args:
+        co: coroutine to schedule
+
+    Returns:
+        A future for the scheduled coroutine, which callers may ignore. Exceptions
+        raised by `co` are stored on the future instead of surfacing anywhere.
+
+    Raises:
+        RuntimeError: If the coroutine could not be scheduled at all, e.g. Mellea's
+            event loop has already been shut down.
+    """
+    return __event_loop_handler.submit(co)
+
+
+__all__ = ["_run_async_in_thread", "_schedule_async_in_thread"]

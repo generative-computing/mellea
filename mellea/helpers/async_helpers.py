@@ -7,9 +7,10 @@ Provides `send_to_queue`, which feeds a backend response coroutine or async iter
 into an `asyncio.Queue` (including sentinel and error forwarding); `wait_for_all_mots`,
 which gathers multiple `ModelOutputThunk` computations in a single `asyncio.gather`
 call; `get_current_event_loop`, a safe wrapper that returns `None` instead of
-raising when no event loop is running; and `close_client_for_loop` /
-`aclose_client_for_loop`, which close a loop-bound async client on the loop that owns
-it. These utilities are used internally by backends that operate in async contexts.
+raising when no event loop is running; and `ClientCache`, an LRU cache of loop-bound
+async clients that closes each entry on the loop that owns it when the entry is
+evicted or cleared. These utilities are used internally by backends that operate in
+async contexts.
 """
 
 from __future__ import annotations
@@ -177,10 +178,41 @@ def get_current_event_loop() -> None | asyncio.AbstractEventLoop:
     return loop
 
 
-def close_client_for_loop(
+_pending_closes: set[asyncio.Task] = set()
+"""Strong references to in-flight fire-and-forget close tasks.
+
+A task scheduled on a loop nobody awaits is only weakly referenced by that loop, so
+without this it can be garbage collected mid-close.
+"""
+
+
+def _log_close_failure(client: Any, future: Any) -> None:
+    """Log, at debug, an exception left on a completed fire-and-forget close.
+
+    Args:
+        client: The client whose close was scheduled, used for the message.
+        future: The finished future or task to inspect. A cancelled one is ignored.
+    """
+    from ..core import MelleaLogger
+
+    try:
+        if future.cancelled():
+            return
+        exc = future.exception()
+    except Exception:  # pragma: no cover - defensive; e.g. a foreign future type
+        return
+    if exc is not None:
+        MelleaLogger.get_logger().debug(
+            f"Failed to close {type(client).__name__}: {exc}"
+        )
+
+
+def _close_client_for_loop(
     client: Any,
     loop: asyncio.AbstractEventLoop | None,
     aclose: Callable[[Any], Coroutine[Any, Any, None]],
+    *,
+    wait: bool = True,
 ) -> None:
     """Close an async client from synchronous code, on whichever loop owns it.
 
@@ -188,84 +220,130 @@ def close_client_for_loop(
     them, so `aclose()` has to run on that same loop. Which loop it is decides
     what is possible here:
 
-    - `loop` is `None` (client never used, so never bound): run the coroutine on
-      Mellea's own background loop.
-    - `loop` is running on another thread: schedule it there and wait up to
-      `CLIENT_CLOSE_TIMEOUT`.
-    - `loop` exists but was never started: drive it with `run_until_complete`.
+    - `loop` is `None` (client created outside any loop, so driven by Mellea's own
+      background loop): close it there.
+    - `loop` is the loop this call is running inside: the close is scheduled on it as
+      a task. Blocking on it from here would deadlock, so `wait` cannot be honoured.
+    - `loop` is running on another thread: schedule it there, waiting up to
+      `CLIENT_CLOSE_TIMEOUT` only if `wait`.
+    - `loop` exists but is not running: drive it with `run_until_complete`. This
+      blocks even when `wait` is false — a stopped loop has no thread to hand the
+      work to — but a client close does no network I/O, so it returns promptly.
     - `loop` is already closed: nothing can await on it, so the client's sockets
-      cannot be reclaimed. Logged at debug and skipped.
+      cannot be reclaimed by this or any other path. Logged at debug and skipped;
+      the operating system gets them back when the client is garbage collected.
 
     Never raises — cleanup runs on teardown paths where a failure to close is not
     worth masking the caller's own outcome.
 
     Args:
         client: The async client to close.
-        loop: The event loop the client is bound to, or `None` if it was never used.
+        loop: The event loop the client is bound to, or `None` if it was created
+            outside of one.
         aclose: Callable returning the coroutine that closes `client`, e.g.
             `lambda c: c.aclose()`.
+        wait: Whether to block until the close finishes. Pass `False` from paths that
+            run on a caller's event loop — an eviction during `generate`, say — where
+            a stalled loop matters more than knowing the client is fully closed.
     """
     from ..core import MelleaLogger
-    from .event_loop_helper import _run_async_in_thread
+    from .event_loop_helper import _run_async_in_thread, _schedule_async_in_thread
 
     logger = MelleaLogger.get_logger()
     try:
         if loop is None:
-            _run_async_in_thread(aclose(client))
+            if wait:
+                _run_async_in_thread(aclose(client))
+            else:
+                _schedule_async_in_thread(aclose(client)).add_done_callback(
+                    lambda f: _log_close_failure(client, f)
+                )
         elif loop.is_closed():
             logger.debug(
                 f"Cannot close {type(client).__name__}: the event loop it was bound "
-                "to is already closed, so its connections cannot be reclaimed."
+                "to is already closed, so its connections cannot be reclaimed until "
+                "the client is garbage collected."
             )
         elif loop.is_running():
             if loop is get_current_event_loop():
-                # Blocking on the running loop from inside it would deadlock.
-                logger.debug(
-                    f"Cannot close {type(client).__name__} synchronously from inside "
-                    "its own event loop; use the async close path instead."
-                )
+                # Blocking on the running loop from inside it would deadlock, so the
+                # close is scheduled on it instead of being dropped.
+                task = loop.create_task(aclose(client))
+                _pending_closes.add(task)
+                task.add_done_callback(_pending_closes.discard)
+                task.add_done_callback(lambda f: _log_close_failure(client, f))
             else:
-                asyncio.run_coroutine_threadsafe(aclose(client), loop).result(
-                    CLIENT_CLOSE_TIMEOUT
-                )
+                future = asyncio.run_coroutine_threadsafe(aclose(client), loop)
+                if wait:
+                    future.result(CLIENT_CLOSE_TIMEOUT)
+                else:
+                    future.add_done_callback(lambda f: _log_close_failure(client, f))
         else:
             loop.run_until_complete(aclose(client))
     except Exception as e:
         logger.debug(f"Failed to close {type(client).__name__}: {e}")
 
 
-async def aclose_client_for_loop(
+async def _aclose_client_for_loop(
     client: Any,
     loop: asyncio.AbstractEventLoop | None,
     aclose: Callable[[Any], Coroutine[Any, Any, None]],
 ) -> None:
     """Close an async client from async code, on whichever loop owns it.
 
-    The async counterpart to `close_client_for_loop`. When `client` is bound to the
-    running loop it is awaited directly — the one case the synchronous helper cannot
-    handle, since blocking on the current loop from inside it would deadlock. Any
-    other loop is delegated to `close_client_for_loop`.
+    The async counterpart to `_close_client_for_loop`. It waits for the close in every
+    case the synchronous helper has to either block a thread or give up on:
 
-    Never raises, for the same reason `close_client_for_loop` doesn't.
+    - `client` is bound to the running loop: awaited directly. The synchronous helper
+      can only schedule this one, since blocking on the current loop would deadlock.
+    - `client` is bound to another running loop, or to Mellea's background loop
+      (`loop` is `None`): scheduled there and awaited through a wrapped future, so
+      this coroutine's own loop keeps running while the close proceeds.
+
+    A client bound to an **already-closed** loop is the one case nothing can fix: with
+    no loop left to await on, its sockets are reclaimed only when it is garbage
+    collected. That is logged at debug and skipped, exactly as in the sync path.
+
+    Never raises, for the same reason `_close_client_for_loop` doesn't.
 
     Args:
         client: The async client to close.
-        loop: The event loop the client is bound to, or `None` if it was never used.
+        loop: The event loop the client is bound to, or `None` if it was created
+            outside of one.
         aclose: Callable returning the coroutine that closes `client`, e.g.
             `lambda c: c.aclose()`.
     """
-    current = get_current_event_loop()
-    if loop is not None and loop is current:
-        from ..core import MelleaLogger
+    from ..core import MelleaLogger
+    from .event_loop_helper import _schedule_async_in_thread
 
-        try:
-            await aclose(client)
-        except Exception as e:
-            MelleaLogger.get_logger().debug(
-                f"Failed to close {type(client).__name__}: {e}"
+    logger = MelleaLogger.get_logger()
+    try:
+        if loop is None:
+            await asyncio.wait_for(
+                asyncio.wrap_future(_schedule_async_in_thread(aclose(client))),
+                CLIENT_CLOSE_TIMEOUT,
             )
-        return
-    close_client_for_loop(client, loop, aclose)
+        elif loop.is_closed():
+            logger.debug(
+                f"Cannot close {type(client).__name__}: the event loop it was bound "
+                "to is already closed, so its connections cannot be reclaimed until "
+                "the client is garbage collected."
+            )
+        elif loop is get_current_event_loop():
+            await aclose(client)
+        elif loop.is_running():
+            await asyncio.wait_for(
+                asyncio.wrap_future(
+                    asyncio.run_coroutine_threadsafe(aclose(client), loop)
+                ),
+                CLIENT_CLOSE_TIMEOUT,
+            )
+        else:
+            # A loop that is neither running nor closed has no thread to schedule on;
+            # only `run_until_complete` can drive it.
+            _close_client_for_loop(client, loop, aclose)
+    except Exception as e:
+        logger.debug(f"Failed to close {type(client).__name__}: {e}")
 
 
 class ClientCache:
@@ -281,9 +359,9 @@ class ClientCache:
         capacity (int): Maximum number of entries to hold before evicting the least recently used.
         aclose (Callable[[Any], Coroutine[Any, Any, None]] | None): Optional callable
             returning the coroutine that closes a cached client, e.g.
-            `lambda c: c.aclose()`. When set, it is invoked on eviction and by
-            `clear()`; without it, evicted clients keep their connections open until
-            garbage collection.
+            `lambda c: c.aclose()`. When set, it is scheduled on eviction and awaited
+            by `clear()`/`aclear()`; without it, evicted clients keep their
+            connections open until garbage collection.
 
     Attributes:
         cache (OrderedDict): Ordered dictionary storing cached key-value pairs in LRU
@@ -329,6 +407,10 @@ class ClientCache:
     def put(self, key: Hashable, value: Any) -> None:
         """Put a value into the cache, closing the evicted entry if one is displaced.
 
+        The evicted client's close is *scheduled* on the loop that owns it rather than
+        awaited: entries are added during `generate`, so blocking here would stall the
+        caller's event loop for as long as the close took.
+
         Args:
             key: Cache key; the event loop the client is bound to, or `None`.
             value: Value to store.
@@ -339,7 +421,7 @@ class ClientCache:
         elif len(self.cache) >= self.capacity:
             # If the cache is full, remove the least recently used item
             evicted_key, evicted_value = self.cache.popitem(last=False)
-            self._close_entry(evicted_key, evicted_value)
+            self._close_entry(evicted_key, evicted_value, wait=False)
         # Add the new key-value pair to the end (most recent)
         self.cache[key] = value
 
@@ -348,6 +430,10 @@ class ClientCache:
 
         Entries are dropped from the cache before being closed, so a failure to close
         one client cannot leave a stale entry behind.
+
+        Called from inside a running event loop, an entry owned by *that* loop can only
+        be scheduled for closing, not awaited — use `aclear()` there to be sure the
+        client is closed before this returns.
         """
         entries = list(self.cache.items())
         self.cache.clear()
@@ -357,27 +443,33 @@ class ClientCache:
     async def aclear(self) -> None:
         """Close every cached client and empty the cache, from async code.
 
-        The async counterpart to `clear()`. Prefer this when a running event loop owns
-        one of the cached clients: that client is awaited directly, which `clear()`
-        cannot do without deadlocking on its own loop.
+        The async counterpart to `clear()`. Prefer this when the running event loop owns
+        one of the cached clients: that client is awaited directly, which `clear()` can
+        only schedule, since blocking on its own loop would deadlock.
+
+        A client bound to a loop that is already closed cannot be closed here either —
+        there is no loop left to await on. Those entries are dropped and logged at
+        debug; their sockets come back on garbage collection.
         """
         entries = list(self.cache.items())
         self.cache.clear()
         if self.aclose is None:
             return
         for key, value in entries:
-            await aclose_client_for_loop(value, self._loop_of(key), self.aclose)
+            await _aclose_client_for_loop(value, self._loop_of(key), self.aclose)
 
-    def _close_entry(self, key: Hashable, value: Any) -> None:
+    def _close_entry(self, key: Hashable, value: Any, *, wait: bool = True) -> None:
         """Close a single evicted or cleared entry, if a close callback is configured.
 
         Args:
             key: The entry's cache key.
             value: The client that was stored under `key`.
+            wait: Whether to block until the client is closed. `False` on eviction,
+                which can happen on a caller's event loop.
         """
         if self.aclose is None:
             return
-        close_client_for_loop(value, self._loop_of(key), self.aclose)
+        _close_client_for_loop(value, self._loop_of(key), self.aclose, wait=wait)
 
     @staticmethod
     def _loop_of(key: Hashable) -> asyncio.AbstractEventLoop | None:
