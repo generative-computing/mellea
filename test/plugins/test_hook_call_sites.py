@@ -1677,6 +1677,7 @@ class TestSOFAIHookCallSites:
         )
 
         assert len(observed) == 3
+        assert observed[-1].iteration == 3
 
     async def test_s1_repair_fires_not_after_last_s1_attempt(self) -> None:
         """SOFAI emits one S1 repair between two failed S1 attempts."""
