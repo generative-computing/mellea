@@ -3,11 +3,11 @@
 
 """Tests for GroundednessRequirement."""
 
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from mellea.backends.huggingface import LocalHFBackend
 from mellea.core.base import ModelOutputThunk
 from mellea.stdlib.components import Document, Message
 from mellea.stdlib.context import ChatContext
@@ -19,6 +19,11 @@ from test.predicates import require_gpu
 @pytest.fixture
 def backend():
     """Provide HuggingFace backend for tests."""
+    try:
+        from mellea.backends.huggingface import LocalHFBackend
+    except ImportError as exc:
+        pytest.skip(str(exc))
+
     with hf_skip():
         return LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
 
@@ -435,6 +440,42 @@ def test_build_batch_support_prompt(sample_docs):
     assert "The sky is blue" in prompt
     assert "Grass is green" in prompt
 
+    # Input spans are keyed "evidence", not "citations" (issue #1316).
+    assert '"evidence": [' in prompt
+    assert '"citations": [' not in prompt
+    assert "Evidence 0" in prompt
+
+
+def test_build_batch_support_prompt_escapes_special_characters(sample_docs):
+    """Text with quotes/newlines must not break the prompt's JSON structure."""
+    req = GroundednessRequirement()
+
+    response = 'He said "hello" to me.'
+    spans_to_assess = [
+        {
+            "text": 'He said "hello" to me',
+            "citations": [
+                {
+                    "citation_text": 'The greeting was "hello".\nA second line.',
+                    "citation_doc_id": "0",
+                }
+            ],
+        }
+    ]
+
+    prompt = req._build_batch_support_prompt(response, spans_to_assess, sample_docs)
+
+    spans_section = prompt[
+        prompt.index("Spans to assess:\n") + len("Spans to assess:\n") : prompt.index(
+            "\n\nJSON Output:"
+        )
+    ]
+    parsed = json.loads(spans_section)
+
+    assert parsed[0]["span_id"] == 0
+    assert parsed[0]["text"] == 'He said "hello" to me'
+    assert 'The greeting was "hello".\nA second line.' in parsed[0]["evidence"][0]
+
 
 def test_parse_batch_support_output():
     """Test parsing batch support output."""
@@ -453,6 +494,253 @@ def test_parse_batch_support_output():
     assert len(result) == 2
     assert result[0] == "FULLY_SUPPORTED"
     assert result[1] == "PARTIALLY_SUPPORTED"
+
+
+def test_parse_batch_support_output_normalises_string_span_id():
+    """Quoted numeric span IDs must map to the integer result key.
+
+    Without this normalisation, a valid model judgment is stored under `"0"`
+    and the caller falls back to NOT_SUPPORTED when looking up integer key `0`.
+    """
+    req = GroundednessRequirement()
+
+    result = req._parse_batch_support_output(
+        '[{"span_id": "0", "support_level": "FULLY_SUPPORTED"}]', 1
+    )
+
+    assert result == {0: "FULLY_SUPPORTED"}
+
+
+def test_parse_batch_support_output_ignores_non_string_support_level():
+    """Unexpected support-level types must degrade conservatively."""
+    req = GroundednessRequirement()
+
+    result = req._parse_batch_support_output('[{"span_id": 0, "support_level": 5}]', 1)
+
+    assert result == {0: "NOT_SUPPORTED"}
+
+
+@pytest.mark.parametrize("nested_key", ["evidence", "citations"])
+def test_parse_batch_support_output_ignores_non_string_nested_support_level(
+    nested_key: str,
+):
+    """Unexpected nested support-level types must not crash validation."""
+    req = GroundednessRequirement()
+
+    result = req._parse_batch_support_output(
+        f'[{{"span_id": 0, "{nested_key}": [{{"support_level": 5}}]}}]', 1
+    )
+
+    assert result == {0: "NOT_SUPPORTED"}
+
+
+@pytest.mark.parametrize(
+    "span_id", [True, -1, 1.5, "not-an-index", "2", "²", "1_0", "+1", "３"]
+)
+def test_parse_batch_support_output_ignores_invalid_span_id(span_id: object):
+    """Invalid model-returned span IDs must not become result keys."""
+    req = GroundednessRequirement()
+
+    result = req._parse_batch_support_output(
+        json.dumps([{"span_id": span_id, "support_level": "FULLY_SUPPORTED"}]), 1
+    )
+
+    assert result == {0: "NOT_SUPPORTED"}
+
+
+@pytest.mark.parametrize("span_id", [0.0, "0"])
+def test_parse_batch_support_output_accepts_integral_span_id(span_id: object):
+    """Integral numeric span IDs must resolve to the integer result key."""
+    req = GroundednessRequirement()
+
+    result = req._parse_batch_support_output(
+        json.dumps([{"span_id": span_id, "support_level": "FULLY_SUPPORTED"}]), 1
+    )
+
+    assert result == {0: "FULLY_SUPPORTED"}
+
+
+def test_parse_necessity_output_normalises_model_types():
+    """Necessity parsing must tolerate quoted IDs and default invalid labels safely."""
+    req = GroundednessRequirement()
+    spans = [
+        {"begin": 0, "end": 5, "text": "Fact."},
+        {"begin": 7, "end": 13, "text": "Other."},
+    ]
+
+    result = req._parse_necessity_output(
+        '[{"span_id": "0", "needs_citation": "yes"}, '
+        '{"span_id": 1, "needs_citation": 1}]',
+        spans,
+    )
+
+    assert result == {(0, 5): True, (7, 13): True}
+
+
+@pytest.mark.parametrize("needs_citation", [False, 0, "false", "0", "no"])
+def test_parse_necessity_output_preserves_false_labels(needs_citation: object):
+    """False model-returned necessity labels must remain false."""
+    req = GroundednessRequirement()
+    spans = [{"begin": 0, "end": 5, "text": "Fact."}]
+
+    result = req._parse_necessity_output(
+        json.dumps([{"span_id": 0, "needs_citation": needs_citation}]), spans
+    )
+
+    assert result == {(0, 5): False}
+
+
+@pytest.mark.parametrize(
+    "output_text",
+    [
+        (
+            '[{"span_id": 0, "needs_citation": "no"}, '
+            '{"span_id": "0", "needs_citation": "yes"}]'
+        ),
+        (
+            '[{"span_id": "0", "needs_citation": "yes"}, '
+            '{"span_id": 0, "needs_citation": "no"}]'
+        ),
+    ],
+)
+def test_parse_necessity_output_duplicate_ids_require_citations(output_text: str):
+    """Duplicate span judgments must retain the conservative result."""
+    req = GroundednessRequirement()
+    spans = [{"begin": 0, "end": 5, "text": "Fact."}]
+
+    result = req._parse_necessity_output(output_text, spans)
+
+    assert result == {(0, 5): True}
+
+
+@pytest.mark.parametrize(
+    "output_text",
+    [
+        (
+            '[{"span_id": 0, "citations": [{"support_level": "NOT_SUPPORTED"}]}, '
+            '{"span_id": "0", "citations": [{"support_level": "FULLY_SUPPORTED"}]}]'
+        ),
+        (
+            '[{"span_id": "0", "citations": [{"support_level": "FULLY_SUPPORTED"}]}, '
+            '{"span_id": 0, "citations": [{"support_level": "NOT_SUPPORTED"}]}]'
+        ),
+    ],
+)
+def test_parse_batch_support_output_duplicate_ids_are_pessimistic(output_text: str):
+    """Nested duplicate span judgments must retain the least-supported result."""
+    req = GroundednessRequirement()
+
+    result = req._parse_batch_support_output(output_text, 1)
+
+    assert result == {0: "NOT_SUPPORTED"}
+
+
+@pytest.mark.parametrize(
+    "output_text",
+    [
+        (
+            '[{"span_id": 0, "support_level": "NOT_SUPPORTED"}, '
+            '{"span_id": "0", "support_level": "FULLY_SUPPORTED"}]'
+        ),
+        (
+            '[{"span_id": "0", "support_level": "FULLY_SUPPORTED"}, '
+            '{"span_id": 0, "support_level": "NOT_SUPPORTED"}]'
+        ),
+    ],
+)
+def test_parse_batch_support_output_duplicate_flat_ids_are_pessimistic(
+    output_text: str,
+):
+    """Duplicate flat rows must retain the least-supported result."""
+    req = GroundednessRequirement()
+
+    result = req._parse_batch_support_output(output_text, 1)
+
+    assert result == {0: "NOT_SUPPORTED"}
+
+
+@pytest.mark.parametrize(
+    "output_text",
+    [
+        (
+            '[{"span_id": 0, "support_level": "FULLY_SUPPORTED"}, '
+            '{"span_id": 0, "evidence": [{"support_level": "NOT_SUPPORTED"}]}]'
+        ),
+        (
+            '[{"span_id": 0, "evidence": [{"support_level": "NOT_SUPPORTED"}]}, '
+            '{"span_id": 0, "support_level": "FULLY_SUPPORTED"}]'
+        ),
+    ],
+)
+def test_parse_batch_support_output_mixed_duplicate_ids_are_pessimistic(
+    output_text: str,
+):
+    """Mixed output shapes must retain the least-supported result."""
+    req = GroundednessRequirement()
+
+    result = req._parse_batch_support_output(output_text, 1)
+
+    assert result == {0: "NOT_SUPPORTED"}
+
+
+@pytest.mark.parametrize(
+    "support_level",
+    [
+        "NOT FULLY SUPPORTED",
+        "FULLY UNSUPPORTED",
+        "NOT_FULLY_SUPPORTED",
+        "FULLY_UNSUPPORTED",
+        "not_fully_supported",
+        "NotFullySupported",
+        "notFullySupported",
+    ],
+)
+def test_parse_batch_support_output_negated_labels_are_not_supported(
+    support_level: str,
+):
+    """Negated support labels must not be classified as fully supported."""
+    req = GroundednessRequirement()
+
+    result = req._parse_batch_support_output(
+        json.dumps([{"span_id": 0, "support_level": support_level}]), 1
+    )
+
+    assert result == {0: "NOT_SUPPORTED"}
+
+
+def test_parse_batch_support_output_positive_unambiguous_label_is_supported():
+    """Positive labels containing unrelated `UN` text must remain supported."""
+    req = GroundednessRequirement()
+
+    result = req._parse_batch_support_output(
+        '[{"span_id": 0, "support_level": "FULLY SUPPORTED (UNAMBIGUOUS)"}]', 1
+    )
+
+    assert result == {0: "FULLY_SUPPORTED"}
+
+
+def test_parse_batch_support_output_nested_negated_label_is_not_supported():
+    """Negated nested support labels must not be classified as fully supported."""
+    req = GroundednessRequirement()
+
+    result = req._parse_batch_support_output(
+        '[{"span_id": 0, "evidence": [{"support_level": "not fully supported"}]}]', 1
+    )
+
+    assert result == {0: "NOT_SUPPORTED"}
+
+
+def test_malformed_necessity_label_keeps_span_subject_to_groundedness():
+    """Malformed necessity output must not let an unsupported span pass."""
+    req = GroundednessRequirement()
+    spans = [{"begin": 0, "end": 5, "text": "Fact."}]
+    necessity = req._parse_necessity_output(
+        '[{"span_id": 0, "needs_citation": 1}]', spans
+    )
+
+    passed, _ = req._build_groundedness_result("Fact.", [], necessity, {})
+
+    assert not passed
 
 
 def test_parse_batch_support_output_nested_citations():
@@ -495,6 +783,83 @@ def test_parse_batch_support_output_nested_citations():
 
     assert len(result) == 2
     assert result[0] == "FULLY_SUPPORTED"
+    assert result[1] == "NOT_SUPPORTED"
+
+
+def test_parse_batch_support_output_nested_evidence():
+    """Same as the 'citations' nesting test, but for the current 'evidence' key."""
+    req = GroundednessRequirement()
+
+    output_text = """
+    [
+        {
+            "span_id": 0,
+            "text": "The Eiffel Tower is located in Paris, France.",
+            "evidence": [
+                {
+                    "citation_id": 0,
+                    "source_document": 0,
+                    "support_level": "FULLY_SUPPORTED"
+                }
+            ]
+        },
+        {
+            "span_id": 1,
+            "text": "Another span.",
+            "evidence": [
+                {
+                    "citation_id": 0,
+                    "source_document": 0,
+                    "support_level": "NOT_SUPPORTED"
+                }
+            ]
+        }
+    ]
+    """
+
+    result = req._parse_batch_support_output(output_text, 2)
+
+    assert len(result) == 2
+    assert result[0] == "FULLY_SUPPORTED"
+    assert result[1] == "NOT_SUPPORTED"
+
+
+def test_parse_batch_support_output_nested_both_keys_union():
+    """Both keys present at once must union, not pick one and drop the other."""
+    req = GroundednessRequirement()
+
+    output_text = """
+    [
+        {
+            "span_id": 0,
+            "evidence": [{"support_level": "FULLY_SUPPORTED"}],
+            "citations": [{"support_level": "NOT_SUPPORTED"}]
+        }
+    ]
+    """
+
+    result = req._parse_batch_support_output(output_text, 1)
+
+    assert len(result) == 1
+    # pessimistic: NOT_SUPPORTED wins over FULLY_SUPPORTED from the other key
+    assert result[0] == "NOT_SUPPORTED"
+
+
+def test_parse_batch_support_output_nested_non_list_value():
+    """A non-list value must not raise - degrade to NOT_SUPPORTED instead."""
+    req = GroundednessRequirement()
+
+    output_text = """
+    [
+        {"span_id": 0, "evidence": 5},
+        {"span_id": 1, "citations": "not a list"}
+    ]
+    """
+
+    result = req._parse_batch_support_output(output_text, 2)
+
+    assert len(result) == 2
+    assert result[0] == "NOT_SUPPORTED"
     assert result[1] == "NOT_SUPPORTED"
 
 

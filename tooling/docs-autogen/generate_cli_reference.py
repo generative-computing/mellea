@@ -96,6 +96,24 @@ def _parse_see_also(see_also_text: str) -> list[tuple[str, str]]:
     return links
 
 
+def _guide_extension(path: str, docs_root: Path | None) -> str:
+    """Return the on-disk extension (`.md` or `.mdx`) for a `See Also` guide path.
+
+    Cross-doc links carry the source file's extension so Docusaurus resolves them
+    against the file rather than the route table. Guides are mostly `.md`, but a
+    page that needs JSX is `.mdx`, so probe the filesystem instead of assuming.
+
+    Args:
+        path: Docs-root-relative guide path without an extension, e.g.
+            `how-to/refactor-prompts-with-cli`.
+        docs_root: Docs root to probe. When `None` (or the file is absent under
+            it), falls back to `.md`.
+    """
+    if docs_root is not None and (docs_root / f"{path}.mdx").is_file():
+        return ".mdx"
+    return ".md"
+
+
 def _rst_to_md(text: str) -> str:
     """Convert RST-style double-backticks to Markdown single-backticks."""
     return _RST_BACKTICK_RE.sub(r"`\1`", text)
@@ -289,9 +307,15 @@ def _build_synopsis(full_name: str, cmd: click.BaseCommand) -> str:
 
 
 def _render_command(
-    full_name: str, cmd: click.BaseCommand, heading_level: int
+    full_name: str,
+    cmd: click.BaseCommand,
+    heading_level: int,
+    docs_root: Path | None = None,
 ) -> list[str]:
-    """Render a single command as Markdown lines."""
+    """Render a single command as Markdown lines.
+
+    `docs_root` is used only to pick the on-disk extension for `See Also` links.
+    """
     lines: list[str] = []
     heading = "#" * heading_level
     lines.append(f"{heading} `{full_name}`")
@@ -456,7 +480,11 @@ def _render_command(
             for kind, path in links:
                 if kind == "guide":
                     title = _slug_to_title(path.split("/")[-1])
-                    see_parts.append(f"[{title}](../{path})")
+                    # The file extension makes Docusaurus resolve the link
+                    # against the source file, so a renamed guide fails the
+                    # build instead of silently resolving to another version.
+                    ext = _guide_extension(path, docs_root)
+                    see_parts.append(f"[{title}](../{path}{ext})")
             if see_parts:
                 lines.append(f"**See also:** {', '.join(see_parts)}")
                 lines.append("")
@@ -477,8 +505,16 @@ description: "Complete reference for the m command-line tool — all subcommands
 """
 
 
-def generate_cli_reference(click_app: click.BaseCommand) -> str:
-    """Generate the full CLI reference page as a Markdown string."""
+def generate_cli_reference(
+    click_app: click.BaseCommand, docs_root: Path | None = None
+) -> str:
+    """Generate the full CLI reference page as a Markdown string.
+
+    Args:
+        click_app: Click command tree for the `m` CLI.
+        docs_root: Docs root used to resolve the on-disk extension of `See Also`
+            link targets. When `None`, those links default to `.md`.
+    """
     lines: list[str] = [FRONTMATTER]
 
     # Intro from root callback docstring
@@ -515,12 +551,19 @@ def generate_cli_reference(click_app: click.BaseCommand) -> str:
                 sub_cmd = cmd.commands[sub_name]
                 lines.extend(
                     _render_command(
-                        f"m {cmd_name} {sub_name}", sub_cmd, heading_level=3
+                        f"m {cmd_name} {sub_name}",
+                        sub_cmd,
+                        heading_level=3,
+                        docs_root=docs_root,
                     )
                 )
         else:
             # Top-level command
-            lines.extend(_render_command(f"m {cmd_name}", cmd, heading_level=2))
+            lines.extend(
+                _render_command(
+                    f"m {cmd_name}", cmd, heading_level=2, docs_root=docs_root
+                )
+            )
 
     return "\n".join(lines)
 
@@ -635,7 +678,7 @@ def main() -> None:
         print("✅ CLI docstring validation passed.")
 
     print("📝 Generating CLI reference...", flush=True)
-    content = generate_cli_reference(click_app)
+    content = generate_cli_reference(click_app, docs_root=docs_root)
 
     if args.stdout:
         print(content)

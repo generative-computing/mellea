@@ -459,6 +459,36 @@ async def test_no_api_base_forwarded_when_base_url_not_set() -> None:
     )
 
 
+async def test_construction_extra_body_thinking_does_not_outrank_per_call_thinking():
+    """Regression for #1617 review: a construction-time `enable_thinking` set via
+    the generic `model_options["extra_body"]` must not silently override a
+    per-call `ModelOption.THINKING`.
+
+    Before the fix, `_simplify_and_merge` merged this construction-time
+    `extra_body` together with any per-call `extra_body` via `merge_model_options`,
+    and the combined blob then unconditionally beat the correctly-resolved
+    per-call THINKING value later in `_generate_from_chat_context_standard`.
+    """
+    from mellea.backends import ModelOption
+
+    backend = LiteLLMBackend(
+        model_id="hosted_vllm/qwen3",
+        base_url="http://localhost:9997",
+        model_options={
+            "extra_body": {"chat_template_kwargs": {"enable_thinking": True}}
+        },
+    )
+
+    kwargs = await _call_and_capture(backend, {ModelOption.THINKING: False})
+
+    assert (
+        kwargs.get("extra_body", {})
+        .get("chat_template_kwargs", {})
+        .get("enable_thinking")
+        is False
+    ), "per-call THINKING=False must win over construction-time extra_body"
+
+
 async def test_extra_body_mutation_does_not_corrupt_caller_dict(
     chat_backend: LiteLLMBackend,
 ) -> None:

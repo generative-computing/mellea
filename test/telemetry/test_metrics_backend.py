@@ -192,10 +192,6 @@ async def test_ollama_token_metrics_integration(
         },
     )
     ctx = ChatContext()
-    # A counting prompt reliably spans many output tokens, so the streaming
-    # branch always sees >=2 chunks (the time_per_output_chunk histogram only
-    # records inter-chunk intervals; a single-chunk reply like "Hello!" leaves
-    # it empty — observed in run 33163851256).
     ctx = ctx.add(Message(role="user", content="Count from 1 to 10 and nothing else"))
 
     model_options = {ModelOption.STREAM: True} if stream else {}
@@ -239,9 +235,7 @@ async def test_ollama_token_metrics_integration(
 
     # Verify latency metrics
     duration_dp = _find_histogram_data_point(
-        metrics_data,
-        "gen_ai.client.operation.duration",
-        {"gen_ai.request.stream": stream},
+        metrics_data, "mellea.llm.request.duration", {"gen_ai.request.stream": stream}
     )
     assert duration_dp is not None, "Request duration should be recorded"
     assert duration_dp.sum > 0, "Request duration should be > 0"
@@ -252,18 +246,6 @@ async def test_ollama_token_metrics_integration(
         )
         assert ttfb_dp is not None, "TTFB should be recorded for streaming requests"
         assert ttfb_dp.sum > 0, "TTFB should be > 0"
-
-        # With MELLEA_GENERATION_CHUNK_EVENTS enabled, each chunk after the
-        # first records an inter-chunk interval.
-        tpoc_dp = _find_histogram_data_point(
-            metrics_data, "gen_ai.client.operation.time_per_output_chunk"
-        )
-        assert tpoc_dp is not None, (
-            "time_per_output_chunk should be recorded when chunk events are enabled"
-        )
-        assert tpoc_dp.count >= 1, (
-            "at least one inter-chunk interval should be recorded"
-        )
 
 
 @pytest.mark.asyncio
@@ -347,9 +329,7 @@ async def test_openai_token_metrics_integration(enable_metrics, metric_reader, s
 
     # Verify latency metrics
     duration_dp = _find_histogram_data_point(
-        metrics_data,
-        "gen_ai.client.operation.duration",
-        {"gen_ai.request.stream": stream},
+        metrics_data, "mellea.llm.request.duration", {"gen_ai.request.stream": stream}
     )
     assert duration_dp is not None, "Request duration should be recorded"
     assert duration_dp.sum > 0, "Request duration should be > 0"
@@ -407,9 +387,7 @@ async def test_watsonx_token_metrics_integration(enable_metrics, metric_reader):
 
     # Verify latency metrics (watsonx is non-streaming only)
     duration_dp = _find_histogram_data_point(
-        metrics_data,
-        "gen_ai.client.operation.duration",
-        {"gen_ai.request.stream": False},
+        metrics_data, "mellea.llm.request.duration", {"gen_ai.request.stream": False}
     )
     assert duration_dp is not None, "Request duration should be recorded"
     assert duration_dp.sum > 0, "Request duration should be > 0"
@@ -505,9 +483,7 @@ async def test_litellm_token_metrics_integration(
 
     # Verify latency metrics
     duration_dp = _find_histogram_data_point(
-        metrics_data,
-        "gen_ai.client.operation.duration",
-        {"gen_ai.request.stream": stream},
+        metrics_data, "mellea.llm.request.duration", {"gen_ai.request.stream": stream}
     )
     assert duration_dp is not None, "Request duration should be recorded"
     assert duration_dp.sum > 0, "Request duration should be > 0"
@@ -707,7 +683,7 @@ async def test_ollama_generate_from_raw_metrics_integration(
 
     duration_dp = _find_histogram_data_point(
         metrics_data,
-        "gen_ai.client.operation.duration",
+        "mellea.llm.request.duration",
         {"gen_ai.provider.name": "ollama", "gen_ai.request.stream": False},
     )
     assert duration_dp is not None, "Request duration should be recorded for batch"

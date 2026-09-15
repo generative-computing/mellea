@@ -345,6 +345,66 @@ def test_filter_for_chat_template_drops_thinking_effort_level() -> None:
     assert result == {}
 
 
+@pytest.mark.parametrize("thinking_value", ["low", "medium", "high"])
+def test_filter_for_chat_template_forwards_string_thinking_as_reasoning_effort(
+    thinking_value: str,
+) -> None:
+    """A string THINKING level is forwarded verbatim as `reasoning_effort`.
+
+    Regression test for issue #1636: Granite 4.2's chat template derives its
+    boolean `low_effort` variable from `reasoning_effort == "low"`
+    (chat_template.jinja), and gpt-oss's HF chat template reads
+    `reasoning_effort` directly — so the string must be forwarded as-is,
+    mirroring the OpenAI backend's `reasoning_effort` handling, rather than
+    translated into a template-specific boolean.
+    """
+    b = _make_backend("{{ reasoning_effort }}")
+
+    result = b._filter_for_chat_template({ModelOption.THINKING: thinking_value})
+
+    assert result == {"reasoning_effort": thinking_value}
+
+
+def test_filter_for_chat_template_drops_string_thinking_without_reasoning_effort_var() -> (
+    None
+):
+    """A string THINKING level is a no-op when the template has no reasoning_effort var."""
+    b = _make_backend("{{ thinking }}")
+
+    result = b._filter_for_chat_template({ModelOption.THINKING: "low"})
+
+    assert "reasoning_effort" not in result
+
+
+def test_filter_for_chat_template_string_thinking_sentinel_overrides_raw_reasoning_effort() -> (
+    None
+):
+    """The resolved THINKING sentinel wins over an already-present raw `reasoning_effort` key.
+
+    Regression guard: a caller passing both ModelOption.THINKING="low" and a
+    conflicting raw `reasoning_effort="high"` must not have the sentinel's
+    intent silently overridden — matching the existing bool-THINKING
+    precedence behaviour (see
+    test_filter_for_chat_template_sentinel_overrides_conflicting_alias_key).
+    """
+    b = _make_backend("{{ reasoning_effort }}")
+
+    result = b._filter_for_chat_template(
+        {ModelOption.THINKING: "low", "reasoning_effort": "high"}
+    )
+
+    assert result == {"reasoning_effort": "low"}
+
+
+def test_filter_for_chat_template_bool_thinking_does_not_set_reasoning_effort() -> None:
+    """A bool THINKING value sets the bool template var, not reasoning_effort."""
+    b = _make_backend("{{ reasoning_effort }}{{ thinking }}")
+
+    result = b._filter_for_chat_template({ModelOption.THINKING: True})
+
+    assert result == {"thinking": True}
+
+
 def test_filter_for_chat_template_drops_thinking_effort_level_via_alias() -> None:
     """A recognised alias (`thinking`) folds into THINKING and is bool-gated too.
 
@@ -719,6 +779,48 @@ def test_granite_thinking_option_uses_detected_template_variable() -> None:
     assert b._filter_for_chat_template({ModelOption.THINKING: False}) == {
         expected_key: False
     }
+
+
+@pytest.mark.integration
+@pytest.mark.huggingface
+def test_granite_reasoning_effort_option_reaches_real_template() -> None:
+    """Regression test for issue #1636 against the real Granite 4.2 chat template.
+
+    THINKING="low" must reach `reasoning_effort="low"` in the kwargs passed to
+    `apply_chat_template` — previously this was silently dropped because
+    `_filter_for_chat_template` only handled bool THINKING values. Forwarding
+    the string verbatim (rather than translating it into the template's
+    derived boolean `low_effort` variable) is the mechanism the template
+    itself expects (`{%- set low_effort = reasoning_effort == "low" %}` in
+    chat_template.jinja) and matches the OpenAI backend's `reasoning_effort`
+    handling.
+    """
+    tok = _try_load_granite_tokenizer(_GRANITE_THINKING_MODEL_ID)
+    if tok is None:
+        pytest.skip(
+            f"{_GRANITE_THINKING_MODEL_ID} not in local HF cache — "
+            "run the Granite 4.2 HF test lane first"
+        )
+
+    b: LocalHFBackend = LocalHFBackend.__new__(LocalHFBackend)
+    b._tokenizer = tok
+    b._model_id = _GRANITE_THINKING_MODEL_ID
+    b.from_mellea_model_opts_map = {ModelOption.MAX_NEW_TOKENS: "max_new_tokens"}
+
+    assert "reasoning_effort" in b._chat_template_allowlist, (
+        f"'reasoning_effort' missing from real Granite 4.2 allowlist; "
+        f"got: {sorted(b._chat_template_allowlist)}"
+    )
+    result = b._filter_for_chat_template({ModelOption.THINKING: "low"})
+    assert result == {"reasoning_effort": "low"}
+
+    # The template must actually render differently with this kwarg — proves
+    # the fix changes real model input, not just an internal dict.
+    messages = [{"role": "user", "content": "hi"}]
+    without_reasoning_effort = tok.apply_chat_template(messages, tokenize=False)
+    with_reasoning_effort = tok.apply_chat_template(messages, tokenize=False, **result)
+    assert "reasoning effort: low" in with_reasoning_effort
+    assert "reasoning effort: low" not in without_reasoning_effort
 
 
 if __name__ == "__main__":

@@ -4,7 +4,7 @@ description: "Configure Mellea's console logging and export logs to OTLP collect
 # diataxis: how-to
 ---
 
-**Prerequisites:** [Telemetry](../observability/telemetry)
+**Prerequisites:** [Telemetry](./telemetry.md)
 introduces the environment variables and telemetry architecture. This page
 covers logging configuration in detail.
 
@@ -240,9 +240,9 @@ Set either `OTEL_EXPORTER_OTLP_ENDPOINT` or `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT`.
 
 **See also:**
 
-- [Telemetry](../observability/telemetry) — overview of all
+- [Telemetry](./telemetry.md) — overview of all
   telemetry features and configuration.
-- [Tracing](../observability/tracing) — distributed traces
+- [Tracing](./tracing.md) — distributed traces
   with Gen-AI semantic conventions.
-- [Metrics](../observability/metrics) — metrics, exporters,
+- [Metrics](./metrics.md) — metrics, exporters,
   and custom instruments.

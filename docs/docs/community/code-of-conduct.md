@@ -172,4 +172,4 @@ Translations are available at
 
 ---
 
-**See also:** [Contributing to Mellea](../community/contributing-guide)
+**See also:** [Contributing to Mellea](./contributing-guide.md)

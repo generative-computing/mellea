@@ -6,6 +6,7 @@
 import json
 import os
 import pathlib
+from typing import Literal
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -643,6 +644,83 @@ class TestOpenAIBackendRegistration:
                 load_embedded_adapters=True,
             )
         assert len(backend._added_adapters) == 2
+
+
+class TestOpenAIBackendComposedAdapterRegistration:
+    """Composed-`Adapter` counterpart of `TestOpenAIBackendRegistration` (Epic
+    #929, issue #1144): `add_adapter` must accept a composed `Adapter` whose
+    `weights` is an `EmbeddedBinding` directly, alongside the deprecated shim.
+    """
+
+    @pytest.fixture
+    def backend(self):
+        os.environ.setdefault("OPENAI_API_KEY", "test-key")
+        from mellea.backends.openai import OpenAIBackend
+
+        return OpenAIBackend(
+            model_id="granite-switch", base_url="http://localhost:8000/v1"
+        )
+
+    @staticmethod
+    def _make_composed_adapter(
+        name: str = "answerability", adapter_type: Literal["lora", "alora"] = "alora"
+    ):
+        from mellea.backends.adapters._core import Adapter, EmbeddedBinding, Identity
+        from mellea.backends.adapters.io_contracts import get_io_contract
+
+        return Adapter(
+            identity=Identity(name=name, adapter_type=adapter_type, capability=name),
+            io_contract=get_io_contract(name),
+            weights=EmbeddedBinding(),
+        )
+
+    def test_add_composed_adapter(self, backend):
+        adapter = self._make_composed_adapter()
+        backend.add_adapter(adapter, config={"parameters": {}})
+        assert "answerability_alora" in backend._added_adapters
+        assert backend._added_adapters["answerability_alora"] is adapter
+        assert adapter.weights.source == backend.base_model_name  # type: ignore[union-attr]
+        assert backend._composed_adapter_configs["answerability_alora"] == {
+            "parameters": {}
+        }
+
+    def test_add_composed_adapter_without_config_raises(self, backend):
+        adapter = self._make_composed_adapter()
+        with pytest.raises(ValueError, match=r"No io\.yaml config given"):
+            backend.add_adapter(adapter)
+        assert "answerability_alora" not in backend._added_adapters
+
+    def test_add_composed_adapter_rejects_non_embedded_weights(self, backend):
+        from mellea.backends.adapters._core import Adapter, Identity, LocalFileBinding
+
+        adapter = Adapter(
+            identity=Identity(name="answerability", adapter_type="lora"),
+            io_contract=self._make_composed_adapter().io_contract,
+            weights=LocalFileBinding.from_catalog("answerability"),
+        )
+        with pytest.raises(TypeError, match="Embedded/Granite Switch"):
+            backend.add_adapter(adapter)
+
+    def test_add_composed_adapter_refuses_duplicate_name(self, backend):
+        first = self._make_composed_adapter()
+        second = self._make_composed_adapter()
+        backend.add_adapter(first, config={"parameters": {}})
+        backend.add_adapter(second, config={"parameters": {}})
+        assert backend._added_adapters["answerability_alora"] is first
+
+    def test_composed_adapter_discoverable_by_capability(self, backend):
+        adapter = self._make_composed_adapter()
+        backend.add_adapter(adapter, config={"parameters": {}})
+        assert backend._find_adapter("answerability") is adapter
+
+    def test_list_adapters_includes_composed_adapter(self, backend):
+        backend.add_adapter(self._make_composed_adapter(), config={"parameters": {}})
+        backend.add_adapter(
+            EmbeddedIntrinsicAdapter(
+                "citations", config=_CITATIONS_CONFIG, technology="lora"
+            )
+        )
+        assert set(backend.list_adapters()) == {"answerability_alora", "citations_lora"}
 
 
 if __name__ == "__main__":

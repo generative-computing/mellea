@@ -129,5 +129,88 @@ def test_model_option_merge():
     assert expected_opts == processed_model_opts, "merged dict did not match expected"
 
 
+def test_model_option_merge_extra_body_unrelated_key_preserves_default():
+    """An unrelated per-call extra_body must not clobber a backend-level default."""
+    default_model_opts = {
+        "extra_body": {"chat_template_kwargs": {"enable_thinking": False}}
+    }
+    overwrite_opts = {"extra_body": {"some_unrelated_field": 123}}
+
+    processed_model_opts = ModelOption.merge_model_options(
+        default_model_opts, overwrite_opts
+    )
+    assert processed_model_opts["extra_body"] == {
+        "chat_template_kwargs": {"enable_thinking": False},
+        "some_unrelated_field": 123,
+    }
+
+
+def test_model_option_merge_extra_body_deep_merges_chat_template_kwargs():
+    """A per-call chat_template_kwargs key must merge with, not replace, the default's."""
+    default_model_opts = {
+        "extra_body": {"chat_template_kwargs": {"enable_thinking": False}}
+    }
+    overwrite_opts = {"extra_body": {"chat_template_kwargs": {"adapter_name": "foo"}}}
+
+    processed_model_opts = ModelOption.merge_model_options(
+        default_model_opts, overwrite_opts
+    )
+    assert processed_model_opts["extra_body"] == {
+        "chat_template_kwargs": {"enable_thinking": False, "adapter_name": "foo"}
+    }
+
+
+def test_model_option_merge_extra_body_overwrite_wins_on_conflict():
+    """Within chat_template_kwargs, the overwrite value wins on an actual key conflict."""
+    default_model_opts = {
+        "extra_body": {"chat_template_kwargs": {"enable_thinking": False}}
+    }
+    overwrite_opts = {"extra_body": {"chat_template_kwargs": {"enable_thinking": True}}}
+
+    processed_model_opts = ModelOption.merge_model_options(
+        default_model_opts, overwrite_opts
+    )
+    assert processed_model_opts["extra_body"] == {
+        "chat_template_kwargs": {"enable_thinking": True}
+    }
+
+
+def test_model_option_merge_extra_body_does_not_mutate_inputs():
+    """Neither `base` nor `overwrite` dicts (nor their nested dicts) are modified."""
+    base = {"chat_template_kwargs": {"enable_thinking": False}}
+    overwrite = {"chat_template_kwargs": {"adapter_name": "answerability"}}
+
+    ModelOption._merge_extra_body(base, overwrite)
+
+    assert base == {"chat_template_kwargs": {"enable_thinking": False}}
+    assert overwrite == {"chat_template_kwargs": {"adapter_name": "answerability"}}
+
+
+def test_model_option_merge_extra_body_non_dict_chat_template_kwargs_falls_back():
+    """A malformed non-dict `chat_template_kwargs` on the base side must not raise."""
+    default_model_opts = {"extra_body": {"chat_template_kwargs": "not-a-dict"}}
+    overwrite_opts = {"extra_body": {"chat_template_kwargs": {"enable_thinking": True}}}
+
+    processed_model_opts = ModelOption.merge_model_options(
+        default_model_opts, overwrite_opts
+    )
+    assert processed_model_opts["extra_body"] == {
+        "chat_template_kwargs": {"enable_thinking": True}
+    }
+
+
+def test_model_option_merge_extra_body_overwrite_non_dict_chat_template_kwargs_wins():
+    """A malformed non-dict `chat_template_kwargs` on the overwrite side must not raise."""
+    default_model_opts = {
+        "extra_body": {"chat_template_kwargs": {"enable_thinking": False}}
+    }
+    overwrite_opts = {"extra_body": {"chat_template_kwargs": "not-a-dict"}}
+
+    processed_model_opts = ModelOption.merge_model_options(
+        default_model_opts, overwrite_opts
+    )
+    assert processed_model_opts["extra_body"] == {"chat_template_kwargs": "not-a-dict"}
+
+
 if __name__ == "__main__":
     pytest.main([__file__])

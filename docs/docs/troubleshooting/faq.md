@@ -104,7 +104,7 @@ m = MelleaSession(
 )
 ```
 
-See [Common Errors](../troubleshooting/common-errors) for help installing
+See [Common Errors](./common-errors.md) for help installing
 backend-specific dependencies.
 
 ## Why does my `@generative` function return the wrong type?
@@ -269,7 +269,7 @@ with start_session() as m:
 ```
 
 For the full telemetry setup, see
-[Tracing](../observability/tracing).
+[Tracing](../observability/tracing.md).
 
 ## Does Mellea support async?
 
@@ -330,14 +330,14 @@ runs ruff, mypy, and codespell automatically.
 - **GitHub Discussions:** Ask questions and share ideas in the Discussions tab.
 - **Examples:** The `docs/examples/` directory contains runnable examples
   covering every major feature.
-- **Common Errors:** See [Common Errors](../troubleshooting/common-errors) for
+- **Common Errors:** See [Common Errors](./common-errors.md) for
   a reference table of known error messages and fixes.
 
 ---
 
 ## See also
 
-- [Common Errors](../troubleshooting/common-errors) — a reference table of
+- [Common Errors](./common-errors.md) — a reference table of
   error messages, diagnostic steps, and fixes.
-- [Quick Start](../getting-started/quickstart) — install Mellea and run your
+- [Quick Start](../getting-started/quickstart.md) — install Mellea and run your
   first generative function.

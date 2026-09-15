@@ -265,11 +265,11 @@ See [Safety Guardrails](../how-to/safety-guardrails.md) for migration guidance.
 - **GitHub Issues:** [github.com/generative-computing/mellea/issues](https://github.com/generative-computing/mellea/issues)
 - **Examples:** [`docs/examples/`](https://github.com/generative-computing/mellea/tree/main/docs/examples)
 - Enable telemetry to inspect what is happening at each step — see
-  [Telemetry](../observability/telemetry).
+  [Telemetry](../observability/telemetry.md).
 
 ---
 
 **See also:**
-[Quick Start](../getting-started/quickstart) |
-[Inference-Time Scaling](../advanced/inference-time-scaling) |
+[Quick Start](../getting-started/quickstart.md) |
+[Inference-Time Scaling](../advanced/inference-time-scaling.md) |
 [Safety Guardrails](../how-to/safety-guardrails.md)

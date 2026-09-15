@@ -16,8 +16,8 @@ By the end you will have covered:
 - Detecting harmful outputs with `guardian.guardian_check`
 - Grounding safety checks against retrieved context
 
-**Prerequisites:** [Tutorial 02](./streaming-and-async) and
-[Tutorial 03](./using-generative-stubs) complete,
+**Prerequisites:** [Tutorial 02](./02-streaming-and-async.md) and
+[Tutorial 03](./03-using-generative-stubs.md) complete,
 `pip install mellea`, Ollama running locally with `granite4.1:3b` downloaded.
 
 ---
@@ -183,7 +183,7 @@ fails, Mellea retries with the failure reason embedded in the repair request.
 > verdict depends on the model — prefer
 > a Python validator for anything you can code, and reserve the judge (or, on Granite
 > models, the aLoRA `requirement-check` adapter) for genuinely subjective constraints. See
-> [Choosing a validation approach](../concepts/requirements-system#choosing-a-validation-approach).
+> [Choosing a validation approach](../concepts/requirements-system.md#choosing-a-validation-approach).
 
 ---
 
@@ -408,7 +408,7 @@ threshold. The available criteria are: `"harm"`, `"jailbreak"`, `"social_bias"`,
 
 > **Note:** If you were using `GuardianRisk.SEXUAL_CONTENT` from the old API,
 > there is no direct equivalent key in `CRITERIA_BANK`. Use a custom free-text
-> criteria string instead — see [Custom criteria](../how-to/safety-guardrails#custom-criteria) in the Guardian how-to guide.
+> criteria string instead — see [Custom criteria](../how-to/safety-guardrails.md#custom-criteria) in the Guardian how-to guide.
 
 ---
 
@@ -489,7 +489,7 @@ The available criteria are: `"harm"`, `"jailbreak"`, `"social_bias"`,
 
 > **Note:** If you were using `GuardianRisk.SEXUAL_CONTENT` from the old API,
 > there is no direct equivalent key in `CRITERIA_BANK`. Use a custom free-text
-> criteria string instead — see [Custom criteria](../how-to/safety-guardrails#custom-criteria) in the Guardian how-to guide.
+> criteria string instead — see [Custom criteria](../how-to/safety-guardrails.md#custom-criteria) in the Guardian how-to guide.
 
 ---
 
@@ -682,4 +682,4 @@ agentic system:
 
 ---
 
-**See also:** [The Requirements System](../concepts/requirements-system) | [Tools and Agents](../how-to/tools-and-agents)
+**See also:** [The Requirements System](../concepts/requirements-system.md) | [Tools and Agents](../how-to/tools-and-agents.md)

@@ -18,7 +18,7 @@ when working with custom components or building your own inference loops.
 
 `aact()` is the async counterpart — same signature, same return types.
 
-See: [act() and aact()](/how-to/act-and-aact)
+See: [act() and aact()](../how-to/act-and-aact.md)
 
 ---
 
@@ -87,7 +87,7 @@ m = start_session()
 lang = classify_language(m, code="print('hello')")
 ```
 
-See: [Generative Functions](/how-to/generative-functions)
+See: [Generative Functions](../how-to/generative-functions.md)
 
 ---
 
@@ -97,7 +97,7 @@ A backend is an inference engine that Mellea uses to run LLM calls. Examples:
 `OllamaModelBackend`, `OpenAIBackend`, `LocalHFBackend`, `WatsonxAIBackend`. Backends are configured via `MelleaSession` or
 `start_session()`.
 
-See: [Backends and Configuration](/how-to/backends-and-configuration)
+See: [Backends and Configuration](../how-to/backends-and-configuration.md)
 
 ---
 
@@ -120,7 +120,7 @@ ctx = ChatContext(window_size=10)
 
 Use `SimpleContext` instead for stateless, single-turn calls.
 
-See: [Context and Sessions](../concepts/context-and-sessions)
+See: [Context and Sessions](../concepts/context-and-sessions.md)
 
 ---
 
@@ -130,7 +130,7 @@ A `CBlock` (content block) is the low-level unit of content in Mellea. A `CBlock
 holds text (or image data) and is assembled by a `Component` into the prompt sent
 to the backend. Multiple CBlocks compose into a single LLM request.
 
-See: [Mellea Core Internals](../advanced/mellea-core-internals)
+See: [Mellea Core Internals](../advanced/mellea-core-internals.md)
 
 ---
 
@@ -162,7 +162,7 @@ structure, its requirements, and its parsing logic. `Instruction`, `Message`,
 `MObject`, and `Document` are all Component subclasses. Components are the building
 blocks of generative programs.
 
-See: [Building Custom Components](../advanced/custom-components)
+See: [Building Custom Components](../advanced/custom-components.md)
 
 ---
 
@@ -182,7 +182,7 @@ except ComponentParseError as e:
     print(f"Parsing failed: {e}")
 ```
 
-See: [Building Custom Components](../advanced/custom-components)
+See: [Building Custom Components](../advanced/custom-components.md)
 
 ---
 
@@ -201,7 +201,7 @@ A `Context` holds the conversation history threaded through a `MelleaSession`.
 Mellea provides `SimpleContext` (single-turn) and `ChatContext` (multi-turn). Push
 and pop operations let you branch and restore context state across calls.
 
-See: [Context and Sessions](../concepts/context-and-sessions)
+See: [Context and Sessions](../concepts/context-and-sessions.md)
 
 ---
 
@@ -226,7 +226,7 @@ annotation as the output schema and its docstring as the prompt. Generative
 functions are called with a `MelleaSession` as the first argument and return the
 annotated type.
 
-See: [Generative Functions](/how-to/generative-functions)
+See: [Generative Functions](../how-to/generative-functions.md)
 
 ---
 
@@ -235,7 +235,7 @@ See: [Generative Functions](/how-to/generative-functions)
 Any computer program that contains calls to an LLM. Mellea is a library for writing
 robust, composable generative programs.
 
-See: [Generative Programming](../concepts/generative-programming)
+See: [Generative Programming](../concepts/generative-programming.md)
 
 ---
 
@@ -263,7 +263,7 @@ for log in logs:
 Key fields: `prompt`, `result` (`ModelOutputThunk | None`), `backend`,
 `model_options`, `is_final_result`.
 
-See: [Evaluate with LLM-as-a-Judge](../how-to/evaluate-with-llm-as-a-judge)
+See: [Evaluate with LLM-as-a-Judge](../how-to/evaluate-with-llm-as-a-judge.md)
 
 ---
 
@@ -304,7 +304,7 @@ async def my_hook(payload, ctx):
     ...
 ```
 
-See: [Plugins & Hooks](../concepts/plugins)
+See: [Plugins & Hooks](../concepts/plugins.mdx)
 
 ---
 
@@ -330,7 +330,7 @@ answer = m.instruct(
 Without `grounding_context`, `m.instruct()` generates from the model's parametric
 knowledge only. It is the primary integration point for RAG pipelines.
 
-See: [Build a RAG Pipeline](../how-to/build-a-rag-pipeline)
+See: [Build a RAG Pipeline](../how-to/build-a-rag-pipeline.md)
 
 ---
 
@@ -350,7 +350,7 @@ from mellea.stdlib.components.intrinsic.guardian import CRITERIA_BANK
 print(list(CRITERIA_BANK.keys()))
 ```
 
-See: [Safety Guardrails](../how-to/safety-guardrails)
+See: [Safety Guardrails](../how-to/safety-guardrails.md)
 
 ---
 
@@ -373,7 +373,7 @@ print(list(SCORING_SCHEMA_BANK.keys()))
 The deprecated `target_role="user" | "assistant"` argument is now superseded
 by `scoring_schema="user_prompt" | "assistant_response"`.
 
-See: [Safety Guardrails](../how-to/safety-guardrails)
+See: [Safety Guardrails](../how-to/safety-guardrails.md)
 
 ---
 
@@ -389,7 +389,7 @@ API contract; gate calls on a positive `factuality_detection()` result.
 from mellea.stdlib.components.intrinsic.guardian import factuality_correction
 ```
 
-See: [Safety Guardrails](../how-to/safety-guardrails#factuality-correction)
+See: [Safety Guardrails](../how-to/safety-guardrails.md#factuality-correction)
 
 ---
 
@@ -403,7 +403,7 @@ response contains factual errors, or `"no"` if it is consistent.
 from mellea.stdlib.components.intrinsic.guardian import factuality_detection
 ```
 
-See: [Safety Guardrails](../how-to/safety-guardrails#factuality-detection)
+See: [Safety Guardrails](../how-to/safety-guardrails.md#factuality-detection)
 
 ---
 
@@ -422,7 +422,7 @@ from mellea.stdlib.components.intrinsic import guardian
 score = guardian.guardian_check(context, backend, criteria="harm")
 ```
 
-See: [Safety Guardrails](../how-to/safety-guardrails)
+See: [Safety Guardrails](../how-to/safety-guardrails.md)
 
 ---
 
@@ -431,13 +431,13 @@ See: [Safety Guardrails](../how-to/safety-guardrails)
 > **Deprecated as of v0.4.** Use [`guardian_check()`](#guardian_check),
 > [`policy_guardrails()`](#policy_guardrails), or
 > [`factuality_detection()`](#factuality_detection) from the Guardian adapter functions
-> instead. See [Safety Guardrails](../how-to/safety-guardrails).
+> instead. See [Safety Guardrails](../how-to/safety-guardrails.md).
 
 A deprecated `Requirement` subclass that validates LLM outputs using a separately loaded
 Granite Guardian model. Requires an independent Ollama or Hugging Face backend
 for the Guardian model.
 
-See: [Safety Guardrails](../how-to/safety-guardrails)
+See: [Safety Guardrails](../how-to/safety-guardrails.md)
 
 ---
 
@@ -449,7 +449,7 @@ See: [Safety Guardrails](../how-to/safety-guardrails)
 An enum specifying which safety risk category the deprecated `GuardianCheck`
 class should detect. Replaced by the string keys in `CRITERIA_BANK`.
 
-See: [Safety Guardrails](../how-to/safety-guardrails)
+See: [Safety Guardrails](../how-to/safety-guardrails.md)
 
 ---
 
@@ -463,7 +463,7 @@ natural-language policy. Returns `"Yes"` (compliant), `"No"` (non-compliant), or
 from mellea.stdlib.components.intrinsic.guardian import policy_guardrails
 ```
 
-See: [Safety Guardrails](../how-to/safety-guardrails#policy-compliance)
+See: [Safety Guardrails](../how-to/safety-guardrails.md#policy-compliance)
 
 ---
 
@@ -509,7 +509,7 @@ prefills each block independently, then smashes the resulting caches together
 before generation — giving results identical to a single full-context forward pass
 at a fraction of the prefill cost.
 
-See: [Prefix Caching and KV Blocks](../advanced/prefix-caching-and-kv-blocks)
+See: [Prefix Caching and KV Blocks](../advanced/prefix-caching-and-kv-blocks.md)
 
 ---
 
@@ -530,7 +530,7 @@ m = mellea.start_session(
 )
 ```
 
-See: [Backends and Configuration](/how-to/backends-and-configuration)
+See: [Backends and Configuration](../how-to/backends-and-configuration.md)
 
 ---
 
@@ -544,7 +544,7 @@ looking for `"yes"` (case-insensitive) in the reply.
 Use `simple_validate` instead when the criterion is deterministic (word count,
 regex, type check) — no second LLM call is needed.
 
-See: [Evaluate with LLM-as-a-Judge](../how-to/evaluate-with-llm-as-a-judge)
+See: [Evaluate with LLM-as-a-Judge](../how-to/evaluate-with-llm-as-a-judge.md)
 
 ---
 
@@ -558,7 +558,7 @@ accepted in the `images=[...]` parameter of `instruct()` and `chat()`.
 Use `ImageBlock` when you need an already-encoded representation, or when the PIL image
 is not directly available (e.g., passing between functions or caching).
 
-See: [Use Images and Vision Models](../how-to/use-images-and-vision)
+See: [Use Images and Vision Models](../how-to/use-images-and-vision.md)
 
 ---
 
@@ -608,7 +608,7 @@ A core generative programming pattern in Mellea:
 2. **Validate** — check the output against a `Requirement`.
 3. **Repair** — if validation fails, retry or fix the output.
 
-See: [Instruct, Validate, Repair](../concepts/instruct-validate-repair)
+See: [Instruct, Validate, Repair](../concepts/instruct-validate-repair.md)
 
 ---
 
@@ -640,7 +640,7 @@ The `@mify` decorator turns any Python class into an **MObject** — an
 LLM-queryable, tool-accessible wrapper around your data. You specify which fields
 and methods are visible to the LLM; everything else remains hidden.
 
-See: [MObjects and mify](../concepts/mobjects-and-mify)
+See: [MObjects and mify](../concepts/mobjects-and-mify.md)
 
 ---
 
@@ -651,7 +651,7 @@ objects so they can be queried and transformed by the LLM via `m.query()` and
 `m.transform()`. Unlike `@generative`, `@mify` does not change the class's Python
 interface — it adds a layer that the LLM can see and call.
 
-See: [MObjects and mify](../concepts/mobjects-and-mify)
+See: [MObjects and mify](../concepts/mobjects-and-mify.md)
 
 ---
 
@@ -665,7 +665,7 @@ keys ensures the same options work across all backends.
 from mellea.backends import ModelOption
 ```
 
-See: [Configure Model Options](../how-to/configure-model-options)
+See: [Configure Model Options](../how-to/configure-model-options.md)
 
 ---
 
@@ -706,7 +706,7 @@ class MyPlugin(Plugin, name="my-plugin", priority=10):
         ...
 ```
 
-See: [Plugins & Hooks](../concepts/plugins)
+See: [Plugins & Hooks](../concepts/plugins.mdx)
 
 ---
 
@@ -723,7 +723,7 @@ from mellea.plugins import PluginSet
 security = PluginSet("security", [hook_a, hook_b, plugin_instance])
 ```
 
-See: [Plugins & Hooks](../concepts/plugins)
+See: [Plugins & Hooks](../concepts/plugins.mdx)
 
 ---
 
@@ -742,7 +742,7 @@ except PreconditionException as e:
     print(e.validation)  # list of ValidationResult
 ```
 
-See: [Handling Exceptions and Failures](../how-to/handling-exceptions)
+See: [Handling Exceptions and Failures](../how-to/handling-exceptions.md)
 
 ---
 
@@ -765,7 +765,7 @@ requirements=[
 ]
 ```
 
-See: [Evaluate with LLM-as-a-Judge](../how-to/evaluate-with-llm-as-a-judge)
+See: [Evaluate with LLM-as-a-Judge](../how-to/evaluate-with-llm-as-a-judge.md)
 
 ---
 
@@ -781,7 +781,7 @@ from mellea.stdlib.frameworks.react import react
 result, _ = await react(goal="...", context=ChatContext(), backend=m.backend, tools=[...])
 ```
 
-See: [Tools and Agents](/how-to/tools-and-agents)
+See: [Tools and Agents](../how-to/tools-and-agents.md)
 
 ---
 
@@ -804,7 +804,7 @@ output. Requirements can be programmatic (lambda, regex, type check) or generati
   without raising an exception. Import from `mellea.stdlib.requirements.python_reqs`.
   Accepts `timeout`, `allowed_imports`, and `use_sandbox` (Docker-based isolation).
 
-See: [Requirements System](../concepts/requirements-system)
+See: [Requirements System](../concepts/requirements-system.md)
 
 ---
 
@@ -818,7 +818,7 @@ to make PDFs, tables, and structured files queryable by the LLM. Extract tables 
 pip install 'mellea[docling]'
 ```
 
-See: [Working with Data](/how-to/working-with-data)
+See: [Working with Data](../how-to/working-with-data.md)
 
 ---
 
@@ -840,7 +840,7 @@ When the cache reaches `capacity`, the least recently used block is evicted and
 its GPU memory freed. Choose capacity based on available VRAM and block size —
 1–3 for large documents, up to 10 for small reused fragments.
 
-See: [Prefix Caching and KV Blocks](../advanced/prefix-caching-and-kv-blocks)
+See: [Prefix Caching and KV Blocks](../advanced/prefix-caching-and-kv-blocks.md)
 
 ---
 
@@ -857,7 +857,7 @@ ctx = SimpleContext()
 
 For multi-turn conversations, use `ChatContext` instead.
 
-See: [Context and Sessions](../concepts/context-and-sessions)
+See: [Context and Sessions](../concepts/context-and-sessions.md)
 
 ---
 
@@ -877,7 +877,7 @@ Mellea's built-in strategies:
 | `BudgetForcingSamplingStrategy` | Inject thinking tokens to expand reasoning budget |
 | `BaseSamplingStrategy` | Abstract base; extend to implement custom repair and selection logic |
 
-See: [Inference-Time Scaling](../advanced/inference-time-scaling)
+See: [Inference-Time Scaling](../advanced/inference-time-scaling.md)
 
 ---
 
@@ -900,7 +900,7 @@ tables = rich_doc.get_tables()
 summary = m.query(tables[0], "What is the total in the last row?")
 ```
 
-See: [Working with Data](/how-to/working-with-data)
+See: [Working with Data](../how-to/working-with-data.md)
 
 ---
 
@@ -919,7 +919,7 @@ for eval_case in test_evals:
     verdict = judge_session.instruct(eval_case)
 ```
 
-See: [Unit Test Generative Code](../how-to/unit-test-generative-code)
+See: [Unit Test Generative Code](../how-to/unit-test-generative-code.md)
 
 ---
 
@@ -929,7 +929,7 @@ A `ChatFormatter` subclass that renders prompts using Jinja2 templates instead o
 the default chat-message format. Use it when you need precise control over how
 components are serialised into the final prompt string. Configured per-backend.
 
-See: [Template Formatting](../advanced/template-formatting)
+See: [Template Formatting](../advanced/template-formatting.md)
 
 ---
 
@@ -940,7 +940,7 @@ the `TemplateFormatter`. It carries the component's template string, named
 arguments, tool definitions, and field list — everything the formatter needs to
 render the component into a prompt fragment.
 
-See: [Mellea Core Internals](../advanced/mellea-core-internals)
+See: [Mellea Core Internals](../advanced/mellea-core-internals.md)
 
 ---
 
@@ -950,7 +950,7 @@ See: [Mellea Core Internals](../advanced/mellea-core-internals)
 dual-process cognition: a fast "System 1" model generates candidates and a slower
 "System 2" model verifies them. Uses `SOFAISamplingStrategy`.
 
-See: [Inference-Time Scaling](../advanced/inference-time-scaling)
+See: [Inference-Time Scaling](../advanced/inference-time-scaling.md)
 
 ---
 
@@ -960,7 +960,7 @@ A Python function decorated with `@tool` (or registered via `MelleaSession`) tha
 Mellea exposes to an LLM for function calling. Tools have typed inputs and outputs
 so the LLM can call them reliably without free-form parsing.
 
-See: [Tools and Agents](/how-to/tools-and-agents)
+See: [Tools and Agents](../how-to/tools-and-agents.md)
 
 ---
 
@@ -978,7 +978,7 @@ def my_verifier(output: str) -> ValidationResult:
     return ValidationResult(passed, reason="Too long" if not passed else None)
 ```
 
-See: [Write Custom Verifiers](../how-to/write-custom-verifiers)
+See: [Write Custom Verifiers](../how-to/write-custom-verifiers.md)
 
 ---
 
@@ -1006,7 +1006,7 @@ Total wall-clock time is roughly the latency of the slowest single call rather
 than the sum of all calls. Use `SimpleContext` (the default) when calling
 `wait_for_all_mots`; concurrent writes to `ChatContext` can corrupt state.
 
-See: [Tutorial 02: Streaming and Async](/tutorials/streaming-and-async)
+See: [Tutorial 02: Streaming and Async](../tutorials/02-streaming-and-async.md)
 
 ---
 

@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from mellea.backends.adapters import AdapterSchemaMismatchError
+from mellea.backends.adapters import AdapterSchemaMismatchError, AdapterType
 from mellea.core import ModelOutputThunk, Requirement
 from mellea.stdlib.context import ChatContext
 from mellea.stdlib.requirements import LLMaJRequirement, simple_validate
@@ -227,6 +227,7 @@ def test_alora_requirement_default_intrinsic(mock_intrinsic_init):
         r,
         intrinsic_name="requirement-check",
         intrinsic_kwargs={"requirement": "must be valid"},
+        adapter_types=None,
     )
 
 
@@ -239,6 +240,26 @@ def test_alora_requirement_custom_intrinsic(mock_intrinsic_init):
         r,
         intrinsic_name="custom_check",
         intrinsic_kwargs={"requirement": "must be valid"},
+        adapter_types=None,
+    )
+
+
+@patch("mellea.stdlib.requirements.requirement.Intrinsic.__init__")
+def test_alora_requirement_forwards_adapter_types(mock_intrinsic_init):
+    """adapter_types is required to use a custom, non-catalog intrinsic_name
+    (Epic #929, issue #1144) — ALoraRequirement must forward it to Intrinsic.
+    """
+    mock_intrinsic_init.return_value = None
+    r = ALoraRequirement(
+        "must be valid",
+        intrinsic_name="custom_check",
+        adapter_types=(AdapterType.ALORA,),
+    )
+    mock_intrinsic_init.assert_called_once_with(
+        r,
+        intrinsic_name="custom_check",
+        intrinsic_kwargs={"requirement": "must be valid"},
+        adapter_types=(AdapterType.ALORA,),
     )
 
 

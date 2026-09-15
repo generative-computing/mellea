@@ -4,7 +4,7 @@ description: "Automatically collect LLM metrics and instrument your own code wit
 # diataxis: how-to
 ---
 
-**Prerequisites:** [Telemetry](../observability/telemetry)
+**Prerequisites:** [Telemetry](./telemetry.md)
 introduces the environment variables and telemetry architecture. This page
 covers metrics collection in detail.
 
@@ -87,9 +87,9 @@ after each LLM call. No code changes are required.
 
 | Metric Name | Type | Unit | Description |
 | ----------- | ---- | ---- | ----------- |
-| `gen_ai.client.operation.duration` | Histogram | `s` | Total request duration, from call to full response |
+| `mellea.llm.request.duration` | Histogram | `s` | Total request duration, from call to full response |
 | `gen_ai.client.operation.time_to_first_chunk` | Histogram | `s` | Time to first chunk (streaming requests only) |
-| `gen_ai.client.operation.time_per_output_chunk` | Histogram | `s` | Approximate time between consecutive streamed chunks (streaming only; opt-in, see below) |
+| `gen_ai.client.operation.time_per_output_chunk` | Histogram | `s` | Client-side interval between consecutive streamed chunks at receipt (streaming only; opt-in, see below) |
 
 ### Latency attributes
 
@@ -105,21 +105,21 @@ after each LLM call. No code changes are required.
 
 Bucket boundaries follow the Gen-AI semantic conventions:
 
-- **`gen_ai.client.operation.duration`**: `0.01, 0.02, 0.04, 0.08, 0.16, 0.32, 0.64, 1.28, 2.56, 5.12, 10.24, 20.48, 40.96, 81.92` seconds
+- **`mellea.llm.request.duration`**: `0.01, 0.02, 0.04, 0.08, 0.16, 0.32, 0.64, 1.28, 2.56, 5.12, 10.24, 20.48, 40.96, 81.92` seconds
 - **`gen_ai.client.operation.time_to_first_chunk`**: `0.01, 0.02, 0.04, 0.08, 0.16, 0.32, 0.64, 1.28, 2.56, 5.12, 10.24, 20.48, 40.96, 81.92` seconds
 - **`gen_ai.client.operation.time_per_output_chunk`**: `0.01, 0.02, 0.04, 0.08, 0.16, 0.32, 0.64, 1.28, 2.56, 5.12, 10.24, 20.48, 40.96, 81.92` seconds
 
 ### Latency recording timing
 
-- **`gen_ai.client.operation.duration`**: Recorded for every `generate_from_context` call,
-  both streaming and non-streaming.
+- **`mellea.llm.request.duration`**: Recorded for every `generate_from_context` call,
+  both streaming and non-streaming. Named `mellea.*` rather than using the `gen_ai.*` convention because it times the full client-side request, not just the model operation.
 - **`gen_ai.client.operation.time_to_first_chunk`**: Recorded only for streaming requests, measuring elapsed time
   from the `generate_from_context` call until the first chunk arrives.
 - **`gen_ai.client.operation.time_per_output_chunk`**: Recorded per streamed chunk after the
-  first, measuring the gap since the previous chunk. Opt-in — the histogram stays empty unless
-  `MELLEA_GENERATION_CHUNK_EVENTS=true`, since it relies on the per-chunk events that flag enables.
-  The gap is measured between chunk *processing* completions, an approximation of the
-  receive-to-receive interval the OTel GenAI spec defines.
+  first, measured from the previous chunk's receipt to this chunk's receipt. Opt-in; the
+  histogram stays empty unless `MELLEA_GENERATION_CHUNK_EVENTS=true`. It measures how fast
+  chunks arrive at the client, so client-side work between chunks (such as per-chunk
+  validation) counts toward the interval.
 
 Access latency data directly from a `ModelOutputThunk`:
 
@@ -296,6 +296,101 @@ All sampling metrics include:
 | --------- | ----------- | -------------- |
 | `gen_ai.tool.name` | Name of the invoked tool | `"search"`, `"calculator"` |
 | `status` | Execution outcome | `success`, `failure` |
+
+## Adapter function metrics
+
+Mellea records metrics for adapter function calls (`core.requirement_check()`,
+`rag.check_answerability()`, `Intrinsic`/`ALoraRequirement`, and the
+deprecated shim classes alike) — no code changes are required beyond enabling
+metrics as above. They are recorded by `AdapterFunctionMetricsPlugin`
+(`mellea/telemetry/metrics_plugins.py`), which subscribes to the
+`adapter_function_invocation_complete` and `adapter_function_phase_complete`
+hooks fired by `AdapterMixin.adapter_scope()` and
+`EmbeddedBinding.apply_activation()`.
+
+### Adapter function instruments
+
+| Metric Name | Type | Attributes | Description |
+| ----------- | ---- | ---------- | ----------- |
+| `mellea.adapter_function.invocations` | Counter | `name`, `revision`, `binding_type`, `adapter_type`, `outcome` | Calls, split by outcome (`success`, `schema_error`, `error`) |
+| `mellea.adapter_function.phase_duration` | Histogram | `name`, `phase` | Lifecycle phase duration, in seconds |
+| `mellea.adapter_function.parse_failures` | Counter | `name`, `revision` | LocalFile/PEFT: calls that raised `AdapterSchemaMismatchError` *while still inside* `adapter_scope()` — see the known gap below. Embedded/Granite Switch: not subject to that gap — a malformed (non-JSON) response fires `outcome="schema_error"` directly, with no `adapter_scope()` involved |
+
+`revision` reports the *resolved* revision actually used, not the raw value
+passed in: for a `LocalFileBinding` constructed with `revision=None` (the
+default for a catalog adapter), `adapter_scope()` resolves it to the
+catalog's pinned SHA before recording the metric, so a catalog adapter used
+without an explicit revision still reports that SHA rather than `"unpinned"`.
+The `"unpinned"` label only appears when no revision could be resolved at
+all — for a `LocalFileBinding`, that means resolution itself failed (a
+non-catalog adapter with no explicit `revision` — see
+[Adding a custom adapter function](../tutorials/07-custom-adapter-function.md)).
+It is not a general filter for "running without a pinned revision." The
+Embedded/Granite Switch reality is the exception: weights are already baked
+into the served model, so there is no revision to resolve at all, and every
+Embedded invocation reports `revision="unpinned"` regardless of resolution
+success.
+
+`phase` is one of `"prepare"`, `"activate"`, `"generate"`, `"parse"`, or
+`"deactivate"` — though as of this writing only three are actually emitted:
+`"prepare"` once per `LocalFileBinding` (fired from `add_adapter`/
+`binding.prepare()` — the download-and-load cost), then
+`"activate"`/`"deactivate"` per call from `adapter_scope()` for the
+LocalFile/PEFT reality, or `"activate"` alone per call for the Embedded
+reality (`EmbeddedBinding.apply_activation()`, which has no lifecycle to
+deactivate). `"generate"`/`"parse"` phase timing is tracked as future work in
+issue #1466.
+
+> **Known gap (LocalFile/PEFT only):** every production caller
+> (`core.requirement_check()`, `call_intrinsic()`, `ALoraRequirement`) parses
+> the model's output *after* `adapter_scope()` has already exited and fired
+> `outcome="success"` — so a real `AdapterSchemaMismatchError` from one of
+> those call paths is correctly raised to your code, but is not yet reflected
+> in `parse_failures` or in `invocations{outcome="schema_error"}`. Tracked in
+> issue #1611. Until that's fixed, catch `AdapterSchemaMismatchError` in
+> application code (see
+> [Adapter schema migrations](../tutorials/08-adapter-schema-migrations.md))
+> rather than relying on these metrics to surface schema drift for that
+> reality.
+>
+> This gap does not apply to the Embedded/Granite Switch reality: a malformed
+> response there fires `outcome="schema_error"` (and increments
+> `parse_failures`) directly from the response-processing code, with no
+> `adapter_scope()` in that path to have already exited.
+
+### Adapter function dashboard queries
+
+**Success rate** — `mellea.adapter_function.invocations`, grouped by `name`
+and `outcome`:
+
+```promql
+sum by (name, outcome) (rate(mellea_adapter_function_invocations_total[5m]))
+```
+
+Watch `outcome="error"` and `outcome="schema_error"` separately — an error
+means the call itself failed (network, generation); a schema error means the
+call succeeded but its output didn't parse against the declared contract
+(subject to the known gap above).
+
+**Phase latency** — `mellea.adapter_function.phase_duration`, grouped by
+`name` and `phase`. A p95 activate-phase latency that jumps for one adapter
+but not others usually means its weights just got evicted from whatever
+cache your deployment relies on (HF Hub's local cache, or your own).
+
+**Parse-failure rate** — `mellea.adapter_function.parse_failures` divided by
+`mellea.adapter_function.invocations` for the same `name`. In principle this
+is the leading indicator for the schema-drift scenario in
+[Adapter schema migrations](../tutorials/08-adapter-schema-migrations.md): a
+sudden rise, correlated with a `revision` change in your own deploy history,
+would be exactly the signal to re-pin or roll back — subject to the known gap
+above.
+
+> **Adapter function tracing:** Mellea does not currently open OpenTelemetry
+> **spans** for adapter function calls — only these metrics, driven by hooks,
+> exist today. Span-level tracing is tracked separately in issue #1466. If
+> your dashboard needs request-level tracing today, correlate the metrics
+> above with your own application-level spans around the
+> `mfuncs.act()`/`m.instruct()` call site instead.
 
 ## Metrics export configuration
 
@@ -604,9 +699,9 @@ Enable at least one exporter:
 
 **See also:**
 
-- [Telemetry](../observability/telemetry) — overview of all
+- [Telemetry](./telemetry.md) — overview of all
   telemetry features and configuration.
-- [Tracing](../observability/tracing) — distributed traces
+- [Tracing](./tracing.md) — distributed traces
   with Gen-AI semantic conventions.
-- [Logging](../observability/logging) — console logging and OTLP
+- [Logging](./logging.md) — console logging and OTLP
   log export.
