@@ -364,9 +364,10 @@ def validate(
         format: Optional Pydantic model for constrained decoding.
         model_options: Additional model options to merge with backend defaults.
         generate_logs: Optional list to append generation logs to.
-        input: Optional input to prepend to the validation context, for judging an output
-            against a specific input rather than the whole conversation. See `avalidate`
-            for the visibility caveat on contexts that render no history.
+        input: Optional input to append to the validation context, for judging an output
+            against a specific input rather than the whole conversation. It is added
+            ahead of `output` if `output` is provided. See `avalidate` for the visibility
+            caveat on contexts that render no history.
 
     Returns:
         List of `ValidationResult` objects, one per requirement.
@@ -1051,11 +1052,11 @@ async def avalidate(
         format: Optional Pydantic model for constrained decoding.
         model_options: Additional model options to merge with backend defaults.
         generate_logs: Optional list to append generation logs to.
-        input: Optional input to prepend to the validation context, for judging an output
+        input: Optional input to append to the validation context, for judging an output
             against a specific input rather than the whole conversation. It is added ahead
-            of `output`, so the judge sees the pair in order. It only reaches the model if
-            the context renders history: on a context whose `view_for_generation()` is empty
-            (`SimpleContext`), nothing added here is visible to the judge.
+            of `output`  if `output` is provided, so the judge sees the pair in order. It only reaches
+            the model if the context renders history: on a context whose `view_for_generation()`
+            is empty (`SimpleContext`), nothing added here is visible to the judge.
 
     Returns:
         List of `ValidationResult` objects, one per requirement.
