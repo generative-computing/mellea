@@ -769,7 +769,10 @@ workflows.
 """
     content += _list_section(mellea_entries, "mellea")
     content += "\n## CLI (`m`)\n\n"
-    content += "See the [CLI Reference](/reference/cli) page.\n"
+    # Relative + `.md`, not `/reference/cli`: a root-absolute path is
+    # version-blind and would send readers of the `next` API index to the
+    # released version's CLI reference.
+    content += "See the [CLI Reference](../reference/cli.md) page.\n"
 
     out_path = api_dir / "index.md"
     safe_write_text(out_path, content)

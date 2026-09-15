@@ -177,6 +177,37 @@ def _make_context() -> ChatContext:
     return ChatContext().add(Message("user", "What is the square root of 4?"))
 
 
+def _make_backend_with_composed_adapter(config: dict) -> OpenAIBackend:
+    """Return an OpenAIBackend with a composed `Adapter` registered directly.
+
+    Composed-Adapter counterpart of `_make_backend_with_adapter` (Epic #929,
+    issue #1144): `add_adapter` and `_generate_from_intrinsic` must drive the
+    same generation path for a composed `Adapter` as for the deprecated
+    `EmbeddedIntrinsicAdapter` shim.
+    """
+    from mellea.backends.adapters._core import (
+        Adapter as _AdapterCore,
+        EmbeddedBinding,
+        Identity,
+    )
+    from mellea.backends.adapters.io_contracts import get_io_contract
+
+    backend = OpenAIBackend(
+        model_id="granite-switch",
+        api_key="fake-key",
+        base_url="http://localhost:9999/v1",
+    )
+    adapter = _AdapterCore(
+        identity=Identity(
+            name="answerability", adapter_type="alora", capability="answerability"
+        ),
+        io_contract=get_io_contract("answerability"),
+        weights=EmbeddedBinding(),
+    )
+    backend.add_adapter(adapter, config=config)
+    return backend
+
+
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
@@ -207,6 +238,75 @@ async def test_chat_template_kwargs_set():
     extra_body = call_kwargs.kwargs.get("extra_body", {})
 
     assert "chat_template_kwargs" in extra_body
+    assert extra_body["chat_template_kwargs"]["adapter_name"] == "answerability"
+
+
+async def test_composed_adapter_drives_generate_from_intrinsic():
+    """A composed `Adapter` (not the `EmbeddedIntrinsicAdapter` shim) drives
+    the same generation path — activation, name/config resolution — as the
+    shim (Epic #929, issue #1144)."""
+    backend = _make_backend_with_composed_adapter(_SIMPLE_CONFIG)
+    ctx = _make_context()
+    mock_create = AsyncMock(return_value=_simple_chat_completion())
+
+    mock_client = MagicMock()
+    mock_client.chat.completions.create = mock_create
+
+    with patch.object(
+        OpenAIBackend,
+        "_async_client",
+        new_callable=PropertyMock,
+        return_value=mock_client,
+    ):
+        mot, _ = await mfuncs.aact(
+            Intrinsic("answerability"), ctx, backend, strategy=None
+        )
+        await mot.avalue()
+
+    mock_create.assert_called_once()
+    call_kwargs = mock_create.call_args
+    extra_body = call_kwargs.kwargs.get("extra_body", {})
+
+    assert "chat_template_kwargs" in extra_body
+    assert extra_body["chat_template_kwargs"]["adapter_name"] == "answerability"
+
+
+async def test_construction_time_extra_body_default_survives_intrinsic_call():
+    """A construction-time extra_body default must survive an intrinsic call
+    that supplies its own unrelated per-call extra_body, alongside the
+    adapter's own chat_template_kwargs.adapter_name write."""
+    backend = _make_backend_with_adapter(
+        _SIMPLE_CONFIG,
+        model_options={
+            "extra_body": {"chat_template_kwargs": {"enable_thinking": False}}
+        },
+    )
+    ctx = _make_context()
+    mock_create = AsyncMock(return_value=_simple_chat_completion())
+
+    mock_client = MagicMock()
+    mock_client.chat.completions.create = mock_create
+
+    with patch.object(
+        OpenAIBackend,
+        "_async_client",
+        new_callable=PropertyMock,
+        return_value=mock_client,
+    ):
+        mot, _ = await mfuncs.aact(
+            Intrinsic("answerability"),
+            ctx,
+            backend,
+            strategy=None,
+            model_options={"extra_body": {"some_unrelated_field": 123}},
+        )
+        await mot.avalue()
+
+    mock_create.assert_called_once()
+    extra_body = mock_create.call_args.kwargs.get("extra_body", {})
+
+    assert extra_body["some_unrelated_field"] == 123
+    assert extra_body["chat_template_kwargs"]["enable_thinking"] is False
     assert extra_body["chat_template_kwargs"]["adapter_name"] == "answerability"
 
 
@@ -668,7 +768,10 @@ async def test_user_extra_body_is_not_mutated():
 
 
 async def test_reasoning_effort_bool_false():
-    """THINKING: False sets chat_template_kwargs.enable_thinking=False; no reasoning_effort."""
+    """THINKING: False sets chat_template_kwargs.enable_thinking=False and
+    reasoning_effort="none" (Ollama /v1 disables thinking only via
+    reasoning_effort; absence means the model default, which is ON for
+    e.g. granite4.2)."""
     backend = _make_backend_with_adapter(_SIMPLE_CONFIG)
     ctx = _make_context()
     mock_create = AsyncMock(return_value=_simple_chat_completion())
@@ -692,8 +795,9 @@ async def test_reasoning_effort_bool_false():
         await mot.avalue()
 
     call_kwargs = mock_create.call_args
-    assert "reasoning_effort" not in call_kwargs.kwargs, (
-        "reasoning_effort must not be sent for THINKING=False (invalid for OpenAI)"
+    assert call_kwargs.kwargs.get("reasoning_effort") == "none", (
+        "reasoning_effort should be 'none' for THINKING=False "
+        "(disables thinking on Ollama /v1, which defaults it on)"
     )
     extra_body = call_kwargs.kwargs.get("extra_body", {})
     assert extra_body.get("chat_template_kwargs", {}).get("enable_thinking") is False
@@ -834,3 +938,59 @@ async def test_intrinsic_path_does_not_download_audio_it_will_reject():
             await mot.avalue()
 
     mock_dl.assert_not_called()
+
+
+def test_register_embedded_adapter_model_refused_duplicate_does_not_clobber_cached_config():
+    """register_embedded_adapter_model() must not overwrite a live adapter's cached
+    config, or falsely report it as (re-)registered, when add_adapter() refuses
+    a duplicate name.
+
+    Regression: add_adapter() silently refuses (logs a warning, returns) rather
+    than raising for an already-registered qualified name. The loop here used to
+    write `discovered`'s config into `_composed_adapter_configs` and append the
+    name unconditionally — mirrors the identical bug fixed on LocalHFBackend.
+    """
+    from mellea.backends.adapters._core import (
+        Adapter as _AdapterCore,
+        EmbeddedBinding as _EmbeddedBinding,
+        Identity as _Identity,
+    )
+    from mellea.backends.adapters.io_contracts import get_io_contract
+
+    backend = OpenAIBackend(
+        model_id="granite-switch",
+        api_key="fake-key",
+        base_url="http://localhost:9999/v1",
+    )
+
+    def _make_composed():
+        return _AdapterCore(
+            identity=_Identity(
+                name="answerability", adapter_type="alora", capability="answerability"
+            ),
+            io_contract=get_io_contract("answerability"),
+            weights=_EmbeddedBinding(),
+        )
+
+    first_config = {"version": "first"}
+    with patch(
+        "mellea.backends.openai._discover_embedded_adapters",
+        return_value=[(_make_composed(), first_config)],
+    ):
+        names = backend.register_embedded_adapter_model(
+            "some/repo", intrinsic_name="answerability"
+        )
+    assert names == ["answerability"]
+    assert backend._composed_adapter_configs["answerability_alora"] is first_config
+
+    second_config = {"version": "second"}
+    with patch(
+        "mellea.backends.openai._discover_embedded_adapters",
+        return_value=[(_make_composed(), second_config)],
+    ):
+        names = backend.register_embedded_adapter_model(
+            "some/other-repo", intrinsic_name="answerability"
+        )
+
+    assert names == []
+    assert backend._composed_adapter_configs["answerability_alora"] is first_config

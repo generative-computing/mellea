@@ -20,6 +20,8 @@ const sidebars: SidebarsConfig = {
         'tutorials/making-agents-reliable',
         'tutorials/mifying-legacy-code',
         'tutorials/streaming-validation',
+        'tutorials/custom-adapter-function',
+        'tutorials/adapter-schema-migrations',
       ],
     },
     {

@@ -3,8 +3,37 @@
 
 """Unit tests for the Intrinsic component."""
 
+import pytest
+
 from mellea.backends.adapters import AdapterType
 from mellea.stdlib.components import Intrinsic
+
+
+class TestCustomNonCatalogName:
+    """A name outside the intrinsics catalog (Epic #929, issue #1144).
+
+    Replaces the deprecated `CustomIntrinsicAdapter` shim's catalog
+    monkey-patch: a custom adapter function can construct an `Intrinsic`
+    without any catalog mutation, as long as it supplies `adapter_types`.
+    """
+
+    def test_custom_name_without_adapter_types_raises(self):
+        with pytest.raises(ValueError, match="Unknown intrinsic name"):
+            Intrinsic("totally-made-up-name")
+
+    def test_custom_name_with_adapter_types_constructs(self):
+        intrinsic = Intrinsic(
+            "totally-made-up-name", adapter_types=(AdapterType.ALORA,)
+        )
+        assert intrinsic.intrinsic_name == "totally-made-up-name"
+        assert intrinsic.adapter_types == (AdapterType.ALORA,)
+        assert intrinsic.metadata.name == "totally-made-up-name"
+
+    def test_known_name_ignores_synthetic_fallback(self):
+        """A real catalog name never hits the synthetic-entry path, even
+        without adapter_types."""
+        intrinsic = Intrinsic("answerability")
+        assert intrinsic.metadata.repo_id != ""
 
 
 class TestAdapterTypesOverride:

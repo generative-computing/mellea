@@ -12,7 +12,10 @@ import inspect
 import pytest
 
 import mellea.backends.model_ids as model_ids
+from mellea.backends.litellm import LiteLLMBackend
 from mellea.backends.model_ids import ModelIdentifier
+from mellea.backends.ollama import OllamaModelBackend
+from mellea.stdlib.session import start_session
 
 # Collect all ModelIdentifier constants defined at module level.
 _ALL_IDS: list[tuple[str, ModelIdentifier]] = [
@@ -27,6 +30,36 @@ _OLLAMA_IDS = [
     for name, obj in _ALL_IDS
     if obj.ollama_name  # excludes None and ""
 ]
+
+
+@pytest.mark.parametrize(
+    ("model_id", "expected_ollama_name"),
+    [
+        (model_ids.IBM_GRANITE_4_2_3B, "granite4.2:3b"),
+        (model_ids.IBM_GRANITE_4_2_8B, "granite4.2:8b"),
+        (model_ids.IBM_GRANITE_4_2_30B, "granite4.2:30b"),
+    ],
+)
+def test_granite_4_2_ollama_names(
+    model_id: ModelIdentifier, expected_ollama_name: str
+) -> None:
+    """Granite 4.2 identifiers use the published Ollama library tags."""
+    assert model_id.ollama_name == expected_ollama_name
+
+
+def test_ollama_defaults_use_granite_4_2() -> None:
+    """Default local backends and sessions use Granite 4.2 3B."""
+    granite_4_2 = model_ids.IBM_GRANITE_4_2_3B
+    assert (
+        inspect.signature(OllamaModelBackend).parameters["model_id"].default
+        is granite_4_2
+    )
+    assert inspect.signature(LiteLLMBackend).parameters["model_id"].default == (
+        f"ollama_chat/{granite_4_2.ollama_name}"
+    )
+    assert (
+        inspect.signature(start_session).parameters["model_id"].default is granite_4_2
+    )
 
 
 @pytest.mark.integration

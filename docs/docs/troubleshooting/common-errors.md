@@ -6,16 +6,16 @@ description: "Common errors, diagnostic steps, and fixes for Mellea programs."
 
 ## Installation
 
-### `granite4.1:3b` not found
+### `granite4.2:3b` not found
 
 ```text
-Error: model "granite4.1:3b" not found
+Error: model "granite4.2:3b" not found
 ```
 
 Pull the model before running:
 
 ```bash
-ollama pull granite4.1:3b
+ollama pull granite4.2:3b
 ```
 
 ### Python 3.13: `outlines` install failure
@@ -265,11 +265,11 @@ See [Safety Guardrails](../how-to/safety-guardrails.md) for migration guidance.
 - **GitHub Issues:** [github.com/generative-computing/mellea/issues](https://github.com/generative-computing/mellea/issues)
 - **Examples:** [`docs/examples/`](https://github.com/generative-computing/mellea/tree/main/docs/examples)
 - Enable telemetry to inspect what is happening at each step — see
-  [Telemetry](../observability/telemetry).
+  [Telemetry](../observability/telemetry.md).
 
 ---
 
 **See also:**
-[Quick Start](../getting-started/quickstart) |
-[Inference-Time Scaling](../advanced/inference-time-scaling) |
+[Quick Start](../getting-started/quickstart.md) |
+[Inference-Time Scaling](../advanced/inference-time-scaling.md) |
 [Safety Guardrails](../how-to/safety-guardrails.md)

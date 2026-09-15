@@ -4,13 +4,13 @@ description: "Write validation functions that inspect LLM output and return pass
 # diataxis: how-to
 ---
 
-> **Concept overview:** [The Requirements System](../concepts/requirements-system) explains the design and trade-offs.
+> **Concept overview:** [The Requirements System](../concepts/requirements-system.md) explains the design and trade-offs.
 
-**Prerequisites:** [The Requirements System](../concepts/requirements-system),
-[Quick Start](../getting-started/quickstart) complete, `pip install mellea`.
+**Prerequisites:** [The Requirements System](../concepts/requirements-system.md),
+[Quick Start](../getting-started/quickstart.md) complete, `pip install mellea`.
 
 Custom verifiers are Python functions that inspect LLM output and return a
-[`ValidationResult`](../reference/glossary#validationresult). Mellea calls them as part of the IVR loop: when a verifier
+[`ValidationResult`](../reference/glossary.md#validationresult). Mellea calls them as part of the IVR loop: when a verifier
 returns `False`, Mellea sends the `reason` back to the model and retries.
 
 ## The `simple_validate` shortcut
@@ -266,5 +266,5 @@ right time and produces helpful repair guidance.
 
 ---
 
-**See also:** [The Requirements System](../concepts/requirements-system) |
-[Instruct, Validate, Repair](../concepts/instruct-validate-repair)
+**See also:** [The Requirements System](../concepts/requirements-system.md) |
+[Instruct, Validate, Repair](../concepts/instruct-validate-repair.md)

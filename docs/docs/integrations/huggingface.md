@@ -12,7 +12,7 @@ server-based backends.
 **Prerequisites:** `pip install 'mellea[hf]'`, Python 3.11+, local model weights.
 
 > **Tip:** For everyday local inference without experimental features, use
-> [Ollama](./ollama) — it is simpler to set up and well suited for development.
+> [Ollama](./ollama.md) — it is simpler to set up and well suited for development.
 
 ## Install
 
@@ -46,7 +46,7 @@ On first run, `LocalHFBackend` downloads the model weights via the Transformers
 
 ## Device selection
 
-The [`Backend`](../reference/glossary#backend) selects the device automatically: CUDA GPU
+The [`Backend`](../reference/glossary.md#backend) selects the device automatically: CUDA GPU
 if available, then Apple Silicon MPS, then CPU. To override device selection, use
 `custom_config`:
 
@@ -64,7 +64,7 @@ m_backend = LocalHFBackend(
 ## KV cache
 
 `LocalHFBackend` caches KV blocks across calls by default (`use_caches=True`). This
-speeds up repeated calls that share a common prefix. Pass a [`SimpleLRUCache`](../reference/glossary#simplelrucache)
+speeds up repeated calls that share a common prefix. Pass a [`SimpleLRUCache`](../reference/glossary.md#simplelrucache)
 to control capacity, or disable caching entirely for debugging:
 
 ```python
@@ -79,11 +79,11 @@ m_backend = LocalHFBackend(model_ids.IBM_GRANITE_4_HYBRID_MICRO, cache=SimpleLRU
 m_backend = LocalHFBackend(model_ids.IBM_GRANITE_4_HYBRID_MICRO, use_caches=False)
 ```
 
-See [Prefix Caching and KV Blocks](../advanced/prefix-caching-and-kv-blocks) for full details on marking blocks for caching and how [KV smashing](../reference/glossary#kv-smashing) works.
+See [Prefix Caching and KV Blocks](../advanced/prefix-caching-and-kv-blocks.md) for full details on marking blocks for caching and how [KV smashing](../reference/glossary.md#kv-smashing) works.
 
 ## aLoRA adapters
 
-`LocalHFBackend` supports [aLoRA](../advanced/lora-and-alora-adapters)
+`LocalHFBackend` supports [aLoRA](../advanced/lora-and-alora-adapters.md)
 adapters — lightweight domain-specific requirement validators that run on local GPU
 hardware. See the aLoRA guide for training and usage.
 
@@ -102,10 +102,10 @@ In testing, spaced JSON used roughly 1.5x more tokens than compact JSON for the 
 ## Vision support
 
 Vision support for `LocalHFBackend` is model-dependent and experimental. Pass a PIL
-image or an [`ImageBlock`](../reference/glossary#imageblock) via `images=[...]` to
+image or an [`ImageBlock`](../reference/glossary.md#imageblock) via `images=[...]` to
 `instruct()` or `chat()` when using a vision-capable model. Not all models loaded via
 `LocalHFBackend` support image input. See
-[Use Images and Vision Models](../how-to/use-images-and-vision).
+[Use Images and Vision Models](../how-to/use-images-and-vision.md).
 
 ## Troubleshooting
 
@@ -133,5 +133,5 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
 ---
 
-**See also:** [Backends and Configuration](../how-to/backends-and-configuration) |
-[LoRA and aLoRA Adapters](../advanced/lora-and-alora-adapters)
+**See also:** [Backends and Configuration](../how-to/backends-and-configuration.md) |
+[LoRA and aLoRA Adapters](../advanced/lora-and-alora-adapters.md)

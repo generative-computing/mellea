@@ -14,29 +14,27 @@ pytestmark = [pytest.mark.openai, pytest.mark.e2e, pytest.mark.ollama]
 
 from mellea import MelleaSession, start_session
 from mellea.backends import ModelOption
-from mellea.backends.model_ids import IBM_GRANITE_4_1_3B
+from mellea.backends.model_ids import IBM_GRANITE_VISION_4_1_4B
 from mellea.core import ImageBlock, ImageUrlBlock, ModelOutputThunk
 from mellea.stdlib.components import Instruction, Message
 
+assert IBM_GRANITE_VISION_4_1_4B.ollama_name is not None
+VISION_MODEL = IBM_GRANITE_VISION_4_1_4B.ollama_name
+VISION_CONTEXT_WINDOW = 4096
+
 
 @pytest.fixture(scope="module")
-def m_session(gh_run):
-    if gh_run == 1:
-        m = start_session(
-            "openai",
-            model_id=IBM_GRANITE_4_1_3B.ollama_name,  # type: ignore
-            base_url=f"http://{os.environ.get('OLLAMA_HOST', 'localhost:11434')}/v1",
-            api_key="ollama",
-            model_options={ModelOption.MAX_NEW_TOKENS: 5},
-        )
-    else:
-        m = start_session(
-            "openai",
-            model_id="granite3.2-vision",
-            base_url=f"http://{os.environ.get('OLLAMA_HOST', 'localhost:11434')}/v1",
-            api_key="ollama",
-            model_options={ModelOption.MAX_NEW_TOKENS: 5},
-        )
+def m_session():
+    m = start_session(
+        "openai",
+        model_id=VISION_MODEL,
+        base_url=f"http://{os.environ.get('OLLAMA_HOST', 'localhost:11434')}/v1",
+        api_key="ollama",
+        model_options={
+            ModelOption.MAX_NEW_TOKENS: 5,
+            ModelOption.CONTEXT_WINDOW: VISION_CONTEXT_WINDOW,
+        },
+    )
     yield m
     del m
 

@@ -333,7 +333,7 @@ async def test_stream_span_ends_error_on_early_exit(span_exporter):
     from mellea.core.requirement import PartialValidationResult, Requirement
 
     class _FailingReq(Requirement):
-        async def stream_validate(self, chunk, *, backend, ctx):
+        async def _stream_validate(self, chunk, *, backend, ctx):
             return PartialValidationResult("fail", reason="nope")
 
     gen = _streaming_backend(["A full sentence here."])

@@ -17,7 +17,11 @@ from opentelemetry.trace import SpanKind
 
 from mellea.backends.model_options import ModelOption
 from mellea.core.base import GenerationMetadata, ModelOutputThunk
-from mellea.core.requirement import PartialValidationResult, ValidationResult
+from mellea.core.requirement import (
+    PartialValidationResult,
+    PartialValidationSummary,
+    ValidationResult,
+)
 from mellea.plugins.hooks.component import (
     ComponentPostErrorPayload,
     ComponentPostSuccessPayload,
@@ -1042,7 +1046,12 @@ async def test_streaming_event_records_mid_stream_events(
     await _open_streaming_span(streaming_plugin, fake_tracer, "sid-ev")
 
     qc = QuickCheckEvent(
-        chunk_index=0, attempt=1, passed=True, results=[PartialValidationResult("pass")]
+        chunk_index=0,
+        attempt=1,
+        passed=True,
+        results=[
+            PartialValidationSummary.from_results([PartialValidationResult("pass")])
+        ],
     )
     chunk = ChunkEvent(text="hello", chunk_index=0, attempt=1)
     done = StreamingDoneEvent(attempt=1, full_text="hello world")

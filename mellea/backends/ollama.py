@@ -175,7 +175,7 @@ class OllamaModelBackend(FormatterBackend):
 
     def __init__(
         self,
-        model_id: str | ModelIdentifier = model_ids.IBM_GRANITE_4_1_3B,
+        model_id: str | ModelIdentifier = model_ids.IBM_GRANITE_4_2_3B,
         formatter: ChatFormatter | None = None,
         base_url: str | None = None,
         model_options: dict | None = None,
@@ -625,7 +625,7 @@ class OllamaModelBackend(FormatterBackend):
             output._gen.generate = asyncio.create_task(
                 send_to_queue(
                     chat_response,
-                    output._gen.queue,
+                    output,
                     chunk_timeout=model_opts.get(
                         ModelOption.STREAM_TIMEOUT, DEFAULT_CHUNK_TIMEOUT
                     ),
