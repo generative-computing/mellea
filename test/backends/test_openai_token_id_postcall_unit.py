@@ -443,3 +443,157 @@ async def test_retained_turn_response_keeps_top_level_id_and_model():
     assert isinstance(mot.raw.response, dict)
     assert mot.raw.response["id"] == "cmpl-1"
     assert mot.raw.response["model"] == "granite-switch"
+
+
+# --- Client-side retention observability -------------------------------------
+#
+# A caller without access to the server's cache counters still needs to see whether
+# Mellea reused ids and how many. `mot.generation.token_id_retention` is that signal;
+# it reports what was SENT, never that the server's cache hit.
+
+
+async def test_first_retaining_turn_reports_no_reuse():
+    """A first turn sends ids but reuses none, and says so rather than staying silent.
+
+    `reused=0` with a non-zero `new_prompt_tokens` is the honest description of a turn
+    that opted into the id transport before any prefix existed. Reporting nothing would
+    be indistinguishable from a turn that fell back to a chat send.
+    """
+    mot, _, _ = await _run_token_id_turn(
+        _backend(), ChatContext(retain_token_ids=True), prompt_ids=[11, 12, 13]
+    )
+
+    assert mot.generation.token_id_retention == {
+        "reused_prompt_tokens": 0,
+        "new_prompt_tokens": 3,
+        "prompt_tokens": 3,
+    }
+
+
+async def test_retaining_turn_reports_the_reused_prefix_size():
+    """A turn that splices a retained prefix reports how much of the prompt it reused."""
+    ctx = ChatContext(retain_token_ids=True).with_sent_token_ids(
+        [1, 2, 3], model_id="granite-switch", message_count=1
+    )
+    mot, _, _ = await _run_token_id_turn(_backend(), ctx, prompt_ids=[1, 2, 3, 40, 41])
+
+    assert mot.generation.token_id_retention == {
+        "reused_prompt_tokens": 3,
+        "new_prompt_tokens": 2,
+        "prompt_tokens": 5,
+    }
+
+
+async def test_rebaselined_turn_reports_no_reuse_despite_retained_ids():
+    """Dropping the prefix must report `reused=0`, not the ids the context still holds.
+
+    The control-token ceiling can force a full re-render (`_build_prompt_ids` returns a
+    fresh transcript instead of a splice). The context still carries the old ids, so a
+    signal derived from the context alone would claim reuse that did not happen. It is
+    measured from the prompt actually built, which no longer starts with those ids.
+    """
+    ctx = ChatContext(retain_token_ids=True).with_sent_token_ids(
+        [1, 2, 3], model_id="granite-switch", message_count=1
+    )
+    mot, _, _ = await _run_token_id_turn(_backend(), ctx, prompt_ids=[90, 91, 92, 93])
+
+    assert mot.generation.token_id_retention == {
+        "reused_prompt_tokens": 0,
+        "new_prompt_tokens": 4,
+        "prompt_tokens": 4,
+    }
+
+
+async def test_fallback_turn_reports_nothing():
+    """A refused prefix falls back to the chat send and leaves the signal `None`.
+
+    Presence of the signal therefore means "this turn went out as ids", which is what a
+    caller needs in order to tell a real reuse from a silent degrade.
+    """
+    from mellea.backends.openai import _prompt_digest
+
+    backend = _backend()
+    ctx = (
+        ChatContext(retain_token_ids=True)
+        .with_sent_token_ids(
+            [10, 11, 999],
+            model_id=backend._model_id,
+            message_count=1,
+            prompt_digest=_prompt_digest([{"role": "user", "content": "NEVER-SENT"}]),
+        )
+        .add(Message("user", "U1"))
+    )
+
+    create = MagicMock(return_value=MagicMock(name="chat_request"))
+    backend._async_client.chat.completions.create = create
+    backend._async_client.completions.create = AsyncMock(
+        side_effect=AssertionError("a refused prefix must not use the id transport")
+    )
+
+    with patch("mellea.backends.openai.send_to_queue", new=AsyncMock()):
+        output, _ = await backend._generate_from_context(
+            Message("user", "U2"), ctx, model_options={}
+        )
+
+    assert create.call_count == 1
+    assert output.generation.token_id_retention is None
+
+
+# --- Terminator overlap: the model can emit the terminator itself ---------------
+
+
+@pytest.mark.parametrize(
+    ("emitted", "terminator", "expected_tail", "why"),
+    [
+        (
+            [501, 100257],
+            [100257, 198],
+            [501, 100257, 198],
+            "emitted ends with all of it",
+        ),
+        (
+            [501, 100257, 198],
+            [100257, 198],
+            [501, 100257, 198],
+            "emitted ends with all of it",
+        ),
+        (
+            [501, 502],
+            [100257, 198],
+            [501, 502, 100257, 198],
+            "no overlap: append whole",
+        ),
+        (
+            [501, 198],
+            [100257, 198],
+            [501, 198, 100257, 198],
+            "tail matches but not a prefix",
+        ),
+    ],
+)
+def test_retained_ids_does_not_duplicate_an_emitted_terminator(
+    emitted, terminator, expected_tail, why
+):
+    """The terminator is appended only where the emitted ids do not already carry it.
+
+    With `return_token_ids` on, vLLM reports the stop token the model sampled, so the
+    emitted ids can already end with the terminator or a prefix of it. Appending it blind
+    duplicates those tokens: measured against a live vLLM, emitted `13, 100257` plus a
+    `[100257, 198]` terminator produced `13, 100257, 100257, 198` where the template
+    renders `13, 100257, 198`. The retained sequence then diverges from what the server
+    cached (reuse fell from 48 tokens to 32) and carries a stray end-of-turn token into
+    every later turn.
+
+    The last case pins the rule as PREFIX overlap, not "ends with any terminator token":
+    a reply ending in `198` does not mean the `100257` before it was emitted.
+    """
+    backend = _backend()
+    mot = ModelOutputThunk(None)
+    mot._meta["retained_from_test"] = True
+    mot.raw.response = {
+        "choices": [{"index": 0, "message": {"content": "x"}, "token_ids": emitted}]
+    }
+
+    retained = backend._retained_ids([1, 2], mot, terminator)
+
+    assert retained == [1, 2, *expected_tail], why
