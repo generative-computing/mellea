@@ -394,4 +394,4 @@ class SamplingStrategy(abc.ABC):
             reqs += self.requirements
         elif call_requirements is not None:
             reqs += call_requirements
-        return list(set(reqs))
+        return list(dict.fromkeys(reqs))
