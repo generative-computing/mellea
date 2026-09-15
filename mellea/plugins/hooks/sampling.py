@@ -109,7 +109,8 @@ class SamplingLoopEndPayload(MelleaBasePayload):
         iterations_used: Total number of sampling iterations that completed. With concurrency
             enabled, this may be less than `loop_budget * concurrency_budget` if the strategy
             exits early after a successful result. `0` on the exception path, regardless of
-            how many iterations ran before the loop raised.
+            how many iterations ran before the loop raised. For fan-out strategies such as Majority voting,
+            these are from the selected branch.
         final_result: The selected `ModelOutputThunk` (best success or best failure).
         final_action: The `Component` that produced `final_result`.
 
@@ -117,7 +118,9 @@ class SamplingLoopEndPayload(MelleaBasePayload):
 
         failure_reason: Human-readable reason when `success` is `False`.
         exception: The exception raised by the loop, or `None` when it completed.
-        all_results: List of `ModelOutputThunk` from every iteration.
+        all_results: List of `ModelOutputThunk` from every iteration represented by the
+            returned sampling result. For fan-out strategies such as Majority voting, these are
+            from the selected branch.
         all_validations: Nested list — `all_validations[i]` is the list of
             `(Requirement, ValidationResult)` tuples for iteration *i*.
     """

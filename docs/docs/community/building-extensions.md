@@ -13,11 +13,11 @@ Components, Sampling Strategies, and Backends without modifying the core library
 
 Choose the pathway that fits the scope of your work:
 
-| Pathway                                                                        | When to use                                                                                 |
-| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------- |
-| **Core repository**                                                            | General-purpose additions that benefit all users — open an issue first to discuss placement |
-| **Your own repo** (`mellea-` prefix)                                           | Application-specific or domain-specific libraries                                           |
-| **[mellea-contribs](https://github.com/generative-computing/mellea-contribs)** | Experimental or specialized components not yet ready for the standard library               |
+| Pathway | When to use |
+| ------- | ----------- |
+| **Core repository** | General-purpose additions that benefit all users — open an issue first to discuss placement |
+| **Your own repo** (`mellea-` prefix) | Application-specific or domain-specific libraries |
+| **[mellea-contribs](https://github.com/generative-computing/mellea-contribs)** | Experimental or specialized components not yet ready for the standard library |
 
 > **Note:** For general-purpose Components, Requirements, or Sampling Strategies,
 > open an issue before submitting a PR. This avoids duplication and ensures

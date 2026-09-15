@@ -27,6 +27,7 @@ from .base import (
     Span,
 )
 from .requirement import Requirement, ValidationResult
+from .utils import log_context
 
 # The kinds of action a sampling strategy may operate on. Originally `Component`
 # only; widened to include `CBlock` and `ModelOutputThunk` so that `act`/`aact`
@@ -147,6 +148,7 @@ class SamplingStrategy(abc.ABC):
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
+        show_progress: bool = True,
         **kwargs,
     ) -> SamplingResult[S]:
         """Concrete wrapper: owns the sampling lifecycle and fires loop start/end hooks.
@@ -165,6 +167,7 @@ class SamplingStrategy(abc.ABC):
             format: output format for structured outputs.
             model_options: model options to pass to the backend during generation / validation.
             tool_calls: True if tool calls should be used during this sampling strategy.
+            show_progress: If true, a tqdm progress bar is used. Otherwise, messages will still be sent to flog.
             **kwargs: Additional keyword arguments forwarded to `_sample`.
 
         Returns:
@@ -181,86 +184,88 @@ class SamplingStrategy(abc.ABC):
         exception: BaseException | None = None
         s_result: SamplingResult | None = None
 
-        try:
-            reqs = self._merge_requirements(requirements)
-            effective_loop_budget = self.loop_budget
+        with log_context(strategy=type(self).__name__):
+            try:
+                reqs = self._merge_requirements(requirements)
+                effective_loop_budget = self.loop_budget
 
-            # --- sampling_loop_start hook ---
-            if has_plugins(HookType.SAMPLING_LOOP_START):
-                from ..plugins.hooks.sampling import SamplingLoopStartPayload
+                # --- sampling_loop_start hook ---
+                if has_plugins(HookType.SAMPLING_LOOP_START):
+                    from ..plugins.hooks.sampling import SamplingLoopStartPayload
 
-                start_payload = SamplingLoopStartPayload(
-                    sampling_id=sampling_id,
-                    strategy_name=type(self).__name__,
+                    start_payload = SamplingLoopStartPayload(
+                        sampling_id=sampling_id,
+                        strategy_name=type(self).__name__,
+                        action=action,
+                        context=context,
+                        requirements=reqs,
+                        loop_budget=self.loop_budget,
+                    )
+                    _, start_payload = await invoke_hook(
+                        HookType.SAMPLING_LOOP_START, start_payload, backend=backend
+                    )
+                    effective_loop_budget = start_payload.loop_budget
+
+                # Hooks can override loop_budget but bypass the constructor's
+                # validation; reject non-positive values up front.
+                if effective_loop_budget < 1:
+                    raise ValueError(
+                        f"SAMPLING_LOOP_START hook returned non-positive loop_budget="
+                        f"{effective_loop_budget}; must be >= 1."
+                    )
+
+                s_result = await self._sample(
                     action=action,
                     context=context,
+                    backend=backend,
                     requirements=reqs,
-                    loop_budget=self.loop_budget,
+                    effective_loop_budget=effective_loop_budget,
+                    validation_ctx=validation_ctx,
+                    format=format,
+                    model_options=model_options,
+                    tool_calls=tool_calls,
+                    sampling_id=sampling_id,
+                    show_progress=show_progress,
+                    **kwargs,
                 )
-                _, start_payload = await invoke_hook(
-                    HookType.SAMPLING_LOOP_START, start_payload, backend=backend
-                )
-                effective_loop_budget = start_payload.loop_budget
+                return s_result
 
-            # Hooks can override loop_budget but bypass the constructor's
-            # validation; reject non-positive values up front.
-            if effective_loop_budget < 1:
-                raise ValueError(
-                    f"SAMPLING_LOOP_START hook returned non-positive loop_budget="
-                    f"{effective_loop_budget}; must be >= 1."
-                )
+            except BaseException as exc:
+                exception = exc
+                raise
+            finally:
+                # --- sampling_loop_end hook ---
+                if has_plugins(HookType.SAMPLING_LOOP_END):
+                    from ..plugins.hooks.sampling import SamplingLoopEndPayload
 
-            s_result = await self._sample(
-                action=action,
-                context=context,
-                backend=backend,
-                requirements=reqs,
-                effective_loop_budget=effective_loop_budget,
-                validation_ctx=validation_ctx,
-                format=format,
-                model_options=model_options,
-                tool_calls=tool_calls,
-                sampling_id=sampling_id,
-                **kwargs,
-            )
-            return s_result
-
-        except BaseException as exc:
-            exception = exc
-            raise
-        finally:
-            # --- sampling_loop_end hook ---
-            if has_plugins(HookType.SAMPLING_LOOP_END):
-                from ..plugins.hooks.sampling import SamplingLoopEndPayload
-
-                if exception is not None:
-                    end_payload = SamplingLoopEndPayload(
-                        sampling_id=sampling_id,
-                        strategy_name=type(self).__name__,
-                        success=False,
-                        exception=exception,
+                    if exception is not None:
+                        end_payload = SamplingLoopEndPayload(
+                            sampling_id=sampling_id,
+                            strategy_name=type(self).__name__,
+                            success=False,
+                            exception=exception,
+                        )
+                    else:
+                        assert s_result is not None
+                        end_payload = SamplingLoopEndPayload(
+                            sampling_id=sampling_id,
+                            strategy_name=type(self).__name__,
+                            success=s_result.success,
+                            iterations_used=len(s_result.sample_generations),
+                            final_result=s_result.result,
+                            final_action=s_result.result_action,
+                            final_context=s_result.result_ctx,
+                            all_results=list(s_result.sample_generations),
+                            all_validations=list(s_result.sample_validations),
+                            failure_reason=(
+                                None
+                                if s_result.success
+                                else f"Budget exhausted after {len(s_result.sample_generations)} iterations"
+                            ),
+                        )
+                    await invoke_hook(
+                        HookType.SAMPLING_LOOP_END, end_payload, backend=backend
                     )
-                else:
-                    assert s_result is not None
-                    end_payload = SamplingLoopEndPayload(
-                        sampling_id=sampling_id,
-                        strategy_name=type(self).__name__,
-                        success=s_result.success,
-                        iterations_used=len(s_result.sample_generations),
-                        final_result=s_result.result,
-                        final_action=s_result.result_action,
-                        final_context=s_result.result_ctx,
-                        all_results=list(s_result.sample_generations),
-                        all_validations=list(s_result.sample_validations),
-                        failure_reason=(
-                            None
-                            if s_result.success
-                            else f"Budget exhausted after {len(s_result.sample_generations)} iterations"
-                        ),
-                    )
-                await invoke_hook(
-                    HookType.SAMPLING_LOOP_END, end_payload, backend=backend
-                )
 
     @abc.abstractmethod
     async def _sample(
