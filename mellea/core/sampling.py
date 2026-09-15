@@ -149,7 +149,6 @@ class SamplingStrategy(abc.ABC):
         model_options: dict | None = None,
         tool_calls: bool = False,
         show_progress: bool = True,
-        **kwargs,
     ) -> SamplingResult[S]:
         """Concrete wrapper: owns the sampling lifecycle and fires loop start/end hooks.
 
@@ -168,7 +167,6 @@ class SamplingStrategy(abc.ABC):
             model_options: model options to pass to the backend during generation / validation.
             tool_calls: True if tool calls should be used during this sampling strategy.
             show_progress: If true, a tqdm progress bar is used. Otherwise, messages will still be sent to flog.
-            **kwargs: Additional keyword arguments forwarded to `_sample`.
 
         Returns:
             SamplingResult[S]: A result object indicating the success or failure of the sampling process.
@@ -226,7 +224,6 @@ class SamplingStrategy(abc.ABC):
                     tool_calls=tool_calls,
                     sampling_id=sampling_id,
                     show_progress=show_progress,
-                    **kwargs,
                 )
                 return s_result
 
@@ -281,7 +278,7 @@ class SamplingStrategy(abc.ABC):
         model_options: dict | None = None,
         tool_calls: bool = False,
         sampling_id: str,
-        **kwargs,
+        show_progress: bool = True,
     ) -> SamplingResult[S]:
         """Execute the sampling algorithm.
 
@@ -299,7 +296,7 @@ class SamplingStrategy(abc.ABC):
             model_options: Model options to pass to the backend.
             tool_calls: True if tool calls should be used.
             sampling_id: UUID correlating iteration/repair/end hooks to this loop.
-            **kwargs: Additional keyword arguments (e.g., `show_progress`).
+            show_progress: If true, a tqdm progress bar is used. Otherwise, messages will still be sent to flog.
 
         Returns:
             SamplingResult[S]: A result object indicating the success or failure of the sampling process.

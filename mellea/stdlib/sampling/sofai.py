@@ -592,7 +592,7 @@ class SOFAISamplingStrategy(SamplingStrategy):
         model_options: dict | None = None,
         tool_calls: bool = False,
         sampling_id: str,
-        **kwargs,
+        show_progress: bool = True,
     ) -> SamplingResult[S]:
         """Execute SOFAI two-solver sampling strategy.
 
@@ -624,7 +624,7 @@ class SOFAISamplingStrategy(SamplingStrategy):
             model_options: Model options to pass to backends.
             tool_calls: True if tool calls should be used.
             sampling_id: UUID correlating iteration/repair/end hooks for this loop.
-            **kwargs: Additional keyword arguments forwarded by `SamplingStrategy.sample()`.
+            show_progress: If true, a tqdm progress bar is used. Otherwise, messages will still be sent to flog.
 
         Returns:
             SamplingResult with success status and all generation history.
@@ -664,7 +664,6 @@ class SOFAISamplingStrategy(SamplingStrategy):
             next_action = deepcopy(action)
             next_context: Context = context
 
-            show_progress = flog.getEffectiveLevel() <= MelleaLogger.INFO
             loop_iterator = (
                 tqdm.tqdm(range(effective_loop_budget), desc="S1 Solver")
                 if show_progress

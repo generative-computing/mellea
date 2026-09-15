@@ -116,7 +116,7 @@ class BudgetForcingSamplingStrategy(RejectionSamplingStrategy):
         tool_calls: bool = False,
         sampling_id: str,
         show_progress: bool = True,
-        **kwargs,
+        sample_index: int | None = None,
     ) -> SamplingResult[S]:
         """Execute the budget-forcing sampling loop.
 
@@ -132,7 +132,7 @@ class BudgetForcingSamplingStrategy(RejectionSamplingStrategy):
             tool_calls: True if tool calls should be used during this sampling strategy.
             sampling_id: UUID correlating iteration/repair/end hooks for this loop.
             show_progress: if true, a tqdm progress bar is used. Otherwise, messages will still be sent to flog.
-            **kwargs: Additional keyword arguments forwarded by `SamplingStrategy.sample()`.
+            sample_index: Optional 0-based index of this branch within a fan-out strategy (e.g. majority voting). `None` for strategies without an outer fan-out.
 
         Returns:
             SamplingResult[S]: A result object indicating the success or failure of the sampling process.

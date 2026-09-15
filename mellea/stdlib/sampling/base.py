@@ -214,7 +214,6 @@ class BaseSamplingStrategy(SamplingStrategy):
         sampling_id: str,
         show_progress: bool = True,
         sample_index: int | None = None,
-        **kwargs,
     ) -> SamplingResult[S]:
         """Execute the rejection-sampling loop.
 
@@ -231,7 +230,6 @@ class BaseSamplingStrategy(SamplingStrategy):
             sampling_id: UUID correlating iteration/repair/end hooks for this loop.
             show_progress: if true, a tqdm progress bar is used. Otherwise, messages will still be sent to flog.
             sample_index: Optional 0-based index of this branch within a fan-out strategy (e.g. majority voting). `None` for strategies without an outer fan-out.
-            **kwargs: Additional keyword arguments forwarded by `SamplingStrategy.sample()`.
 
         Returns:
             SamplingResult[S]: A result object indicating the success or failure of the sampling process.
