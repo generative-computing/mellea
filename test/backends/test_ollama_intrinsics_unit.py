@@ -9,7 +9,8 @@ Mocks the Ollama async client to verify that `_generate_from_intrinsic` correctl
 - routes the call to the Ollama model tag registered for the adapter function
 - applies the `IntrinsicsResultProcessor` to the raw response
 - user-provided model options override io.yaml parameter defaults
-- raises when no adapter is registered or streaming is requested
+- raises when no adapter is registered, no model tag is configured for it, or
+  streaming is requested
 """
 
 import json
@@ -22,6 +23,7 @@ import pytest
 from mellea.backends import ModelOption
 from mellea.backends.adapters import (
     Adapter,
+    AdapterType,
     Identity,
     ServerMediatedBinding,
     get_io_contract,
@@ -172,7 +174,16 @@ def _make_backend_with_adapter(
     model_options: dict | None = None,
     adapter_models: dict | None = None,
 ) -> OllamaModelBackend:
-    """Return an OllamaModelBackend with a registered uncertainty adapter."""
+    """Return an OllamaModelBackend with a registered uncertainty adapter.
+
+    Defaults `adapter_models` to a tag for "uncertainty" so tests that don't
+    care about model-tag routing aren't affected by it: generating against an
+    adapter with no configured tag now raises (it would otherwise silently
+    run against the plain base model with none of the adapter's weights).
+    Pass `adapter_models={}` explicitly to opt into that unconfigured case.
+    """
+    if adapter_models is None:
+        adapter_models = {"uncertainty": _ADAPTER_TAG}
     backend = _make_backend(model_options=model_options, adapter_models=adapter_models)
     adapter = Adapter(
         identity=Identity(name="uncertainty", adapter_type="alora"),
@@ -282,12 +293,20 @@ async def test_adapter_model_tag_used():
     assert mock_chat.call_args.kwargs["model"] == _ADAPTER_TAG
 
 
-async def test_adapter_model_tag_defaults_to_model_id():
-    """Adapter functions without a registered tag run against the backend's model."""
-    backend = _make_backend_with_adapter(_SIMPLE_CONFIG)
-    _, mock_chat = await _run_intrinsic(backend, _simple_chat_response())
+async def test_generation_without_configured_tag_raises():
+    """An adapter with no `adapter_models` entry raises rather than silently
+    running against the plain base model.
 
-    assert mock_chat.call_args.kwargs["model"] == "granite4.1:3b"
+    The rewriter still builds the adapter's activation prompt and enforces
+    its response schema either way, so a silent fallback would return a
+    schema-valid, meaningless answer from a model that never saw the
+    adapter's weights — the same failure class already guarded against in
+    `resolve_adapter()`.
+    """
+    backend = _make_backend_with_adapter(_SIMPLE_CONFIG, adapter_models={})
+
+    with pytest.raises(ValueError, match="No Ollama model tag configured"):
+        await _run_intrinsic(backend, _simple_chat_response())
 
 
 async def test_alora_requirement_resolves_mapped_adapter(
@@ -321,6 +340,84 @@ async def test_alora_requirement_resolves_mapped_adapter(
 
     assert mock_chat.call_args.kwargs["model"] == _ADAPTER_TAG
     assert backend.list_adapters() == ["requirement-check_alora"]
+
+
+async def test_alora_requirement_with_explicit_alora_type_still_resolves(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    """An explicit `adapter_types=(ALORA,)` override doesn't block the resolve.
+
+    `resolve_adapter()` has no way to request a specific type — it always
+    prefers aLoRA when the catalog publishes it. An override that asks for
+    exactly that is satisfied by a cold resolve, so it shouldn't be treated
+    like an override the resolve can't satisfy.
+    """
+    config_path = tmp_path / "io.yaml"
+    config_path.write_text(json.dumps(_SIMPLE_CONFIG), encoding="utf-8")
+    monkeypatch.setattr(
+        "mellea.backends.ollama.granite_formatters.intrinsics.obtain_io_yaml",
+        lambda *_args, **_kwargs: config_path,
+    )
+    backend = _make_backend(adapter_models={"requirement-check": _ADAPTER_TAG})
+    mock_chat = AsyncMock(return_value=_simple_chat_response())
+    mock_client = MagicMock()
+    mock_client.chat = mock_chat
+
+    with patch.object(
+        OllamaModelBackend,
+        "_async_client",
+        new_callable=PropertyMock,
+        return_value=mock_client,
+    ):
+        mot, _ = await mfuncs.aact(
+            ALoraRequirement(
+                "The response is correct.", adapter_types=(AdapterType.ALORA,)
+            ),
+            _make_context(),
+            backend,
+            strategy=None,
+        )
+        await mot.avalue()
+
+    assert mock_chat.call_args.kwargs["model"] == _ADAPTER_TAG
+
+
+async def test_alora_requirement_with_explicit_lora_type_skips_resolve(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    """An explicit override that excludes aLoRA does not trigger a cold resolve.
+
+    `resolve_adapter()` can't be steered to a specific type, so resolving
+    here could register the wrong one; falling back to regular generation is
+    correct instead.
+    """
+    config_path = tmp_path / "io.yaml"
+    config_path.write_text(json.dumps(_SIMPLE_CONFIG), encoding="utf-8")
+    resolve_calls: list[str] = []
+
+    def _fake_obtain_io_yaml(name, *_args, **_kwargs) -> Path:
+        resolve_calls.append(name)
+        return config_path
+
+    monkeypatch.setattr(
+        "mellea.backends.ollama.granite_formatters.intrinsics.obtain_io_yaml",
+        _fake_obtain_io_yaml,
+    )
+    backend = _make_backend(adapter_models={"requirement-check": _ADAPTER_TAG})
+    action = ALoraRequirement(
+        "The response is correct.", adapter_types=(AdapterType.LORA,)
+    )
+    ctx = _make_context()
+
+    with patch.object(
+        OllamaModelBackend, "generate_from_chat_context", new_callable=AsyncMock
+    ) as mock_standard:
+        mock_standard.return_value = MagicMock()
+        await backend._generate_from_context(action, ctx, model_options={})
+
+    assert resolve_calls == []
+    assert backend.list_adapters() == []
+    mock_standard.assert_awaited_once()
 
 
 async def test_result_processor_applied():

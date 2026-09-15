@@ -32,7 +32,6 @@ from ..core import (
 )
 from ..core.base import AbstractMelleaTool
 from ..formatters import ChatFormatter, TemplateFormatter, granite as granite_formatters
-from ..formatters.granite.intrinsics.input import move_documents_to_message
 from ..helpers import (
     DEFAULT_CHUNK_TIMEOUT,
     ClientCache,
@@ -675,6 +674,17 @@ class OllamaModelBackend(FormatterBackend, AdapterMixin):
                 "register it via add_adapter() or resolve_adapter()."
             )
 
+        # Ollama's chat API has no extra_body passthrough (unlike the OpenAI-
+        # compatible endpoints this rewriter otherwise targets). If the
+        # io.yaml leaves `docs_as_message` unset, force "roles" here so the
+        # rewriter (encode) and result processor (decode) agree on where
+        # documents live. Encoding them into the message without updating
+        # this config would leave the result processor still looking for
+        # documents in `extra_body`, where they no longer are — it would
+        # silently decode zero document sentences instead of raising.
+        if not intrinsic_config.get("docs_as_message"):
+            intrinsic_config = {**intrinsic_config, "docs_as_message": "roles"}
+
         rewriter = granite_formatters.IntrinsicsRewriter(
             config_dict=intrinsic_config, model_name=adapter.identity.name
         )
@@ -708,15 +718,6 @@ class OllamaModelBackend(FormatterBackend, AdapterMixin):
 
         rewritten = rewriter.transform(request_json, **action.intrinsic_kwargs)
 
-        # Ollama's chat API has no extra_body passthrough (unlike the OpenAI-
-        # compatible endpoints this rewriter otherwise targets), so any
-        # documents the io.yaml didn't already fold into a message via
-        # `docs_as_message` must be folded in here or they're silently dropped.
-        if rewritten.extra_body is not None and rewritten.extra_body.documents:
-            rewritten = move_documents_to_message(  # type: ignore[assignment]
-                rewritten, "string"
-            )
-
         tools: dict[str, AbstractMelleaTool] = dict()
         if tool_calls:
             add_tools_from_model_options(tools, model_options)
@@ -732,8 +733,20 @@ class OllamaModelBackend(FormatterBackend, AdapterMixin):
         logprobs = model_opts.pop("logprobs", None)
         top_logprobs = model_opts.pop("top_logprobs", None)
 
-        # each adapter function is served by its own ollama model tag
-        model = self._adapter_models.get(action.intrinsic_name, self._model_id)
+        # Each adapter function is served by its own ollama model tag.
+        # `ServerMediatedBinding` doesn't yet carry its own server target
+        # (issue #1633), so it's not enough that `_find_adapter` above found
+        # a registered adapter — that only proves it's discoverable, not that
+        # we know which tag serves it. An adapter added directly via
+        # add_adapter() (bypassing adapter_models) would otherwise silently
+        # fall back to the plain base model here.
+        if action.intrinsic_name not in self._adapter_models:
+            raise ValueError(
+                f"No Ollama model tag configured for adapter function "
+                f"{action.intrinsic_name!r}; add one to `adapter_models` "
+                "before generating with it."
+            )
+        model = self._adapter_models[action.intrinsic_name]
 
         messages_dicts = []
         for m in rewritten.messages:
@@ -867,14 +880,31 @@ class OllamaModelBackend(FormatterBackend, AdapterMixin):
                     else ("alora",)
                 )
                 alora_req_adapter = self._find_adapter(adapter_name, search_types)
+                # resolve_adapter() has no way to request a specific adapter
+                # type — it picks aLoRA over LoRA whenever the catalog says
+                # aLoRA is published. Skip the opportunistic resolve only
+                # when an explicit override would rule out whatever it
+                # produces (i.e. the override excludes aLoRA); an explicit
+                # override that includes aLoRA is exactly what a cold resolve
+                # would satisfy, so it shouldn't block the attempt.
                 if (
                     alora_req_adapter is None
                     and reroute_to_alora
                     and adapter_name in self._adapter_models
-                    and not explicit_types
+                    and (not explicit_types or AdapterType.ALORA in explicit_types)
                 ):
-                    await asyncio.to_thread(self.resolve_adapter, adapter_name)
-                    alora_req_adapter = self._find_adapter(adapter_name, search_types)
+                    try:
+                        await asyncio.to_thread(self.resolve_adapter, adapter_name)
+                    except Exception as e:
+                        MelleaLogger.get_logger().warning(
+                            f"failed to resolve adapter {adapter_name!r} while "
+                            f"attempting automatic requirement-check rerouting; "
+                            f"defaulting to regular generation: {e}"
+                        )
+                    else:
+                        alora_req_adapter = self._find_adapter(
+                            adapter_name, search_types
+                        )
                 if alora_req_adapter is None:
                     if reroute_to_alora and isinstance(action, ALoraRequirement):
                         MelleaLogger.get_logger().warning(
