@@ -2216,7 +2216,22 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 ids.append(int(suffix))
             else:
                 return None
-        return list(prompt_ids) + ids + list(terminator)
+        sequence = list(prompt_ids) + ids
+        # The model can emit the terminator itself: with `return_token_ids` on, vLLM
+        # reports the stop token it sampled, so `ids` may already end with the whole
+        # terminator or a prefix of it. Appending it blind duplicates those tokens --
+        # measured against a live vLLM, emitted ids ending `13, 100257` plus a
+        # `[100257, 198]` terminator produced `13, 100257, 100257, 198` where the
+        # template renders `13, 100257, 198`. The retained sequence then diverges from
+        # what the server cached at that index (reuse dropped from 48 tokens to 32) and
+        # carries a stray end-of-turn token into every later turn's history. Append only
+        # the part not already present.
+        overlap = 0
+        for k in range(len(terminator), 0, -1):
+            if sequence[-k:] == list(terminator[:k]):
+                overlap = k
+                break
+        return sequence + list(terminator[overlap:])
 
     async def _generate_via_token_ids(
         self,
