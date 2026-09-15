@@ -330,6 +330,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
     """
 
     _supports_composed_adapters = True
+    _supports_token_id_retention = True
 
     # Class-level defaults only, so a subclass or a `__new__`-built instance reads
     # something sane; `__init__` replaces both with per-instance containers. They must
