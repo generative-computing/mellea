@@ -63,12 +63,33 @@ uv run poe nbtest                                        # the subset PR CI runs
 uv run pytest --nbmake docs/examples/notebooks -m e2e    # everything, incl. slow
 ```
 
+Three notebooks are nightly-only, because they cost far more than the rest:
+
+- `simple_email.ipynb` — rejection sampling with LLM-validated requirements;
+  blows past nbmake's default 300s per-cell budget.
+- `document_mobject.ipynb` — downloads docling model weights plus a PDF from
+  arxiv, then loops over 5 seeds.
+- `georgia_tech.ipynb` — two Ollama models, docling weights, and a long
+  multi-step pipeline.
+
 Three things to know before editing or adding one:
 
-- **Every notebook needs an entry in the `NOTEBOOKS` registry** in
-  [`docs/examples/conftest.py`](../conftest.py), which carries its markers and any
-  optional packages it needs. Without an entry the notebook is skipped and a unit
-  test fails. Notebooks are collected only when `--nbmake` is passed.
+- **Every notebook declares what it needs in its own metadata.** A `mellea` block
+  in the notebook's top-level metadata carries its markers and any optional
+  packages, which is the notebook equivalent of the `# pytest:` comment a `.py`
+  example carries. Without it the notebook is skipped and a unit test fails.
+  Notebooks are collected only when `--nbmake` is passed.
+
+  ```json
+  "metadata": {
+   "mellea": {
+    "markers": ["e2e", "ollama", "slow"],
+    "packages": ["docling"]
+   },
+   ...
+  }
+  ```
+
 - **The Colab setup cells are tagged `skip-execution`** (installing ollama,
   `uv pip install mellea`), so a test run exercises the working tree rather than
   the released package. Keep that tag on any new setup cell, and keep such cells

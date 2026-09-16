@@ -1,13 +1,14 @@
 """Allows you to use `pytest docs` to run the examples.
 
 Python examples opt in with a `# pytest: <markers>` comment near the top of the file.
-Notebooks opt in through the `NOTEBOOKS` registry below and are only collected when
-`--nbmake` is passed:
+Notebooks opt in with a `mellea` block in their own notebook metadata and are only
+collected when `--nbmake` is passed:
 
     uv run pytest --nbmake docs/examples/notebooks
 """
 
 import ast
+import json
 import os
 import pathlib
 import subprocess
@@ -66,42 +67,60 @@ def get_system_capabilities():
 
 examples_to_skip: dict[str, str] = {}
 
-# Notebooks under docs/examples/notebooks/ that pytest may execute, and what each one
-# needs. Notebooks are only collected when `--nbmake` is passed; an unlisted notebook is
-# never collected (mirrors the `# pytest:` opt-in for .py examples).
+# Notebooks declare what they need in their own top-level notebook metadata, which is
+# the notebook equivalent of the `# pytest:` comment a .py example carries:
+#
+#     "metadata": {
+#      "mellea": {
+#       "markers": ["e2e", "ollama"],
+#       "packages": ["pandas"]
+#      },
+#      ...
+#     }
 #
 #   markers:  pytest markers to attach, so `-m ollama` / `-m "not slow"` select correctly
-#             and the capability gates in `_should_skip_collection` apply.
+#             and the capability gates in `_should_skip_collection` apply. Required.
 #   packages: optional imports the notebook needs; the notebook is skipped when missing.
+#
+# Notebooks are only collected when `--nbmake` is passed, and one without a `mellea`
+# block is never collected (`test/test_example_collection.py` fails in that case).
 #
 # Notebooks are deliberately not marked `qualitative` — they assert nothing, they just
 # have to run without raising, and `CICD=1` skips qualitative items.
 #
 # `slow` means over ~2 minutes or a heavyweight download; those run nightly, not on PRs.
-NOTEBOOKS: dict[str, dict[str, list[str]]] = {
-    "compositionality_with_generative_stubs.ipynb": {"markers": ["e2e", "ollama"]},
-    "context_example.ipynb": {"markers": ["e2e", "ollama"]},
-    "example.ipynb": {"markers": ["e2e", "ollama"]},
-    "instruct_validate_repair.ipynb": {"markers": ["e2e", "ollama"]},
-    "m_serve_example.ipynb": {"markers": ["e2e", "ollama"]},
-    "mcp_example.ipynb": {"markers": ["e2e", "ollama"], "packages": ["mcp"]},
-    "model_options_example.ipynb": {"markers": ["e2e", "ollama"]},
-    "sentiment_classifier.ipynb": {"markers": ["e2e", "ollama"]},
-    "table_mobject.ipynb": {"markers": ["e2e", "ollama"]},
-    # Rejection sampling with LLM-validated requirements; blows past nbmake's default
-    # 300s per-cell budget.
-    "simple_email.ipynb": {"markers": ["e2e", "ollama", "slow"]},
-    # Downloads docling model weights plus a PDF from arxiv, then loops over 5 seeds.
-    "document_mobject.ipynb": {
-        "markers": ["e2e", "ollama", "slow"],
-        "packages": ["docling"],
-    },
-    # Two Ollama models, docling weights, and a long multi-step pipeline.
-    "georgia_tech.ipynb": {
-        "markers": ["e2e", "ollama", "slow"],
-        "packages": ["docling"],
-    },
-}
+NOTEBOOK_METADATA_KEY = "mellea"
+
+# Parsed `mellea` blocks keyed by notebook path (None = notebook does not opt in).
+_notebook_requirements_cache: dict[str, dict | None] = {}
+
+
+def _notebook_requirements(path) -> dict | None:
+    """Return a notebook's `mellea` metadata block, or None when it has none.
+
+    A notebook has nowhere to put the `# pytest:` comment that `.py` examples use, so it
+    opts in through a `mellea` key in its top-level notebook metadata instead. A notebook
+    that is unreadable, malformed, or declares no markers is treated as not opting in, so
+    it gets skipped rather than executed with no gates applied.
+
+    Results are cached per path; notebooks do not change mid-session.
+    """
+    key = str(path)
+    if key in _notebook_requirements_cache:
+        return _notebook_requirements_cache[key]
+
+    entry: dict | None = None
+    try:
+        with open(path, encoding="utf-8") as f:
+            notebook = json.load(f)
+        candidate = notebook.get("metadata", {}).get(NOTEBOOK_METADATA_KEY)
+        if isinstance(candidate, dict) and candidate.get("markers"):
+            entry = candidate
+    except (OSError, ValueError, AttributeError):
+        entry = None
+
+    _notebook_requirements_cache[key] = entry
+    return entry
 
 
 def _missing_packages(packages: list[str]) -> list[str]:
@@ -119,35 +138,32 @@ def _missing_packages(packages: list[str]) -> list[str]:
     return missing
 
 
-def _notebook_name(path) -> str:
-    """Return the registry key (bare filename) for a notebook path or pytest item."""
-    return pathlib.Path(str(path)).name
-
-
 def _is_notebook_item(item) -> bool:
-    """Whether `item` is an nbmake NotebookItem.
+    """Whether `item` is a notebook item (nbmake collects one item per notebook).
 
-    nbmake tags its items with a class attribute rather than exposing the class, so
-    checking that attribute avoids importing nbmake (which is only installed with the
-    test dependencies).
+    Keys off the file suffix rather than nbmake's `NotebookItem.nbmake` attribute: that
+    attribute is an implementation detail rather than public API, so a rename in a future
+    nbmake would silently stop marking and gating every notebook.
     """
-    return getattr(item, "nbmake", False) is True
+    path = getattr(item, "path", None)
+    return path is not None and pathlib.Path(str(path)).suffix == ".ipynb"
 
 
-def _should_skip_notebook(name: str, config=None) -> tuple[bool, str | None]:
+def _should_skip_notebook(path, config=None) -> tuple[bool, str | None]:
     """Decide whether a notebook should be skipped, and why.
 
-    Applies the same capability gates as `.py` examples, plus the registry's optional
+    Applies the same capability gates as `.py` examples, plus the notebook's optional
     `packages` requirement. Used both at collection time and at runtime (a notebook
     named directly on the command line bypasses `pytest_ignore_collect`).
 
     Returns (should_skip, reason) tuple.
     """
-    entry = NOTEBOOKS.get(name)
+    entry = _notebook_requirements(path)
     if entry is None:
         return (
             True,
-            "Notebook not listed in NOTEBOOKS registry (docs/examples/conftest.py)",
+            f'Notebook declares no "{NOTEBOOK_METADATA_KEY}.markers" in its notebook '
+            "metadata (see docs/examples/notebooks/README.md)",
         )
 
     missing = _missing_packages(entry.get("packages", []))
@@ -486,16 +502,14 @@ def pytest_ignore_collect(collection_path, config):
     # (pytest may pass relative paths)
     abs_path = collection_path.resolve()
 
-    # Notebooks: registry-driven opt-in plus the usual capability gates. Gated on
+    # Notebooks: metadata-driven opt-in plus the usual capability gates. Gated on
     # --nbmake because this hook fires during directory traversal whether or not
     # anything would collect the file, and reporting notebook skips in a run that was
     # never going to execute notebooks is just noise.
     if collection_path.suffix == ".ipynb" and "notebooks" in abs_path.parts:
         if not config.getoption("nbmake", False):
             return True
-        should_skip, reason = _should_skip_notebook(
-            _notebook_name(collection_path), config
-        )
+        should_skip, reason = _should_skip_notebook(collection_path, config)
         if should_skip:
             if reason:
                 examples_to_skip[str(collection_path)] = reason
@@ -697,9 +711,7 @@ def pytest_runtest_setup(item):
     would otherwise bypass the checks and fail instead of skipping.
     """
     if _is_notebook_item(item):
-        should_skip, reason = _should_skip_notebook(
-            _notebook_name(item.path), item.config
-        )
+        should_skip, reason = _should_skip_notebook(item.path, item.config)
         if should_skip:
             pytest.skip(reason or "Notebook skipped")
         return
@@ -798,12 +810,12 @@ def pytest_collection_modifyitems(items):
 
     This keeps examples clean while allowing intelligent test skipping.
 
-    Notebook items get their markers from the `NOTEBOOKS` registry instead, so that
+    Notebook items get their markers from their own notebook metadata instead, so that
     `-m ollama` and the default `-m "not slow"` select them correctly.
     """
     for item in items:
         if _is_notebook_item(item):
-            entry = NOTEBOOKS.get(_notebook_name(item.path))
+            entry = _notebook_requirements(item.path)
             if entry:
                 for marker_name in entry["markers"]:
                     item.add_marker(getattr(pytest.mark, marker_name))

@@ -7,10 +7,11 @@ These hooks have regressed twice (#794, #796). This test ensures:
 - Support files (__init__.py, helpers.py, conftest.py) are never collected
 - Real examples with markers ARE collected
 - No example is collected twice (duplicate guard)
-- Every notebook is listed in the NOTEBOOKS registry (#89)
+- Every notebook declares its requirements in its own notebook metadata (#89)
 """
 
 import importlib.util
+import json
 import pathlib
 import subprocess
 import sys
@@ -297,55 +298,88 @@ def test_ignore_all_preserves_non_capability_gates(monkeypatch):
     assert capability_probes == []
 
 
-def test_notebook_registry_covers_every_notebook():
-    """Verify each notebook on disk has a NOTEBOOKS entry, and no entry is stale."""
-    on_disk = {path.name for path in NOTEBOOK_DIR.glob("*.ipynb")}
-    registered = set(example_conftest.NOTEBOOKS)
-
-    assert on_disk, f"no notebooks found under {NOTEBOOK_DIR}"
-    assert not on_disk - registered, (
-        f"notebooks missing from NOTEBOOKS in {EXAMPLE_CONFTEST_PATH}: "
-        f"{sorted(on_disk - registered)}. Add an entry so the notebook is tested, "
-        "or delete it."
+def _write_notebook(path: pathlib.Path, mellea_metadata: dict | None) -> pathlib.Path:
+    """Write a minimal, cell-free notebook carrying `mellea_metadata` (or none)."""
+    metadata = {} if mellea_metadata is None else {"mellea": mellea_metadata}
+    path.write_text(
+        json.dumps(
+            {"cells": [], "metadata": metadata, "nbformat": 4, "nbformat_minor": 4}
+        ),
+        encoding="utf-8",
     )
-    assert not registered - on_disk, (
-        f"stale NOTEBOOKS entries in {EXAMPLE_CONFTEST_PATH}: "
-        f"{sorted(registered - on_disk)}"
+    return path
+
+
+def test_every_notebook_declares_requirements():
+    """Verify every notebook on disk opts in via its own `mellea` metadata."""
+    notebooks = sorted(NOTEBOOK_DIR.glob("*.ipynb"))
+    assert notebooks, f"no notebooks found under {NOTEBOOK_DIR}"
+
+    missing = [
+        path.name
+        for path in notebooks
+        if example_conftest._notebook_requirements(path) is None
+    ]
+    assert not missing, (
+        f"notebooks with no `mellea.markers` in their notebook metadata: {missing}. "
+        "Add a `mellea` block to the notebook's top-level metadata so it is tested, "
+        "or delete the notebook. See docs/examples/notebooks/README.md."
     )
 
 
-def test_notebook_registry_uses_registered_markers():
-    """Verify NOTEBOOKS marker names are declared in pyproject.toml."""
+def test_notebook_metadata_uses_registered_markers():
+    """Verify notebook-declared marker names are declared in pyproject.toml."""
     with open(REPO_ROOT / "pyproject.toml", "rb") as f:
         declared_markers = {
             line.split(":", 1)[0]
             for line in tomllib.load(f)["tool"]["pytest"]["ini_options"]["markers"]
         }
 
-    for name, entry in example_conftest.NOTEBOOKS.items():
-        assert entry["markers"], f"{name} has no markers"
+    for path in sorted(NOTEBOOK_DIR.glob("*.ipynb")):
+        entry = example_conftest._notebook_requirements(path)
+        assert entry, f"{path.name} declares no markers"
         unknown = set(entry["markers"]) - declared_markers
-        assert not unknown, f"{name} uses undeclared markers: {sorted(unknown)}"
+        assert not unknown, f"{path.name} uses undeclared markers: {sorted(unknown)}"
 
 
-def test_unregistered_notebook_is_skipped():
-    """Verify an unlisted notebook is never executed, even with checks disabled."""
+@pytest.mark.parametrize(
+    "metadata",
+    [
+        None,  # no `mellea` block at all
+        {"packages": ["mcp"]},  # block present but no markers
+        {"markers": []},  # markers present but empty
+    ],
+    ids=["no-block", "no-markers-key", "empty-markers"],
+)
+def test_notebook_without_markers_is_skipped(tmp_path, metadata):
+    """Verify a notebook that does not opt in is never executed, even with checks off."""
+    notebook = _write_notebook(tmp_path / "undeclared.ipynb", metadata)
     should_skip, reason = example_conftest._should_skip_notebook(
-        "not_a_real_notebook.ipynb", _Config("--ignore-all-checks")
+        notebook, _Config("--ignore-all-checks")
     )
     assert should_skip
-    assert "NOTEBOOKS" in reason
+    assert "mellea" in reason
 
 
-def test_notebook_skipped_when_package_missing(monkeypatch):
-    """Verify the registry's `packages` requirement gates a notebook."""
-    monkeypatch.setitem(
-        example_conftest.NOTEBOOKS,
-        "fake.ipynb",
+def test_malformed_notebook_is_skipped(tmp_path):
+    """Verify unparseable JSON is skipped rather than executed without gates."""
+    notebook = tmp_path / "broken.ipynb"
+    notebook.write_text("{not valid json", encoding="utf-8")
+    should_skip, reason = example_conftest._should_skip_notebook(
+        notebook, _Config("--ignore-all-checks")
+    )
+    assert should_skip
+    assert "mellea" in reason
+
+
+def test_notebook_skipped_when_package_missing(tmp_path):
+    """Verify the notebook's `packages` requirement gates it."""
+    notebook = _write_notebook(
+        tmp_path / "needs_package.ipynb",
         {"markers": ["e2e", "ollama"], "packages": ["definitely_not_installed_pkg"]},
     )
     should_skip, reason = example_conftest._should_skip_notebook(
-        "fake.ipynb", _Config("--ignore-all-checks")
+        notebook, _Config("--ignore-all-checks")
     )
     assert should_skip
     assert "definitely_not_installed_pkg" in reason
@@ -376,4 +410,76 @@ def test_notebooks_not_collected_without_nbmake():
     )
     assert ".ipynb::" not in result.stdout, (
         f"notebooks collected without --nbmake:\n{result.stdout}"
+    )
+
+
+def _collect_notebook_names(marker_expr: str) -> set[str]:
+    """Collect notebooks with --nbmake under `marker_expr`, returning bare filenames."""
+    result = subprocess.run(
+        [
+            "uv",
+            "run",
+            "pytest",
+            "docs/examples/notebooks",
+            # --nbmake is what makes pytest collect .ipynb at all.
+            "--nbmake",
+            "--collect-only",
+            "-q",
+            "--no-cov",
+            # Otherwise the split would depend on whether this host has Ollama.
+            "--ignore-all-checks",
+            "--rootdir=.",
+            "-m",
+            marker_expr,
+        ],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        cwd=REPO_ROOT,
+    )
+
+    # Exit 5 == "no tests collected", legitimate when a marker selects nothing.
+    assert result.returncode in (0, 5), (
+        f"notebook collection failed (exit {result.returncode}) for -m {marker_expr!r}:"
+        f"\n{result.stdout}\n{result.stderr}"
+    )
+
+    return {
+        line.split("::")[0].rsplit("/", 1)[-1]
+        for line in result.stdout.splitlines()
+        if ".ipynb::" in line
+    }
+
+
+def _expected_notebook_names(*, slow: bool) -> set[str]:
+    """Notebooks that a fast (or slow) run should collect on this host.
+
+    Package-gated notebooks drop out before markers matter, so honour that here too —
+    otherwise this would assert docling is installed rather than that markers work.
+    """
+    expected = set()
+    for path in NOTEBOOK_DIR.glob("*.ipynb"):
+        entry = example_conftest._notebook_requirements(path)
+        assert entry, f"{path.name} declares no markers"
+        if example_conftest._missing_packages(entry.get("packages", [])):
+            continue
+        if ("slow" in entry["markers"]) == slow:
+            expected.add(path.name)
+    return expected
+
+
+def test_nbmake_collection_splits_fast_and_slow():
+    """Verify declared markers reach pytest's `-m` selection.
+
+    This is the gate that keeps the heavyweight notebooks out of PR CI: they are marked
+    `slow` in their own metadata, and the `-m "not slow"` in addopts deselects them.
+    """
+    fast = _collect_notebook_names("not slow")
+    slow = _collect_notebook_names("slow")
+
+    assert fast, "no notebooks collected for a fast run — marker wiring may be broken"
+    assert fast == _expected_notebook_names(slow=False)
+    assert slow == _expected_notebook_names(slow=True)
+    assert not fast & slow, (
+        f"notebooks in both fast and slow runs: {sorted(fast & slow)}"
     )

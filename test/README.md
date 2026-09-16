@@ -525,33 +525,47 @@ uv run pytest --nbmake docs/examples/notebooks/example.ipynb
 ```
 
 A notebook cannot carry a `# pytest:` comment (the first cell is user-facing
-Colab prose), so it opts in through the `NOTEBOOKS` registry in
-`docs/examples/conftest.py` instead:
+Colab prose), so it opts in through a `mellea` block in its own top-level
+notebook metadata instead — the notebook equivalent of that comment:
 
-```python
-NOTEBOOKS = {
-    "example.ipynb": {"markers": ["e2e", "ollama"]},
-    "document_mobject.ipynb": {
-        "markers": ["e2e", "ollama", "slow"],
-        "packages": ["docling"],
-    },
+```json
+{
+ "cells": [ ... ],
+ "metadata": {
+  "mellea": {
+   "markers": ["e2e", "ollama", "slow"],
+   "packages": ["docling"]
+  },
+  "kernelspec": { ... }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 4
 }
 ```
 
 | Key | Effect |
 |-----|--------|
-| `markers` | Attached to the nbmake item, so `-m` selects notebooks exactly as it does tests. Feeds the same capability gates, `--ignore-*-check` overrides, and "Skipped Examples" summary as `.py` examples. |
+| `markers` | Required. Attached to the nbmake item, so `-m` selects notebooks exactly as it does tests. Feeds the same capability gates, `--ignore-*-check` overrides, and "Skipped Examples" summary as `.py` examples. |
 | `packages` | Optional import check. A missing package skips the notebook instead of failing it — the equivalent of `require_package` for tests that cannot use a decorator. |
+
+Jupyter preserves unknown top-level metadata keys, so the block survives an
+open-and-save. In JupyterLab it is editable under Property Inspector → Advanced
+Tools → Notebook Metadata; otherwise edit the `.ipynb` JSON directly.
 
 Conventions:
 
-- **Register every notebook.** An unregistered notebook is skipped with a reason
-  rather than silently ignored, and
-  `test/test_example_collection.py::test_notebook_registry_covers_every_notebook`
-  fails until an entry exists. Stale entries fail the same test.
+- **Every notebook needs a `mellea` block.** One without it is skipped with a
+  reason rather than silently ignored, and
+  `test/test_example_collection.py::test_every_notebook_declares_requirements`
+  fails until it has one.
 - **`slow` means nightly-only**, same as elsewhere: anything over roughly two
-  minutes or pulling heavyweight weights. `--nbmake-timeout` is **per cell**
-  (300 s by default), not per notebook.
+  minutes or pulling heavyweight weights.
+- **Two timeouts, measuring different things.** `--nbmake-timeout` is **per
+  cell** (300 s by default). nbmake runs a whole notebook as a single pytest
+  item, so `--timeout` (pytest-timeout) is what bounds the notebook end to end —
+  set it explicitly whenever you raise `--nbmake-timeout`, or the notebook
+  silently inherits the 900 s from `addopts` and the per-cell budget becomes
+  unreachable.
 - **No `qualitative` marker.** Notebooks assert nothing, they only have to run
   clean, so gating them behind `CICD=1` would mean they never run in CI.
 - **Use the models CI already pulls.** The Ollama backend auto-pulls a missing

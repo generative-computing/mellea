@@ -28,9 +28,9 @@ jobs:
   notebooks:
     # The notebooks under docs/examples/notebooks/ are the onboarding path for users
     # without local hardware (#89), so a PR must not break them. Only the fast subset
-    # runs here: the NOTEBOOKS registry in docs/examples/conftest.py marks the
-    # heavyweight ones `slow`, which the `-m "not slow"` in addopts deselects. The full
-    # set runs nightly via test/scripts/run_tests_with_ollama_and_vllm.sh.
+    # runs here: the heavyweight notebooks declare `slow` in their own notebook
+    # metadata, which the `-m "not slow"` in addopts deselects. The full set runs
+    # nightly via test/scripts/run_tests_with_ollama_and_vllm.sh.
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -81,11 +81,17 @@ jobs:
       - name: Run notebooks
         # --nbmake is what makes pytest collect .ipynb at all. --no-cov because each
         # notebook executes in its own kernel process, so the addopts coverage flags
-        # only add overhead. --nbmake-timeout is per cell (300s by default), doubled
-        # for CI's slower inference. -rs surfaces the registry's skip reasons.
+        # only add overhead. -rs surfaces each notebook's skip reason.
+        #
+        # The two timeouts bound different things. --nbmake-timeout is per cell (300s by
+        # default), doubled for CI's slower inference. nbmake runs a whole notebook as one
+        # pytest item, so pytest-timeout's --timeout is what bounds the notebook end to
+        # end; left implicit it would inherit 900s from addopts, i.e. below the per-cell
+        # budget, so a hung cell would trip the blunt item timer instead of the per-cell
+        # one that names the offending cell. `timeout-minutes` above still caps the job.
         run: >-
           uv run -m pytest --nbmake docs/examples/notebooks
-          -v -rs --no-cov --nbmake-timeout=600
+          -v -rs --no-cov --nbmake-timeout=600 --timeout=1800
       - name: Dump Ollama server log on failure
         if: failure() # Only the notebook step can produce a useful server log here.
         run: |
