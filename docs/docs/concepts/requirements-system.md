@@ -331,11 +331,10 @@ post-generation context is what you get unless you drive a strategy's `sample()`
 
 `validate()` and `avalidate()` follow the same rule at a lower level: they validate over
 the `context` you hand them, in your own context type. Their `output` argument designates
-*which* output is under judgement rather than replacing the context — it is appended only
-when it is not already the context's last output.
-
-> **Deprecated:** the `input` parameter of `validate()` / `avalidate()` is deprecated and
-> will be removed in a future release. Pass a context that already contains the input.
+*which* output is under judgement rather than replacing the context — it is appended unless
+it is already the context's last entry. Passing an `output` from an earlier turn works too:
+it is appended so that it becomes the target, and the judge still sees the conversation
+around it.
 
 Preconditions are the one case that never sees the conversation: `precondition_requirements`
 are judged over the function arguments alone, in a fresh context.

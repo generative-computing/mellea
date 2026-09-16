@@ -6,6 +6,7 @@
 Covers image preprocessing plus chat()/instruct() forwarding of multimodal inputs.
 """
 
+import asyncio
 import base64
 import io
 import logging
@@ -506,6 +507,16 @@ async def test_atransform_persists_chosen_tool_message_in_context(
 # --- avalidate context handling (issue #426) ---
 
 
+@pytest.fixture
+def reset_empty_view_warnings():
+    """Clear `avalidate`'s dedup set so warning assertions do not depend on test order."""
+    from mellea.stdlib import functional
+
+    functional._validation_empty_view_warned.clear()
+    yield
+    functional._validation_empty_view_warned.clear()
+
+
 def _ctx_capturing_requirement() -> tuple[Requirement, list[Context]]:
     """A passing requirement that records every context it is validated over."""
     seen: list[Context] = []
@@ -590,25 +601,159 @@ async def test_avalidate_input_reaches_the_judges_view():
     )
 
 
-async def test_avalidate_warns_when_the_context_renders_nothing(caplog):
-    """A context with an empty generation view must not fail silently."""
+async def test_avalidate_accepts_an_output_from_an_earlier_turn():
+    """`output=` may name an output further back than `last_output()` searches.
+
+    `last_output()` only looks at the last 3 components, so an older output was reported as
+    "not last", appended a second time, and the whole call died on the cycle assertion in
+    `Context.as_list`. It is now appended so that it becomes the validation target, with the
+    conversation around it intact.
+    """
+    req, seen = _ctx_capturing_requirement()
+    older = ModelOutputThunk("the output under judgement")
+    ctx = (
+        ChatContext()
+        .add(Message("user", "q1"))
+        .add(older)
+        .add(Message("user", "q2"))
+        .add(ModelOutputThunk("a later output"))
+    )
+
+    await avalidate(reqs=[req], context=ctx, backend=MagicMock(), output=older)
+
+    assert seen[0].last_output() is older, (
+        "the requested output must be the target, since Requirement.validate re-derives it"
+        " from ctx.last_output()"
+    )
+    assert any("q1" in str(node) for node in seen[0].as_list()), (
+        "appending an older target must not discard the conversation around it"
+    )
+
+
+async def test_avalidate_computes_the_target_once_before_fanning_out():
+    """Two requirements over an uncomputed thunk must not deadlock on `astream()`.
+
+    `Requirement.parts()` exposes the bound target, so each requirement's backend call
+    awaits it — and two `astream()` consumers on one thunk hang forever. `avalidate` now
+    computes the target before the fan-out. The timeout is the assertion: on a regression
+    this test hangs rather than fails.
+    """
+    from mellea.core import Backend
+    from mellea.core.base import GenerateType
+
+    async def _process(mot: ModelOutputThunk, chunk) -> None:
+        if mot._underlying_value is None:
+            mot._underlying_value = ""
+        if chunk is not None:
+            mot._underlying_value += chunk
+
+    async def _post_process(mot: ModelOutputThunk) -> None:
+        pass
+
+    target = ModelOutputThunk(value=None)
+    target._call.action = CBlock("action")
+    target._gen.generate_type = GenerateType.ASYNC
+    target._gen.process = _process
+    target._gen.post_process = _post_process
+    target._gen.chunk_size = 0
+
+    async def produce_chunks_over_time():
+        # Spacing the chunks is what exposes the race: a pre-filled queue drains before the
+        # second validation task ever starts.
+        for chunk in ("the ", "generated ", "answer"):
+            await asyncio.sleep(0.01)
+            target._gen.queue.put_nowait(chunk)
+        await asyncio.sleep(0.01)
+        target._gen.queue.put_nowait(None)
+
+    class AwaitsItsActionBackend(Backend):
+        """Test double that awaits its action's uncomputed parts, as real backends do."""
+
+        _model_id = "test-model"
+        _provider = "test"
+
+        async def _generate_from_context(
+            self, action, ctx, *, format=None, model_options=None, tool_calls=False
+        ):
+            await self.do_generate_walk(action)
+            return ModelOutputThunk("yes"), ctx
+
+        async def _generate_from_raw(self, *args, **kwargs):
+            raise NotImplementedError
+
+    ctx = ChatContext().add(Message("user", "q")).add(target)
+    producer = asyncio.create_task(produce_chunks_over_time())
+    try:
+        results = await asyncio.wait_for(
+            avalidate(
+                reqs=[Requirement("first"), Requirement("second")],
+                context=ctx,
+                backend=AwaitsItsActionBackend(),
+            ),
+            timeout=10,
+        )
+    finally:
+        producer.cancel()
+
+    assert len(results) == 2, "both requirements must produce a verdict"
+
+
+async def test_avalidate_computes_an_uncomputed_input_thunk():
+    """An `input` that is still streaming is computed too, for the same reason."""
+    from mellea.core.base import GenerateType
+
+    async def _process(mot: ModelOutputThunk, chunk) -> None:
+        if mot._underlying_value is None:
+            mot._underlying_value = ""
+        if chunk is not None:
+            mot._underlying_value += chunk
+
+    async def _post_process(mot: ModelOutputThunk) -> None:
+        pass
+
+    streaming_input = ModelOutputThunk(value=None)
+    streaming_input._call.action = CBlock("action")
+    streaming_input._gen.generate_type = GenerateType.ASYNC
+    streaming_input._gen.process = _process
+    streaming_input._gen.post_process = _post_process
+    streaming_input._gen.chunk_size = 0
+    streaming_input._gen.queue.put_nowait("the specific input")
+    streaming_input._gen.queue.put_nowait(None)
+
     req, _seen = _ctx_capturing_requirement()
-    # SimpleContext retains as_list()/last_output() but renders no history.
+    ctx = ChatContext().add(ModelOutputThunk("hi"))
+
+    await avalidate(reqs=[req], context=ctx, backend=MagicMock(), input=streaming_input)
+
+    assert streaming_input.is_computed(), (
+        "an uncomputed input must be resolved before the judge renders the context"
+    )
+
+
+async def test_avalidate_does_not_warn_for_an_adapter_backed_requirement(
+    caplog, reset_empty_view_warnings
+):
+    """The empty-view warning is left to the backend for adapter-backed requirements.
+
+    The backend is the only layer that knows whether the adapter was actually reached:
+    openai/huggingface raise for an explicit `ALoraRequirement` or fall back with their own
+    warning, and the remaining backends reject aLoRA outright. Warning here as well would
+    duplicate that, and would misfire when the named adapter is simply absent.
+    """
+    from mellea.stdlib.requirements import ALoraRequirement
+
+    # ALoraRequirement pins validation_fn to None; attaching one keeps this a unit test by
+    # taking the LLM-as-a-judge branch out of Requirement.validate.
+    req = ALoraRequirement("must be polite")
+    req.validation_fn = lambda ctx: ValidationResult(result=True)
     caller_ctx = SimpleContext().add(ModelOutputThunk("hi"))
 
     with caplog.at_level(logging.WARNING):
-        await avalidate(
-            reqs=[req],
-            context=caller_ctx,
-            backend=MagicMock(),
-            input=CBlock("invisible to the judge"),
-        )
+        await avalidate(reqs=[req], context=caller_ctx, backend=MagicMock())
 
-    assert "view_for_generation() is empty" in caplog.text, (
-        "validating over a context that renders nothing should warn, since `input` and the"
-        " conversation are dropped without any other signal"
+    assert "view_for_generation()" not in caplog.text, (
+        "avalidate must not pre-empt the backend's own adapter reporting"
     )
-    assert "SimpleContext" in caplog.text, "the warning should name the context type"
 
 
 if __name__ == "__main__":

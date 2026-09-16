@@ -9,11 +9,12 @@ create_response_format, GenerativeStub.format_for_llm, and @generative routing.
 
 import inspect
 from typing import Any, Literal, get_type_hints
+from unittest.mock import MagicMock
 
 import pytest
 
 from mellea import generative
-from mellea.core import TemplateRepresentation, ValidationResult
+from mellea.core import Requirement, TemplateRepresentation, ValidationResult
 from mellea.stdlib.components.genstub import (
     ArgPreconditionRequirement,
     Arguments,
@@ -26,6 +27,7 @@ from mellea.stdlib.components.genstub import (
     describe_function,
     get_argument,
 )
+from mellea.stdlib.context import SimpleContext
 from mellea.stdlib.requirements.requirement import reqify
 from test.stdlib.components._postponed_annotation_samples import (
     extract_requirements,
@@ -391,6 +393,46 @@ def test_arg_precondition_deepcopy():
     cloned = deepcopy(wrapper)
     assert isinstance(cloned, ArgPreconditionRequirement)
     assert cloned.description == req.description
+
+
+# --- precondition validation context (PR #1628 review) ---
+
+
+def test_precondition_validation_renders_no_conversation():
+    """The arguments must reach the precondition judge exactly once.
+
+    `ArgPreconditionRequirement.jinja2` already inlines them in its `Arguments:` block, so
+    validating over a context that renders history sends them a second time as an
+    `assistant` turn (any `ModelOutputThunk` maps to `assistant`). The precondition context
+    therefore has to be one that renders nothing.
+    """
+    seen: list[Any] = []
+
+    def capture_and_fail(ctx):
+        seen.append(ctx)
+        return ValidationResult(result=False, reason="forced failure")
+
+    @generative
+    def classify(text: str) -> str: ...
+
+    with pytest.raises(PreconditionException):
+        classify(
+            context=SimpleContext(),
+            backend=MagicMock(),
+            text="hello",
+            precondition_requirements=[
+                Requirement("forced failure", validation_fn=capture_and_fail)
+            ],
+        )
+
+    assert seen, "the precondition requirement must actually have been validated"
+    assert seen[0].view_for_generation() == [], (
+        "the precondition context must render no conversation, or the arguments reach the"
+        " judge twice"
+    )
+    assert "hello" in str(seen[0].last_output()), (
+        "the arguments must still be the validation target, so the template inlines them"
+    )
 
 
 # --- PreconditionException ---

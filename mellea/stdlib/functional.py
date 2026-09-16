@@ -57,6 +57,11 @@ from .components import (
 from .context import SimpleContext
 from .sampling import RejectionSamplingStrategy
 
+# Context types whose empty generation view has already been warned about, so the warning
+# in `avalidate` fires once per situation rather than on every call. Mirrors the
+# `_warned_about` guards the backends keep for the same reason.
+_validation_empty_view_warned: set[str] = set()
+
 # Bound to Context so functions can return the same subtype they were given
 # (issue #1522): a `ChatContext` in yields a `ChatContext` out, statically.
 ContextT = TypeVar("ContextT", bound=Context)
@@ -1639,8 +1644,10 @@ async def avalidate(
 
     Validation always runs over `context`, in the caller's own context type, so requirements
     (including adapter-backed ones) see the same conversation the model saw. `output`
-    designates *which* output is under judgement: it is appended to `context` when it is not
-    already the context's last output, and the requirement then validates that output.
+    designates *which* output is under judgement: it is appended to `context` unless it is
+    already the context's last entry, and the requirement then validates that output. An
+    `output` that appears earlier in `context` is appended too, so validating an output from
+    a previous turn works and the judge still sees the conversation around it.
 
     Args:
         reqs: A single `Requirement` or a list of them to validate.
@@ -1671,26 +1678,46 @@ async def avalidate(
     if input is not None:
         validation_target_ctx = validation_target_ctx.add(input)
 
-    # `output` designates the validation target rather than replacing the context. Adding it
-    # is a no-op for the sampling path: ComputedModelOutputThunk reassigns __class__ in place,
-    # so the thunk passed here *is* the one already in the context.
-    if output is not None and validation_target_ctx.last_output() is not output:
+    # `output` designates the validation target rather than replacing the context, and
+    # `Requirement.validate` re-derives that target from `ctx.last_output()` -- so `output`
+    # has to end up last. It is added unless it is already the final entry, which is the
+    # sampling path: ComputedModelOutputThunk reassigns __class__ in place, so the thunk
+    # passed here *is* the one already at the tail, and re-adding it would only render the
+    # judged output twice. Anything else is added, including an `output` that appears
+    # earlier in the chain (validating an older output); `Context.as_list` tolerates a
+    # repeated span because its cycle guard tracks nodes rather than data.
+    if output is not None and validation_target_ctx.node_data is not output:
         validation_target_ctx = validation_target_ctx.add(output)
 
     # A context that renders no history hands the judge nothing but the requirement and the
-    # inlined output, so anything conversational -- `input`, earlier turns, and the whole
-    # premise of adapter-backed requirement checking -- is silently dropped. Say so rather
-    # than letting the caller infer working validation from a plausible-looking verdict.
-    if (
-        not validation_target_ctx.view_for_generation()
-        and validation_target_ctx.as_list()
-    ):
-        MelleaLogger.get_logger().warning(
-            f"validating over a {type(validation_target_ctx).__name__} whose"
-            " view_for_generation() is empty: the judge sees only the requirement and the"
-            " inlined output, not the conversation that produced it. Pass a context that"
-            " renders history (e.g. ChatContext) to validate against the input."
+    # inlined output, and `input` is the only thing that costs. A plain LLM-as-a-judge
+    # requirement loses nothing (its template inlines the output either way), and an
+    # adapter-backed requirement is already reported by the backend, which knows whether the
+    # adapter was actually reached: openai/huggingface raise or fall back with a warning,
+    # and the other backends reject aLoRA outright. Warning here too would duplicate that,
+    # and would misfire in the case where the named adapter is absent -- the backend then
+    # never takes the adapter path at all and LLM-as-a-judge handles it correctly.
+    view = validation_target_ctx.view_for_generation()
+    if input is not None and not view and validation_target_ctx.as_list():
+        ctx_type = type(validation_target_ctx).__name__
+        # `view_for_generation()` returning None means the history is non-linear and
+        # cannot be rendered at all; [] means it renders, but to nothing.
+        detail = (
+            f"view_for_generation() is None: {ctx_type} has a non-linear history, so no"
+            " conversation can be rendered"
+            if view is None
+            else f"view_for_generation() is empty: {ctx_type} renders no conversation"
         )
+        # Deduped the way the backends' `_warned_about` guards are: without this, the
+        # warning fires on every single `avalidate` call.
+        warn_key = f"{ctx_type}:{view is None}"
+        if warn_key not in _validation_empty_view_warned:
+            _validation_empty_view_warned.add(warn_key)
+            MelleaLogger.get_logger().warning(
+                f"validating over a context whose {detail}, so `input` never reaches the"
+                " judge. Pass a context that renders history (e.g. ChatContext) to"
+                " validate against the input."
+            )
 
     # --- validation_pre_check hook ---
     if has_plugins(HookType.VALIDATION_PRE_CHECK):
@@ -1708,6 +1735,20 @@ async def avalidate(
         )
         reqs = pre_payload.requirements
         model_options = pre_payload.model_options or model_options
+
+    # Compute the spans the requirements will read *before* fanning out. Every requirement
+    # binds the same validation target, `Requirement.parts()` exposes it, and each backend
+    # awaits the uncomputed leaves of its action -- so with two or more requirements the
+    # gather below would have two tasks calling `avalue()` on one uncomputed thunk at once.
+    # That deadlocks: `ModelOutputThunk.astream()` supports a single consumer, so one task
+    # takes the completion signal and the other waits forever for a chunk that never comes.
+    # Awaiting here, sequentially, means the fan-out only ever sees computed thunks.
+    if isinstance(input, ModelOutputThunk) and not input.is_computed():
+        await input.avalue()
+
+    validation_target = validation_target_ctx.last_output()
+    if validation_target is not None and not validation_target.is_computed():
+        await validation_target.avalue()
 
     rvs: list[ValidationResult] = []
     coroutines: list[Coroutine[Any, Any, ValidationResult]] = []

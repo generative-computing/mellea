@@ -1025,7 +1025,7 @@ class MelleaSession(Generic[ContextT]):
             format: Optional Pydantic model for constrained decoding.
             model_options: Additional model options to merge with backend defaults.
             generate_logs: Optional list to append generation logs to.
-            input: Optional input to prepend to the validation context, for judging an
+            input: Optional input to append to the validation context, for judging an
                 output against a specific input rather than the whole conversation.
 
         Returns:
@@ -1466,7 +1466,7 @@ class MelleaSession(Generic[ContextT]):
             format: Optional Pydantic model for constrained decoding.
             model_options: Additional model options to merge with backend defaults.
             generate_logs: Optional list to append generation logs to.
-            input: Optional input to prepend to the validation context, for judging an
+            input: Optional input to append to the validation context, for judging an
                 output against a specific input rather than the whole conversation.
 
         Returns:

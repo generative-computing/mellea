@@ -29,7 +29,7 @@ from ...core import (
     ValidationResult,
 )
 from ...helpers.annotation_helpers import resolve_signature_annotations
-from ..context import ChatContext
+from ..context import SimpleContext
 from ..requirements.requirement import reqify
 from ..session import MelleaSession
 
@@ -628,6 +628,10 @@ class SyncGenerativeStub(GenerativeStub, Generic[P, R]):
         if stub_copy._arguments is not None:
             # Preconditions are judged over the arguments alone, so they get a fresh
             # context rather than the caller's/session's conversation history.
+            # `SimpleContext` renders no conversation, which is what keeps the arguments
+            # from reaching the judge twice: `ArgPreconditionRequirement`'s template
+            # already inlines them in its `Arguments:` block, and a context that rendered
+            # them would also emit them as an `assistant` turn.
             precondition_backend = (
                 extracted.m.backend if extracted.m is not None else extracted.backend
             )
@@ -635,7 +639,7 @@ class SyncGenerativeStub(GenerativeStub, Generic[P, R]):
             assert precondition_backend is not None
             val_results = mfuncs.validate(
                 reqs=stub_copy.precondition_requirements,
-                context=ChatContext(),
+                context=SimpleContext(),
                 backend=precondition_backend,
                 model_options=extracted.model_options,
                 output=ModelOutputThunk(stub_copy._arguments.value),
@@ -771,6 +775,10 @@ class AsyncGenerativeStub(GenerativeStub, Generic[P, R]):
             if stub_copy._arguments is not None:
                 # Preconditions are judged over the arguments alone, so they get a fresh
                 # context rather than the caller's/session's conversation history.
+                # `SimpleContext` renders no conversation, which is what keeps the
+                # arguments from reaching the judge twice: `ArgPreconditionRequirement`'s
+                # template already inlines them in its `Arguments:` block, and a context
+                # that rendered them would also emit them as an `assistant` turn.
                 precondition_backend = (
                     extracted.m.backend
                     if extracted.m is not None
@@ -780,7 +788,7 @@ class AsyncGenerativeStub(GenerativeStub, Generic[P, R]):
                 assert precondition_backend is not None
                 val_results = await mfuncs.avalidate(
                     reqs=stub_copy.precondition_requirements,
-                    context=ChatContext(),
+                    context=SimpleContext(),
                     backend=precondition_backend,
                     model_options=extracted.model_options,
                     output=ModelOutputThunk(stub_copy._arguments.value),
