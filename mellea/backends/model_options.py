@@ -72,12 +72,14 @@ class ModelOption:
       `chat_template_kwargs`, while Ollama's /v1 endpoint (>= 0.33.1) honours
       `reasoning_effort` — and for models that default to thinking on (e.g.
       granite4.2) absent `reasoning_effort` means thinking stays on.
-    * `"low"` / `"medium"` / `"high"` — passed directly as `reasoning_effort`
-      (OpenAI-compatible backends only; no-op on vLLM).
+    * `"low"` / `"medium"` / `"high"` — OpenAI-compatible backends: passed
+      directly as `reasoning_effort` (no-op on vLLM). HuggingFace: forwarded
+      verbatim as the chat template's `reasoning_effort` variable if it
+      declares one (e.g. Granite 4.2, gpt-oss); a no-op otherwise.
 
-    HuggingFace supports boolean values only; a non-boolean value (e.g.
-    `"low"`) is silently ignored. If its chat template does not expose a
-    recognised thinking variable, the option is ignored regardless of value.
+    For HuggingFace, any value is ignored if the tokenizer's chat template
+    does not declare the corresponding variable (`think`/`thinking`/
+    `enable_thinking` for bools, `reasoning_effort` for strings).
     """
     SEED = "@@@seed@@@"
     STREAM = "@@@stream@@@"

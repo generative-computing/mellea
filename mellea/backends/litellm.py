@@ -43,6 +43,7 @@ from ..helpers import (
     extract_model_tool_requests,
     get_current_event_loop,
     message_to_openai_message,
+    prefetch_audio_urls,
     send_to_queue,
     should_replay_reasoning,
 )
@@ -379,6 +380,7 @@ class LiteLLMBackend(FormatterBackend):
         system_prompt = model_opts.get(ModelOption.SYSTEM_PROMPT, "")
         if system_prompt != "":
             conversation.append({"role": "system", "content": system_prompt})
+        await prefetch_audio_urls(messages)
         replay_flags = should_replay_reasoning(messages, self._provider)
         conversation.extend(
             [
@@ -527,7 +529,7 @@ class LiteLLMBackend(FormatterBackend):
             output._gen.generate = asyncio.create_task(
                 send_to_queue(
                     chat_response,
-                    output._gen.queue,
+                    output,
                     chunk_timeout=model_opts.get(
                         ModelOption.STREAM_TIMEOUT, DEFAULT_CHUNK_TIMEOUT
                     ),

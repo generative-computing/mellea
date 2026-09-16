@@ -440,7 +440,21 @@ as it can corrupt state.
 6. **Run the test suite** to ensure everything passes
 7. **Update documentation** as needed
 8. **Push to your fork** and create a pull request to the main repository
-9. **Follow the automated PR workflow** instructions
+9. **Fill out the PR template and type checklist**
+   - GitHub prefills the body from [`.github/pull_request_template.md`](.github/pull_request_template.md).
+     Complete the `Issue`, `Description`, `Testing`, and `Attribution` sections.
+   - If your PR adds or modifies a **Component**, **Requirement**, **Sampling Strategy**, or
+     **Tool**, check that one box at the bottom. The `PR Bot` workflow
+     ([`.github/workflows/pr-update.yml`](.github/workflows/pr-update.yml)) then posts the
+     type-specific review checklist as a comment, usually within a few seconds. If your PR
+     covers more than one type, split it up; the bot only honors the first checked box.
+   - Work through that checklist comment before requesting review. Editing the comment is
+     fine (ticking boxes, adding notes), but leave the HTML marker on its first line alone,
+     otherwise the bot loses track of the comment and posts a duplicate.
+   - Keep the checkbox section in the body. The bot re-runs on every body edit: unchecking
+     the box deletes the checklist comment, and switching boxes replaces it with the new
+     checklist. Note that opening the PR outside the GitHub UI (`gh pr create --body`, or
+     via automation) skips the prefill entirely, so paste the template body in yourself.
 
 ### Review Assignment
 

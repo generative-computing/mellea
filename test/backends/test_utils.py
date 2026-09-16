@@ -151,6 +151,95 @@ def test_to_chat_basic_message():
     assert result[1]["content"] == "next question"
 
 
+def test_to_chat_attaches_reasoning_content_for_assistant_thinking():
+    """An assistant Message carrying `.thinking` must have it forwarded as
+    `reasoning_content` on the wire dict.
+    """
+    from mellea.backends.utils import to_chat
+    from mellea.formatters.template_formatter import TemplateFormatter as ChatFormatter
+    from mellea.stdlib.components import Message
+    from mellea.stdlib.context import ChatContext
+
+    ctx = ChatContext()
+    ctx = ctx.add(Message("user", "hello"))
+    ctx = ctx.add(Message("assistant", "the answer", thinking="reasoning trace"))
+    action = Message("user", "next question")
+    formatter = ChatFormatter(model_id="test")
+
+    result = to_chat(action, ctx, formatter, system_prompt=None)
+    assistant_msg = next(m for m in result if m["role"] == "assistant")
+    assert assistant_msg["reasoning_content"] == "reasoning trace"
+
+
+def test_to_chat_known_reasoning_content_wins_over_provider_fields():
+    """Regression/contract test: `reasoning_content` is set from `Message.thinking`
+    before `merge_provider_fields` runs (same known-fields-first pattern as
+    `tool_calls`/`tool_call_id`), so an author-declared `provider_fields`
+    collision on the same key is silently dropped (debug-logged, not raised) —
+    Mellea's own value always wins.
+    """
+    from mellea.backends.utils import to_chat
+    from mellea.formatters.template_formatter import TemplateFormatter as ChatFormatter
+    from mellea.stdlib.components import Message
+    from mellea.stdlib.context import ChatContext
+
+    ctx = ChatContext()
+    ctx = ctx.add(Message("user", "hello"))
+    ctx = ctx.add(
+        Message(
+            "assistant",
+            "the answer",
+            thinking="reasoning trace",
+            provider_fields={"huggingface": {"reasoning_content": "author override"}},
+        )
+    )
+    action = Message("user", "next question")
+    formatter = ChatFormatter(model_id="test")
+
+    result = to_chat(action, ctx, formatter, system_prompt=None)
+    assistant_msg = next(m for m in result if m["role"] == "assistant")
+    assert assistant_msg["reasoning_content"] == "reasoning trace"
+
+
+def test_to_chat_omits_reasoning_content_when_no_thinking():
+    """An assistant Message with no captured reasoning must not get a
+    `reasoning_content` key at all (not even an empty string)."""
+    from mellea.backends.utils import to_chat
+    from mellea.formatters.template_formatter import TemplateFormatter as ChatFormatter
+    from mellea.stdlib.components import Message
+    from mellea.stdlib.context import ChatContext
+
+    ctx = ChatContext()
+    ctx = ctx.add(Message("user", "hello"))
+    ctx = ctx.add(Message("assistant", "the answer"))
+    action = Message("user", "next question")
+    formatter = ChatFormatter(model_id="test")
+
+    result = to_chat(action, ctx, formatter, system_prompt=None)
+    assistant_msg = next(m for m in result if m["role"] == "assistant")
+    assert "reasoning_content" not in assistant_msg
+
+
+def test_to_chat_ignores_thinking_on_non_assistant_message():
+    """`.thinking` on a non-assistant Message (never set by real code paths, but
+    not type-guarded against) must not be forwarded as `reasoning_content` — the
+    Granite template only consumes that key on the assistant branch, so this is
+    otherwise inert, but the wire dict should not carry stray, unconsumed keys."""
+    from mellea.backends.utils import to_chat
+    from mellea.formatters.template_formatter import TemplateFormatter as ChatFormatter
+    from mellea.stdlib.components import Message
+    from mellea.stdlib.context import ChatContext
+
+    ctx = ChatContext()
+    ctx = ctx.add(Message("user", "hello", thinking="stray thinking"))
+    action = Message("user", "next question")
+    formatter = ChatFormatter(model_id="test")
+
+    result = to_chat(action, ctx, formatter, system_prompt=None)
+    user_msg = next(m for m in result if m["content"] == "hello")
+    assert "reasoning_content" not in user_msg
+
+
 def test_to_chat_with_system_prompt():
     from mellea.backends.utils import to_chat
     from mellea.formatters.template_formatter import TemplateFormatter as ChatFormatter

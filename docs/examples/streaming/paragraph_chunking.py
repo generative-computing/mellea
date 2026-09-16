@@ -59,7 +59,7 @@ class ParagraphLengthReq(Requirement):
     def format_for_llm(self) -> str:
         return f"Each paragraph must contain at most {self._max_words} words."
 
-    async def stream_validate(
+    async def _stream_validate(
         self, chunk: str, *, backend: Backend, ctx: Context
     ) -> PartialValidationResult:
         self._para_index += 1

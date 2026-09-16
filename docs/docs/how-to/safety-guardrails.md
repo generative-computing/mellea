@@ -235,7 +235,7 @@ consistent with the documents in context. The context must contain source
 documents added via `ChatContext().add(Document(...))`, a user question, and the
 assistant's answer. This differs from `guardian_check(criteria="groundedness")`,
 which expects documents attached to the assistant message via
-`Message(..., documents=[...])` — see [Build a RAG Pipeline](../how-to/build-a-rag-pipeline#step-5-check-groundedness-optional).
+`Message(..., documents=[...])` — see [Build a RAG Pipeline](./build-a-rag-pipeline.md#step-5-check-groundedness-optional).
 
 Returns `"yes"` if the response is factually incorrect (contains unsupported or
 contradicted claims), or `"no"` if it is factually correct:
@@ -327,7 +327,7 @@ else:
 ## Limitations
 
 Guardian adapter functions return a numeric score (or label string) rather than a
-[`Requirement`](../reference/glossary#requirement) instance, so they cannot be
+[`Requirement`](../reference/glossary.md#requirement) instance, so they cannot be
 passed to `m.validate()` or wired into `RepairTemplateStrategy` the way the
 deprecated `GuardianCheck` could. The practical workaround is to call
 `guardian_check()` (or another adapter function) manually after generation and
@@ -336,7 +336,7 @@ your threshold. A `Requirement`-backed wrapper is tracked in
 [#1071](https://github.com/generative-computing/mellea/issues/1071).
 
 Guardian functions also do not emit `mellea.requirement` metrics — see
-[Observability and metrics](../observability/metrics) for details.
+[Observability and metrics](../observability/metrics.md) for details.
 
 ---
 

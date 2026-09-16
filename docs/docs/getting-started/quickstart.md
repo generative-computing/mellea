@@ -5,7 +5,7 @@ description: "Run your first generative program in minutes."
 ---
 
 **Prerequisites:** [Ollama](https://ollama.ai) installed and running locally,
-[Installation](./installation) complete.
+[Installation](./installation.md) complete.
 
 ## Hello world
 
@@ -51,7 +51,7 @@ Best Regards,
 > **Note:** LLM output is non-deterministic. Your exact results will vary by model and temperature, but you should see a well-formed email in a similar format.
 
 Three lines: create a session, instruct, print. The `instruct()` call returns a
-[`ModelOutputThunk`](../reference/glossary#modeloutputthunk); call `str()` on it (or access `.value`) to get the string.
+[`ModelOutputThunk`](../reference/glossary.md#modeloutputthunk); call `str()` on it (or access `.value`) to get the string.
 
 > **Full example:** [`docs/examples/tutorial/simple_email.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/tutorial/simple_email.py)
 
@@ -183,25 +183,25 @@ best regards,
 > **Note:** LLM output is non-deterministic. With the `"Use only lower-case letters"` requirement, the output will be all lowercase. If the first attempt isn't successful, Mellea retries automatically up to a specified limit.
 
 The repair loop retries up to two times by default. See
-[Instruct, Validate, Repair](../concepts/instruct-validate-repair) for control
+[Instruct, Validate, Repair](../concepts/instruct-validate-repair.md) for control
 over loop budget, custom validators, and the full `instruct()` API.
 
 ## Core concepts
 
-**Sessions** — [`MelleaSession`](../reference/glossary#melleasession) is the main entry point. `start_session()` creates one
-with defaults: Ollama backend, Granite 4 Micro, [`SimpleContext`](../reference/glossary#context) (single-turn).
+**Sessions** — [`MelleaSession`](../reference/glossary.md#melleasession) is the main entry point. `start_session()` creates one
+with defaults: Ollama backend, Granite 4 Micro, [`SimpleContext`](../reference/glossary.md#context) (single-turn).
 
 **Instructions** — `instruct()` builds a structured `Instruction` component, not a
 raw chat message. It supports a description, requirements, user variables, grounding
 context, and few-shot examples.
 
-**Contexts** — `SimpleContext` holds a single turn. [`ChatContext`](../reference/glossary#context) accumulates turns for
+**Contexts** — `SimpleContext` holds a single turn. [`ChatContext`](../reference/glossary.md#context) accumulates turns for
 multi-turn conversations. Pass `ctx=ChatContext()` to `start_session()` for stateful
 chat.
 
-**Backends** — Pluggable model providers. Ollama is the default. OpenAI, [LiteLLM](../reference/glossary#litellm--litellmbackend),
+**Backends** — Pluggable model providers. Ollama is the default. OpenAI, [LiteLLM](../reference/glossary.md#litellm--litellmbackend),
 Hugging Face, and WatsonX are also supported. See
-[Backends and Configuration](../how-to/backends-and-configuration).
+[Backends and Configuration](../how-to/backends-and-configuration.md).
 
 ## Troubleshooting
 

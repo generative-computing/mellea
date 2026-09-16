@@ -5,17 +5,17 @@ description: "Replace ad-hoc instruct() calls with typed, composable @generative
 ---
 
 This tutorial shows how to build composable LLM-backed functions using the
-[`@generative`](../reference/glossary#generative) decorator — functions with typed return values, docstring-driven
+[`@generative`](../reference/glossary.md#generative) decorator — functions with typed return values, docstring-driven
 prompts, and consistent behaviour that you can reuse across a codebase.
 
 By the end you will have covered:
 
 - Defining `@generative` functions with typed returns
 - Composing multiple generative functions into a pipeline
-- Controlling behaviour via [`ChatContext`](../reference/glossary#chatcontext) and context injection
+- Controlling behaviour via [`ChatContext`](../reference/glossary.md#chatcontext) and context injection
 - Precondition and postcondition validation patterns
 
-**Prerequisites:** [Tutorial 01](./your-first-generative-program) complete,
+**Prerequisites:** [Tutorial 01](./01-your-first-generative-program.md) complete,
 `pip install mellea`, Ollama running locally with `granite4.2:3b` downloaded.
 
 ---
@@ -320,4 +320,4 @@ context-steerable generative functions:
 
 ---
 
-**See also:** [Generative Functions](../how-to/generative-functions) | [The Requirements System](../concepts/requirements-system) | [Write Custom Verifiers](../how-to/write-custom-verifiers)
+**See also:** [Generative Functions](../how-to/generative-functions.md) | [The Requirements System](../concepts/requirements-system.md) | [Write Custom Verifiers](../how-to/write-custom-verifiers.md)

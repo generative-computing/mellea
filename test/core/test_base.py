@@ -4,7 +4,9 @@
 import base64
 import copy
 import io
+import wave
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 from PIL import Image as PILImage
@@ -20,8 +22,10 @@ from mellea.core import (
     ModelOutputThunk,
     ModelToolCall,
     RawProviderResponse,
+    TemplateRepresentation,
     blockify,
     get_audio_from_component,
+    get_images_from_component,
     make_image_block,
 )
 from mellea.core.backend import generate_walk
@@ -254,6 +258,300 @@ def test_audio_block_missing_format_raises():
         AudioBlock(raw_b64)
 
 
+# --- AudioBlock.detect_format / from_bytes / from_file ---
+
+
+def _make_wav_bytes(seconds: float = 0.05, rate: int = 8000) -> bytes:
+    """Return a minimal mono 16-bit PCM WAV via the stdlib `wave` module."""
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(rate)
+        w.writeframes(b"\x00\x10" * int(rate * seconds))
+    return buf.getvalue()
+
+
+@pytest.mark.parametrize(
+    "data,expected",
+    [
+        (b"ID3\x04\x00\x00\x00", "mp3"),  # ID3v2 tag
+        (b"\xff\xfb\x90\x00", "mp3"),  # bare frame sync
+        (b"fLaC\x00\x00\x00\x00", "flac"),
+        (b"OggS\x00\x02\x00\x00", "ogg"),
+    ],
+)
+def test_audio_detect_format_by_magic_bytes(data: bytes, expected: str):
+    assert AudioBlock.detect_format(data) == expected
+
+
+def test_audio_detect_format_wav():
+    assert AudioBlock.detect_format(_make_wav_bytes()) == "wav"
+
+
+def test_audio_detect_format_riff_without_wave_is_not_audio():
+    """A RIFF container that is not a WAVE form (e.g. AVI) must not pass as wav."""
+    assert AudioBlock.detect_format(b"RIFF\x00\x00\x00\x00AVI LIST") is None
+
+
+@pytest.mark.parametrize("data", [b"", b"nope", b"\x01\x02\x03\x04"])
+def test_audio_detect_format_unrecognised(data: bytes):
+    assert AudioBlock.detect_format(data) is None
+
+
+@pytest.mark.parametrize(
+    "byte1",
+    [
+        0xF1,  # ADTS, MPEG-4, no CRC
+        0xF9,  # ADTS, MPEG-2, no CRC
+        0xF0,  # ADTS, MPEG-4, with CRC
+    ],
+)
+def test_audio_detect_format_adts_aac_is_not_mp3(byte1: int):
+    """ADTS AAC shares MP3's 11-bit sync word and must not be reported as mp3.
+
+    AAC's syncword is 12 bits (0xFFF...), so `0xF1 & 0xE0 == 0xE0` passes a sync-only
+    check. The 2-bit layer field separates them: ADTS always encodes 0b00, MPEG audio
+    never does. Mislabelling would send AAC bytes tagged `format="mp3"`.
+
+    These byte patterns are synthetic so the test needs no encoder, but the case is real:
+    `ffmpeg -c:a aac -f adts` produces a file starting `ff f1 50 40`, which the
+    sync-only check reported as mp3.
+    """
+    adts = bytes([0xFF, byte1]) + b"\x00" * 40
+    assert AudioBlock.detect_format(adts) is None
+
+
+@pytest.mark.parametrize(
+    "byte1,layer", [(0xFB, "III"), (0xF5, "II"), (0xF7, "I"), (0xE3, "III (MPEG 2.5)")]
+)
+def test_audio_detect_format_all_mpeg_layers_still_mp3(byte1: int, layer: str):
+    """Excluding ADTS must not exclude any real MPEG audio layer."""
+    frame = bytes([0xFF, byte1]) + b"\x00" * 40
+    assert AudioBlock.detect_format(frame) == "mp3", f"Layer {layer} regressed"
+
+
+def test_audio_from_file_rejects_adts_aac(tmp_path):
+    """An AAC file must fail loudly rather than be loaded as mp3."""
+    path = tmp_path / "clip.aac"
+    path.write_bytes(bytes([0xFF, 0xF1]) + b"\x00" * 64)
+    with pytest.raises(ValueError, match="Could not identify the audio format"):
+        AudioBlock.from_file(path)
+
+
+def test_audio_from_bytes_detects_format():
+    wav = _make_wav_bytes()
+    block = AudioBlock.from_bytes(wav)
+    assert block.format == "wav"
+    assert base64.b64decode(str(block.value)) == wav
+
+
+def test_audio_from_bytes_explicit_format_overrides_detection():
+    """An explicit format is trusted, so unrecognised payloads remain usable."""
+    block = AudioBlock.from_bytes(b"\x01\x02\x03\x04", "wav")
+    assert block.format == "wav"
+
+
+def test_audio_from_bytes_undetectable_raises():
+    with pytest.raises(ValueError, match="Could not detect the audio format"):
+        AudioBlock.from_bytes(b"\x01\x02\x03\x04")
+
+
+def test_audio_from_file(tmp_path):
+    wav = _make_wav_bytes()
+    path = tmp_path / "clip.wav"
+    path.write_bytes(wav)
+    block = AudioBlock.from_file(path)
+    assert block.format == "wav"
+    assert base64.b64decode(str(block.value)) == wav
+
+
+def test_audio_from_file_accepts_str_path(tmp_path):
+    path = tmp_path / "clip.wav"
+    path.write_bytes(_make_wav_bytes())
+    assert AudioBlock.from_file(str(path)).format == "wav"
+
+
+def test_audio_from_file_detects_by_content_not_extension(tmp_path):
+    """A WAV named .mp3 is reported as wav — extensions are not trusted."""
+    path = tmp_path / "mislabelled.mp3"
+    path.write_bytes(_make_wav_bytes())
+    assert AudioBlock.from_file(path).format == "wav"
+
+
+def test_audio_from_file_unrecognised_format_raises(tmp_path):
+    path = tmp_path / "clip.bin"
+    path.write_bytes(b"\x01\x02\x03\x04")
+    with pytest.raises(ValueError, match="Could not identify the audio format"):
+        AudioBlock.from_file(path)
+
+
+def test_audio_from_file_explicit_format_skips_detection(tmp_path):
+    path = tmp_path / "clip.bin"
+    path.write_bytes(b"\x01\x02\x03\x04")
+    assert AudioBlock.from_file(path, "wav").format == "wav"
+
+
+def test_audio_from_file_missing_raises(tmp_path):
+    with pytest.raises(ValueError, match="expected a path to an audio file"):
+        AudioBlock.from_file(tmp_path / "nope.wav")
+
+
+@pytest.mark.parametrize(
+    "not_a_path",
+    [
+        "https://example.com/clip.wav",  # a URL — plausible mistake
+        base64.b64encode(b"\x00" * 400).decode(),  # base64 payload — "name too long"
+    ],
+)
+def test_audio_from_file_non_path_string_gives_actionable_error(not_a_path: str):
+    """`audio=` accepts bare strings, so URLs and base64 land here; say what was wanted.
+
+    Without this the caller sees a raw FileNotFoundError or
+    `OSError: File name too long`, neither of which names the real mistake.
+    """
+    with pytest.raises(ValueError, match="expected a path to an audio file") as exc:
+        AudioBlock.from_file(not_a_path)
+    msg = str(exc.value)
+    # Point at every alternative, since any of them could be what the caller meant.
+    assert "from_url" in msg and "from_bytes" in msg
+
+
+def test_audio_from_file_error_does_not_echo_the_whole_input():
+    """A base64 payload passed as a path must not be reproduced in the exception.
+
+    The path is truncated when formatted, but interpolating the OSError would undo that:
+    `str(OSError)` repeats the full filename, so a whole clip's base64 would land in the
+    message and from there into logs.
+    """
+    payload = base64.b64encode(b"\x00" * 7500).decode()
+    assert len(payload) > 9000, "fixture must exceed the truncation threshold"
+
+    with pytest.raises(ValueError) as exc:
+        AudioBlock.from_file(payload)
+
+    msg = str(exc.value)
+    assert payload not in msg, "the full input leaked into the error"
+    assert len(msg) < 500, f"message length should not scale with input; got {len(msg)}"
+    # The actionable parts survive truncation.
+    assert "expected a path to an audio file" in msg
+    assert "chars total" in msg, "truncation should say how much was elided"
+
+
+# --- AudioBlock.from_url / AudioUrlBlock.resolve_base64 ---
+#
+# OpenAI Chat Completions has no audio-by-URL content part, so a URL must be resolved to
+# inline base64 — eagerly via from_url, or lazily at send time via
+# AudioUrlBlock.resolve_base64. The network is patched out throughout; these assert
+# wiring, not connectivity.
+
+
+def test_audio_from_url_downloads_and_detects_format():
+    wav = _make_wav_bytes()
+    encoded = base64.b64encode(wav).decode()
+    with patch(
+        "mellea.core.base._cached_download_audio_as_base64", return_value=encoded
+    ) as mock_dl:
+        block = AudioBlock.from_url("https://example.com/clip.wav")
+    mock_dl.assert_called_once_with("https://example.com/clip.wav")
+    assert block.format == "wav"
+    assert block.value == encoded
+
+
+def test_audio_from_url_explicit_format_skips_detection():
+    encoded = base64.b64encode(b"\x01\x02\x03\x04").decode()
+    with patch(
+        "mellea.core.base._cached_download_audio_as_base64", return_value=encoded
+    ):
+        assert AudioBlock.from_url("https://example.com/x.bin", "wav").format == "wav"
+
+
+def test_audio_from_url_undetectable_format_raises():
+    encoded = base64.b64encode(b"\x01\x02\x03\x04").decode()
+    with patch(
+        "mellea.core.base._cached_download_audio_as_base64", return_value=encoded
+    ):
+        with pytest.raises(ValueError, match="Could not identify the audio format"):
+            AudioBlock.from_url("https://example.com/x.bin")
+
+
+@pytest.mark.parametrize("bad", ["clip.wav", "ftp://example.com/a.wav", "/tmp/a.wav"])
+def test_audio_from_url_rejects_non_http(bad: str):
+    """A local path here is a plausible mistake; point at from_file rather than fetching."""
+    with pytest.raises(ValueError, match="requires an http:// or https:// URL") as exc:
+        AudioBlock.from_url(bad)
+    assert "from_file" in str(exc.value)
+
+
+def test_audio_url_block_resolve_base64_delegates_to_cache():
+    encoded = base64.b64encode(_make_wav_bytes()).decode()
+    block = AudioUrlBlock("https://example.com/clip.wav", format="wav")
+    with patch(
+        "mellea.core.base._cached_download_audio_as_base64", return_value=encoded
+    ) as mock_dl:
+        assert block.resolve_base64() == encoded
+    mock_dl.assert_called_once_with("https://example.com/clip.wav")
+
+
+def test_audio_from_url_evicts_cache_when_detection_fails():
+    """A transient non-audio 200 must not be cached, or retries replay the bad body.
+
+    Without eviction the first attempt caches the response, so every later attempt fails
+    identically without re-fetching — the URL is permanently poisoned for the process.
+    """
+    from mellea.core.base import _audio_base64_cache
+
+    url = "https://example.com/transiently-broken.wav"
+    _audio_base64_cache.pop(url, None)
+    not_audio = base64.b64encode(b"<html>error page</html>" + b"\x00" * 40).decode()
+
+    with patch(
+        "mellea.core.base._download_audio_as_base64", return_value=not_audio
+    ) as mock_dl:
+        for _ in range(2):
+            with pytest.raises(ValueError, match="Could not identify the audio format"):
+                AudioBlock.from_url(url)
+            assert url not in _audio_base64_cache, "bad body must not stay cached"
+
+    assert mock_dl.call_count == 2, "each retry must re-download, not replay the cache"
+    _audio_base64_cache.pop(url, None)
+
+
+def test_audio_from_url_recovers_once_the_url_serves_audio():
+    """After a transient failure, a corrected response must be picked up."""
+    from mellea.core.base import _audio_base64_cache
+
+    url = "https://example.com/recovers.wav"
+    _audio_base64_cache.pop(url, None)
+    bad = base64.b64encode(b"<html>error</html>" + b"\x00" * 40).decode()
+    good = base64.b64encode(_make_wav_bytes()).decode()
+
+    with patch("mellea.core.base._download_audio_as_base64", side_effect=[bad, good]):
+        with pytest.raises(ValueError):
+            AudioBlock.from_url(url)
+        block = AudioBlock.from_url(url)
+
+    assert block.format == "wav"
+    _audio_base64_cache.pop(url, None)
+
+
+def test_audio_download_cache_fetches_once_per_url():
+    """Reusing a URL across turns must not re-fetch it."""
+    from mellea.core.base import _audio_base64_cache, _cached_download_audio_as_base64
+
+    url = "https://example.com/cached-once.wav"
+    _audio_base64_cache.pop(url, None)
+    encoded = base64.b64encode(_make_wav_bytes()).decode()
+    with patch(
+        "mellea.core.base._download_audio_as_base64", return_value=encoded
+    ) as mock_dl:
+        first = _cached_download_audio_as_base64(url)
+        second = _cached_download_audio_as_base64(url)
+    assert first == second == encoded
+    mock_dl.assert_called_once()
+    _audio_base64_cache.pop(url, None)
+
+
 # --- AudioUrlBlock ---
 
 
@@ -335,6 +633,122 @@ def test_get_audio_from_component_returns_none_when_missing():
             return ""
 
     assert get_audio_from_component(_ComponentWithoutAudio()) is None
+
+
+# --- TemplateRepresentation fallback for attribute-less components ---
+#
+# A component may declare attachments only on its TemplateRepresentation. Without a
+# fallback such components are invisible to backend capability checks, so backends
+# that cannot carry the modality (e.g. LocalHFBackend) would drop them silently.
+
+
+class _ComponentDeclaringOnRepresentation(Component[str]):
+    """Declares attachments only via format_for_llm — deliberately has no attribute."""
+
+    def __init__(self, *, images=None, audio=None):
+        self._declared_images = images
+        self._declared_audio = audio
+        self.format_for_llm_calls = 0
+
+    def parts(self):
+        return []
+
+    def format_for_llm(self) -> TemplateRepresentation:
+        self.format_for_llm_calls += 1
+        return TemplateRepresentation(
+            obj=self, args={}, images=self._declared_images, audio=self._declared_audio
+        )
+
+    def _parse(self, computed: ModelOutputThunk) -> str:
+        return ""
+
+
+def test_get_audio_falls_back_to_template_representation():
+    audio = [AudioBlock(base64.b64encode(b"audio").decode(), format="wav")]
+    component = _ComponentDeclaringOnRepresentation(audio=audio)
+    assert get_audio_from_component(component) == audio
+
+
+def test_get_images_falls_back_to_template_representation():
+    images = [ImageUrlBlock("https://example.com/cat.png")]
+    component = _ComponentDeclaringOnRepresentation(images=images)
+    assert get_images_from_component(component) == images
+
+
+def test_representation_fallback_returns_none_when_nothing_declared():
+    component = _ComponentDeclaringOnRepresentation()
+    assert get_audio_from_component(component) is None
+    assert get_images_from_component(component) is None
+
+
+def test_representation_fallback_validates_element_types():
+    """The fallback must not return non-blocks under a block-typed signature.
+
+    Without validation the declared return type is a lie the backend discovers later.
+    """
+    bad_audio = _ComponentDeclaringOnRepresentation(audio=["not-a-block"])
+    with pytest.raises(AssertionError, match=r"TemplateRepresentation\.audio"):
+        get_audio_from_component(bad_audio)
+
+    bad_images = _ComponentDeclaringOnRepresentation(images=[object()])
+    with pytest.raises(AssertionError, match=r"TemplateRepresentation\.images"):
+        get_images_from_component(bad_images)
+
+
+def test_representation_fallback_not_consulted_when_attribute_present():
+    """Components exposing the attribute must not pay for an extra format_for_llm call.
+
+    This pins a deliberate performance trade, not merely current behaviour. Falling back
+    whenever the attribute yields nothing — rather than only when it is missing — would
+    make the guard agree with the payload path (the formatter always reads `tr.audio`),
+    but would add a `format_for_llm()` call for every attachment-free `Message` and
+    `Instruction` on every capability scan. The contract instead requires a component's
+    attribute to agree with its representation; see `get_images_from_component`. Do not
+    "fix" this by loosening the condition without weighing that cost.
+    """
+
+    class _WithAttributeAndRepresentation(_ComponentDeclaringOnRepresentation):
+        audio = None  # attribute present, so the fallback must be skipped
+
+    component = _WithAttributeAndRepresentation(
+        audio=[AudioBlock(base64.b64encode(b"audio").decode(), format="wav")]
+    )
+    assert get_audio_from_component(component) is None
+    assert component.format_for_llm_calls == 0
+
+
+def test_representation_fallback_swallows_format_for_llm_errors():
+    """A capability guard must not become a new source of failure."""
+
+    class _Exploding(Component[str]):
+        def parts(self):
+            return []
+
+        def format_for_llm(self) -> TemplateRepresentation:
+            raise RuntimeError("cannot render")
+
+        def _parse(self, computed: ModelOutputThunk) -> str:
+            return ""
+
+    assert get_audio_from_component(_Exploding()) is None
+    assert get_images_from_component(_Exploding()) is None
+
+
+def test_representation_fallback_ignores_string_representation():
+    """format_for_llm may return a plain string; that carries no attachments."""
+
+    class _StringRepr(Component[str]):
+        def parts(self):
+            return []
+
+        def format_for_llm(self) -> str:
+            return "just text"
+
+        def _parse(self, computed: ModelOutputThunk) -> str:
+            return ""
+
+    assert get_audio_from_component(_StringRepr()) is None
+    assert get_images_from_component(_StringRepr()) is None
 
 
 # --- make_image_block factory ---

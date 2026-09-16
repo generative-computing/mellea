@@ -12,10 +12,10 @@ together. Copy any example as a starting point for your own project.
 
 | Example | What it shows |
 | ------- | ------------- |
-| [Data extraction pipeline](/examples/data-extraction-pipeline) | Use `@generative` with a typed return to pull structured data from unstructured text |
-| [Legacy code integration](/examples/legacy-code-integration) | Apply `@mify` to existing Python classes so the model can act on them |
-| [Resilient RAG with fallback](/examples/resilient-rag-fallback) | Build a FAISS retrieval pipeline with an LLM relevance filter before generation |
-| [Traced generation loop](/examples/traced-generation-loop) | Enable OpenTelemetry application and backend traces with two environment variables |
+| [Data extraction pipeline](./data-extraction-pipeline.md) | Use `@generative` with a typed return to pull structured data from unstructured text |
+| [Legacy code integration](./legacy-code-integration.md) | Apply `@mify` to existing Python classes so the model can act on them |
+| [Resilient RAG with fallback](./resilient-rag-fallback.md) | Build a FAISS retrieval pipeline with an LLM relevance filter before generation |
+| [Traced generation loop](./traced-generation-loop.md) | Enable OpenTelemetry application and backend traces with two environment variables |
 
 ## All example categories
 

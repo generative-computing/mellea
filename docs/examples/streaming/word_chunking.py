@@ -58,7 +58,7 @@ class ForbiddenWordReq(Requirement):
     def format_for_llm(self) -> str:
         return f"Do not use any of the following words: {', '.join(self._forbidden_display)}."
 
-    async def stream_validate(
+    async def _stream_validate(
         self, chunk: str, *, backend: Backend, ctx: Context
     ) -> PartialValidationResult:
         word = chunk.strip().lower().strip(".,!?;:\"'")

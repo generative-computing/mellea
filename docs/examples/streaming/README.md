@@ -21,7 +21,7 @@ uv run validated_streaming.py
 Demonstrates:
 - Streaming token-by-token generation
 - Sentence-level chunking via `stream()`
-- Per-chunk validation with custom `stream_validate()` methods
+- Per-chunk validation with custom `_stream_validate()` methods
 - Iterating typed stream events via `stream(as_events=True)`
 - Early exit on validation failure
 
@@ -57,6 +57,16 @@ Demonstrates:
 - Implementing custom chunking logic
 - Defining custom stream validators
 - Advanced streaming patterns
+
+### Per-Requirement Chunking
+
+```bash
+uv run per_requirement_chunking.py
+```
+
+Demonstrates:
+- Each `Requirement` carrying its own `chunking=` strategy, independent of the stream's
+- Sentence-level and word-level requirements validating one stream at once
 
 ### Events Across Multiple Concurrent Streams
 

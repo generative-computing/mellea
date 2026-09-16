@@ -290,4 +290,4 @@ checklist, and the review process for documentation contributions. Key points:
 
 ---
 
-**See also:** [Building Extensions](../community/building-extensions)
+**See also:** [Building Extensions](./building-extensions.md)
