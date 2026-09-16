@@ -195,14 +195,6 @@ all three backends, provided the serving runtime forwards the effort level
 into the chat template (Ollama and vLLM do). Granite defaults to thinking
 **on** when `ModelOption.THINKING` is not set at all.
 
-The `LocalHFBackend` string-forwarding behaviour above is live on `main`
-(landed via [#1639](https://github.com/generative-computing/mellea/pull/1639)).
-
-> **Depends on [#1616](https://github.com/generative-computing/mellea/pull/1616):**
-> the paragraph below describes the state once that open PR merges. On current
-> `main`, `LocalHFBackend` does not populate `result.thinking` — the reasoning
-> trace stays embedded raw in `result.value`.
-
 `LocalHFBackend` also parses Granite's `<think>...</think>` block out of the
 response, so `result.thinking` and `result.value` are populated separately —
 matching the other backends — rather than leaving the reasoning trace
