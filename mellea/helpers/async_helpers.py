@@ -413,7 +413,14 @@ class ClientCache:
             return value
 
     def put(self, key: Hashable, value: Any) -> None:
-        """Put a value into the cache, closing the evicted entry if one is displaced.
+        """Put a value into the cache, closing the least-recently-used entry if one is evicted.
+
+        LRU eviction is the only case that closes anything. Replacing the value under a
+        key that is *already* cached just drops the old reference: a same-key `put`
+        means another caller built a client for that key between this caller's `get`
+        miss and this `put`, so the value displaced here is the one that caller is
+        about to use. Closing it would break their in-flight request; its connections
+        come back when they drop it and it is garbage collected.
 
         The evicted client's close is *scheduled* on the loop that owns it rather than
         awaited: entries are added during `generate`, so blocking here would stall the

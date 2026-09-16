@@ -360,6 +360,23 @@ class TestClientCacheClose:
         release.set()
         assert finished.wait(timeout=5.0)
 
+    def test_put_over_an_existing_key_does_not_close_the_displaced_client(self):
+        """A same-key put displaces a client its own creator is about to use."""
+        closed = []
+
+        async def aclose(client):
+            closed.append(client)
+
+        cache = ClientCache(capacity=2, aclose=aclose)
+        cache.put(None, "first")
+        cache.put(None, "second")  # replaces, rather than evicting, "first"
+
+        assert cache.get(None) == "second"
+        assert cache.current_size() == 1
+        # Only LRU eviction closes; closing here would break the request the
+        # caller that put "first" is running on it.
+        assert closed == []
+
     def test_put_without_aclose_does_not_error_on_eviction(self):
         cache = ClientCache(capacity=1)
         cache.put(1, "a")

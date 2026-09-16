@@ -5,7 +5,9 @@ import asyncio
 import contextvars
 import gc
 import multiprocessing
+import sys
 import threading
+import time
 import warnings
 from unittest import mock
 
@@ -166,6 +168,76 @@ def test_close_event_loop_closes_thread_and_loop_and_is_idempotent():
     # be a no-op, not raise, and not attempt to close the loop again.
     handler._close_event_loop()
     assert loop.is_closed()
+
+
+def test_del_skips_its_waits_during_interpreter_finalization(monkeypatch):
+    """A daemon thread that can't be rescheduled must not be waited on at exit."""
+    # Do not ever instantiate this manually. Only doing here for testing.
+    handler = elh._EventLoopHandler()
+    loop = handler._event_loop
+    thread = handler._thread
+
+    blocked = threading.Event()
+    release = threading.Event()
+
+    def hold_the_loop():
+        blocked.set()
+        release.wait(10.0)
+
+    # Stands in for a loop thread frozen by finalization: nothing this handler
+    # schedules can run, so both waits would burn their full timeout.
+    loop.call_soon_threadsafe(hold_the_loop)
+    assert blocked.wait(timeout=5.0)
+
+    monkeypatch.setattr(sys, "is_finalizing", lambda: True)
+    try:
+        start = time.monotonic()
+        handler.__del__()
+        assert time.monotonic() - start < 0.5, "__del__ waited on a frozen loop thread"
+    finally:
+        release.set()
+        loop.call_soon_threadsafe(loop.stop)
+        thread.join(timeout=5.0)
+        loop.close()
+
+
+def test_submit_after_shutdown_raises_runtime_error():
+    """A cleared loop reference must not surface as an AttributeError from asyncio."""
+    # Do not ever instantiate this manually. Only doing here for testing.
+    handler = elh._EventLoopHandler()
+    handler._close_event_loop()
+
+    async def work() -> None:
+        return None
+
+    co = work()
+    with pytest.raises(RuntimeError, match="shut down"):
+        handler.submit(co)
+
+    # Same contract as any other scheduling failure: `co` is closed, not leaked.
+    with pytest.raises(RuntimeError):
+        co.send(None)
+
+
+def test_call_after_shutdown_raises_runtime_error():
+    """Without an explicit check this would run on a throwaway nested loop instead."""
+    # Do not ever instantiate this manually. Only doing here for testing.
+    handler = elh._EventLoopHandler()
+    handler._close_event_loop()
+
+    ran = False
+
+    async def work() -> None:
+        nonlocal ran
+        ran = True
+
+    co = work()
+    with pytest.raises(RuntimeError, match="shut down"):
+        handler(co)
+
+    assert ran is False, "the coroutine ran despite the handler being shut down"
+    with pytest.raises(RuntimeError):
+        co.send(None)
 
 
 def test_run_async_in_thread_closes_coroutine_on_scheduling_failure():

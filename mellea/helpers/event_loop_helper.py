@@ -7,6 +7,7 @@ import asyncio
 import concurrent.futures
 import contextvars
 import os
+import sys
 import threading
 from collections.abc import Coroutine
 from typing import Any, TypeVar
@@ -50,9 +51,12 @@ class _EventLoopHandler:
 
         Uses a short join timeout: `__del__` can run during interpreter
         finalization, where blocking on a thread that may never be rescheduled
-        would stall process exit.
+        would stall process exit. Once `sys.is_finalizing()` is true the waits
+        are skipped altogether — a daemon thread is not guaranteed to be
+        scheduled again at that point, so waiting on one can only burn the
+        timeout without changing the outcome.
         """
-        self._close_event_loop(join_timeout=1.0)
+        self._close_event_loop(join_timeout=0.0 if sys.is_finalizing() else 1.0)
 
     def _close_event_loop(self, join_timeout: float = 5.0) -> None:
         """Shut down the event loop and its thread, releasing the loop's file descriptors.
@@ -68,7 +72,9 @@ class _EventLoopHandler:
 
         Args:
             join_timeout: Seconds to wait for the loop thread to exit before giving
-                up and leaving the loop unclosed.
+                up and leaving the loop unclosed. `0` blocks nowhere: the task
+                cancellation round-trip is skipped and the thread is not joined, for
+                callers that cannot afford to wait at all.
         """
         loop = self._event_loop
         if loop is None:
@@ -87,12 +93,16 @@ class _EventLoopHandler:
             await loop.shutdown_asyncgens()
 
         if loop.is_running():
-            try:
-                asyncio.run_coroutine_threadsafe(finalize_tasks(), loop).result(
-                    join_timeout
-                )
-            except Exception:
-                pass
+            # With no time to wait, don't schedule `finalize_tasks()` at all: the
+            # coroutine object would be created and then never awaited, trading the
+            # blocking wait for a "coroutine was never awaited" warning.
+            if join_timeout > 0:
+                try:
+                    asyncio.run_coroutine_threadsafe(finalize_tasks(), loop).result(
+                        join_timeout
+                    )
+                except Exception:
+                    pass
             try:
                 loop.call_soon_threadsafe(loop.stop)
             except Exception:
@@ -111,6 +121,27 @@ class _EventLoopHandler:
                 loop.close()
         except Exception:
             pass
+
+    def _require_event_loop(self) -> asyncio.AbstractEventLoop:
+        """Return this handler's event loop, or raise if it has been shut down.
+
+        `_close_event_loop` clears the loop reference, so without this check the
+        loop's absence surfaces as an `AttributeError` from deep inside `asyncio`
+        (`submit`) or as a silent fallback onto a throwaway nested loop (`__call__`).
+
+        Returns:
+            The handler's event loop.
+
+        Raises:
+            RuntimeError: If the loop has already been shut down.
+        """
+        loop = self._event_loop
+        if loop is None:
+            raise RuntimeError(
+                "This event loop handler has been shut down; its event loop is closed "
+                "and cannot run further work."
+            )
+        return loop
 
     def submit(self, co: Coroutine[Any, Any, R]) -> concurrent.futures.Future[R]:
         """Schedule the coroutine on the event loop without waiting for its result.
@@ -132,13 +163,14 @@ class _EventLoopHandler:
             future rather than raised here.
 
         Raises:
-            RuntimeError: If the coroutine could not be scheduled, e.g. the loop has
-                already been closed. `co` is closed first, so it does not additionally
-                emit a "coroutine was never awaited" warning.
+            RuntimeError: If the coroutine could not be scheduled, e.g. this handler
+                has already been shut down by `_close_event_loop`. `co` is closed
+                first, so it does not additionally emit a "coroutine was never
+                awaited" warning.
         """
         try:
             self._reinit_if_forked()
-            return asyncio.run_coroutine_threadsafe(co, self._event_loop)
+            return asyncio.run_coroutine_threadsafe(co, self._require_event_loop())
         except Exception:
             # `run_coroutine_threadsafe` only wraps `co` in a task from inside the
             # callback it hands to the loop, so a raise here means `co` never started
@@ -179,11 +211,18 @@ class _EventLoopHandler:
         loop, `_wrapped()` never starts and never gets to `await co` — leaking
         both `_wrapped()`'s and (via the outer `except`) `co`'s "coroutine was
         never awaited" warnings otherwise.
+
+        Raises:
+            RuntimeError: If this handler has been shut down by `_close_event_loop`.
+                The check is explicit because a cleared loop reference would
+                otherwise compare equal to a sync caller's absent loop (`None ==
+                None`) and quietly run `co` on a throwaway nested loop.
         """
         wrapped_co: Coroutine[Any, Any, R] | None = None
         try:
             self._reinit_if_forked()
-            if self._event_loop == get_current_event_loop():
+            event_loop = self._require_event_loop()
+            if event_loop == get_current_event_loop():
                 # If this gets called from the same event loop, launch in a separate thread to prevent blocking.
                 # The nested handler owns an event loop and a thread, so tear it down
                 # explicitly rather than leaving it to __del__: a dropped handler's
@@ -203,9 +242,7 @@ class _EventLoopHandler:
                 return await co
 
             wrapped_co = _wrapped()
-            return asyncio.run_coroutine_threadsafe(
-                wrapped_co, self._event_loop
-            ).result()
+            return asyncio.run_coroutine_threadsafe(wrapped_co, event_loop).result()
         except Exception:
             co.close()
             if wrapped_co is not None:

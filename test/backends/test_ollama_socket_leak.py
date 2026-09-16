@@ -22,8 +22,28 @@ from mellea.helpers.event_loop_helper import _run_async_in_thread
 pytestmark = [pytest.mark.ollama, pytest.mark.e2e]
 
 
+def _resolved_port(backend: OllamaModelBackend) -> int:
+    """The port the backend's client actually connected to.
+
+    Read off the constructed client rather than assumed: `OllamaModelBackend` resolves
+    its host through `OLLAMA_HOST`, so hard-coding 11434 would silently match nothing
+    (and pass) wherever that env var points elsewhere.
+
+    Args:
+        backend: The backend whose resolved Ollama port is wanted.
+
+    Returns:
+        The port of the sync client's base URL.
+    """
+    base_url = backend._client._client.base_url
+    port = base_url.port
+    assert port is not None, f"no port to filter warnings on in base url {base_url}"
+    return port
+
+
 def test_close_leaves_no_socket_resource_warning():
     backend = OllamaModelBackend(model_id=IBM_GRANITE_4_2_3B)
+    port = _resolved_port(backend)
 
     backend._client.ps()
     # Route through Mellea's own background loop, same as real call sites
@@ -41,7 +61,7 @@ def test_close_leaves_no_socket_resource_warning():
     port_warnings = [
         w
         for w in caught
-        if issubclass(w.category, ResourceWarning) and "11434" in str(w.message)
+        if issubclass(w.category, ResourceWarning) and str(port) in str(w.message)
     ]
     assert port_warnings == [], f"leaked Ollama socket(s): {port_warnings}"
 
