@@ -6,10 +6,12 @@
 import asyncio
 import datetime
 import threading
+import time
 
 import pytest
 
 from mellea.core.base import ModelOutputThunk
+from mellea.helpers import async_helpers
 from mellea.helpers.async_helpers import (
     DEFAULT_CHUNK_TIMEOUT,
     ClientCache,
@@ -389,6 +391,32 @@ class TestClientCacheClose:
         cache.clear()  # the closer's error is caught and logged, not raised
 
         assert cache.current_size() == 0
+
+    def test_clear_bounds_its_wait_on_an_unbound_client(self, monkeypatch):
+        """`close()`'s own path: a busy background loop must time out, not hang."""
+        monkeypatch.setattr(async_helpers, "CLIENT_CLOSE_TIMEOUT", 0.1)
+        release = threading.Event()
+        finished = threading.Event()
+
+        async def aclose(client):
+            await asyncio.to_thread(release.wait, 10.0)
+            finished.set()
+
+        cache = ClientCache(capacity=1, aclose=aclose)
+        cache.put(None, "a")  # the key every sync-constructed backend uses
+
+        try:
+            start = time.monotonic()
+            cache.clear()
+            elapsed = time.monotonic() - start
+
+            assert elapsed < 5.0, "clear() waited without a timeout"
+            assert cache.current_size() == 0
+        finally:
+            release.set()
+
+        # Timing out abandons the wait, not the close.
+        assert finished.wait(timeout=5.0), "the close was cancelled, not just unwaited"
 
     def test_clear_without_aclose_just_empties(self):
         cache = ClientCache(capacity=2)

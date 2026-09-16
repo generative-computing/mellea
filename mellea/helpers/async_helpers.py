@@ -221,7 +221,11 @@ def _close_client_for_loop(
     what is possible here:
 
     - `loop` is `None` (client created outside any loop, so driven by Mellea's own
-      background loop): close it there.
+      background loop): schedule it there, waiting up to `CLIENT_CLOSE_TIMEOUT` only
+      if `wait`. This is the path every sync-constructed backend takes on `close()`,
+      so the wait is bounded: a background loop busy with a generate call costs a
+      timeout, not a hang. A wait that times out leaves the close scheduled rather
+      than cancelling it, so the client is still closed on the right loop.
     - `loop` is the loop this call is running inside: the close is scheduled on it as
       a task. Blocking on it from here would deadlock, so `wait` cannot be honoured.
     - `loop` is running on another thread: schedule it there, waiting up to
@@ -247,17 +251,16 @@ def _close_client_for_loop(
             a stalled loop matters more than knowing the client is fully closed.
     """
     from ..core import MelleaLogger
-    from .event_loop_helper import _run_async_in_thread, _schedule_async_in_thread
+    from .event_loop_helper import _schedule_async_in_thread
 
     logger = MelleaLogger.get_logger()
     try:
         if loop is None:
+            background = _schedule_async_in_thread(aclose(client))
             if wait:
-                _run_async_in_thread(aclose(client))
+                background.result(CLIENT_CLOSE_TIMEOUT)
             else:
-                _schedule_async_in_thread(aclose(client)).add_done_callback(
-                    lambda f: _log_close_failure(client, f)
-                )
+                background.add_done_callback(lambda f: _log_close_failure(client, f))
         elif loop.is_closed():
             logger.debug(
                 f"Cannot close {type(client).__name__}: the event loop it was bound "
