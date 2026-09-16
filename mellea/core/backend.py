@@ -69,6 +69,11 @@ class Backend(abc.ABC):
         clients (e.g. `OllamaModelBackend`, `OpenAIBackend`) override this to
         close them; backends without closeable resources can rely on this
         default. Safe to call more than once.
+
+        Teardown only, not a reset: a backend is not guaranteed to work again
+        afterwards. An overriding backend may end up partly closed, since a sync
+        client cannot be reopened while a cached async one is rebuilt on next
+        use. Build a new backend instead of reusing a closed one.
         """
         return None
 

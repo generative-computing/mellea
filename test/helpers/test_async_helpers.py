@@ -430,6 +430,26 @@ class TestClientCacheClose:
         await asyncio.wait_for(done.wait(), timeout=5.0)
         assert closed == ["a"]
 
+    async def test_aclear_drives_a_stopped_loop_to_close_its_entry(self):
+        """A loop that is neither running nor closed can only be driven off-loop."""
+        ran_on = []
+
+        async def aclose(client):
+            ran_on.append(asyncio.get_running_loop())
+
+        stopped_loop = asyncio.new_event_loop()
+        try:
+            cache = ClientCache(capacity=2, aclose=aclose)
+            cache.put(stopped_loop, "a")
+            await cache.aclear()
+
+            # `run_until_complete` from inside this coroutine's loop would raise and be
+            # swallowed, leaving the client to GC.
+            assert ran_on == [stopped_loop], "the stopped loop's client was not closed"
+            assert cache.current_size() == 0
+        finally:
+            stopped_loop.close()
+
     async def test_aclear_closes_an_entry_owned_by_a_foreign_loop(self):
         """A client on another thread's loop closes there, without blocking this one."""
         ran_on = []

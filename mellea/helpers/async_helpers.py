@@ -299,6 +299,9 @@ async def _aclose_client_for_loop(
     - `client` is bound to another running loop, or to Mellea's background loop
       (`loop` is `None`): scheduled there and awaited through a wrapped future, so
       this coroutine's own loop keeps running while the close proceeds.
+    - `client` is bound to a loop that is stopped but not closed: only
+      `run_until_complete` can drive such a loop, and that cannot run inside this
+      coroutine's own loop, so it is handed to a worker thread and awaited there.
 
     A client bound to an **already-closed** loop is the one case nothing can fix: with
     no loop left to await on, its sockets are reclaimed only when it is garbage
@@ -340,8 +343,10 @@ async def _aclose_client_for_loop(
             )
         else:
             # A loop that is neither running nor closed has no thread to schedule on;
-            # only `run_until_complete` can drive it.
-            _close_client_for_loop(client, loop, aclose)
+            # only `run_until_complete` can drive it, and calling that from inside this
+            # coroutine's own running loop raises. Hand it to a worker thread, where
+            # no loop is running, so the sync helper can drive it there.
+            await asyncio.to_thread(_close_client_for_loop, client, loop, aclose)
     except Exception as e:
         logger.debug(f"Failed to close {type(client).__name__}: {e}")
 
@@ -410,6 +415,13 @@ class ClientCache:
         The evicted client's close is *scheduled* on the loop that owns it rather than
         awaited: entries are added during `generate`, so blocking here would stall the
         caller's event loop for as long as the close took.
+
+        Closing on eviction assumes no more than `capacity` event loops drive a backend
+        at once, which holds for Mellea's single-background-loop design. Past that, an
+        evicted client's transport could be closed while a request is still in flight on
+        its loop. The alternative — dropping the reference and leaving the close to
+        garbage collection — is what leaked sockets for the life of the process, so the
+        close is scheduled rather than skipped.
 
         Args:
             key: Cache key; the event loop the client is bound to, or `None`.

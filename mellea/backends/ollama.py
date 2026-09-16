@@ -341,6 +341,11 @@ class OllamaModelBackend(FormatterBackend):
         """Close the sync and cached async Ollama clients, releasing their sockets.
 
         Safe to call more than once; subsequent calls close nothing further.
+
+        Teardown only: the backend is left half-closed rather than reset. The sync
+        client cannot be reopened, so later sync calls fail, while a later async call
+        builds a fresh client into the emptied cache. Build a new backend to keep
+        generating.
         """
         sync_client = getattr(self._client, "_client", None)
         if sync_client is not None:
