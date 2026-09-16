@@ -362,7 +362,7 @@ def test_notebook_without_markers_is_skipped(tmp_path, metadata):
 
 
 def test_malformed_notebook_is_skipped(tmp_path):
-    """Verify unparseable JSON is skipped rather than executed without gates."""
+    """Verify unparsable JSON is skipped rather than executed without gates."""
     notebook = tmp_path / "broken.ipynb"
     notebook.write_text("{not valid json", encoding="utf-8")
     should_skip, reason = example_conftest._should_skip_notebook(
