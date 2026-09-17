@@ -225,7 +225,16 @@ class WatsonxAIBackend(FormatterBackend):
 
     @property
     def _model(self) -> ModelInference:
-        """Watsonx's client gets tied to a specific event loop. Reset it if needed here."""
+        """Watsonx's client gets tied to a specific event loop. Reset it if needed here.
+
+        Raises:
+            RuntimeError: If `close` or `aclose` has already closed this backend.
+        """
+        # Every generation path reaches its ModelInference through here, so this is
+        # where reuse after close() has to stop: the cache is empty by then, and
+        # building another one would hold its sockets for the life of the process (and
+        # re-fetch an IAM token to do it).
+        self._raise_if_closed()
         # get_or_create, not get/put: sync callers all key on None, so two threads
         # calling in would otherwise each build a client and leak one of them.
         return self._client_cache.get_or_create(
@@ -244,14 +253,23 @@ class WatsonxAIBackend(FormatterBackend):
         """Close the HTTP clients held by every cached watsonx `ModelInference`.
 
         Safe to call more than once; subsequent calls close nothing further.
+
+        Teardown only, not a reset: the backend is marked closed, and generating with
+        it afterwards raises `RuntimeError` instead of building another
+        `ModelInference`. Build a new backend to keep generating.
         """
+        # Marked closed before anything is closed: the flag is what stops a concurrent
+        # caller from rebuilding a client into the cache `clear()` is about to empty.
+        self._closed = True
         self._client_cache.clear()
 
     async def aclose(self) -> None:
         """Async counterpart to `close`.
 
-        Safe to call more than once; subsequent calls close nothing further.
+        Safe to call more than once; subsequent calls close nothing further. Leaves
+        the backend closed to reuse on the same terms as `close`.
         """
+        self._closed = True
         await self._client_cache.aclear()
 
     def filter_chat_completions_kwargs(self, model_options: dict) -> dict:

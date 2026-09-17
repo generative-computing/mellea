@@ -274,7 +274,13 @@ class OllamaModelBackend(FormatterBackend):
 
         Returns:
           True if the model is available, False otherwise.
+
+        Raises:
+          RuntimeError: If `close` or `aclose` has already closed this backend.
         """
+        # Guarded because the `except` below would otherwise turn "this backend is
+        # closed" into a plain `False`, which reads as "the model isn't there".
+        self._raise_if_closed()
         try:
             models = self._client.list()
             for model in models["models"]:
@@ -328,7 +334,15 @@ class OllamaModelBackend(FormatterBackend):
 
     @property
     def _async_client(self) -> ollama.AsyncClient:
-        """Ollama's client gets tied to a specific event loop. Reset it if needed here."""
+        """Ollama's client gets tied to a specific event loop. Reset it if needed here.
+
+        Raises:
+            RuntimeError: If `close` or `aclose` has already closed this backend.
+        """
+        # Every generation path reaches its client through here, so this is where reuse
+        # after close() has to stop: the cache is empty by then, and building a client
+        # into it would hold sockets for the life of the process.
+        self._raise_if_closed()
         # get_or_create, not get/put: sync callers all key on None, so two threads
         # calling in would otherwise each build a client and leak one of them.
         return self._client_cache.get_or_create(
@@ -341,11 +355,13 @@ class OllamaModelBackend(FormatterBackend):
 
         Safe to call more than once; subsequent calls close nothing further.
 
-        Teardown only: the backend is left half-closed rather than reset. The sync
-        client cannot be reopened, so later sync calls fail, while a later async call
-        builds a fresh client into the emptied cache. Build a new backend to keep
-        generating.
+        Teardown only, not a reset: the backend is marked closed, and generating with
+        it afterwards raises `RuntimeError` instead of reopening a client. Build a new
+        backend to keep generating.
         """
+        # Marked closed before anything is closed: the flag is what stops a concurrent
+        # caller from rebuilding a client into the cache `clear()` is about to empty.
+        self._closed = True
         sync_client = getattr(self._client, "_client", None)
         if sync_client is not None:
             try:
@@ -357,8 +373,10 @@ class OllamaModelBackend(FormatterBackend):
     async def aclose(self) -> None:
         """Async counterpart to `close`.
 
-        Safe to call more than once; subsequent calls close nothing further.
+        Safe to call more than once; subsequent calls close nothing further. Leaves
+        the backend closed to reuse on the same terms as `close`.
         """
+        self._closed = True
         sync_client = getattr(self._client, "_client", None)
         if sync_client is not None:
             try:

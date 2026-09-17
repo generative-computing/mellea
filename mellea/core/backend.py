@@ -62,6 +62,15 @@ class Backend(abc.ABC):
     _provider: str
     """Provider name (e.g. 'openai', 'ollama'). Must be set by every backend implementation."""
 
+    _closed: bool = False
+    """Whether `close`/`aclose` has released this backend's resources.
+
+    A class-level default, so every backend reads as open without having to set it in
+    `__init__`. Only backends that own closeable clients set it, and they gate their
+    client accessors on `_raise_if_closed`. The no-op default `close` leaves it
+    `False`: it releases nothing, so there is nothing to lock out afterwards.
+    """
+
     def close(self) -> None:
         """Release any resources this backend holds open (clients, cached connections).
 
@@ -70,10 +79,10 @@ class Backend(abc.ABC):
         close them; backends without closeable resources can rely on this
         default. Safe to call more than once.
 
-        Teardown only, not a reset: a backend is not guaranteed to work again
-        afterwards. An overriding backend may end up partly closed, since a sync
-        client cannot be reopened while a cached async one is rebuilt on next
-        use. Build a new backend instead of reusing a closed one.
+        Teardown only, not a reset. A backend that owns clients marks itself
+        closed here, and generating with it afterwards raises `RuntimeError`
+        rather than reopening a client that nothing will close. Build a new
+        backend instead of reusing a closed one.
         """
         return None
 
@@ -86,9 +95,29 @@ class Backend(abc.ABC):
         Neither can reach a client bound to an event loop that has *already*
         been closed — those connections are released only when the client is
         garbage collected. The default implementation is a no-op. Safe to call
-        more than once.
+        more than once. An overriding backend closes itself to reuse on the same
+        terms as `close`.
         """
         return None
+
+    def _raise_if_closed(self) -> None:
+        """Raise if `close`/`aclose` has already released this backend's resources.
+
+        Backends that own clients call this from the accessor that would otherwise
+        build a replacement, so that reuse after teardown fails loudly instead of
+        quietly opening connections nothing will ever close: `close` empties the
+        client cache, so a client rebuilt into it afterwards would hold its sockets
+        for the life of the process.
+
+        Raises:
+            RuntimeError: If `close` or `aclose` has been called on this backend.
+        """
+        if self._closed:
+            raise RuntimeError(
+                f"{type(self).__name__} has been closed. close()/aclose() is teardown, "
+                "not a reset: this backend's clients have been released and cannot be "
+                "reopened. Build a new backend instead of reusing a closed one."
+            )
 
     @final
     async def generate_from_context(

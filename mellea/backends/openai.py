@@ -564,7 +564,18 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
     @property
     def _async_client(self) -> openai.AsyncOpenAI:
-        """OpenAI's client usually handles changing event loops but explicitly handle it here for edge cases."""
+        """OpenAI's client usually handles changing event loops but explicitly handle it here for edge cases.
+
+        Raises:
+            RuntimeError: If `close` or `aclose` has already closed this backend.
+        """
+        # Every generation path reaches its client through here, so this is where reuse
+        # after close() has to stop. Without the guard the SDK's own failure mode is
+        # worse than useless: a closed sync client surfaces as `APIConnectionError`,
+        # indistinguishable from the server being down, and an async call rebuilds a
+        # client into the emptied cache that then holds its sockets for the life of the
+        # process.
+        self._raise_if_closed()
         # get_or_create, not get/put: sync callers all key on None, so two threads
         # calling in would otherwise each build a client and leak one of them.
         return self._client_cache.get_or_create(
@@ -581,11 +592,13 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         Safe to call more than once; subsequent calls close nothing further.
 
-        Teardown only: the backend is left half-closed rather than reset. The sync
-        client cannot be reopened, so later sync calls fail, while a later async call
-        builds a fresh client into the emptied cache. Build a new backend to keep
-        generating.
+        Teardown only, not a reset: the backend is marked closed, and generating with
+        it afterwards raises `RuntimeError` instead of reopening a client. Build a new
+        backend to keep generating.
         """
+        # Marked closed before anything is closed: the flag is what stops a concurrent
+        # caller from rebuilding a client into the cache `clear()` is about to empty.
+        self._closed = True
         try:
             self._client.close()
         except Exception as e:
@@ -595,8 +608,10 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
     async def aclose(self) -> None:
         """Async counterpart to `close`.
 
-        Safe to call more than once; subsequent calls close nothing further.
+        Safe to call more than once; subsequent calls close nothing further. Leaves
+        the backend closed to reuse on the same terms as `close`.
         """
+        self._closed = True
         try:
             self._client.close()
         except Exception as e:
