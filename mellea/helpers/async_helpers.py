@@ -7,15 +7,16 @@ Provides `send_to_queue`, which feeds a backend response coroutine or async iter
 into an `asyncio.Queue` (including sentinel and error forwarding); `wait_for_all_mots`,
 which gathers multiple `ModelOutputThunk` computations in a single `asyncio.gather`
 call; `get_current_event_loop`, a safe wrapper that returns `None` instead of
-raising when no event loop is running; and `ClientCache`, an LRU cache of loop-bound
-async clients that closes each entry on the loop that owns it when the entry is
-evicted or cleared. These utilities are used internally by backends that operate in
+raising when no event loop is running; and `ClientCache`, a thread-safe LRU cache of
+loop-bound async clients that closes each entry on the loop that owns it when the entry
+is evicted or cleared. These utilities are used internally by backends that operate in
 async contexts.
 """
 
 from __future__ import annotations
 
 import asyncio
+import threading
 import time
 from collections import OrderedDict
 from collections.abc import AsyncIterator, Callable, Coroutine, Hashable
@@ -363,6 +364,11 @@ class ClientCache:
     evicted or cleared. Holding the loop object rather than its `id()` also stops a
     recycled address from handing a fresh loop a client bound to a dead one.
 
+    Every method is safe to call from multiple threads. Build clients through
+    `get_or_create` rather than a `get`/`put` pair: only `get_or_create` holds the lock
+    across the miss and the insert, which is what keeps two threads from each
+    constructing a client under the same key.
+
     Args:
         capacity (int): Maximum number of entries to hold before evicting the least recently used.
         aclose (Callable[[Any], Coroutine[Any, Any, None]] | None): Optional callable
@@ -386,6 +392,7 @@ class ClientCache:
         self.capacity = capacity
         self.cache: OrderedDict = OrderedDict()
         self.aclose = aclose
+        self._lock = threading.Lock()
 
     def current_size(self) -> int:
         """Just return the size of the key set. This isn't necessarily safe.
@@ -398,19 +405,17 @@ class ClientCache:
     def get(self, key: Hashable) -> Any | None:
         """Gets a value from the cache.
 
+        A hit here is only worth acting on if nothing else can insert under `key`
+        meanwhile — use `get_or_create` to build a client on a miss.
+
         Args:
             key: Cache key; the event loop the client is bound to, or `None`.
 
         Returns:
             The cached value, or `None` if the key is not present.
         """
-        if key not in self.cache:
-            return None
-        else:
-            # Move the accessed item to the end (most recent)
-            value = self.cache.pop(key)
-            self.cache[key] = value
-            return value
+        with self._lock:
+            return self._get_locked(key)
 
     def put(self, key: Hashable, value: Any) -> None:
         """Put a value into the cache, closing the least-recently-used entry if one is evicted.
@@ -420,7 +425,8 @@ class ClientCache:
         means another caller built a client for that key between this caller's `get`
         miss and this `put`, so the value displaced here is the one that caller is
         about to use. Closing it would break their in-flight request; its connections
-        come back when they drop it and it is garbage collected.
+        come back when they drop it and it is garbage collected. `get_or_create` avoids
+        that window altogether, and is the preferred way in.
 
         The evicted client's close is *scheduled* on the loop that owns it rather than
         awaited: entries are added during `generate`, so blocking here would stall the
@@ -437,15 +443,44 @@ class ClientCache:
             key: Cache key; the event loop the client is bound to, or `None`.
             value: Value to store.
         """
-        if key in self.cache:
-            # If the key exists, move it to the end (most recent)
-            self.cache.pop(key)
-        elif len(self.cache) >= self.capacity:
-            # If the cache is full, remove the least recently used item
-            evicted_key, evicted_value = self.cache.popitem(last=False)
-            self._close_entry(evicted_key, evicted_value, wait=False)
-        # Add the new key-value pair to the end (most recent)
-        self.cache[key] = value
+        with self._lock:
+            evicted = self._put_locked(key, value)
+        if evicted is not None:
+            self._close_entry(*evicted, wait=False)
+
+    def get_or_create(self, key: Hashable, factory: Callable[[], Any]) -> Any:
+        """Get the value cached under `key`, building and caching one if there is none.
+
+        Prefer this to a `get`/`put` pair. `get_current_event_loop()` returns `None`
+        whenever no loop is running, so every synchronous call path shares the one `None`
+        key: two threads calling a backend synchronously would otherwise both miss, both
+        construct a client, and the second `put` would displace the first client without
+        closing it — leaking its connections for the life of the process. Holding the
+        lock across the miss, the construction and the insert makes the second thread
+        find the client the first one built.
+
+        `factory` runs with the lock held, so concurrent construction for the same cache
+        is serialised and `factory` must not call back into this cache. If it raises, the
+        exception propagates and nothing is cached.
+
+        Args:
+            key: Cache key; the event loop the client is bound to, or `None`.
+            factory: Zero-argument callable returning a value to cache under `key`.
+                Called only on a miss. A `None` it returns is cached but reads back as a
+                miss, the same conflation `get` has.
+
+        Returns:
+            The value already cached under `key`, or the newly built one.
+        """
+        with self._lock:
+            value = self._get_locked(key)
+            if value is not None:
+                return value
+            value = factory()
+            evicted = self._put_locked(key, value)
+        if evicted is not None:
+            self._close_entry(*evicted, wait=False)
+        return value
 
     def clear(self) -> None:
         """Close every cached client and empty the cache.
@@ -457,8 +492,9 @@ class ClientCache:
         be scheduled for closing, not awaited — use `aclear()` there to be sure the
         client is closed before this returns.
         """
-        entries = list(self.cache.items())
-        self.cache.clear()
+        with self._lock:
+            entries = list(self.cache.items())
+            self.cache.clear()
         for key, value in entries:
             self._close_entry(key, value)
 
@@ -473,12 +509,56 @@ class ClientCache:
         there is no loop left to await on. Those entries are dropped and logged at
         debug; their sockets come back on garbage collection.
         """
-        entries = list(self.cache.items())
-        self.cache.clear()
+        with self._lock:
+            entries = list(self.cache.items())
+            self.cache.clear()
         if self.aclose is None:
             return
         for key, value in entries:
             await _aclose_client_for_loop(value, self._loop_of(key), self.aclose)
+
+    def _get_locked(self, key: Hashable) -> Any | None:
+        """Return the value under `key`, marking it most recently used.
+
+        The caller must hold `self._lock`.
+
+        Args:
+            key: Cache key; the event loop the client is bound to, or `None`.
+
+        Returns:
+            The cached value, or `None` if the key is not present.
+        """
+        if key not in self.cache:
+            return None
+        # Move the accessed item to the end (most recent)
+        value = self.cache.pop(key)
+        self.cache[key] = value
+        return value
+
+    def _put_locked(self, key: Hashable, value: Any) -> tuple[Hashable, Any] | None:
+        """Insert an entry as most recently used, reporting whatever it evicted.
+
+        The caller must hold `self._lock`. The evicted entry is handed back instead of
+        closed here so its close can run with the lock released — closing a client bound
+        to a stopped loop blocks, and no other thread should have to wait on that.
+
+        Args:
+            key: Cache key; the event loop the client is bound to, or `None`.
+            value: Value to store.
+
+        Returns:
+            The `(key, value)` pair evicted to make room, or `None` if none was.
+        """
+        evicted: tuple[Hashable, Any] | None = None
+        if key in self.cache:
+            # If the key exists, move it to the end (most recent)
+            self.cache.pop(key)
+        elif len(self.cache) >= self.capacity:
+            # If the cache is full, remove the least recently used item
+            evicted = self.cache.popitem(last=False)
+        # Add the new key-value pair to the end (most recent)
+        self.cache[key] = value
+        return evicted
 
     def _close_entry(self, key: Hashable, value: Any, *, wait: bool = True) -> None:
         """Close a single evicted or cleared entry, if a close callback is configured.

@@ -565,17 +565,16 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
     @property
     def _async_client(self) -> openai.AsyncOpenAI:
         """OpenAI's client usually handles changing event loops but explicitly handle it here for edge cases."""
-        key = get_current_event_loop()
-
-        _async_client = self._client_cache.get(key)
-        if _async_client is None:
-            _async_client = openai.AsyncOpenAI(
+        # get_or_create, not get/put: sync callers all key on None, so two threads
+        # calling in would otherwise each build a client and leak one of them.
+        return self._client_cache.get_or_create(
+            get_current_event_loop(),
+            lambda: openai.AsyncOpenAI(
                 api_key=self._api_key,
                 base_url=self._base_url,
                 **self._openai_client_kwargs,
-            )
-            self._client_cache.put(key, _async_client)
-        return _async_client
+            ),
+        )
 
     def close(self) -> None:
         """Close the sync and cached async OpenAI clients, releasing their connections.

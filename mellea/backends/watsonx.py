@@ -226,21 +226,19 @@ class WatsonxAIBackend(FormatterBackend):
     @property
     def _model(self) -> ModelInference:
         """Watsonx's client gets tied to a specific event loop. Reset it if needed here."""
-        key = get_current_event_loop()
-
-        _model_inference = self._client_cache.get(key)
-        if _model_inference is None:
-            _client = APIClient(credentials=self._creds)
-            _model_inference = ModelInference(
+        # get_or_create, not get/put: sync callers all key on None, so two threads
+        # calling in would otherwise each build a client and leak one of them.
+        return self._client_cache.get_or_create(
+            get_current_event_loop(),
+            lambda: ModelInference(
                 model_id=self._model_id,
-                api_client=_client,
+                api_client=APIClient(credentials=self._creds),
                 credentials=self._creds,
                 project_id=self._project_id,
                 params=self.model_options,
                 **self._kwargs,
-            )
-            self._client_cache.put(key, _model_inference)
-        return _model_inference
+            ),
+        )
 
     def close(self) -> None:
         """Close the HTTP clients held by every cached watsonx `ModelInference`.

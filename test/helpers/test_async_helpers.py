@@ -323,6 +323,91 @@ class TestClientCache:
         assert cache.current_size() == 1
 
 
+class TestClientCacheGetOrCreate:
+    def test_calls_factory_on_a_miss_and_caches_the_result(self):
+        cache = ClientCache(capacity=2)
+        assert cache.get_or_create(None, lambda: "built") == "built"
+        assert cache.get(None) == "built"
+
+    def test_does_not_call_factory_on_a_hit(self):
+        cache = ClientCache(capacity=2)
+        cache.put(None, "cached")
+
+        def factory():
+            raise AssertionError("factory ran on a cache hit")
+
+        assert cache.get_or_create(None, factory) == "cached"
+
+    def test_refreshes_lru_order_on_a_hit(self):
+        cache = ClientCache(capacity=2)
+        cache.put(1, "a")
+        cache.put(2, "b")
+        cache.get_or_create(1, lambda: "unused")  # refresh key 1 — key 2 is now LRU
+        cache.get_or_create(3, lambda: "c")  # evicts key 2
+        assert cache.get(1) == "a"
+        assert cache.get(2) is None
+
+    def test_evicts_and_closes_the_lru_entry(self):
+        closed = []
+        done = threading.Event()
+
+        async def aclose(client):
+            closed.append(client)
+            done.set()
+
+        cache = ClientCache(capacity=1, aclose=aclose)
+        cache.put(1, "a")
+        cache.get_or_create(2, lambda: "b")  # evicts "a"
+
+        assert done.wait(timeout=5.0), "evicted client was never closed"
+        assert closed == ["a"]
+
+    def test_factory_error_propagates_and_caches_nothing(self):
+        cache = ClientCache(capacity=2)
+
+        def factory():
+            raise ValueError("no client for you")
+
+        with pytest.raises(ValueError, match="no client for you"):
+            cache.get_or_create(None, factory)
+        assert cache.current_size() == 0
+        # The lock was released, so the cache is still usable.
+        assert cache.get_or_create(None, lambda: "built") == "built"
+
+    def test_concurrent_sync_callers_share_one_client(self):
+        """Two threads calling a backend synchronously both key on `None`.
+
+        With a bare `get`/`put` pair the second `put` displaces the first thread's
+        client without closing it — the leak this cache exists to prevent.
+        """
+        threads = 8
+        lined_up = threading.Barrier(threads)
+        built = []
+        results: list[object] = [None] * threads
+
+        def factory():
+            client = object()
+            built.append(client)
+            return client
+
+        def call(index: int) -> None:
+            # Line every thread up on the cache call so they contend for the miss.
+            lined_up.wait(timeout=5.0)
+            results[index] = cache.get_or_create(None, factory)
+
+        cache = ClientCache(capacity=2)
+        workers = [threading.Thread(target=call, args=(i,)) for i in range(threads)]
+        for worker in workers:
+            worker.start()
+        for worker in workers:
+            worker.join(timeout=5.0)
+            assert not worker.is_alive()
+
+        assert len(built) == 1, "more than one client was constructed under key None"
+        assert results == [built[0]] * threads
+        assert cache.current_size() == 1
+
+
 class TestClientCacheClose:
     def test_put_evicts_and_closes_via_callback(self):
         closed = []

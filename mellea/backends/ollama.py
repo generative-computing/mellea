@@ -329,13 +329,12 @@ class OllamaModelBackend(FormatterBackend):
     @property
     def _async_client(self) -> ollama.AsyncClient:
         """Ollama's client gets tied to a specific event loop. Reset it if needed here."""
-        key = get_current_event_loop()
-
-        _async_client = self._client_cache.get(key)
-        if _async_client is None:
-            _async_client = ollama.AsyncClient(self._base_url, **self._client_kwargs)
-            self._client_cache.put(key, _async_client)
-        return _async_client
+        # get_or_create, not get/put: sync callers all key on None, so two threads
+        # calling in would otherwise each build a client and leak one of them.
+        return self._client_cache.get_or_create(
+            get_current_event_loop(),
+            lambda: ollama.AsyncClient(self._base_url, **self._client_kwargs),
+        )
 
     def close(self) -> None:
         """Close the sync and cached async Ollama clients, releasing their sockets.
