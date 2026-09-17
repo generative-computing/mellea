@@ -7,6 +7,7 @@ import asyncio
 import datetime
 import functools
 import json
+import threading
 from collections.abc import AsyncIterator, Coroutine, Sequence
 from typing import Any
 
@@ -211,7 +212,9 @@ class OllamaModelBackend(FormatterBackend, AdapterMixin):
             (e.g. `"uncertainty"`) to the Ollama model tag that bundles that
             adapter (e.g. `"mellea-test/uncertainty-alora:latest"`). Ollama
             bundles one adapter per model, so each adapter function is served by
-            its own tag. Adapter functions not listed here run against `model_id`.
+            its own tag. An adapter function not listed here cannot be generated
+            with: `resolve_adapter` and `_generate_from_intrinsic` both raise
+            `ValueError` rather than silently running the base model.
         adapter_base_model_name (str | None): Hugging Face base-model directory
             name used to find an adapter's `io.yaml` (for example,
             `"granite-4.1-3b"`). Required when `model_id` is itself a bundled
@@ -274,6 +277,10 @@ class OllamaModelBackend(FormatterBackend, AdapterMixin):
         self._adapter_models: dict[str, str] = adapter_models or {}
         self._adapter_base_model_name = adapter_base_model_name
         self.default_to_constraint_checking_alora = default_to_constraint_checking_alora
+        # Coalesces concurrent resolve_adapter() calls for the same name so they
+        # don't redundantly re-download/re-parse the same io.yaml (resolve_adapter
+        # is invoked from a worker thread via asyncio.to_thread).
+        self._resolve_adapter_lock = threading.Lock()
 
         # Setup the client and ensure that we have the model available.
         self._base_url = base_url
@@ -407,6 +414,10 @@ class OllamaModelBackend(FormatterBackend, AdapterMixin):
         weights. Mellea downloads only the catalogued `io.yaml`, which
         rewrites requests and processes the structured response.
 
+        Concurrent calls for the same `name` are coalesced onto a single
+        cold resolve rather than each independently re-downloading and
+        re-parsing the same `io.yaml`.
+
         Args:
             name (str): Catalogued adapter function name.
 
@@ -418,6 +429,14 @@ class OllamaModelBackend(FormatterBackend, AdapterMixin):
                 catalogued `io.yaml` is invalid.
             KeyError: If registration does not yield a discoverable adapter.
         """
+        found = self._find_adapter(name)
+        if found is not None:
+            return found
+        with self._resolve_adapter_lock:
+            return self._resolve_adapter_uncoalesced(name)
+
+    def _resolve_adapter_uncoalesced(self, name: str) -> _AdapterCore:
+        """Cold-resolve path for `resolve_adapter`, run under `_resolve_adapter_lock`."""
         found = self._find_adapter(name)
         if found is not None:
             return found
@@ -863,6 +882,12 @@ class OllamaModelBackend(FormatterBackend, AdapterMixin):
                 reroute_to_alora = self.default_to_constraint_checking_alora
                 adapter_name = "requirement-check"
 
+                # Check this before the adapter search below: an LLMaJRequirement
+                # never reroutes, so there's no reason to pay for a resolve_adapter()
+                # download (io.yaml fetch from the Hub) on its account.
+                if issubclass(type(action), LLMaJRequirement):
+                    reroute_to_alora = False
+
                 if isinstance(action, ALoraRequirement):
                     reroute_to_alora = True
                     adapter_name = action.intrinsic_name
@@ -905,6 +930,22 @@ class OllamaModelBackend(FormatterBackend, AdapterMixin):
                         alora_req_adapter = self._find_adapter(
                             adapter_name, search_types
                         )
+                # An adapter can be warm (added via add_adapter()) without a
+                # matching adapter_models entry — the cold-resolve gate above
+                # only protects the not-yet-added case. Generating with it
+                # would hit the hard raise in _generate_from_intrinsic, so
+                # this best-effort reroute must degrade the same way the
+                # not-found case below does, not propagate out of validate().
+                if (
+                    alora_req_adapter is not None
+                    and adapter_name not in self._adapter_models
+                ):
+                    MelleaLogger.get_logger().warning(
+                        f"adapter {adapter_name!r} is registered but has no Ollama "
+                        "model tag in `adapter_models`; defaulting to regular "
+                        "generation"
+                    )
+                    alora_req_adapter = None
                 if alora_req_adapter is None:
                     if reroute_to_alora and isinstance(action, ALoraRequirement):
                         MelleaLogger.get_logger().warning(
@@ -912,9 +953,6 @@ class OllamaModelBackend(FormatterBackend, AdapterMixin):
                             f"doesn't have the specified adapter added {adapter_name}; "
                             f"defaulting to regular generation"
                         )
-                    reroute_to_alora = False
-
-                if issubclass(type(action), LLMaJRequirement):
                     reroute_to_alora = False
 
                 if reroute_to_alora:

@@ -14,6 +14,8 @@ Mocks the Ollama async client to verify that `_generate_from_intrinsic` correctl
 """
 
 import json
+import threading
+import time
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
@@ -29,10 +31,11 @@ from mellea.backends.adapters import (
     get_io_contract,
 )
 from mellea.backends.ollama import OllamaModelBackend, _to_chat_completion_dict
+from mellea.core import ModelOutputThunk
 from mellea.stdlib import functional as mfuncs
 from mellea.stdlib.components import Intrinsic, Message
 from mellea.stdlib.context import ChatContext
-from mellea.stdlib.requirements import ALoraRequirement
+from mellea.stdlib.requirements import ALoraRequirement, LLMaJRequirement, Requirement
 
 # ---------------------------------------------------------------------------
 # Configs
@@ -420,6 +423,74 @@ async def test_alora_requirement_with_explicit_lora_type_skips_resolve(
     mock_standard.assert_awaited_once()
 
 
+async def test_llmaj_requirement_never_attempts_adapter_resolve():
+    """LLMaJRequirement always falls back to LLM-as-judge, so it must never
+
+    pay for a resolve_adapter() download that its result would just discard.
+    """
+    backend = _make_backend(adapter_models={"requirement-check": _ADAPTER_TAG})
+    action = LLMaJRequirement("The response is correct.")
+    ctx = _make_context()
+
+    with (
+        patch.object(
+            backend, "resolve_adapter", side_effect=AssertionError("should not resolve")
+        ) as mock_resolve,
+        patch.object(
+            OllamaModelBackend, "generate_from_chat_context", new_callable=AsyncMock
+        ) as mock_standard,
+    ):
+        mock_standard.return_value = MagicMock()
+        await backend._generate_from_context(action, ctx, model_options={})
+
+    mock_resolve.assert_not_called()
+    mock_standard.assert_awaited_once()
+
+
+async def test_requirement_reroute_falls_back_when_resolve_fails():
+    """A resolve_adapter() failure during automatic rerouting must not fail the call."""
+    backend = _make_backend(adapter_models={"requirement-check": _ADAPTER_TAG})
+    action = Requirement("Be polite.")
+    ctx = _make_context()
+
+    with (
+        patch.object(
+            backend, "resolve_adapter", side_effect=RuntimeError("network error")
+        ),
+        patch.object(
+            OllamaModelBackend, "generate_from_chat_context", new_callable=AsyncMock
+        ) as mock_standard,
+    ):
+        mock_standard.return_value = MagicMock()
+        await backend._generate_from_context(action, ctx, model_options={})
+
+    # Fell back to regular generation instead of propagating the failure.
+    mock_standard.assert_awaited_once()
+
+
+async def test_requirement_reroute_falls_back_when_warm_adapter_has_no_tag():
+    """A warm-added adapter with no adapter_models entry degrades to LLMaJ.
+
+    The adapter is already registered via add_adapter() (so the cold-resolve
+    gate never runs), but no Ollama model tag is configured for it. Without
+    this check, reroute_to_alora would stay True, _generate_from_intrinsic
+    would hit its own ValueError for the missing tag, and that exception
+    would propagate out of validate() instead of degrading like the
+    not-yet-added case does.
+    """
+    backend = _make_backend_with_adapter(_SIMPLE_CONFIG, adapter_models={})
+    action = ALoraRequirement("The response is correct.", "uncertainty")
+    ctx = _make_context()
+
+    with patch.object(
+        OllamaModelBackend, "generate_from_chat_context", new_callable=AsyncMock
+    ) as mock_standard:
+        mock_standard.return_value = MagicMock()
+        await backend._generate_from_context(action, ctx, model_options={})
+
+    mock_standard.assert_awaited_once()
+
+
 async def test_result_processor_applied():
     """Full uncertainty config: likelihood + project transforms produce the expected JSON."""
     backend = _make_backend_with_adapter(_UNCERTAINTY_CONFIG)
@@ -590,6 +661,63 @@ def test_resolve_adapter_registers_server_mediated_adapter(
     assert adapter.identity.adapter_type == "alora"
     assert isinstance(adapter.weights, ServerMediatedBinding)
     assert backend.list_adapters() == ["uncertainty_alora"]
+
+
+def test_resolve_adapter_coalesces_concurrent_cold_resolves(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    """Concurrent resolve_adapter() calls for the same name share one cold resolve.
+
+    Without coalescing, each concurrent caller would independently
+    re-download and re-parse the same `io.yaml`.
+    """
+    config_path = tmp_path / "io.yaml"
+    config_path.write_text(json.dumps(_SIMPLE_CONFIG), encoding="utf-8")
+    backend = _make_backend(adapter_models={"uncertainty": _ADAPTER_TAG})
+
+    call_count = 0
+    in_flight = 0
+    max_in_flight = 0
+    counters_lock = threading.Lock()
+
+    def _fake_obtain_io_yaml(*_args, **_kwargs) -> Path:
+        nonlocal call_count, in_flight, max_in_flight
+        with counters_lock:
+            call_count += 1
+            in_flight += 1
+            max_in_flight = max(max_in_flight, in_flight)
+        time.sleep(0.05)  # give a second, uncoalesced caller a chance to overlap
+        with counters_lock:
+            in_flight -= 1
+        return config_path
+
+    monkeypatch.setattr(
+        "mellea.backends.ollama.granite_formatters.intrinsics.obtain_io_yaml",
+        _fake_obtain_io_yaml,
+    )
+
+    results: list = []
+    errors: list[BaseException] = []
+
+    def _resolve():
+        try:
+            results.append(backend.resolve_adapter("uncertainty"))
+        except BaseException as e:
+            errors.append(e)
+
+    threads = [threading.Thread(target=_resolve) for _ in range(2)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=5)
+
+    assert not errors, errors
+    # Coalesced onto a single cold resolve: only one download, and never two
+    # threads inside the download body at the same time.
+    assert call_count == 1
+    assert max_in_flight == 1
+    assert len(results) == 2
+    assert results[0] is results[1]
 
 
 def test_resolve_adapter_explains_missing_huggingface_extra(
