@@ -16,7 +16,7 @@
 #   WITH_VLLM=1 ./run_tests_with_ollama_and_vllm.sh                  # force-enable vLLM
 #   WITH_VLLM=0 ./run_tests_with_ollama_and_vllm.sh                  # force-disable vLLM
 #   SKIP_WARMUP=1 ./run_tests_with_ollama_and_vllm.sh                 # skip ollama model warmup
-#   WITH_EXAMPLES=1 ./run_tests_with_ollama_and_vllm.sh               # include docs/examples/
+#   WITH_EXAMPLES=1 ./run_tests_with_ollama_and_vllm.sh               # include docs/examples/ + notebooks
 #   WITH_TOOLING_TESTS=1 ./run_tests_with_ollama_and_vllm.sh          # include test/tooling/
 #   WITH_VLLM=1 VLLM_MODEL=ibm-granite/granite-4.2-3b \
 #     ./run_tests_with_ollama_and_vllm.sh --group-by-backend -v -s
@@ -47,7 +47,16 @@ OLLAMA_MODEL_LIST=(
     "granite4.2:3b"
     "granite4:micro-h"
     "hf.co/ibm-granite/granite-vision-4.1-4b-GGUF:Q4_K_M"
+    # The library default moved 4.1 -> 4.2 in #1587, but several examples collected by
+    # WITH_EXAMPLES=1 still name 4.1 explicitly (sofai, mini_researcher, both m_serve
+    # examples), and only mini_researcher is `slow`. Without this the ollama backend
+    # auto-pulls mid-test.
+    "granite4.1:3b"
     "llama3.2"
+    # georgia_tech.ipynb builds a second session on META_LLAMA_3_2_3B. The "llama3.2"
+    # entry above resolves to :latest, a distinct tag as far as ollama is concerned,
+    # so without this the notebook run would trigger a mid-cell auto-pull.
+    "llama3.2:3b"
     "qwen2.5vl:7b"
 )
 
@@ -322,5 +331,39 @@ uv run --quiet --frozen --all-groups --all-extras $UV_PYTHON_ARG \
 EXIT_CODE=${PIPESTATUS[0]}
 
 log "Tests finished with exit code: $EXIT_CODE"
+
+# --- Run notebooks (nbmake) ---
+# Notebooks opt in through a `mellea` block in their own notebook metadata and are only
+# collected when --nbmake is passed, so they need their own pytest invocation.
+# The explicit `-m e2e` replaces the `-m "not slow"` in addopts (CLI wins over addopts),
+# which is what lets the slow notebooks -- the ones PR CI deselects -- run here.
+#
+# Both timeouts are required. --nbmake-timeout bounds each cell, but nbmake runs a whole
+# notebook as one pytest item, so pytest-timeout's --timeout is the end-to-end bound; the
+# 900s it would otherwise inherit from addopts is not enough for this set, whose per-cell
+# work adds up across many cells (georgia_tech.ipynb, document_mobject.ipynb). --timeout
+# here is a backstop for a wedged run, not a target -- a hung cell should trip the
+# per-cell timer first, since that names the offending cell.
+# Failures are recorded rather than fatal so the log always covers every notebook.
+NOTEBOOK_EXIT_CODE=0
+if [[ "${WITH_EXAMPLES:-0}" == "1" ]]; then
+    log "Starting notebook tests..."
+    if uv run --quiet --frozen --all-groups --all-extras $UV_PYTHON_ARG \
+        pytest --nbmake docs/examples/notebooks -v -rs --no-cov \
+        -m e2e --nbmake-timeout=900 --timeout=5400 \
+        2>&1 | tee "$LOGDIR/pytest_notebooks.log"; then
+        log "Notebooks passed."
+    else
+        NOTEBOOK_EXIT_CODE=1
+        log "Notebooks FAILED. See $LOGDIR/pytest_notebooks.log"
+    fi
+else
+    log "Notebooks skipped (WITH_EXAMPLES=0). Pass WITH_EXAMPLES=1 to run them."
+fi
+
+if [[ "$EXIT_CODE" -eq 0 ]]; then
+    EXIT_CODE=$NOTEBOOK_EXIT_CODE
+fi
+
 log "Logs: $LOGDIR/"
 exit $EXIT_CODE

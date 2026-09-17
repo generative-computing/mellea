@@ -452,18 +452,29 @@ Tests skip automatically when requirements are not met:
 |------|---------|-------|-----------|
 | **Pre-commit** | Every commit (local) | Local hook | ruff, mypy, uv-lock, codespell, markdownlint |
 | **PR CI** | Every push / merge group | GitHub Actions, Ubuntu | `pytest test/` on Python 3.11/3.12/3.13 with Ollama. `CICD=1` (qualitative skipped). `slow` excluded. |
-| **Nightly** | Scheduled | IBM internal LSF cluster (GPU) | Full `pytest test/ --group-by-backend`, Ollama + vLLM, qualitative enabled. Failures file an auto-issue. |
+| **Notebooks** | Every PR (advisory) | GitHub Actions, Ubuntu | `pytest --nbmake docs/examples/notebooks` on Python 3.12 with Ollama. `slow` notebooks excluded. |
+| **Nightly** | Scheduled | IBM internal LSF cluster (GPU) | Full `pytest test/ --group-by-backend`, Ollama + vLLM, qualitative enabled. All notebooks including `slow` when `WITH_EXAMPLES=1`. Failures file an auto-issue. |
 | **On-demand nightly** | Not yet available | IBM internal LSF cluster | Comment-triggered nightly against a PR branch. Tracked in [#734](https://github.com/generative-computing/mellea/issues/734); ask a maintainer if you need pre-merge GPU validation today. |
 
 **PR CI** (`ci.yml` → `quality.yml`): pre-commit checks, then Ollama installed
 and `granite4.2:3b` + `granite4:micro-h` + the `granite-vision-4.1-4b` GGUF
-pulled, then `uv run -m pytest -v --junit-xml=... test`. `docs/examples/` is
-not collected in PR CI.
+pulled, then `uv run -m pytest -v --junit-xml=... test`. The `.py` files under
+`docs/examples/` are not collected in PR CI.
+
+**Notebooks** (`notebooks.yml`): its own workflow rather than a job under
+`quality.yml`, because notebooks need a separate pytest invocation (`--nbmake`)
+and their own per-cell timeout, and because `publish-release.yml` depends on the
+same `code-checks` aggregate — a flaky notebook there would block a release, not
+just a PR. So this is advisory: it reports on every PR but is not part of
+`code-checks`. Installs Ollama, pulls `granite4.2:3b`, then runs
+`pytest --nbmake docs/examples/notebooks`. See [Notebooks](#notebooks) below.
 
 **Nightly** (`test/scripts/run_tests_with_ollama_and_vllm.sh`): starts local
 Ollama and (when GPU present) a local vLLM server, then runs
 `pytest test/ --group-by-backend`. The `--group-by-backend` flag reorders tests
 to run each backend as a contiguous group, reducing GPU memory fragmentation.
+With `WITH_EXAMPLES=1` it follows up with a notebook pass using `-m e2e`, which
+replaces the configured `-m "not slow"` and so covers the notebooks PR CI skips.
 
 ## Coverage
 
@@ -500,6 +511,69 @@ files. Only add the `# pytest:` comment when the example has the necessary
 dependencies documented and should be part of the regression suite.
 
 Parser: `docs/examples/conftest.py` (`_extract_markers_from_file`).
+
+### Notebooks
+
+Notebooks in `docs/examples/notebooks/` are executed by
+[nbmake](https://github.com/treebeardtech/nbmake). They are only collected when
+`--nbmake` is passed, so a plain `pytest` run never touches them:
+
+```bash
+uv run poe nbtest                                   # fast subset (the PR CI set)
+uv run pytest --nbmake docs/examples/notebooks -m e2e   # everything, including slow
+uv run pytest --nbmake docs/examples/notebooks/example.ipynb
+```
+
+A notebook cannot carry a `# pytest:` comment (the first cell is user-facing
+Colab prose), so it opts in through a `mellea` block in its own top-level
+notebook metadata instead — the notebook equivalent of that comment:
+
+```json
+{
+ "cells": [ ... ],
+ "metadata": {
+  "mellea": {
+   "markers": ["e2e", "ollama", "slow"],
+   "packages": ["docling"]
+  },
+  "kernelspec": { ... }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 4
+}
+```
+
+| Key | Effect |
+|-----|--------|
+| `markers` | Required. Attached to the nbmake item, so `-m` selects notebooks exactly as it does tests. Feeds the same capability gates, `--ignore-*-check` overrides, and "Skipped Examples" summary as `.py` examples. |
+| `packages` | Optional import check. A missing package skips the notebook instead of failing it — the equivalent of `require_package` for tests that cannot use a decorator. |
+
+Jupyter preserves unknown top-level metadata keys, so the block survives an
+open-and-save. In JupyterLab it is editable under Property Inspector → Advanced
+Tools → Notebook Metadata; otherwise edit the `.ipynb` JSON directly.
+
+Conventions:
+
+- **Every notebook needs a `mellea` block.** One without it is skipped with a
+  reason rather than silently ignored, and
+  `test/test_example_collection.py::test_every_notebook_declares_requirements`
+  fails until it has one.
+- **`slow` means nightly-only**, same as elsewhere: anything over roughly two
+  minutes or pulling heavyweight weights.
+- **Two timeouts, measuring different things.** `--nbmake-timeout` is **per
+  cell** (300 s by default). nbmake runs a whole notebook as a single pytest
+  item, so `--timeout` (pytest-timeout) is what bounds the notebook end to end —
+  set it explicitly whenever you raise `--nbmake-timeout`, or the notebook
+  silently inherits the 900 s from `addopts` and the per-cell budget becomes
+  unreachable.
+- **No `qualitative` marker.** Notebooks assert nothing, they only have to run
+  clean, so gating them behind `CICD=1` would mean they never run in CI.
+- **Use the models CI already pulls.** The Ollama backend auto-pulls a missing
+  model, so a notebook naming an unpulled one buys a multi-GB download inside a
+  per-cell timeout.
+- **Colab-only setup cells are tagged `skip-execution`** (ollama install,
+  `uv pip install mellea`). nbclient honours the tag, which is why notebooks run
+  against the working tree's editable install rather than the released package.
 
 ## Ollama model eviction
 

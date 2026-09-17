@@ -57,6 +57,8 @@ See **[test/README.md](test/README.md)** for classification rules, authoring gui
 """Example description..."""
 ```
 
+**Notebooks in `docs/examples/notebooks/`** opt in through a `mellea` block in their own top-level notebook metadata (`{"markers": [...], "packages": [...]}`), since a notebook has nowhere to put a `# pytest:` comment. They are collected only when `--nbmake` is passed: `uv run poe nbtest`. A notebook without that block is skipped, and `test/test_example_collection.py` fails. `--nbmake-timeout` is per cell; a whole notebook is one pytest item bounded by `--timeout`, so raise both together.
+
 ⚠️ Don't add `qualitative` to trivial tests — keep the fast loop fast.
 ⚠️ Mark tests taking >1 minute with `slow`.
 

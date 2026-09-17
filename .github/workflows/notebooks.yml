@@ -1,0 +1,99 @@
+name: Run Example Notebooks
+
+# Deliberately NOT called from ci.yml's `code-checks`: publish-release.yml depends on
+# that same aggregate job, so a flaky notebook there would block a release, not just a
+# PR. This runs as its own advisory check instead. There are no path filters — a change
+# under mellea/ (a session default, a formatter) is exactly what silently breaks a
+# notebook, so narrowing the trigger to docs/examples/ would miss the regressions this
+# job exists to catch (#89).
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.ref_name }}
+  cancel-in-progress: true
+
+env:
+  # CICD=1 is what test/conftest.py checks to pick CI-appropriate behaviour; OLLAMA_HOST
+  # is honoured by both `ollama serve` and the Mellea Ollama backend. Both are inherited
+  # from quality.yml when this job lived there, so they have to be restated here.
+  CICD: 1
+  OLLAMA_HOST: "127.0.0.1:5000"
+
+jobs:
+  notebooks:
+    # The notebooks under docs/examples/notebooks/ are the onboarding path for users
+    # without local hardware (#89), so a PR must not break them. Only the fast subset
+    # runs here: the heavyweight notebooks declare `slow` in their own notebook
+    # metadata, which the `-m "not slow"` in addopts deselects. The full set runs
+    # nightly via test/scripts/run_tests_with_ollama_and_vllm.sh.
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Free disk space
+        uses: ./.github/actions/free-disk-space
+      - name: Install uv and set the python version
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - name: Install dependencies
+        # The `notebook` group is not needed: nbmake pulls ipykernel transitively.
+        run: uv sync --frozen --all-extras --group dev
+      - name: Install Ollama
+        # Same pin and rationale as quality.yml's `quality` job (#1388).
+        run: curl -fsSL https://ollama.com/install.sh | OLLAMA_VERSION=0.33.1 sh
+      - name: Start serving ollama
+        run: nohup ollama serve > /tmp/ollama-serve.log 2>&1 &
+      - name: Pull models
+        # Every notebook in this subset talks to the session default. Pulling it up
+        # front keeps the multi-GB download out of nbmake's per-cell timeout, which is
+        # what the Ollama backend's auto-pull would otherwise spend it on.
+        run: |
+          pulled=false
+          for i in 1 2 3 4 5; do
+            ollama pull granite4.2:3b && { pulled=true; break; }
+            echo "Attempt $i to pull granite4.2:3b failed, retrying in 20s..."
+            sleep 20
+          done
+          # See quality.yml: without this the loop exits 0 after exhausting every
+          # attempt, turning an infra miss into a test failure 20 minutes later.
+          $pulled || { echo "::error::failed to pull granite4.2:3b after 5 attempts"; exit 1; }
+          ollama list
+      - name: Constrain the granite4.2:3b context for the CI runner
+        # Same clamp as quality.yml: the published tag ships num_ctx=131072, a ~6 GB KV
+        # cache at load, which is too much for the 16 GB runner.
+        run: |
+          ollama cp granite4.2:3b granite4.2:3b-128k
+          printf 'FROM granite4.2:3b-128k\nPARAMETER num_ctx 8192\n' \
+            > /tmp/MODELFILE-granite42-ci
+          ollama create granite4.2:3b -f /tmp/MODELFILE-granite42-ci
+          ollama show granite4.2:3b --modelfile | grep -qx 'PARAMETER num_ctx 8192'
+      - name: Run notebooks
+        # --nbmake is what makes pytest collect .ipynb at all. --no-cov because each
+        # notebook executes in its own kernel process, so the addopts coverage flags
+        # only add overhead. -rs surfaces each notebook's skip reason.
+        #
+        # The two timeouts bound different things. --nbmake-timeout is per cell (300s by
+        # default), doubled for CI's slower inference. nbmake runs a whole notebook as one
+        # pytest item, so pytest-timeout's --timeout is what bounds the notebook end to
+        # end; left implicit it would inherit 900s from addopts, i.e. below the per-cell
+        # budget, so a hung cell would trip the blunt item timer instead of the per-cell
+        # one that names the offending cell. `timeout-minutes` above still caps the job.
+        run: >-
+          uv run -m pytest --nbmake docs/examples/notebooks
+          -v -rs --no-cov --nbmake-timeout=600 --timeout=1800
+      - name: Dump Ollama server log on failure
+        if: failure() # Only the notebook step can produce a useful server log here.
+        run: |
+          echo "=== ollama serve log (last 100 lines) ==="
+          tail -n 100 /tmp/ollama-serve.log || echo "(no ollama serve log found)"
