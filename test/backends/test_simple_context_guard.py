@@ -18,11 +18,15 @@ in the commit message.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
 import pytest
 from openai.types.chat import ChatCompletion, ChatCompletionMessage
 from openai.types.chat.chat_completion import Choice
+
+if TYPE_CHECKING:
+    import ollama
 
 
 def _ok_chat_completion(model: str = "gpt-4o") -> ChatCompletion:
@@ -58,7 +62,7 @@ def _ok_litellm_response():
     )
 
 
-def _ok_ollama_response(content: str = "ok") -> "ollama.ChatResponse":
+def _ok_ollama_response(content: str = "ok") -> ollama.ChatResponse:
     import ollama
 
     return ollama.ChatResponse(
@@ -73,9 +77,7 @@ def _make_openai_backend():
     from mellea.backends.openai import OpenAIBackend
 
     return OpenAIBackend(
-        model_id="gpt-4o",
-        api_key="test-key",
-        base_url="http://localhost:9999/v1",
+        model_id="gpt-4o", api_key="test-key", base_url="http://localhost:9999/v1"
     )
 
 
@@ -84,8 +86,7 @@ def _make_litellm_backend():
     from mellea.backends.litellm import LiteLLMBackend
 
     return LiteLLMBackend(
-        model_id="hosted_vllm/qwen3",
-        base_url="http://localhost:9997",
+        model_id="hosted_vllm/qwen3", base_url="http://localhost:9997"
     )
 
 
@@ -98,10 +99,7 @@ def _make_ollama_backend():
         patch("mellea.backends.ollama.ollama.Client", return_value=MagicMock()),
         patch("mellea.backends.ollama.ollama.AsyncClient", return_value=MagicMock()),
     ):
-        return OllamaModelBackend(
-            model_id="granite4.2:3b",
-            model_options=None,
-        )
+        return OllamaModelBackend(model_id="granite4.2:3b", model_options=None)
 
 
 # ---------------------------------------------------------------------------
@@ -241,9 +239,7 @@ async def test_nonempty_user_content_still_sends_request_on_litellm():
     with patch("litellm.acompletion", new_callable=AsyncMock) as mock_acomplete:
         mock_acomplete.return_value = _ok_litellm_response()
 
-        mot, _ = await backend.generate_from_context(
-            CBlock(value="real question"), ctx
-        )
+        mot, _ = await backend.generate_from_context(CBlock(value="real question"), ctx)
         await mot.avalue()
 
     assert mock_acomplete.called
