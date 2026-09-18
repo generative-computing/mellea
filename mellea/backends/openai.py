@@ -876,6 +876,10 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             tool_calls (bool): If `True`, expose available tools to the model and
                 parse tool-call responses.
 
+        Raises:
+            ValueError: If `action` is an `ALoraRequirement` but `ctx` renders no
+                conversation, leaving the requirement-check adapter nothing to judge.
+
         Returns:
             tuple[ModelOutputThunk[C], Context]: A thunk holding the (lazy) model output
                 and an updated context that includes `action` and the new output.
@@ -929,6 +933,43 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                     reroute_to_alora = False
 
                 if issubclass(type(action), LLMaJRequirement):
+                    reroute_to_alora = False
+
+                # The requirement-check adapter judges the last assistant turn of the
+                # conversation it is given, and this path never renders the requirement
+                # template -- so unlike LLM-as-a-judge it has no inlined copy of the output
+                # to fall back on. A context that renders nothing leaves it nothing to judge.
+                adapter_view = ctx.view_for_generation()
+                if reroute_to_alora and not adapter_view:
+                    # `None` means the history is non-linear and cannot be rendered at all;
+                    # `[]` means it renders, but to nothing. Neither gives the adapter an
+                    # assistant turn, so both are fatal here -- only the wording differs.
+                    empty_view_reason = (
+                        "its history is non-linear, so no conversation can be rendered"
+                        if adapter_view is None
+                        else "it renders no conversation"
+                    )
+                    if isinstance(action, ALoraRequirement):
+                        raise ValueError(
+                            f"cannot validate an ALoraRequirement over a "
+                            f"{type(ctx).__name__}: {empty_view_reason}, so the "
+                            f"{adapter_name} adapter has no assistant turn to judge. "
+                            "Validate over a context that renders history (e.g. ChatContext), "
+                            "or use a plain Requirement, which falls back to LLM-as-a-judge."
+                        )
+                    # Auto-rerouting a plain Requirement is an optimisation, not a request:
+                    # fall back to LLM-as-a-judge, which inlines the output and still works.
+                    warn_key = (
+                        f"alora_reroute_empty_view_{type(ctx).__name__}"
+                        f"_{adapter_view is None}"
+                    )
+                    if warn_key not in self._warned_about:
+                        self._warned_about.add(warn_key)
+                        MelleaLogger.get_logger().warning(
+                            f"not rerouting requirements to the {adapter_name} adapter: "
+                            f"{type(ctx).__name__} gives it nothing to judge -- "
+                            f"{empty_view_reason}; using LLM-as-a-judge instead."
+                        )
                     reroute_to_alora = False
 
                 if reroute_to_alora:

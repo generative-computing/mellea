@@ -222,7 +222,8 @@ class BaseSamplingStrategy(SamplingStrategy):
             context: The context to be passed to the sampling strategy.
             backend: The backend used for generating samples.
             requirements: List of requirements to test against (merged with global requirements).
-            validation_ctx: Optional context to use for validation. If None, validation_ctx = ctx.
+            validation_ctx: Optional context to validate over. If None, each sample is validated
+                over its own post-generation context.
             format: output format for structured outputs.
             model_options: model options to pass to the backend during generation / validation.
             tool_calls: True if tool calls should be used during this sampling strategy.
@@ -240,8 +241,6 @@ class BaseSamplingStrategy(SamplingStrategy):
                 the first non-cancellation exception is re-raised (e.g. a
                 backend error).
         """
-        validation_ctx = validation_ctx if validation_ctx is not None else context
-
         flog = MelleaLogger.get_logger()
 
         with log_context(strategy=type(self).__name__, loop_budget=self.loop_budget):
@@ -490,7 +489,8 @@ class BaseSamplingStrategy(SamplingStrategy):
         Yields a :class:`_SamplingResultSlice` per attempt and ends early after the first successful slice.
         `subsample_index` (0-based) identifies this subsample within the parent `sample()` call; it is used to derive a
         globally unique iteration counter for telemetry and hooks. `sampling_id` is passed through to the
-        iteration and repair hooks this subsample fires.
+        iteration and repair hooks this subsample fires. When `validation_ctx` is `None`, each attempt is
+        validated over its own post-generation context.
         """
         flog = MelleaLogger.get_logger()
         sampled_results: list[ComputedModelOutputThunk[S]] = []
@@ -533,10 +533,13 @@ class BaseSamplingStrategy(SamplingStrategy):
                     else result.value  # type: ignore[assignment]
                 )
 
-                # validation pass
+                # validation pass; validate over the caller's validation context if they
+                # supplied one, otherwise over this attempt's post-generation context.
                 val_scores_co = mfuncs.avalidate(
                     reqs=requirements,
-                    context=result_ctx,
+                    context=validation_ctx
+                    if validation_ctx is not None
+                    else result_ctx,
                     backend=backend,
                     output=result,
                     format=None,

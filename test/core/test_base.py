@@ -1486,3 +1486,44 @@ def test_last_turn_tool_message_treated_as_input():
     assert isinstance(turn.model_input, Message)
     assert turn.model_input.role == "tool"
     assert turn.output is None
+
+
+# --- Context.as_list cycle guard (PR #1628 review) ---
+
+
+def test_as_list_allows_the_same_span_twice():
+    """A span may appear more than once in a chain without tripping the cycle guard.
+
+    Re-adding an earlier output to designate it as a validation target is the motivating
+    case (`avalidate(..., output=an_earlier_output)`). The guard used to compare the data
+    each node carries, so this raised `AssertionError: There might be a cycle`.
+    """
+    from mellea.stdlib.context import ChatContext
+
+    repeated = ModelOutputThunk("first output")
+    ctx = (
+        ChatContext()
+        .add(Message("user", "q1"))
+        .add(repeated)
+        .add(Message("user", "q2"))
+        .add(ModelOutputThunk("second output"))
+        .add(repeated)
+    )
+
+    spans = ctx.as_list()
+
+    assert [s for s in spans if s is repeated] == [repeated, repeated], (
+        "both occurrences of the repeated span must survive the walk"
+    )
+
+
+def test_as_list_still_detects_a_real_node_cycle():
+    """A chain that revisits a *node* is a real cycle and must still be rejected."""
+    from mellea.stdlib.context import ChatContext
+
+    ctx = ChatContext().add(Message("user", "q1")).add(Message("user", "q2"))
+    # Splice the chain back onto itself: walking it would otherwise never terminate.
+    ctx.previous_node._previous = ctx  # type: ignore[union-attr]
+
+    with pytest.raises(AssertionError, match="cycle in the context tree"):
+        ctx.as_list()

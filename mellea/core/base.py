@@ -2180,6 +2180,11 @@ class Context(abc.ABC):
 
         If `last_n_components` is `None`, then all components are returned.
 
+        The same `Span` may legitimately appear more than once in the returned list: adding
+        an earlier output back onto a context to designate it as a validation target is the
+        motivating case. Only a repeated context *node* is a cycle, and that is what the
+        guard on this walk rejects.
+
         Args:
             last_n_components (int | None): Maximum number of most-recent components to include.
                 Pass `None` to return the full history.
@@ -2189,16 +2194,19 @@ class Context(abc.ABC):
         """
         context_list: list[Span] = []
         current_context: Context = self
+        visited_nodes: set[int] = set()
 
         last_n_count = 0
         while not current_context.is_root_node and (
             last_n_components is None or last_n_count < last_n_components
         ):
-            data = current_context.node_data
-            assert data is not None, "Data cannot be None (except for root context)."
-            assert data not in context_list, (
+            assert id(current_context) not in visited_nodes, (
                 "There might be a cycle in the context tree. That is not allowed."
             )
+            visited_nodes.add(id(current_context))
+
+            data = current_context.node_data
+            assert data is not None, "Data cannot be None (except for root context)."
             context_list.append(data)
             last_n_count += 1
 
@@ -2386,7 +2394,14 @@ class TemplateRepresentation:
     obj: Any
     args: dict[
         str,
-        str | Component | CBlock | Iterable | Mapping | TemplateRepresentation | None,
+        str
+        | Component
+        | CBlock
+        | ModelOutputThunk
+        | Iterable
+        | Mapping
+        | TemplateRepresentation
+        | None,
     ]
     tools: dict[str, AbstractMelleaTool] | None = (
         None  # the key must be the name of the function.

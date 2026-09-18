@@ -1029,21 +1029,23 @@ class MelleaSession(Generic[ContextT]):
         self,
         reqs: Requirement | list[Requirement],
         *,
-        output: CBlock | ModelOutputThunk | None = None,
+        output: ModelOutputThunk | None = None,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         generate_logs: list[GenerateLog] | None = None,
         input: CBlock | ModelOutputThunk | None = None,
     ) -> list[ValidationResult]:
-        """Validates a set of requirements over the output (if provided) or the current context (if the output is not provided).
+        """Validates a set of requirements over this session's context.
 
         Args:
             reqs: A single `Requirement` or a list of them to validate.
-            output: Optional model output to validate against instead of the context.
+            output: Optional model output designating the validation target. When `None`,
+                the context's last output is validated.
             format: Optional Pydantic model for constrained decoding.
             model_options: Additional model options to merge with backend defaults.
             generate_logs: Optional list to append generation logs to.
-            input: Optional input to include alongside `output` when validating.
+            input: Optional input to append to the validation context, for judging an
+                output against a specific input rather than the whole conversation.
 
         Returns:
             List of `ValidationResult` objects, one per requirement.
@@ -1468,21 +1470,23 @@ class MelleaSession(Generic[ContextT]):
         self,
         reqs: Requirement | list[Requirement],
         *,
-        output: CBlock | ModelOutputThunk | None = None,
+        output: ModelOutputThunk | None = None,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         generate_logs: list[GenerateLog] | None = None,
         input: CBlock | ModelOutputThunk | None = None,
     ) -> list[ValidationResult]:
-        """Validates a set of requirements over the output (if provided) or the current context (if the output is not provided).
+        """Validates a set of requirements over this session's context.
 
         Args:
             reqs: A single `Requirement` or a list of them to validate.
-            output: Optional model output to validate against instead of the context.
+            output: Optional model output designating the validation target. When `None`,
+                the context's last output is validated.
             format: Optional Pydantic model for constrained decoding.
             model_options: Additional model options to merge with backend defaults.
             generate_logs: Optional list to append generation logs to.
-            input: Optional input to include alongside `output` when validating.
+            input: Optional input to append to the validation context, for judging an
+                output against a specific input rather than the whole conversation.
 
         Returns:
             List of `ValidationResult` objects, one per requirement.
