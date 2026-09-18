@@ -687,7 +687,12 @@ async def test_stream_e2e(span_exporter):
     else:
         assert chat_span.parent is None, "chat span should be flat on Python <=3.11"
 
+    # This calls a real model, so generation latency is not controlled (unlike
+    # the sibling mocked-stream tests, where >= 0.1s matches a deterministic
+    # fake per-chunk delay). A short real completion can finish in well under
+    # 100ms, so only assert the span reflects genuine nonzero elapsed time
+    # rather than a broken/collapsed-to-zero duration.
     chat_duration_s = (chat_span.end_time - chat_span.start_time) / 1e9
-    assert chat_duration_s >= 0.1, (
-        f"chat span duration too short for streaming: {chat_duration_s}s"
+    assert chat_duration_s > 0, (
+        f"chat span duration should be positive for a real streamed call: {chat_duration_s}s"
     )
