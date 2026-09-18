@@ -122,10 +122,32 @@ def test_ollama_model_names_exist(const_name: str, ollama_name: str) -> None:
     except ConnectionError as e:
         pytest.skip(f"Ollama server unreachable: {e}")
 
-    # Check the Ollama registry manifest without downloading anything.
     # Strip any tag so we query the base model name.
     base_name = ollama_name.split(":")[0]
     tag = ollama_name.split(":")[1] if ":" in ollama_name else "latest"
+
+    # "hf.co/<repo>[:tag]" is Ollama's syntax for importing a GGUF file directly
+    # from the Hugging Face Hub -- these are never hosted on registry.ollama.ai,
+    # so validate against the Hub instead (mirrors test_hf_model_names_exist).
+    if base_name.startswith("hf.co/"):
+        pytest.importorskip("huggingface_hub", reason="huggingface_hub not installed")
+        from huggingface_hub import model_info
+        from huggingface_hub.errors import GatedRepoError, RepositoryNotFoundError
+
+        hf_repo = base_name.removeprefix("hf.co/")
+        try:
+            model_info(hf_repo, token=False)
+        except GatedRepoError:
+            pass
+        except RepositoryNotFoundError:
+            pytest.skip(
+                f"{const_name}.ollama_name={ollama_name!r} (hf.co repo {hf_repo!r}) "
+                "not found on HuggingFace Hub (may be gated -- re-run with "
+                "HF_TOKEN to confirm it exists)."
+            )
+        return
+
+    # Check the Ollama registry manifest without downloading anything.
     # Unnamespaced models (no "/" in base_name) live under the "library" namespace.
     registry_name = base_name if "/" in base_name else f"library/{base_name}"
     registry_url = f"https://registry.ollama.ai/v2/{registry_name}/manifests/{tag}"
