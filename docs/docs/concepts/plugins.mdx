@@ -615,7 +615,7 @@ async def cap_tokens(payload, ctx):
 
 **Fires:** After each sampling attempt.
 
-**Payload fields:** `iteration`, `action`, `result`, `validation_results`, `all_validations_passed`, `valid_count`, `total_count`
+**Payload fields:** `sampling_id`, `strategy_name`, `iteration`, `sample_index`, `action`, `result`, `validation_results`, `all_validations_passed`, `valid_count`, `total_count`
 
 **Writable fields:** *(observe-only)*
 
@@ -628,7 +628,7 @@ async def cap_tokens(payload, ctx):
 
 **Fires:** When repair is invoked after a validation failure.
 
-**Payload fields:** `repair_type`, `failed_action`, `failed_result`, `failed_validations`, `repair_action`, `repair_context`, `repair_iteration`
+**Payload fields:** `sampling_id`, `repair_type`, `failed_action`, `failed_result`, `failed_validations`, `repair_action`, `repair_context`, `repair_iteration`, `sample_index`
 
 **Writable fields:** *(observe-only)*
 
