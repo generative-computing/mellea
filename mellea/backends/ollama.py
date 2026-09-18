@@ -291,7 +291,9 @@ class OllamaModelBackend(FormatterBackend, AdapterMixin):
         self._client_kwargs = client_kwargs
         self._client = ollama.Client(base_url, **client_kwargs)
 
-        self._client_cache = ClientCache(2)
+        self._client_cache: ClientCache = ClientCache(
+            2, aclose=lambda client: client._client.aclose()
+        )
 
         # Call once to set up an async client and prepopulate the cache.
         _ = self._async_client
@@ -509,7 +511,13 @@ class OllamaModelBackend(FormatterBackend, AdapterMixin):
 
         Returns:
           True if the model is available, False otherwise.
+
+        Raises:
+          RuntimeError: If `close` or `aclose` has already closed this backend.
         """
+        # Guarded because the `except` below would otherwise turn "this backend is
+        # closed" into a plain `False`, which reads as "the model isn't there".
+        self._raise_if_closed()
         try:
             models = self._client.list()
             for model in models["models"]:
@@ -563,14 +571,56 @@ class OllamaModelBackend(FormatterBackend, AdapterMixin):
 
     @property
     def _async_client(self) -> ollama.AsyncClient:
-        """Ollama's client gets tied to a specific event loop. Reset it if needed here."""
-        key = id(get_current_event_loop())
+        """Ollama's client gets tied to a specific event loop. Reset it if needed here.
 
-        _async_client = self._client_cache.get(key)
-        if _async_client is None:
-            _async_client = ollama.AsyncClient(self._base_url, **self._client_kwargs)
-            self._client_cache.put(key, _async_client)
-        return _async_client
+        Raises:
+            RuntimeError: If `close` or `aclose` has already closed this backend.
+        """
+        # Every generation path reaches its client through here, so this is where reuse
+        # after close() has to stop: the cache is empty by then, and building a client
+        # into it would hold sockets for the life of the process.
+        self._raise_if_closed()
+        # get_or_create, not get/put: sync callers all key on None, so two threads
+        # calling in would otherwise each build a client and leak one of them.
+        return self._client_cache.get_or_create(
+            get_current_event_loop(),
+            lambda: ollama.AsyncClient(self._base_url, **self._client_kwargs),
+        )
+
+    def close(self) -> None:
+        """Close the sync and cached async Ollama clients, releasing their sockets.
+
+        Safe to call more than once; subsequent calls close nothing further.
+
+        Teardown only, not a reset: the backend is marked closed, and generating with
+        it afterwards raises `RuntimeError` instead of reopening a client. Build a new
+        backend to keep generating.
+        """
+        # Marked closed before anything is closed: the flag is what stops a concurrent
+        # caller from rebuilding a client into the cache `clear()` is about to empty.
+        self._closed = True
+        sync_client = getattr(self._client, "_client", None)
+        if sync_client is not None:
+            try:
+                sync_client.close()
+            except Exception as e:
+                MelleaLogger.get_logger().debug(f"Failed to close Ollama client: {e}")
+        self._client_cache.clear()
+
+    async def aclose(self) -> None:
+        """Async counterpart to `close`.
+
+        Safe to call more than once; subsequent calls close nothing further. Leaves
+        the backend closed to reuse on the same terms as `close`.
+        """
+        self._closed = True
+        sync_client = getattr(self._client, "_client", None)
+        if sync_client is not None:
+            try:
+                sync_client.close()
+            except Exception as e:
+                MelleaLogger.get_logger().debug(f"Failed to close Ollama client: {e}")
+        await self._client_cache.aclear()
 
     def _simplify_and_merge(
         self, model_options: dict[str, Any] | None

@@ -285,6 +285,13 @@ def start_session(
     like `instruct()`, `chat()`, `query()`, and `transform()`. When called directly,
     it returns a session object that can be used directly.
 
+    Ending the session does not close the backend. Neither leaving a `with` block nor
+    calling `cleanup()` closes the backend this function built, because a backend can
+    be shared by other sessions that are still generating. Call
+    `session.backend.close()` (or `await session.backend.aclose()`) once nothing else
+    is using it; until then its pooled connections are released only when the backend
+    is garbage collected.
+
     Args:
         backend_name: The backend to use. Options are:
             - "ollama": Use Ollama backend for local models
@@ -348,6 +355,7 @@ def start_session(
         session = start_session()
         response = session.instruct("Explain quantum computing")
         session.cleanup()
+        session.backend.close()  # cleanup() does not close the backend
         ```
     """
     import uuid
@@ -652,7 +660,11 @@ class MelleaSession(Generic[ContextT]):
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        """Exit context manager and cleanup session."""
+        """Exit context manager and cleanup session.
+
+        Leaves `self.backend` open — see `cleanup` for why, and for what to call
+        when the backend's connections should be released too.
+        """
         self.cleanup(exception=exc_val)
         if self._log_context_token is not None:
             _log_context.reset(self._log_context_token)
@@ -733,6 +745,13 @@ class MelleaSession(Generic[ContextT]):
 
     def cleanup(self, *, exception: BaseException | None = None) -> None:
         """Clean up session resources and deregister session-scoped plugins.
+
+        Session-scoped only: `self.backend` is deliberately left open, since one
+        backend can serve several sessions and closing it here would pull its clients
+        out from under a session that is still generating. The backend's connections
+        are the caller's to release — call `backend.close()` (or `await
+        backend.aclose()`) when nothing else needs it, or they stay open until the
+        backend is garbage collected.
 
         Args:
             exception: Optional exception that triggered cleanup. Forwarded
