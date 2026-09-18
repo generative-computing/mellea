@@ -1454,8 +1454,17 @@ class EmbeddedIntrinsicAdapter(_AdapterCore):
         local_root = cache_root / "mellea" / "embedded-adapter-configs" / cache_key
 
         try:
-            if not local_root.is_dir():
+            # Validate the cache by content, not just directory existence: a
+            # prior run that crashed or lost a `temporary_dir.replace()` race
+            # (see below) can leave `local_root` as a directory missing
+            # `adapter_index.json`, which `is_dir()` alone would trust forever.
+            if not (local_root / "adapter_index.json").is_file():
                 local_root.parent.mkdir(parents=True, exist_ok=True)
+                if local_root.is_dir():
+                    # Invalid leftover from a prior partial run -- clear it so
+                    # `temporary_dir.replace(local_root)` below doesn't fail
+                    # trying to rename onto a non-empty stale directory.
+                    shutil.rmtree(local_root)
                 temporary_dir = pathlib.Path(
                     tempfile.mkdtemp(dir=local_root.parent, prefix=f"{cache_key}-")
                 )
