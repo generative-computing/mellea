@@ -255,6 +255,22 @@ help = "Build the Docusaurus site for fork preview (baseUrl: /mellea/)"
 cmd = "pytest --nbmake docs/examples/notebooks -v -rs --no-cov --nbmake-timeout=600 --timeout=1800"
 help = "Execute the example notebooks with nbmake (needs ollama; skips slow notebooks)"
 
+# The Colab counterpart to `nbtest`, and the local half of the colab-notebooks.yml workflow.
+# Where `nbtest` honours the `skip-execution` tag, this task overrides it so the Colab setup
+# cells run, which is the only way to exercise the onboarding path users actually take.
+#
+# Two local side effects follow from that, both intentional: ollama is installed if missing
+# (the script skips it when already present), and the notebooks' own `!uv pip install mellea`
+# installs the working tree into the active environment via UV_OVERRIDE, replacing an editable
+# install with a regular one. Run `uv sync` afterwards to restore it.
+[tool.poe.tasks.colabtest]
+shell = """
+set -e
+bash test/colab/prepare_ollama_model.sh
+python test/colab/run_notebooks.py --out-dir /tmp/colab-executed
+"""
+help = "Execute the example notebooks with their Colab setup cells enabled (see test/colab/)"
+
 # -----------------------------
 # Ruff - Linting and Formatting
 # -----------------------------

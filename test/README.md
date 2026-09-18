@@ -574,6 +574,12 @@ Conventions:
 - **Colab-only setup cells are tagged `skip-execution`** (ollama install,
   `uv pip install mellea`). nbclient honours the tag, which is why notebooks run
   against the working tree's editable install rather than the released package.
+  Those cells are covered separately by
+  [`.github/workflows/colab-notebooks.yml`](../.github/workflows/colab-notebooks.yml),
+  which points `skip_cells_with_tag` at a sentinel tag so they do execute — once
+  against Colab's pinned package set per PR, and once inside Colab's published
+  runtime image nightly. Run it locally with `uv run poe colabtest`; see
+  [`test/colab/README.md`](colab/README.md).
 
 ## Ollama model eviction
 
