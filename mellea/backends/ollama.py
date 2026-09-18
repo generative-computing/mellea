@@ -52,7 +52,11 @@ from .adapters.catalog import AdapterType, fetch_intrinsic_metadata
 from .adapters.io_contracts import get_io_contract
 from .backend import FormatterBackend
 from .model_options import ModelOption
-from .tools import add_tools_from_context_actions, add_tools_from_model_options
+from .tools import (
+    add_tools_from_context_actions,
+    add_tools_from_model_options,
+    convert_tools_to_json,
+)
 
 format: None = None  # typing this variable in order to shadow the global format function and ensure mypy checks for errors
 
@@ -1171,7 +1175,7 @@ class OllamaModelBackend(FormatterBackend, AdapterMixin):
         ] = self._async_client.chat(
             model=self._model_id,
             messages=conversation,
-            tools=[t.as_json_tool for t in tools.values()],
+            tools=convert_tools_to_json(tools),
             think=model_opts.get(ModelOption.THINKING, None),
             stream=model_opts.get(ModelOption.STREAM, False),
             options=self._make_backend_specific_and_remove(model_opts),
