@@ -101,7 +101,9 @@ Three things to know before editing or adding one:
 - **The Colab setup cells are tagged `skip-execution`** (installing ollama,
   `uv pip install mellea`), so a test run exercises the working tree rather than
   the released package. Keep that tag on any new setup cell, and keep such cells
-  free of anything the rest of the notebook depends on.
+  free of anything the rest of the notebook depends on. The tagged cells are not
+  untested: `.github/workflows/colab-notebooks.yml` runs them in a Colab-like
+  environment, so a setup cell that breaks is still caught.
 - **Prefer the default session model** (`mellea.start_session()`), or a model CI
   already pulls. Naming another model makes the Ollama backend download it
   mid-cell, which usually just exhausts the per-cell timeout.
