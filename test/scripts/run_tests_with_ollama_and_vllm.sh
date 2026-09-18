@@ -319,7 +319,13 @@ run_phase() {
 # ollama phase in a single job, and concurrent jobs sharing one install path
 # race on download+extract.
 if [[ "$SERIAL_PHASES" != "1" ]] || phase_enabled ollama; then
-    OLLAMA_MIN_VERSION="${OLLAMA_MIN_VERSION:-0.32.2}"
+    # 0.32.2 crashes on BlueVela's current driver/CUDA 13.1 stack: llama-server
+    # segfaults with "signal: bus error" on every GPU call, including the
+    # --list-devices probe -- verified 2026-09-18 across 5 nodes. 0.34.1 fixes
+    # this (confirmed working end to end) at the cost of dropping LoRA adapter
+    # support (see the uncertainty-adapter build step below, which degrades
+    # gracefully on that failure rather than aborting the whole phase).
+    OLLAMA_MIN_VERSION="${OLLAMA_MIN_VERSION:-0.34.1}"
     ollama_current_version=""
     if [[ -x "$OLLAMA_BIN" ]]; then
         # `ollama --version` prints a multi-line warning block to stdout
@@ -411,11 +417,21 @@ start_ollama() {
 
     log "All ollama models ready."
 
-    MELLEA_OLLAMA_UNCERTAINTY_MODEL="$(
+    # Failure here (e.g. an Ollama release that dropped LoRA adapter support --
+    # confirmed on 0.34.1) must not take down the whole phase via set -e: `if`
+    # exempts the command substitution from that, so we degrade gracefully --
+    # the two uncertainty-adapter tests fail/skip on their own, and every other
+    # ollama test in this phase still runs.
+    if MELLEA_OLLAMA_UNCERTAINTY_MODEL="$(
         ./test/scripts/build_ollama_uncertainty_adapter.sh
-    )"
-    export MELLEA_OLLAMA_UNCERTAINTY_MODEL
-    OLLAMA_MODEL_LIST+=("$MELLEA_OLLAMA_UNCERTAINTY_MODEL")
+    )"; then
+        export MELLEA_OLLAMA_UNCERTAINTY_MODEL
+        OLLAMA_MODEL_LIST+=("$MELLEA_OLLAMA_UNCERTAINTY_MODEL")
+    else
+        log "WARNING: failed to build the Ollama uncertainty adapter model (see" \
+            "stderr above) -- uncertainty-adapter tests will fail/skip; every" \
+            "other model in this run is unaffected."
+    fi
 
     # --- Warm up models (first load into memory is slow) ---
     # Disable with SKIP_WARMUP=1 (covers all backends) or OLLAMA_SKIP_WARMUP=1 (ollama only).
