@@ -41,6 +41,11 @@ SENTINEL_TAG = "colab-harness-never-executes"
 
 ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*m")
 
+# Keeps a failure summary readable in a markdown table cell; the exception name and the
+# start of the message are the parts worth seeing, and the executed notebook artifact
+# carries the full traceback.
+SUMMARY_WIDTH = 200
+
 # Matches notebooks.yml's --nbmake-timeout: CI inference is slow enough to need it.
 DEFAULT_CELL_TIMEOUT = 600
 
@@ -149,19 +154,24 @@ def execute_notebook(path: Path, out_dir: Path, timeout: int) -> str | None:
 
 
 def _summarize_cell_error(err: CellExecutionError) -> str:
-    """Reduce a cell traceback to its last meaningful line.
+    """Reduce a cell failure to a one-line `Ename: message` summary.
 
     Args:
         err: The raised execution error.
 
     Returns:
-        A one-line summary suitable for a job summary table. IPython colours tracebacks
-        with ANSI escapes, which would render as literal noise in GitHub markdown, so they
-        are stripped.
+        A one-line summary suitable for a job summary table. The structured `ename` and
+        `evalue` are used rather than the rendered traceback: IPython appends a dashed
+        separator and a "NOTE: If your import is failing..." advisory *after* the exception
+        line, so the traceback's last line is punctuation rather than the cause. ANSI colour
+        codes are stripped and pipes escaped, since either would corrupt the markdown row
+        this lands in.
     """
-    plain = ANSI_ESCAPE.sub("", str(err))
-    lines = [line.strip() for line in plain.splitlines() if line.strip()]
-    return lines[-1] if lines else "CellExecutionError"
+    detail = " ".join(ANSI_ESCAPE.sub("", err.evalue).split()).replace("|", r"\|")
+    summary = f"{err.ename}: {detail}" if detail else err.ename
+    if len(summary) > SUMMARY_WIDTH:
+        summary = summary[: SUMMARY_WIDTH - 3].rstrip() + "..."
+    return summary
 
 
 def _report(results: dict[Path, str | None], out_dir: Path) -> None:
