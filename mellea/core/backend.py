@@ -62,6 +62,17 @@ class Backend(abc.ABC):
     _provider: str
     """Provider name (e.g. 'openai', 'ollama'). Must be set by every backend implementation."""
 
+    _supports_token_id_retention: bool = False
+    """Whether this backend honours `ChatContext(retain_token_ids=True)`.
+
+    Left `False` for every backend that re-renders history from text each turn. A
+    backend that sends the retained ids instead sets it `True`, which suppresses the
+    warning `generate_from_context` emits for a policy it cannot carry out.
+    """
+
+    _warned_token_id_retention_unsupported: bool = False
+    """Guard so the unsupported-policy warning is emitted once per instance, not per turn."""
+
     @final
     async def generate_from_context(
         self,
@@ -85,6 +96,22 @@ class Backend(abc.ABC):
             a tuple of (ModelOutputThunk, Context) where the Context is the new context after the generation has been completed.
         """
         generation_id = str(uuid.uuid4())
+
+        # A context can ask for token-id retention against any backend, but only a
+        # backend that sends the retained ids can honour it. Elsewhere the flag is
+        # inert: history is re-rendered from text, silently doing the thing the policy
+        # was set to avoid. Warn once per instance rather than per turn.
+        if (
+            getattr(ctx, "retains_token_ids", False)
+            and not self._supports_token_id_retention
+            and not self._warned_token_id_retention_unsupported
+        ):
+            self._warned_token_id_retention_unsupported = True
+            MelleaLogger.get_logger().warning(
+                "this context asked to retain token ids, but %s does not support it; "
+                "history is re-rendered as text on every turn and the ids are ignored.",
+                type(self).__name__,
+            )
 
         # --- generation_pre_call hook ---
         if has_plugins(HookType.GENERATION_PRE_CALL):
@@ -130,6 +157,31 @@ class Backend(abc.ABC):
             raise
         # Save the ID for the post_call / error hooks.
         mot._call.generation_id = generation_id
+
+        # An already-computed thunk (e.g. the OpenAI token-id retention path, which
+        # must materialize the reply to derive the ids before returning) short-circuits
+        # `astream()`, so the `generation_post_call` hook astream normally fires never
+        # runs -- leaving the `generation_pre_call` fired above without its partner. Fire
+        # it here, now that `generation_id` is assigned, so the PRE/POST pair balances
+        # and the tracing/metrics plugins see a finished thunk with the right id.
+        if (
+            mot._call.fire_post_call_on_return
+            and mot.is_computed()
+            and has_plugins(HookType.GENERATION_POST_CALL)
+        ):
+            from ..plugins.hooks.generation import GenerationPostCallPayload
+
+            glog = mot._generate_log
+            await invoke_hook(
+                HookType.GENERATION_POST_CALL,
+                GenerationPostCallPayload(
+                    prompt=glog.prompt if glog and glog.prompt else "",
+                    model_output=mot,
+                    latency_ms=mot._elapsed_ms(),
+                    generation_id=generation_id,
+                ),
+                backend=self,
+            )
         return mot, new_ctx
 
     @abc.abstractmethod

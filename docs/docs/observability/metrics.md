@@ -392,6 +392,41 @@ above.
 > above with your own application-level spans around the
 > `mfuncs.act()`/`m.instruct()` call site instead.
 
+## Token-id retention metrics
+
+When a conversation opts into id-preserving history with
+`ChatContext(retain_token_ids=True)`, Mellea sends the token ids the server has
+already seen plus only the new turn's ids, so a server with prefix caching can
+reuse the cached blocks. These metrics report what the **client** did, recorded by
+`TokenIdRetentionMetricsPlugin` (`mellea/telemetry/metrics_plugins.py`) from the
+`generation_post_call` hook.
+
+| Metric Name | Type | Attributes | Description |
+| ----------- | ---- | ---------- | ----------- |
+| `mellea.token_id_retention.turns` | Counter | `model`, `provider`, `reused` | Turns sent as token ids, split by whether a retained prefix was reused |
+| `mellea.token_id_retention.reused_prompt_tokens` | Histogram | `model`, `provider` | Prompt ids reused from the retained prefix, per turn |
+
+`reused=false` means the turn was sent as ids but built no reuse: the first turn of
+a conversation, or one where the control-token ceiling forced the retained prefix to
+be dropped and the transcript re-rendered.
+
+A turn that gave up on id reuse and went out as ordinary chat messages records
+nothing at all, so `turns` counts only id-transport turns. The same values are
+available per turn on the thunk, as `mot.generation.token_id_retention`, and on the
+generation span as `mellea.token_id_retention.*` attributes.
+
+> **This is not a server cache-hit metric.** It reports the ids Mellea sent and how
+> many came from the retained prefix. Whether the server actually reused those KV
+> blocks is only visible in the server's own counters (for vLLM,
+> `vllm:prefix_cache_hits_total` / `vllm:prefix_cache_queries_total` on `/metrics`).
+> Retention is a precondition for a hit, not evidence of one.
+
+Supported servers and fallback behaviour: the id transport needs a `/tokenize`
+route and vLLM >= 0.10.2 for `return_token_ids`. Against anything else, retention
+never engages and every turn is sent as chat messages, which is correct but forgoes
+the cache hit. `OpenAIBackend.token_id_reprefills` counts how many retained turns
+had to drop their prefix.
+
 ## Metrics export configuration
 
 Mellea supports multiple metrics exporters that can be used independently or

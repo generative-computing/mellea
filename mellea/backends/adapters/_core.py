@@ -108,11 +108,17 @@ class Identity:
         capability (str | None): Advisory capability string; emits
             :class:`UserWarning` when not in
             :data:`~mellea.backends.adapters.capabilities.KNOWN_CAPABILITIES`.
+        control_token_id (int | None): Vocabulary id of the control token that
+            activates this adapter, from the model's `adapter_index.json`. `None`
+            when the metadata did not supply one. A backend serving over the OpenAI
+            API reads this to count control tokens exactly instead of probing
+            `/tokenize` per adapter (token-id retention's ceiling guard).
     """
 
     name: str
     adapter_type: Literal["lora", "alora"]
     capability: str | None = None
+    control_token_id: int | None = None
 
     def __post_init__(self) -> None:
         # Literal[...] is a static-only constraint; mypy enforces it but Python
