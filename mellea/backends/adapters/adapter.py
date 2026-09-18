@@ -565,24 +565,26 @@ class AdapterMixin(Backend, abc.ABC):
         still be rejected at runtime.
 
         `config` is the raw io.yaml mapping for a composed `Adapter`/
-        `_AdapterCore` whose `weights` is an `EmbeddedBinding` — that reality's
-        config cannot be cheaply re-derived later, so it must be supplied here
-        (see `_discover_embedded_adapters`/`resolve_adapter`), rather than
-        being fetched lazily the way a `LocalFileBinding`'s io.yaml is.
+        `_AdapterCore` whose `weights` is an `EmbeddedBinding` or
+        `ServerMediatedBinding`. Those realities do not retain the raw
+        configuration required by the legacy rewriter, so it must be supplied
+        at registration rather than being fetched lazily like a
+        `LocalFileBinding`'s io.yaml.
 
         Args:
             adapter (AdapterInput): The adapter to register with this backend.
             config (dict | None): Raw io.yaml config for a composed
-                `EmbeddedBinding` adapter. Ignored (and rejected) for every
-                other adapter reality.
+                `EmbeddedBinding` or `ServerMediatedBinding` adapter. Ignored
+                (and rejected) for every other adapter reality.
 
         Raises:
             TypeError: If `adapter` belongs to a reality this backend does not
                 support, or `config` is given for a reality other than a
-                composed `EmbeddedBinding` adapter.
-            ValueError: If `adapter.weights` is an `EmbeddedBinding` and
-                `config` is not given — registering it without a config would
-                make it discoverable but permanently unable to generate.
+                composed `EmbeddedBinding` or `ServerMediatedBinding` adapter.
+            ValueError: If `adapter.weights` is an `EmbeddedBinding` or
+                `ServerMediatedBinding` and `config` is not given —
+                registering it without a config would make it discoverable
+                but permanently unable to generate.
         """
 
     @abc.abstractmethod

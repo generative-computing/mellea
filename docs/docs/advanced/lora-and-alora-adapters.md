@@ -15,8 +15,13 @@ and use it as a requirement validator in any Mellea program.
 Apple Silicon Mac with sufficient VRAM for the chosen base model. Uploading requires a
 Hugging Face account.
 
-> **Backend note:** Custom-trained adapters can only be loaded into `LocalHFBackend`.
-> They do not work with Ollama, OpenAI, or other remote backends.
+> **Backend note:** Custom-trained adapters can only be loaded directly into
+> `LocalHFBackend`. Ollama can use a custom adapter bundled into a model with a
+> Modelfile `ADAPTER` line, but Mellea does not discover custom Ollama adapter
+> functions from `adapter_models` alone. Register a composed adapter with its
+> `io.yaml` explicitly, then map its name to the bundled model tag. See
+> [Adapter functions](./intrinsics.md) for the supported catalogue-adapter
+> workflow.
 >
 > Granite Switch models ship with pre-trained adapter functions embedded in the
 > model weights. Use them through `OpenAIBackend` with a served checkpoint, or

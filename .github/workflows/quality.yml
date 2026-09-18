@@ -136,7 +136,7 @@ jobs:
         # projector Ollama needs for image input). Drop the hf.co prefix if the
         # model is ever published to the Ollama library directly.
         run: |
-          for model in granite4.2:3b granite4:micro-h hf.co/ibm-granite/granite-vision-4.1-4b-GGUF:Q4_K_M; do
+          for model in granite4.2:3b granite4:micro-h granite4.1:3b hf.co/ibm-granite/granite-vision-4.1-4b-GGUF:Q4_K_M; do
             pulled=false
             for i in 1 2 3 4 5; do
               ollama pull "$model" && { pulled=true; break; }
@@ -153,6 +153,25 @@ jobs:
           # The names below are what the tests match against; print them so a
           # tag-name mismatch is diagnosable from the log alone.
           ollama list
+      - name: Constrain the granite4.1:3b context for the CI runner
+        # granite4.1:3b ships the same oversized num_ctx default as
+        # granite4.2:3b below. The uncertainty aLoRA Ollama model is built
+        # `FROM` this tag, so it must be constrained *before* that build step
+        # or the bundled adapter model inherits the unconstrained context.
+        run: |
+          ollama cp granite4.1:3b granite4.1:3b-128k
+          printf 'FROM granite4.1:3b-128k\nPARAMETER num_ctx 8192\n' \
+            > /tmp/MODELFILE-granite41-ci
+          ollama create granite4.1:3b -f /tmp/MODELFILE-granite41-ci
+          ollama show granite4.1:3b --modelfile | grep -qx 'PARAMETER num_ctx 8192'
+      - name: Build the official uncertainty aLoRA Ollama model
+        env:
+          # read-only public-repo HF token; used only to make the pinned build
+          # reliable under Hub rate limits.
+          HF_TOKEN: ${{ secrets.HF_TOKEN_READ_PUBLIC_ONLY }}  # zizmor: ignore[secrets-outside-env]
+        run: |
+          model=$(./test/scripts/build_ollama_uncertainty_adapter.sh)
+          echo "MELLEA_OLLAMA_UNCERTAINTY_MODEL=$model" >> "$GITHUB_ENV"
       - name: Constrain the granite4.2:3b context for the CI runner
         # The published tag ships num_ctx=131072, a ~6 GB KV cache at load —
         # too much for the 16 GB runner and a cause of the CI stalls. Re-point

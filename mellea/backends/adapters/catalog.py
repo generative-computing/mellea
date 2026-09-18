@@ -162,11 +162,15 @@ _INTRINSICS_CATALOG_ENTRIES = [
     ############################################
     # Core adapter functions
     ############################################
+    # context-attribution, citations, and hallucination_detection publish only
+    # a `lora/` subdirectory on the Hub for granite-4.1-3b (no `alora/`), unlike
+    # every other entry below.
     IntrinsicsCatalogEntry(
         name="context-attribution",
         capability="context_attribution",
         repo_id=_CORE_R1_REPO,
         revision=_CORE_R1_SHA,
+        adapter_types=(AdapterType.LORA,),
     ),
     IntrinsicsCatalogEntry(
         name="requirement-check",
@@ -181,9 +185,17 @@ _INTRINSICS_CATALOG_ENTRIES = [
     # RAG adapter functions
     ############################################
     IntrinsicsCatalogEntry(name="answerability", repo_id=_RAG_REPO, revision=_RAG_SHA),
-    IntrinsicsCatalogEntry(name="citations", repo_id=_RAG_REPO, revision=_RAG_SHA),
     IntrinsicsCatalogEntry(
-        name="hallucination_detection", repo_id=_RAG_REPO, revision=_RAG_SHA
+        name="citations",
+        repo_id=_RAG_REPO,
+        revision=_RAG_SHA,
+        adapter_types=(AdapterType.LORA,),
+    ),
+    IntrinsicsCatalogEntry(
+        name="hallucination_detection",
+        repo_id=_RAG_REPO,
+        revision=_RAG_SHA,
+        adapter_types=(AdapterType.LORA,),
     ),
     IntrinsicsCatalogEntry(
         name="query_clarification", repo_id=_RAG_REPO, revision=_RAG_SHA

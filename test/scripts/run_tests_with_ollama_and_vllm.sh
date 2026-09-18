@@ -46,6 +46,7 @@ OLLAMA_CONTEXT_LENGTH="${OLLAMA_CONTEXT_LENGTH:-2048}"
 OLLAMA_MODEL_LIST=(
     "granite4.2:3b"
     "granite4:micro-h"
+    "granite4.1:3b"
     "hf.co/ibm-granite/granite-vision-4.1-4b-GGUF:Q4_K_M"
     # The library default moved 4.1 -> 4.2 in #1587, but several examples collected by
     # WITH_EXAMPLES=1 still name 4.1 explicitly (sofai, mini_researcher, both m_serve
@@ -202,6 +203,12 @@ for model in "${OLLAMA_MODEL_LIST[@]}"; do
 done
 
 log "All ollama models ready."
+
+MELLEA_OLLAMA_UNCERTAINTY_MODEL="$(
+    ./test/scripts/build_ollama_uncertainty_adapter.sh
+)"
+export MELLEA_OLLAMA_UNCERTAINTY_MODEL
+OLLAMA_MODEL_LIST+=("$MELLEA_OLLAMA_UNCERTAINTY_MODEL")
 
 # --- Warm up models (first load into memory is slow) ---
 # Disable with SKIP_WARMUP=1 (covers all backends) or OLLAMA_SKIP_WARMUP=1 (ollama only).
