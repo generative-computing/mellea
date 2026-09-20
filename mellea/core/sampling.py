@@ -136,6 +136,13 @@ class SamplingStrategy(abc.ABC):
     loop_budget: int = 1
     requirements: list[Requirement] | None = None
 
+    def _get_repair_type(self) -> str:
+        """Return the repair-type label used in telemetry hooks.
+
+        Subclasses override this to return a strategy-specific string.
+        """
+        return "unknown"
+
     @final
     async def sample(
         self,
@@ -363,7 +370,7 @@ class SamplingStrategy(abc.ABC):
 
         repair_payload = SamplingRepairPayload(
             sampling_id=sampling_id,
-            repair_type=getattr(self, "_get_repair_type", lambda: "unknown")(),
+            repair_type=self._get_repair_type(),
             failed_action=failed_action,
             failed_result=failed_result,
             failed_validations=failed_validations,

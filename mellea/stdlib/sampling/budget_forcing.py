@@ -238,6 +238,7 @@ class BudgetForcingSamplingStrategy(RejectionSamplingStrategy):
                     result=result,
                     validation_results=constraint_scores,
                     backend=backend,
+                    sample_index=sample_index,
                 )
 
                 # collect all data
@@ -291,6 +292,7 @@ class BudgetForcingSamplingStrategy(RejectionSamplingStrategy):
                         repair_action=next_action,
                         repair_context=next_context,
                         backend=backend,
+                        sample_index=sample_index,
                     )
 
             flog.info(
