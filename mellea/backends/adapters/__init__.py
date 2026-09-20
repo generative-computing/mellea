@@ -6,6 +6,7 @@
 from ._core import (
     Adapter,
     AdapterSchemaMismatchError,
+    EmbeddedActivationRequest,
     EmbeddedBinding,
     Identity,
     IOContract,
@@ -25,6 +26,7 @@ from .adapter import (
 )
 from .capabilities import KNOWN_CAPABILITIES
 from .catalog import validate_revision
+from .io_contracts import get_io_contract
 
 __all__ = [
     "KNOWN_CAPABILITIES",
@@ -33,6 +35,7 @@ __all__ = [
     "AdapterMixin",
     "AdapterSchemaMismatchError",
     "AdapterType",
+    "EmbeddedActivationRequest",
     "EmbeddedBinding",
     "EmbeddedIntrinsicAdapter",
     "IOContract",
@@ -44,5 +47,6 @@ __all__ = [
     "WeightsBinding",
     "fetch_intrinsic_metadata",
     "get_adapter_for_intrinsic",
+    "get_io_contract",
     "validate_revision",
 ]

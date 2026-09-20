@@ -4,7 +4,7 @@ description: "Give LLMs access to tools, build ReACT agents, and validate tool c
 # diataxis: how-to
 ---
 
-**Prerequisites:** [Quick Start](../getting-started/quickstart) complete, `pip install mellea`,
+**Prerequisites:** [Quick Start](../getting-started/quickstart.md) complete, `pip install mellea`,
 Ollama running locally. LangChain interop requires `pip install langchain-community`.
 
 > **Note:** An _agent_ is a generative program in which an LLM determines the control
@@ -317,4 +317,4 @@ for a complete example against the hosted GitHub MCP server.
 
 ---
 
-**See also:** [Tutorial 04: Making Agents Reliable](../tutorials/making-agents-reliable) | [Instruct, Validate, Repair](../concepts/instruct-validate-repair)
+**See also:** [Tutorial 04: Making Agents Reliable](../tutorials/04-making-agents-reliable.md) | [Instruct, Validate, Repair](../concepts/instruct-validate-repair.md)

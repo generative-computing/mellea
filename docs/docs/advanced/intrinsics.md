@@ -4,24 +4,34 @@ description: "Adapter-accelerated RAG quality checks using LoRA/aLoRA adapters w
 # diataxis: how-to
 ---
 
-**Prerequisites:** `pip install "mellea[hf]"` for LocalHFBackend (GPU or Apple
-Silicon Mac recommended), or `pip install mellea` for OpenAIBackend with a
-[Granite Switch](/reference/glossary#granite-switch) model served via vLLM.
+**Prerequisites:** use `uv sync --extra hf` for runtime LoRA/aLoRA adapter
+functions and local [Granite Switch](../reference/glossary.md#granite-switch)
+checkpoints. Both local paths require a GPU or Apple Silicon Mac. An
+OpenAIBackend using a Granite Switch model served via vLLM uses
+`uv sync --extra switch` when it downloads embedded adapter metadata.
 
-Adapter functions are adapter-accelerated operations for RAG quality checks. They use
-LoRA/aLoRA adapters loaded directly into the Hugging Face backend — faster and more
-reliable than prompting a general-purpose model for these specialized micro-tasks.
+Adapter functions are adapter-accelerated operations for RAG quality checks. Their
+LoRA/aLoRA weights are loaded locally, selected from an embedded checkpoint, or
+bundled into an Ollama model — faster and more reliable than prompting a
+general-purpose model for these specialised micro-tasks.
 
-> **Backend note:** Adapter functions work with two backends:
+> **Backend note:** Adapter functions work with three backends:
 >
 > - **LocalHFBackend** — loads LoRA/aLoRA adapters from the catalog at runtime.
->   All adapter functions are available. Requires a GPU or Apple Silicon Mac.
+>   A local Granite Switch checkpoint can instead use
+>   `load_embedded_adapters=True`; install `mellea[hf]` first. Only
+>   adapter functions embedded in the checkpoint are then available. Requires a
+>   GPU or Apple Silicon Mac.
 > - **OpenAIBackend** — uses a Granite Switch model served via vLLM with
 >   `load_embedded_adapters=True`. Only adapter functions embedded in the model are
 >   available — check the model's `adapter_index.json` for the list.
 >   See `docs/docs/examples/granite-switch/README.md`
+> - **OllamaModelBackend** — uses an Ollama model that bundles the adapter.
+>   Ollama bundles one adapter per model, so pass
+>   `adapter_models={"uncertainty": "<tag>", ...}` to route each adapter function
+>   to its model. Install `mellea[switch]` to download the adapter's `io.yaml`.
 >
-> Adapter functions do not work with Ollama or other remote backends.
+> Adapter functions do not work with other remote backends.
 
 Set up the backend once and reuse it across adapter function calls:
 
@@ -32,6 +42,89 @@ from mellea.backends.huggingface import LocalHFBackend
 
 backend = LocalHFBackend(model_id="ibm-granite/granite-4.1-3b")
 ```
+
+## Use an adapter bundled in an Ollama model
+
+Ollama serves adapter weights as part of a model tag; Mellea does not load the
+weights separately. For local development, build a bundled uncertainty model
+from the pinned official Granite base and adapter artefacts:
+
+```bash
+MELLEA_OLLAMA_UNCERTAINTY_MODEL="$(
+  ./test/scripts/build_ollama_uncertainty_adapter.sh
+)"
+export MELLEA_OLLAMA_UNCERTAINTY_MODEL
+```
+
+Install the lightweight Hugging Face Hub dependency that retrieves the
+catalogued `io.yaml`:
+
+```bash
+uv sync --extra switch
+```
+
+For one adapter function, use the bundled tag for both ordinary chat and the
+adapter route. Before the invocation tokens appear, the aLoRA model behaves as
+the base model; keeping one model identity lets Ollama reuse its own prefix
+cache where available.
+
+```python
+import os
+
+from mellea.backends import ModelOption
+from mellea.backends.ollama import OllamaModelBackend
+from mellea.stdlib.components import Message
+from mellea.stdlib.components.intrinsic import core
+from mellea.stdlib.context import ChatContext
+
+backend = OllamaModelBackend(
+    model_id=os.environ["MELLEA_OLLAMA_UNCERTAINTY_MODEL"],
+    adapter_base_model_name="granite-4.1-3b",
+    model_options={ModelOption.CONTEXT_WINDOW: 4096},
+    adapter_models={
+        "uncertainty": os.environ["MELLEA_OLLAMA_UNCERTAINTY_MODEL"],
+    },
+)
+context = (
+    ChatContext()
+    .add(Message("user", "What is the square root of 4?"))
+    .add(Message("assistant", "The square root of 4 is 2."))
+)
+
+print(core.check_certainty(context, backend))
+```
+
+When an application needs several adapter functions, keep the base model as
+`model_id` and map each function to its bundled model tag. Current Ollama
+model packaging exposes one adapter per tag, so calls across those tags do not
+share a KV cache. Use a Granite Switch checkpoint when multi-adapter,
+single-model serving is important.
+
+See `docs/examples/intrinsics/uncertainty_ollama.py` for the complete
+executable example.
+
+## Use a local Granite Switch checkpoint
+
+Granite Switch checkpoints contain their adapter functions already. Pass the
+checkpoint to `LocalHFBackend` with `load_embedded_adapters=True`; existing
+helper functions such as `rag.check_answerability()` work unchanged.
+
+```python
+# Requires: mellea[hf]
+# Returns: LocalHFBackend
+from mellea.backends.huggingface import LocalHFBackend
+from mellea.backends.model_ids import IBM_GRANITE_SWITCH_4_1_3B_PREVIEW
+
+backend = LocalHFBackend(
+    model_id=IBM_GRANITE_SWITCH_4_1_3B_PREVIEW,
+    load_embedded_adapters=True,
+)
+```
+
+Only adapter functions listed in the checkpoint's `adapter_index.json` are
+available. Mellea warns once if Granite Switch's installed package metadata
+does not yet include Mellea's resolved Transformers version; the warning
+disappears after Granite Switch publishes compatible metadata.
 
 Or, with a Granite Switch model via the OpenAI backend:
 
@@ -70,55 +163,6 @@ docs_not_answerable = [Document("The square root of 8 is approximately 2.83.")]
 
 print(rag.check_answerability(question, docs_answerable, context, backend))   # True
 print(rag.check_answerability(question, docs_not_answerable, context, backend))  # False
-```
-
-## Context relevance
-
-:::warning Deprecated
-`check_context_relevance()` is deprecated and will be removed in a future release.
-The underlying adapter is Granite 4.0 only and will not receive a Granite 4.1 version.
-
-**There is no direct adapter replacement.** `check_answerability()` addresses a
-related but different question — it asks whether a *set* of documents can collectively
-answer a question (binary result), while `check_context_relevance()` scores a *single*
-document on a three-way scale. They operate at different stages of a RAG pipeline and
-are not interchangeable.
-
-For per-document relevance filtering, use a `@generative` function with any current
-Granite backend:
-
-```python
-from mellea import generative
-
-@generative
-def is_relevant(document: str, question: str) -> bool:
-    """Determine whether the document contains information relevant to the question."""
-```
-
-See [Build a RAG pipeline](../how-to/build-a-rag-pipeline.md) for a full example.
-:::
-
-Assess whether a document is relevant to a question:
-
-```python
-# Requires: mellea[hf]
-# Returns: str
-from mellea.backends.huggingface import LocalHFBackend
-from mellea.stdlib.components import Document
-from mellea.stdlib.components.intrinsic import rag
-from mellea.stdlib.context import ChatContext
-
-# NOTE: no context_relevance adapter for Granite 4.1 — use granite-4.0-micro
-backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
-context = ChatContext()
-question = "Who is the CEO of Microsoft?"
-document = Document(
-    "Microsoft Corporation is an American multinational corporation "
-    "headquartered in Redmond, Washington."
-)
-
-result = rag.check_context_relevance(question, document, context, backend)
-print(result)  # 'partially relevant' — doc is about Microsoft but not its CEO
 ```
 
 ## Hallucination detection
@@ -235,24 +279,41 @@ print(result)
 
 ## Direct adapter function usage
 
-> **Advanced:** For custom adapter tasks, use the `Intrinsic` component and
-> `CustomIntrinsicAdapter` directly.
+> **Advanced:** For custom adapter tasks, compose an `Adapter` directly from
+> an `Identity`, an output contract, and a weights binding.
 
 ```python
 # Requires: mellea[hf]
 # Returns: dict
 import mellea.stdlib.functional as mfuncs
-from mellea.backends.adapters.adapter import CustomIntrinsicAdapter
+from mellea.backends.adapters import Adapter, Identity, LocalFileBinding, get_io_contract
+from mellea.backends.adapters.catalog import AdapterType, fetch_intrinsic_metadata
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.stdlib.components import Intrinsic, Message
 from mellea.stdlib.context import ChatContext
 
 backend = LocalHFBackend(model_id="ibm-granite/granite-4.1-3b")
 
-# Register an adapter by task name
-req_adapter = CustomIntrinsicAdapter(
-    "requirement-check",
-    base_model_name=backend.base_model_name,
+# Compose an adapter by task name — get_io_contract returns the catalog's
+# declared contract (or a permissive fallback for a name outside it).
+# requirement-check's catalog entry lists LoRA before aLoRA, so
+# LocalFileBinding.from_catalog would pick LoRA — build the binding
+# explicitly instead when you want the aLoRA variant specifically; identity
+# and weights must agree, since nothing currently cross-checks them.
+_metadata = fetch_intrinsic_metadata("requirement-check")
+req_adapter = Adapter(
+    identity=Identity(
+        name="requirement-check",
+        adapter_type="alora",
+        capability=_metadata.effective_capability,
+    ),
+    io_contract=get_io_contract("requirement-check"),
+    weights=LocalFileBinding(
+        name="requirement-check",
+        adapter_type=AdapterType.ALORA,
+        repo_id=_metadata.repo_id,
+        revision=_metadata.revision,
+    ),
 )
 backend.add_adapter(req_adapter)
 
@@ -276,6 +337,85 @@ For OpenAI backends with Granite Switch, adapters are loaded from the model's
 Hugging Face repository configuration instead of the adapter function catalog.
 Output format is task-specific — `requirement-check` returns `{"requirement_check": {"score": <float>}}`.
 
+For a fully custom, non-catalog adapter — your own trained LoRA/aLoRA weights,
+not one of the built-in adapter functions — see
+[Adding a custom adapter function in 20 lines](../tutorials/07-custom-adapter-function.md).
+
+## Composable adapter construction (advanced)
+
+`Adapter` composes an `Identity`, an output contract (`IOContract`), and a
+weights binding into a single, inspectable object. Both `LocalHFBackend` and
+`OpenAIBackend` accept a composed `Adapter` directly via `add_adapter` —
+dispatching on the weights binding's reality (`LocalFileBinding` for
+LocalFile/PEFT, `EmbeddedBinding` for Embedded/Granite Switch) — alongside
+the deprecated shim classes, which remain functional for now (Epic #929,
+issue #1144). An `EmbeddedBinding` adapter additionally requires `add_adapter`'s
+`config=` argument (the raw io.yaml mapping) — `add_adapter` raises `ValueError`
+without it, since that reality's config cannot be cheaply re-derived later; see
+below.
+
+Each weights binding models how its deployment turns an adapter on.
+`LocalFileBinding` downloads and loads LoRA/aLoRA weights, so it exposes a
+`prepare`/`activate`/`deactivate`/`release` lifecycle — driven automatically
+by `add_adapter`, so a caller need not call `prepare()` itself:
+
+```python
+# Requires: mellea[hf]
+from mellea.backends.adapters import Adapter, Identity, LocalFileBinding, get_io_contract
+from mellea.backends.huggingface import LocalHFBackend
+
+# LocalFile/PEFT reality — LocalHFBackend downloads and loads the weights.
+hf_backend = LocalHFBackend(model_id="ibm-granite/granite-4.1-3b")
+hf_adapter = Adapter(
+    identity=Identity(name="answerability", adapter_type="lora"),
+    io_contract=get_io_contract("answerability"),
+    weights=LocalFileBinding.from_catalog("answerability"),
+)
+hf_backend.add_adapter(hf_adapter)  # downloads and loads the weights
+```
+
+`EmbeddedBinding` has no weights to manage — the adapter is already part of
+the served base model — so it exposes a single method, `apply_activation`,
+that edits the outgoing request instead of a lifecycle. Its `io.yaml` config
+comes from the served checkpoint's `adapter_index.json`, not from anything
+you can construct by hand, so registration goes through
+`register_embedded_adapter_model` (or `resolve_adapter`) rather than a bare
+`add_adapter(adapter)` call with no `config=`:
+
+```python
+from mellea.backends.openai import OpenAIBackend
+from mellea.backends.model_ids import IBM_GRANITE_SWITCH_4_1_3B_PREVIEW
+
+switch_backend = OpenAIBackend(
+    model_id=IBM_GRANITE_SWITCH_4_1_3B_PREVIEW.hf_model_name,
+    api_key="EMPTY",
+    base_url="http://localhost:8000/v1",
+    load_embedded_adapters=False,
+)
+# Discovers "answerability" from the model's Hugging Face repo and composes
+# an Adapter (Identity + IOContract + EmbeddedBinding) for it, including the
+# io.yaml config a bare Adapter(weights=EmbeddedBinding.from_base_model(...))
+# construction has no way to supply.
+switch_backend.register_embedded_adapter_model(
+    IBM_GRANITE_SWITCH_4_1_3B_PREVIEW.hf_model_name, intrinsic_name="answerability"
+)
+```
+
+Weights-binding support by backend today:
+
+| Backend | `LocalFileBinding` (LocalFile/PEFT) | `EmbeddedBinding` (Embedded/Granite Switch) | `ServerMediatedBinding` |
+| --- | --- | --- | --- |
+| `LocalHFBackend` | ✅ shipping — `add_adapter` accepts a composed `Adapter` or a bare `LocalFileBinding` directly | ✅ shipping — `load_embedded_adapters=True`, or `add_adapter(adapter, config=...)`/`register_embedded_adapter_model` with a composed `Adapter` | — |
+| `OpenAIBackend` | — | ✅ shipping — `load_embedded_adapters=True`, or `add_adapter(adapter, config=...)`/`register_embedded_adapter_model` with a composed `Adapter` | — |
+| `OllamaModelBackend` | — | — | ✅ model selection through `adapter_models` for catalogued adapter functions; lifecycle telemetry is tracked separately |
+
+`ServerMediatedBinding` currently supports Ollama's bundled-model path. A full
+server-mediated lifecycle and telemetry contract is tracked separately.
+Discovering *multiple* embedded adapters from a Granite Switch checkpoint or
+Hub repo (rather than one already-known name) still goes through
+`register_embedded_adapter_model`, which builds the composed `Adapter`
+instances for you.
+
 ---
 
 ## Guardian adapter functions
@@ -283,4 +423,9 @@ Output format is task-specific — `requirement-check` returns `{"requirement_ch
 Safety and factuality checks use a separate set of Guardian-specific adapter functions:
 `guardian_check()`, `policy_guardrails()`, `factuality_detection()`, and
 `factuality_correction()`. These are documented in the
-[Safety Guardrails](../how-to/safety-guardrails) how-to guide.
+[Safety Guardrails](../how-to/safety-guardrails.md) how-to guide.
+
+**See also:**
+[Adding a custom adapter function in 20 lines](../tutorials/07-custom-adapter-function.md) |
+[Handling a breaking adapter schema change](../tutorials/08-adapter-schema-migrations.md) |
+[Adapter function metrics](../observability/metrics.md#adapter-function-metrics)

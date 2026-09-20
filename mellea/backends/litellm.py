@@ -43,6 +43,7 @@ from ..helpers import (
     extract_model_tool_requests,
     get_current_event_loop,
     message_to_openai_message,
+    prefetch_audio_urls,
     send_to_queue,
     should_replay_reasoning,
 )
@@ -76,7 +77,10 @@ class LiteLLMBackend(FormatterBackend):
             `ollama_chat/` → localhost:11434, `anthropic/` → Anthropic API).
             Use `None` for cloud providers; set explicitly for local servers
             such as vLLM or a non-default Ollama port.
-        model_options (dict | None): Default model options for generation requests.
+        model_options (dict | None): Default model options applied to every
+            generation request. Per-call options take precedence. Use
+            `{ModelOption.THINKING: False}` here to suppress the think block
+            on models that enable it by default.
 
     Attributes:
         to_mellea_model_opts_map (dict): Mapping from backend-specific option names to
@@ -87,7 +91,7 @@ class LiteLLMBackend(FormatterBackend):
 
     def __init__(
         self,
-        model_id: str = "ollama_chat/" + str(model_ids.IBM_GRANITE_4_1_3B.ollama_name),
+        model_id: str = "ollama_chat/" + str(model_ids.IBM_GRANITE_4_2_3B.ollama_name),
         formatter: ChatFormatter | None = None,
         base_url: str | None = None,
         model_options: dict | None = None,
@@ -144,6 +148,18 @@ class LiteLLMBackend(FormatterBackend):
         }
 
         self._past_event_loops: set[int] = set()
+
+        # Construction-time `extra_body` in the generic `model_options` dict must
+        # not outrank a per-call `ModelOption.THINKING`. Fold it into a dedicated
+        # lowest-priority tier now and exclude it from `self.model_options` in
+        # `_simplify_and_merge`, so it can no longer re-enter the per-call
+        # precedence chain as if it were caller-supplied `extra_body` (#1617).
+        construction_extra_body = self.model_options.get("extra_body")
+        self._default_extra_body: dict = (
+            dict(construction_extra_body)
+            if isinstance(construction_extra_body, dict)
+            else {}
+        )
 
     def __repr__(self) -> str:
         """Return a useful string representation for debugging."""
@@ -221,8 +237,13 @@ class LiteLLMBackend(FormatterBackend):
         Returns:
             a new dict
         """
+        # `extra_body` is excluded here: it was already folded into
+        # `_default_extra_body` at construction time (see `__init__`), so
+        # merging it again would let it re-enter the per-call precedence
+        # chain and outrank a per-call `ModelOption.THINKING`.
         backend_model_opts = ModelOption.replace_keys(
-            self.model_options, self.to_mellea_model_opts_map
+            {k: v for k, v in self.model_options.items() if k != "extra_body"},
+            self.to_mellea_model_opts_map,
         )
 
         if model_options is None:
@@ -359,15 +380,26 @@ class LiteLLMBackend(FormatterBackend):
         system_prompt = model_opts.get(ModelOption.SYSTEM_PROMPT, "")
         if system_prompt != "":
             conversation.append({"role": "system", "content": system_prompt})
+        await prefetch_audio_urls(messages)
         replay_flags = should_replay_reasoning(messages, self._provider)
         conversation.extend(
             [
-                message_to_openai_message(m, self.formatter, replay_reasoning=replay)
+                message_to_openai_message(
+                    m, self.formatter, replay_reasoning=replay, provider=self._provider
+                )
                 for m, replay in zip(messages, replay_flags)
             ]
         )
 
         extra_params: dict[str, Any] = {}
+        if self._default_extra_body:
+            # Seed from the construction-time tier (below the per-call
+            # THINKING resolution below, and below caller-supplied extra_body
+            # further down); `_merge_extra_body` gives back a fresh dict (and
+            # a fresh `chat_template_kwargs` sub-dict) safe to mutate below.
+            extra_params["extra_body"] = ModelOption._merge_extra_body(
+                {}, self._default_extra_body
+            )
         if _format is not None:
             extra_params["response_format"] = {
                 "type": "json_schema",
@@ -384,9 +416,9 @@ class LiteLLMBackend(FormatterBackend):
 
         # Map THINKING to the correct backend parameter(s). Two mechanisms:
         # - chat_template_kwargs.enable_thinking: vLLM/Qwen3/Gemma4 (bool toggle)
-        # - reasoning_effort: LiteLLM/OpenAI-compatible (string level, or True → "medium")
-        # Both are set for True so each server picks up whichever it understands.
-        # NOTE: don't pass reasoning_effort=False — it is invalid; absence disables reasoning.
+        # - reasoning_effort: LiteLLM/OpenAI-compatible (string level; True → "medium",
+        #   False → "none")
+        # Both are set so each server picks up whichever it understands.
         thinking = model_opts.get(ModelOption.THINKING, None)
         original_thinking = thinking  # preserve raw caller value for the generate log
         reasoning_params: dict[str, Any] = {}
@@ -399,8 +431,15 @@ class LiteLLMBackend(FormatterBackend):
                 extra_params["extra_body"] = ctk_body
                 if thinking:
                     reasoning_params["reasoning_effort"] = "medium"
-                # False: do not send reasoning_effort — absent param disables reasoning;
-                # passing False would be invalid.
+                elif "ollama" in self._model_id.split("/")[0]:
+                    # Ollama-served thinking models (e.g. granite4.2) default to
+                    # thinking ON when reasoning_effort is absent; "none" is the
+                    # OpenAI enum value their /v1 endpoint maps to think=false
+                    # (Ollama >= 0.33.1). Real OpenAI/other reasoning providers
+                    # reject "none", so this is scoped to Ollama-routed models
+                    # (same provider-prefix check used for the streaming
+                    # tool-call workaround above).
+                    reasoning_params["reasoning_effort"] = "none"
             else:
                 reasoning_params["reasoning_effort"] = thinking
 
@@ -490,7 +529,7 @@ class LiteLLMBackend(FormatterBackend):
             output._gen.generate = asyncio.create_task(
                 send_to_queue(
                     chat_response,
-                    output._gen.queue,
+                    output,
                     chunk_timeout=model_opts.get(
                         ModelOption.STREAM_TIMEOUT, DEFAULT_CHUNK_TIMEOUT
                     ),

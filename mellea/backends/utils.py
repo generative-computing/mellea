@@ -19,6 +19,7 @@ from typing import Any
 from ..core import Context, MelleaLogger, ModelToolCall, Span
 from ..core.base import AbstractMelleaTool, ModelOutputThunk
 from ..formatters import ChatFormatter
+from ..helpers import merge_provider_fields
 from ..stdlib.components import Message
 from .tools import parse_tools, validate_tool_arguments
 
@@ -98,18 +99,39 @@ def to_chat(
 
     # NOTE: `self.formatter.to_chat_messages` explicitly skips `Message` objects. However, we need
     # to print `Message`s to correctly serialize any documents with the message. Do the printing here.
-    # NOTE: reasoning is never replayed on the HF chat path — we serialize only `content` and never
-    # consult `should_replay_reasoning` (unlike the OpenAI/LiteLLM/Watsonx/Ollama chat paths). This is
-    # acceptable today because HF has a capture gap (per #1201) and never populates `Message.thinking`
-    # to begin with; when that gap is closed, replay must be wired in here.
-    ctx_as_conversation: list = [
-        {"role": m.role, "content": formatter.print(m)} for m in ctx_as_message_list
-    ]
+    # NOTE: `Message.thinking` is forwarded as `reasoning_content` (the key Granite/Qwen3
+    # templates consume) for every assistant turn that has it. Granite's own chat template
+    # (not a turn-type check) then decides whether to keep or strip it: reasoning survives
+    # only for a turn at or after the most recent user message (`last_user_idx` /
+    # `truncate_history_thinking`, defaulted True and never overridden by mellea), and is
+    # stripped for anything from an earlier exchange, tool-call or not. In mellea's typical
+    # flow a tool-call turn has no intervening user message before its continuation, so it
+    # tends to survive, and a plain turn from a prior exchange tends not to — but that's a
+    # consequence of the recency rule, not a tool-call/plain-turn distinction Mellea enforces
+    # (unlike #1201's cross-backend `should_replay_reasoning`, which HF does not call). See
+    # test_rendered_prompt_*_turn in test_huggingface_thinking.py.
+    ctx_as_conversation: list = []
+    for m in ctx_as_message_list:
+        msg_dict: dict = {"role": m.role, "content": formatter.print(m)}
+        # Honor component-declared tool metadata. HF chat templates expect the
+        # OpenAI-ish id/type/function shape, so pass `tool_calls` verbatim; a
+        # `role="tool"` turn references its originating call via `tool_call_id`.
+        if m.tool_calls:
+            msg_dict["tool_calls"] = m.tool_calls
+        if m.tool_call_id:
+            msg_dict["tool_call_id"] = m.tool_call_id
+        if m.role == "assistant" and m.thinking:
+            msg_dict["reasoning_content"] = m.thinking
+        # Merge any author-declared provider fields (Mellea's known fields win;
+        # a mismatched target raises). Must run after the known fields are set.
+        msg_dict = merge_provider_fields(msg_dict, m.provider_fields, "huggingface")
+        ctx_as_conversation.append(msg_dict)
 
-    # Check that we ddin't accidentally end up with CBlocks.
+    # Check that we ddin't accidentally end up with CBlocks. Only string values can
+    # carry a stray `CBlock` repr; tool metadata (lists/None) is skipped.
     for msg in ctx_as_conversation:
         for v in msg.values():
-            if "CBlock" in v:
+            if isinstance(v, str) and "CBlock" in v:
                 MelleaLogger.get_logger().error(
                     f"Found the string `CBlock` in what should've been a stringified context: {ctx_as_conversation}"
                 )

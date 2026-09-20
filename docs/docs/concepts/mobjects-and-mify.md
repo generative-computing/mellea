@@ -4,7 +4,7 @@ description: "How the @mify decorator turns any Python class into an LLM-queryab
 # diataxis: explanation
 ---
 
-> **Looking to use this in code?** See [Tutorial 05: MIFYing Legacy Code](../tutorials/mifying-legacy-code) for a practical walkthrough.
+> **Looking to use this in code?** See [Tutorial 05: MIFYing Legacy Code](../tutorials/05-mifying-legacy-code.md) for a practical walkthrough.
 
 Object-oriented programming organizes related data and the methods that operate on it into
 classes. Mellea applies the same principle to LLM interactions: an **MObject** is a Python
@@ -147,5 +147,5 @@ MObjects are well-suited for:
 For simple one-off generation, `m.instruct()` is usually sufficient. MObjects add value when
 you have structured data or methods that the model needs to reason about or call.
 
-**See also:** [Context and Sessions](./context-and-sessions) |
-[Generative Functions](./generative-functions)
+**See also:** [Context and Sessions](./context-and-sessions.md) |
+[Generative Functions](./generative-functions.md)

@@ -14,7 +14,7 @@ import asyncio
 import time
 import uuid
 from collections.abc import Coroutine, Iterable
-from typing import Any, Literal, overload
+from typing import Any, Literal, TypeVar, cast, overload
 
 from PIL import Image as PILImage
 
@@ -28,6 +28,7 @@ from ..core import (
     Component,
     ComputedModelOutputThunk,
     Context,
+    ContextTypeMismatchError,
     GenerateLog,
     ImageBlock,
     ImageUrlBlock,
@@ -56,6 +57,60 @@ from .components import (
 from .context import SimpleContext
 from .sampling import RejectionSamplingStrategy
 
+# Context types whose empty generation view has already been warned about, so the warning
+# in `avalidate` fires once per situation rather than on every call. Mirrors the
+# `_warned_about` guards the backends keep for the same reason.
+_validation_empty_view_warned: set[str] = set()
+
+# Bound to Context so functions can return the same subtype they were given
+# (issue #1522): a `ChatContext` in yields a `ChatContext` out, statically.
+ContextT = TypeVar("ContextT", bound=Context)
+
+
+def _enforce_context_type(
+    input_ctx: ContextT, output_ctx: Context, *, allow_context_type_change: bool
+) -> ContextT:
+    """Enforce the input==output context-type convention (issue #1522).
+
+    Mellea functions return the same `Context` subtype they were given. This
+    checks that invariant at runtime and returns `output_ctx` narrowed to the
+    input type. The runtime type of `output_ctx` is unchanged; only the static
+    type is narrowed, which is sound because the types are asserted equal here.
+
+    Args:
+        input_ctx (ContextT): The context passed into the function.
+        output_ctx (Context): The context the function produced.
+        allow_context_type_change (bool): When `True`, a differing output type is
+            permitted (the deliberate exception, e.g. switching a session's
+            context type) and returned as-is.
+
+    Returns:
+        ContextT: `output_ctx`, narrowed to the input context's type.
+
+    Raises:
+        ContextTypeMismatchError: If the output context type differs from the
+            input context type and `allow_context_type_change` is `False`.
+    """
+    if type(output_ctx) is type(input_ctx) or allow_context_type_change:
+        return cast(ContextT, output_ctx)
+    raise ContextTypeMismatchError(type(input_ctx), type(output_ctx))
+
+
+@overload
+def act(
+    action: Component[S] | CBlock | ModelOutputThunk,
+    context: ContextT,
+    backend: Backend,
+    *,
+    requirements: list[Requirement] | None = None,
+    strategy: SamplingStrategy | None = None,
+    return_sampling_results: Literal[False] = False,
+    format: type[BaseModelSubclass] | None = None,
+    model_options: dict | None = None,
+    tool_calls: bool = False,
+    allow_context_type_change: Literal[False] = False,
+) -> tuple[ComputedModelOutputThunk[S], ContextT]: ...
+
 
 @overload
 def act(
@@ -69,6 +124,7 @@ def act(
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
+    allow_context_type_change: Literal[True],
 ) -> tuple[ComputedModelOutputThunk[S], Context]: ...
 
 
@@ -79,17 +135,34 @@ def act(
     backend: Backend,
     *,
     requirements: list[Requirement] | None = None,
+    strategy: SamplingStrategy | None = None,
+    return_sampling_results: Literal[False] = False,
+    format: type[BaseModelSubclass] | None = None,
+    model_options: dict | None = None,
+    tool_calls: bool = False,
+    allow_context_type_change: bool,
+) -> tuple[ComputedModelOutputThunk[S], Context]: ...
+
+
+@overload
+def act(
+    action: Component[S] | CBlock | ModelOutputThunk,
+    context: ContextT,
+    backend: Backend,
+    *,
+    requirements: list[Requirement] | None = None,
     strategy: SamplingStrategy,
     return_sampling_results: Literal[True],
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
+    allow_context_type_change: bool = False,
 ) -> SamplingResult[S]: ...
 
 
 def act(
     action: Component[S] | CBlock | ModelOutputThunk,
-    context: Context,
+    context: ContextT,
     backend: Backend,
     *,
     requirements: list[Requirement] | None = None,
@@ -98,7 +171,8 @@ def act(
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
-) -> tuple[ComputedModelOutputThunk[S], Context] | SamplingResult[S]:
+    allow_context_type_change: bool = False,
+) -> tuple[ComputedModelOutputThunk[S], ContextT] | SamplingResult[S]:
     """Runs a generic action, and adds both the action and the result to the context.
 
     Args:
@@ -114,12 +188,14 @@ def act(
             `MyModel.model_validate_json(str(result))` to get a typed instance.
         model_options: additional model options, which will upsert into the model/backend's defaults.
         tool_calls: if true, tool calling is enabled.
+        allow_context_type_change: if True, permits the returned context to be a different `Context` subtype than `context`. By default (False), a differing type raises `ContextTypeMismatchError`. Context-type validation scope depends on `return_sampling_results`: with `False`, only the single chosen result context is returned and checked; with `True`, every context in the returned `SamplingResult.sample_contexts` is checked, so a mismatch on any sampling attempt is caught.
 
     Raises:
         ValueError: if `return_sampling_results=True` without a `strategy`, or if `requirements` are provided without a `strategy` to validate them.
+        ContextTypeMismatchError: if the returned context type differs from the input context type and `allow_context_type_change` is `False`.
 
     Returns:
-        A (ComputedModelOutputThunk, Context) if `return_sampling_results` is `False`, else returns a `SamplingResult`.
+        A (ComputedModelOutputThunk, Context) with the same context subtype as the input if `return_sampling_results` is `False`, else returns a `SamplingResult`.
         Always returns ComputedModelOutputThunk since sync functions must await completion.
     """
     out = _run_async_in_thread(
@@ -134,6 +210,7 @@ def act(
             model_options=model_options,
             tool_calls=tool_calls,
             silence_context_type_warning=True,  # We can safely silence this here since it's in a sync function.
+            allow_context_type_change=allow_context_type_change,
             await_result=True,  # Sync functions must always await
         )  # type: ignore[call-overload, misc]
     )
@@ -152,6 +229,29 @@ def act(
 @overload
 def instruct(
     description: str,
+    context: ContextT,
+    backend: Backend,
+    *,
+    images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
+    audio: list[AudioBlock | AudioUrlBlock] | None = None,
+    requirements: list[Requirement | str] | None = None,
+    icl_examples: list[str | CBlock] | None = None,
+    grounding_context: dict[str, str | Span] | None = None,
+    user_variables: dict[str, str] | None = None,
+    prefix: str | CBlock | None = None,
+    output_prefix: str | CBlock | None = None,
+    strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
+    return_sampling_results: Literal[False] = False,
+    format: type[BaseModelSubclass] | None = None,
+    model_options: dict | None = None,
+    tool_calls: bool = False,
+    allow_context_type_change: Literal[False] = False,
+) -> tuple[ComputedModelOutputThunk[str], ContextT]: ...
+
+
+@overload
+def instruct(
+    description: str,
     context: Context,
     backend: Backend,
     *,
@@ -168,6 +268,7 @@ def instruct(
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
+    allow_context_type_change: Literal[True],
 ) -> tuple[ComputedModelOutputThunk[str], Context]: ...
 
 
@@ -186,16 +287,40 @@ def instruct(
     prefix: str | CBlock | None = None,
     output_prefix: str | CBlock | None = None,
     strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
+    return_sampling_results: Literal[False] = False,
+    format: type[BaseModelSubclass] | None = None,
+    model_options: dict | None = None,
+    tool_calls: bool = False,
+    allow_context_type_change: bool,
+) -> tuple[ComputedModelOutputThunk[str], Context]: ...
+
+
+@overload
+def instruct(
+    description: str,
+    context: ContextT,
+    backend: Backend,
+    *,
+    images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
+    audio: list[AudioBlock | AudioUrlBlock] | None = None,
+    requirements: list[Requirement | str] | None = None,
+    icl_examples: list[str | CBlock] | None = None,
+    grounding_context: dict[str, str | Span] | None = None,
+    user_variables: dict[str, str] | None = None,
+    prefix: str | CBlock | None = None,
+    output_prefix: str | CBlock | None = None,
+    strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
     return_sampling_results: Literal[True],
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
+    allow_context_type_change: bool = False,
 ) -> SamplingResult[str]: ...
 
 
 def instruct(
     description: str,
-    context: Context,
+    context: ContextT,
     backend: Backend,
     *,
     images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
@@ -211,7 +336,8 @@ def instruct(
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
-) -> tuple[ComputedModelOutputThunk[str], Context] | SamplingResult[str]:
+    allow_context_type_change: bool = False,
+) -> tuple[ComputedModelOutputThunk[str], ContextT] | SamplingResult[str]:
     """Generates from an instruction.
 
     Args:
@@ -234,9 +360,13 @@ def instruct(
         tool_calls: If true, tool calling is enabled.
         images: A list of images to be used in the instruction or None if none.
         audio: A list of audio blocks to be used in the instruction or None if none.
+        allow_context_type_change: if True, permits the returned context to be a different `Context` subtype than `context`. By default (False), a differing type raises `ContextTypeMismatchError`.
+
+    Raises:
+        ContextTypeMismatchError: if the returned context type differs from the input context type and `allow_context_type_change` is `False`.
 
     Returns:
-        A (ComputedModelOutputThunk, Context) if `return_sampling_results` is `False`, else returns a `SamplingResult`.
+        A (ComputedModelOutputThunk, Context) with the same context subtype as the input if `return_sampling_results` is `False`, else returns a `SamplingResult`.
         Always returns ComputedModelOutputThunk since sync functions must await completion.
     """
     requirements = [] if requirements is None else requirements
@@ -271,9 +401,29 @@ def instruct(
         format=format,
         model_options=model_options,
         tool_calls=tool_calls,
+        allow_context_type_change=allow_context_type_change,
     )  # type: ignore[call-overload]
 
 
+@overload
+def chat(
+    content: str,
+    context: ContextT,
+    backend: Backend,
+    *,
+    role: Message.Role = "user",
+    images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
+    audio: list[AudioBlock | AudioUrlBlock] | None = None,
+    documents: Iterable[str | Document] | None = None,
+    user_variables: dict[str, str] | None = None,
+    format: type[BaseModelSubclass] | None = None,
+    model_options: dict | None = None,
+    tool_calls: bool = False,
+    allow_context_type_change: Literal[False] = False,
+) -> tuple[Message, ContextT]: ...
+
+
+@overload
 def chat(
     content: str,
     context: Context,
@@ -287,6 +437,42 @@ def chat(
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
+    allow_context_type_change: Literal[True],
+) -> tuple[Message, Context]: ...
+
+
+@overload
+def chat(
+    content: str,
+    context: Context,
+    backend: Backend,
+    *,
+    role: Message.Role = "user",
+    images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
+    audio: list[AudioBlock | AudioUrlBlock] | None = None,
+    documents: Iterable[str | Document] | None = None,
+    user_variables: dict[str, str] | None = None,
+    format: type[BaseModelSubclass] | None = None,
+    model_options: dict | None = None,
+    tool_calls: bool = False,
+    allow_context_type_change: bool,
+) -> tuple[Message, Context]: ...
+
+
+def chat(
+    content: str,
+    context: ContextT,
+    backend: Backend,
+    *,
+    role: Message.Role = "user",
+    images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
+    audio: list[AudioBlock | AudioUrlBlock] | None = None,
+    documents: Iterable[str | Document] | None = None,
+    user_variables: dict[str, str] | None = None,
+    format: type[BaseModelSubclass] | None = None,
+    model_options: dict | None = None,
+    tool_calls: bool = False,
+    allow_context_type_change: bool = False,
 ) -> tuple[Message, Context]:
     """Sends a simple chat message and returns the response. Adds both messages to the Context.
 
@@ -303,9 +489,13 @@ def chat(
         format: Optional Pydantic model for constrained decoding of the response.
         model_options: Additional model options to merge with backend defaults.
         tool_calls: If true, tool calling is enabled.
+        allow_context_type_change: if True, permits the returned context to be a different `Context` subtype than `context`. By default (False), a differing type raises `ContextTypeMismatchError`.
+
+    Raises:
+        ContextTypeMismatchError: if the returned context type differs from the input context type and `allow_context_type_change` is `False`.
 
     Returns:
-        Tuple of the assistant `Message` and the updated `Context`.
+        Tuple of the assistant `Message` and the updated `Context` (same subtype as the input).
     """
     if user_variables is not None:
         content_resolved = Instruction.apply_user_dict_from_jinja(
@@ -331,6 +521,7 @@ def chat(
         format=format,
         model_options=model_options,
         tool_calls=tool_calls,
+        allow_context_type_change=allow_context_type_change,  # type: ignore[call-overload]
     )
     parsed_assistant_message = result.parsed_repr
     assert isinstance(parsed_assistant_message, Message)
@@ -343,24 +534,31 @@ def validate(
     context: Context,
     backend: Backend,
     *,
-    output: CBlock | ModelOutputThunk | None = None,
+    output: ModelOutputThunk | None = None,
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     generate_logs: list[GenerateLog]
     | None = None,  # TODO: Can we get rid of gen logs here and in act?
     input: CBlock | ModelOutputThunk | None = None,
 ) -> list[ValidationResult]:
-    """Validates a set of requirements over the output (if provided) or the current context (if the output is not provided).
+    """Validates a set of requirements over the given context.
+
+    Validation always runs over `context`, in the caller's own context type. `output`
+    designates *which* output is under judgement; see `avalidate` for details.
 
     Args:
         reqs: A single `Requirement` or a list of them to validate.
-        context: The current conversation context.
+        context: The context to validate over.
         backend: The backend used for LLM-as-a-judge requirements.
-        output: Optional model output to validate against instead of the context.
+        output: Optional model output designating the validation target. When `None`, the
+            context's last output is validated.
         format: Optional Pydantic model for constrained decoding.
         model_options: Additional model options to merge with backend defaults.
         generate_logs: Optional list to append generation logs to.
-        input: Optional input to include alongside `output` when validating.
+        input: Optional input to append to the validation context, for judging an output
+            against a specific input rather than the whole conversation. It is added
+            ahead of `output` if `output` is provided. See `avalidate` for the visibility
+            caveat on contexts that render no history.
 
     Returns:
         List of `ValidationResult` objects, one per requirement.
@@ -384,6 +582,21 @@ def validate(
     return out
 
 
+@overload
+def query(
+    obj: Any,
+    query: str,
+    context: ContextT,
+    backend: Backend,
+    *,
+    format: type[BaseModelSubclass] | None = None,
+    model_options: dict | None = None,
+    tool_calls: bool = False,
+    allow_context_type_change: Literal[False] = False,
+) -> tuple[ComputedModelOutputThunk, ContextT]: ...
+
+
+@overload
 def query(
     obj: Any,
     query: str,
@@ -393,6 +606,34 @@ def query(
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
+    allow_context_type_change: Literal[True],
+) -> tuple[ComputedModelOutputThunk, Context]: ...
+
+
+@overload
+def query(
+    obj: Any,
+    query: str,
+    context: Context,
+    backend: Backend,
+    *,
+    format: type[BaseModelSubclass] | None = None,
+    model_options: dict | None = None,
+    tool_calls: bool = False,
+    allow_context_type_change: bool,
+) -> tuple[ComputedModelOutputThunk, Context]: ...
+
+
+def query(
+    obj: Any,
+    query: str,
+    context: ContextT,
+    backend: Backend,
+    *,
+    format: type[BaseModelSubclass] | None = None,
+    model_options: dict | None = None,
+    tool_calls: bool = False,
+    allow_context_type_change: bool = False,
 ) -> tuple[ComputedModelOutputThunk, Context]:
     """Query method for retrieving information from an object.
 
@@ -404,9 +645,13 @@ def query(
         format:  format for output parsing.
         model_options: Model options to pass to the backend.
         tool_calls: If true, the model may make tool calls. Defaults to False.
+        allow_context_type_change: if True, permits the returned context to be a different `Context` subtype than `context`. By default (False), a differing type raises `ContextTypeMismatchError`.
+
+    Raises:
+        ContextTypeMismatchError: if the returned context type differs from the input context type and `allow_context_type_change` is `False`.
 
     Returns:
-        tuple[ComputedModelOutputThunk, Context]: The result of the query and updated context.
+        tuple[ComputedModelOutputThunk, Context]: The result of the query and updated context (same subtype as the input).
     """
     if not isinstance(obj, MObjectProtocol):
         obj = mify(obj)
@@ -423,10 +668,25 @@ def query(
         format=format,
         model_options=model_options,
         tool_calls=tool_calls,
+        allow_context_type_change=allow_context_type_change,  # type: ignore[call-overload]
     )
     return answer
 
 
+@overload
+def transform(
+    obj: Any,
+    transformation: str,
+    context: ContextT,
+    backend: Backend,
+    *,
+    format: type[BaseModelSubclass] | None = None,
+    model_options: dict | None = None,
+    allow_context_type_change: Literal[False] = False,
+) -> tuple[ModelOutputThunk | Any, ContextT]: ...
+
+
+@overload
 def transform(
     obj: Any,
     transformation: str,
@@ -435,6 +695,32 @@ def transform(
     *,
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
+    allow_context_type_change: Literal[True],
+) -> tuple[ModelOutputThunk | Any, Context]: ...
+
+
+@overload
+def transform(
+    obj: Any,
+    transformation: str,
+    context: Context,
+    backend: Backend,
+    *,
+    format: type[BaseModelSubclass] | None = None,
+    model_options: dict | None = None,
+    allow_context_type_change: bool,
+) -> tuple[ModelOutputThunk | Any, Context]: ...
+
+
+def transform(
+    obj: Any,
+    transformation: str,
+    context: ContextT,
+    backend: Backend,
+    *,
+    format: type[BaseModelSubclass] | None = None,
+    model_options: dict | None = None,
+    allow_context_type_change: bool = False,
 ) -> tuple[ModelOutputThunk | Any, Context]:
     """Transform method for creating a new object with the transformation applied.
 
@@ -445,9 +731,13 @@ def transform(
         backend: the backend used to generate the response.
         format: format for output parsing; usually not needed with transform.
         model_options: Model options to pass to the backend.
+        allow_context_type_change: if True, permits the returned context to be a different `Context` subtype than `context`. By default (False), a differing type raises `ContextTypeMismatchError`.
+
+    Raises:
+        ContextTypeMismatchError: if the returned context type differs from the input context type and `allow_context_type_change` is `False`.
 
     Returns:
-        (ModelOutputThunk | Any, Context): The result of the transformation as processed by the backend. If no tools were called,
+        (ModelOutputThunk | Any, Context): The result of the transformation as processed by the backend, with the same context subtype as the input. If no tools were called,
         the return type will be always be (ModelOutputThunk, Context). If a tool was called, the return type will be the return type
         of the function called, usually the type of the object passed in.
     """
@@ -468,6 +758,7 @@ def transform(
         format=format,
         model_options=model_options,
         tool_calls=True,
+        allow_context_type_change=allow_context_type_change,  # type: ignore[call-overload]
     )
 
     tools = call_tools(transformed, backend)
@@ -512,6 +803,24 @@ def transform(
 @overload
 async def aact(
     action: Component[S] | CBlock | ModelOutputThunk,
+    context: ContextT,
+    backend: Backend,
+    *,
+    requirements: list[Requirement] | None = None,
+    strategy: None = None,
+    return_sampling_results: Literal[False] = False,
+    format: type[BaseModelSubclass] | None = None,
+    model_options: dict | None = None,
+    tool_calls: bool = False,
+    silence_context_type_warning: bool = False,
+    allow_context_type_change: Literal[False] = False,
+    await_result: Literal[True],
+) -> tuple[ComputedModelOutputThunk[S], ContextT]: ...
+
+
+@overload
+async def aact(
+    action: Component[S] | CBlock | ModelOutputThunk,
     context: Context,
     backend: Backend,
     *,
@@ -522,8 +831,27 @@ async def aact(
     model_options: dict | None = None,
     tool_calls: bool = False,
     silence_context_type_warning: bool = False,
+    allow_context_type_change: Literal[True],
     await_result: Literal[True],
 ) -> tuple[ComputedModelOutputThunk[S], Context]: ...
+
+
+@overload
+async def aact(
+    action: Component[S] | CBlock | ModelOutputThunk,
+    context: ContextT,
+    backend: Backend,
+    *,
+    requirements: list[Requirement] | None = None,
+    strategy: SamplingStrategy,
+    return_sampling_results: Literal[False] = False,
+    format: type[BaseModelSubclass] | None = None,
+    model_options: dict | None = None,
+    tool_calls: bool = False,
+    silence_context_type_warning: bool = False,
+    allow_context_type_change: Literal[False] = False,
+    await_result: bool = False,
+) -> tuple[ComputedModelOutputThunk[S], ContextT]: ...
 
 
 @overload
@@ -539,8 +867,27 @@ async def aact(
     model_options: dict | None = None,
     tool_calls: bool = False,
     silence_context_type_warning: bool = False,
+    allow_context_type_change: Literal[True],
     await_result: bool = False,
 ) -> tuple[ComputedModelOutputThunk[S], Context]: ...
+
+
+@overload
+async def aact(
+    action: Component[S] | CBlock | ModelOutputThunk,
+    context: ContextT,
+    backend: Backend,
+    *,
+    requirements: list[Requirement] | None = None,
+    strategy: None = None,
+    return_sampling_results: Literal[False] = False,
+    format: type[BaseModelSubclass] | None = None,
+    model_options: dict | None = None,
+    tool_calls: bool = False,
+    silence_context_type_warning: bool = False,
+    allow_context_type_change: Literal[False] = False,
+    await_result: Literal[False] = False,
+) -> tuple[ModelOutputThunk[S], ContextT]: ...
 
 
 @overload
@@ -556,6 +903,7 @@ async def aact(
     model_options: dict | None = None,
     tool_calls: bool = False,
     silence_context_type_warning: bool = False,
+    allow_context_type_change: Literal[True],
     await_result: Literal[False] = False,
 ) -> tuple[ModelOutputThunk[S], Context]: ...
 
@@ -567,19 +915,56 @@ async def aact(
     backend: Backend,
     *,
     requirements: list[Requirement] | None = None,
+    strategy: SamplingStrategy | None = None,
+    return_sampling_results: Literal[False] = False,
+    format: type[BaseModelSubclass] | None = None,
+    model_options: dict | None = None,
+    tool_calls: bool = False,
+    silence_context_type_warning: bool = False,
+    allow_context_type_change: bool,
+    await_result: Literal[True],
+) -> tuple[ComputedModelOutputThunk[S], Context]: ...
+
+
+@overload
+async def aact(
+    action: Component[S] | CBlock | ModelOutputThunk,
+    context: Context,
+    backend: Backend,
+    *,
+    requirements: list[Requirement] | None = None,
+    strategy: None = None,
+    return_sampling_results: Literal[False] = False,
+    format: type[BaseModelSubclass] | None = None,
+    model_options: dict | None = None,
+    tool_calls: bool = False,
+    silence_context_type_warning: bool = False,
+    allow_context_type_change: bool,
+    await_result: Literal[False] = False,
+) -> tuple[ModelOutputThunk[S], Context]: ...
+
+
+@overload
+async def aact(
+    action: Component[S] | CBlock | ModelOutputThunk,
+    context: ContextT,
+    backend: Backend,
+    *,
+    requirements: list[Requirement] | None = None,
     strategy: SamplingStrategy,
     return_sampling_results: Literal[True],
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
     silence_context_type_warning: bool = False,
+    allow_context_type_change: bool = False,
     await_result: bool = False,
 ) -> SamplingResult[S]: ...
 
 
 async def aact(
     action: Component[S] | CBlock | ModelOutputThunk,
-    context: Context,
+    context: ContextT,
     backend: Backend,
     *,
     requirements: list[Requirement] | None = None,
@@ -589,8 +974,9 @@ async def aact(
     model_options: dict | None = None,
     tool_calls: bool = False,
     silence_context_type_warning: bool = False,
+    allow_context_type_change: bool = False,
     await_result: bool = False,
-) -> tuple[ModelOutputThunk[S], Context] | SamplingResult:
+) -> tuple[ModelOutputThunk[S], ContextT] | SamplingResult:
     """Asynchronous version of .act; runs a generic action, and adds both the action and the result to the context.
 
     Args:
@@ -607,13 +993,15 @@ async def aact(
         model_options: additional model options, which will upsert into the model/backend's defaults.
         tool_calls: if true, tool calling is enabled.
         silence_context_type_warning: if called directly from an asynchronous function, will log a warning if not using a SimpleContext
+        allow_context_type_change: if True, permits the returned context to be a different `Context` subtype than `context`. By default (False), a differing type raises `ContextTypeMismatchError` to enforce the input==output context-type convention. Context-type validation scope depends on `return_sampling_results`: with `False`, only the single chosen result context is returned and checked; with `True`, every context in the returned `SamplingResult.sample_contexts` is checked, so a mismatch on any sampling attempt is caught.
         await_result: if False and strategy is None, returns uncomputed ModelOutputThunk for streaming. If True or strategy is not None, awaits and returns ComputedModelOutputThunk. Default is False.
 
     Raises:
         ValueError: if `return_sampling_results=True` without a `strategy`, or if `requirements` are provided without a `strategy` to validate them.
+        ContextTypeMismatchError: if the returned context type differs from the input context type and `allow_context_type_change` is `False`.
 
     Returns:
-        A (ModelOutputThunk, Context) if `return_sampling_results` is `False`, else returns a `SamplingResult`.
+        A (ModelOutputThunk, Context) with the same context subtype as the input if `return_sampling_results` is `False`, else returns a `SamplingResult`.
     """
     import time
     import traceback
@@ -727,6 +1115,33 @@ async def aact(
                 "generate logs from the final result returned by the sampling strategy must be marked as final"
             )
 
+        # Enforce the input==output context-type convention (issue #1522)
+        # BEFORE the success hook fires. A rejected context must emit only the
+        # error path: if this ran after `component_post_success`, a mismatch
+        # would fire both success and error terminal hooks for one call (the
+        # tracing plugin would close the action span as successful, then the
+        # `except` below would fire `component_post_error`). Validating here
+        # keeps a rejected call on the error path alone.
+        if return_sampling_results:
+            assert (
+                sampling_result is not None
+            )  # Needed for the type checker but should never happen.
+            # `SamplingResult` does not statically track its context type, so the
+            # convention can only be enforced at runtime here. Check every sample
+            # context, not just the chosen one, so a strategy that produces a
+            # mismatched context for any attempt is caught rather than silently
+            # returned.
+            for sample_ctx in sampling_result.sample_contexts:
+                _enforce_context_type(
+                    context,
+                    sample_ctx,
+                    allow_context_type_change=allow_context_type_change,
+                )
+        else:
+            new_ctx = _enforce_context_type(
+                context, new_ctx, allow_context_type_change=allow_context_type_change
+            )
+
         # --- component_post_success hook ---
         if has_plugins(HookType.COMPONENT_POST_SUCCESS):
             from ..plugins.hooks.component import ComponentPostSuccessPayload
@@ -750,12 +1165,15 @@ async def aact(
             )
 
         if return_sampling_results:
-            assert (
-                sampling_result is not None
-            )  # Needed for the type checker but should never happen.
+            # Guaranteed non-None: `return_sampling_results=True` requires a
+            # strategy (validated above), and the strategy branch assigns it.
+            assert sampling_result is not None
             return sampling_result
         else:
-            return result, new_ctx
+            # `new_ctx` was validated and narrowed to `ContextT` by
+            # `_enforce_context_type` in the `else` branch above; mypy widens it
+            # back to `Context` at the branch join, so re-narrow for the return.
+            return result, cast(ContextT, new_ctx)
 
     except BaseException as exc:
         # --- component_post_error hook ---
@@ -781,6 +1199,30 @@ async def aact(
 @overload
 async def ainstruct(
     description: str,
+    context: ContextT,
+    backend: Backend,
+    *,
+    images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
+    audio: list[AudioBlock | AudioUrlBlock] | None = None,
+    requirements: list[Requirement | str] | None = None,
+    icl_examples: list[str | CBlock] | None = None,
+    grounding_context: dict[str, str | Span] | None = None,
+    user_variables: dict[str, str] | None = None,
+    prefix: str | CBlock | None = None,
+    output_prefix: str | CBlock | None = None,
+    strategy: None = None,
+    return_sampling_results: Literal[False] = False,
+    format: type[BaseModelSubclass] | None = None,
+    model_options: dict | None = None,
+    tool_calls: bool = False,
+    allow_context_type_change: Literal[False] = False,
+    await_result: Literal[True],
+) -> tuple[ComputedModelOutputThunk[str], ContextT]: ...
+
+
+@overload
+async def ainstruct(
+    description: str,
     context: Context,
     backend: Backend,
     *,
@@ -797,8 +1239,33 @@ async def ainstruct(
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
+    allow_context_type_change: Literal[True],
     await_result: Literal[True],
 ) -> tuple[ComputedModelOutputThunk[str], Context]: ...
+
+
+@overload
+async def ainstruct(
+    description: str,
+    context: ContextT,
+    backend: Backend,
+    *,
+    images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
+    audio: list[AudioBlock | AudioUrlBlock] | None = None,
+    requirements: list[Requirement | str] | None = None,
+    icl_examples: list[str | CBlock] | None = None,
+    grounding_context: dict[str, str | Span] | None = None,
+    user_variables: dict[str, str] | None = None,
+    prefix: str | CBlock | None = None,
+    output_prefix: str | CBlock | None = None,
+    strategy: SamplingStrategy,
+    return_sampling_results: Literal[False] = False,
+    format: type[BaseModelSubclass] | None = None,
+    model_options: dict | None = None,
+    tool_calls: bool = False,
+    allow_context_type_change: Literal[False] = False,
+    await_result: bool = False,
+) -> tuple[ComputedModelOutputThunk[str], ContextT]: ...
 
 
 @overload
@@ -820,7 +1287,80 @@ async def ainstruct(
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
+    allow_context_type_change: Literal[True],
     await_result: bool = False,
+) -> tuple[ComputedModelOutputThunk[str], Context]: ...
+
+
+@overload
+async def ainstruct(
+    description: str,
+    context: ContextT,
+    backend: Backend,
+    *,
+    images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
+    audio: list[AudioBlock | AudioUrlBlock] | None = None,
+    requirements: list[Requirement | str] | None = None,
+    icl_examples: list[str | CBlock] | None = None,
+    grounding_context: dict[str, str | Span] | None = None,
+    user_variables: dict[str, str] | None = None,
+    prefix: str | CBlock | None = None,
+    output_prefix: str | CBlock | None = None,
+    strategy: None = None,
+    return_sampling_results: Literal[False] = False,
+    format: type[BaseModelSubclass] | None = None,
+    model_options: dict | None = None,
+    tool_calls: bool = False,
+    allow_context_type_change: Literal[False] = False,
+    await_result: Literal[False] = False,
+) -> tuple[ModelOutputThunk[str], ContextT]: ...
+
+
+@overload
+async def ainstruct(
+    description: str,
+    context: Context,
+    backend: Backend,
+    *,
+    images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
+    audio: list[AudioBlock | AudioUrlBlock] | None = None,
+    requirements: list[Requirement | str] | None = None,
+    icl_examples: list[str | CBlock] | None = None,
+    grounding_context: dict[str, str | Span] | None = None,
+    user_variables: dict[str, str] | None = None,
+    prefix: str | CBlock | None = None,
+    output_prefix: str | CBlock | None = None,
+    strategy: None = None,
+    return_sampling_results: Literal[False] = False,
+    format: type[BaseModelSubclass] | None = None,
+    model_options: dict | None = None,
+    tool_calls: bool = False,
+    allow_context_type_change: Literal[True],
+    await_result: Literal[False] = False,
+) -> tuple[ModelOutputThunk[str], Context]: ...
+
+
+@overload
+async def ainstruct(
+    description: str,
+    context: Context,
+    backend: Backend,
+    *,
+    images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
+    audio: list[AudioBlock | AudioUrlBlock] | None = None,
+    requirements: list[Requirement | str] | None = None,
+    icl_examples: list[str | CBlock] | None = None,
+    grounding_context: dict[str, str | Span] | None = None,
+    user_variables: dict[str, str] | None = None,
+    prefix: str | CBlock | None = None,
+    output_prefix: str | CBlock | None = None,
+    strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
+    return_sampling_results: Literal[False] = False,
+    format: type[BaseModelSubclass] | None = None,
+    model_options: dict | None = None,
+    tool_calls: bool = False,
+    allow_context_type_change: bool,
+    await_result: Literal[True],
 ) -> tuple[ComputedModelOutputThunk[str], Context]: ...
 
 
@@ -843,6 +1383,7 @@ async def ainstruct(
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
+    allow_context_type_change: bool,
     await_result: Literal[False] = False,
 ) -> tuple[ModelOutputThunk[str], Context]: ...
 
@@ -850,7 +1391,7 @@ async def ainstruct(
 @overload
 async def ainstruct(
     description: str,
-    context: Context,
+    context: ContextT,
     backend: Backend,
     *,
     images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
@@ -866,13 +1407,14 @@ async def ainstruct(
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
+    allow_context_type_change: bool = False,
     await_result: bool = False,
 ) -> SamplingResult[str]: ...
 
 
 async def ainstruct(
     description: str,
-    context: Context,
+    context: ContextT,
     backend: Backend,
     *,
     images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
@@ -888,8 +1430,9 @@ async def ainstruct(
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
+    allow_context_type_change: bool = False,
     await_result: bool = False,
-) -> tuple[ModelOutputThunk[str], Context] | SamplingResult:
+) -> tuple[ModelOutputThunk[str], ContextT] | SamplingResult:
     """Generates from an instruction.
 
     Args:
@@ -912,10 +1455,14 @@ async def ainstruct(
         tool_calls: If true, tool calling is enabled.
         images: A list of images to be used in the instruction or None if none.
         audio: A list of audio blocks to be used in the instruction or None if none.
+        allow_context_type_change: if True, permits the returned context to be a different `Context` subtype than `context`. By default (False), a differing type raises `ContextTypeMismatchError`.
         await_result: if False and strategy is None, returns uncomputed ModelOutputThunk for streaming. If True or strategy is not None, awaits and returns ComputedModelOutputThunk. Default is False.
 
     Returns:
         A (ModelOutputThunk, Context) if `return_sampling_results` is `False`, else returns a `SamplingResult`.
+
+    Raises:
+        ContextTypeMismatchError: if the returned context type differs from the input context type and `allow_context_type_change` is `False`.
     """
     requirements = [] if requirements is None else requirements
     icl_examples = [] if icl_examples is None else icl_examples
@@ -949,10 +1496,30 @@ async def ainstruct(
         format=format,
         model_options=model_options,
         tool_calls=tool_calls,
+        allow_context_type_change=allow_context_type_change,
         await_result=await_result,
     )  # type: ignore[call-overload]
 
 
+@overload
+async def achat(
+    content: str,
+    context: ContextT,
+    backend: Backend,
+    *,
+    role: Message.Role = "user",
+    images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
+    audio: list[AudioBlock | AudioUrlBlock] | None = None,
+    documents: Iterable[str | Document] | None = None,
+    user_variables: dict[str, str] | None = None,
+    format: type[BaseModelSubclass] | None = None,
+    model_options: dict | None = None,
+    tool_calls: bool = False,
+    allow_context_type_change: Literal[False] = False,
+) -> tuple[Message, ContextT]: ...
+
+
+@overload
 async def achat(
     content: str,
     context: Context,
@@ -966,6 +1533,42 @@ async def achat(
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
+    allow_context_type_change: Literal[True],
+) -> tuple[Message, Context]: ...
+
+
+@overload
+async def achat(
+    content: str,
+    context: Context,
+    backend: Backend,
+    *,
+    role: Message.Role = "user",
+    images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
+    audio: list[AudioBlock | AudioUrlBlock] | None = None,
+    documents: Iterable[str | Document] | None = None,
+    user_variables: dict[str, str] | None = None,
+    format: type[BaseModelSubclass] | None = None,
+    model_options: dict | None = None,
+    tool_calls: bool = False,
+    allow_context_type_change: bool,
+) -> tuple[Message, Context]: ...
+
+
+async def achat(
+    content: str,
+    context: ContextT,
+    backend: Backend,
+    *,
+    role: Message.Role = "user",
+    images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
+    audio: list[AudioBlock | AudioUrlBlock] | None = None,
+    documents: Iterable[str | Document] | None = None,
+    user_variables: dict[str, str] | None = None,
+    format: type[BaseModelSubclass] | None = None,
+    model_options: dict | None = None,
+    tool_calls: bool = False,
+    allow_context_type_change: bool = False,
 ) -> tuple[Message, Context]:
     """Sends a simple chat message and returns the response. Adds both messages to the Context.
 
@@ -982,9 +1585,13 @@ async def achat(
         format: Optional Pydantic model for constrained decoding of the response.
         model_options: Additional model options to merge with backend defaults.
         tool_calls: If true, tool calling is enabled.
+        allow_context_type_change: if True, permits the returned context to be a different `Context` subtype than `context`. By default (False), a differing type raises `ContextTypeMismatchError`.
 
     Returns:
         Tuple of the assistant `Message` and the updated `Context`.
+
+    Raises:
+        ContextTypeMismatchError: if the returned context type differs from the input context type and `allow_context_type_change` is `False`.
     """
     if user_variables is not None:
         content_resolved = Instruction.apply_user_dict_from_jinja(
@@ -1010,6 +1617,10 @@ async def achat(
         format=format,
         model_options=model_options,
         tool_calls=tool_calls,
+        # `allow_context_type_change` is a runtime bool here, so it matches
+        # neither the `Literal[True]` nor the `Literal[False]` overload; the
+        # impl signature (which accepts `bool`) handles it correctly.
+        allow_context_type_change=allow_context_type_change,  # type: ignore[call-overload]
         await_result=True,  # Must compute for Message parsing below.
     )
     parsed_assistant_message = result.parsed_repr
@@ -1023,23 +1634,35 @@ async def avalidate(
     context: Context,
     backend: Backend,
     *,
-    output: CBlock | ModelOutputThunk | None = None,
+    output: ModelOutputThunk | None = None,
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     generate_logs: list[GenerateLog] | None = None,
     input: CBlock | ModelOutputThunk | None = None,
 ) -> list[ValidationResult]:
-    """Asynchronous version of .validate; validates a set of requirements over the output (if provided) or the current context (if the output is not provided).
+    """Asynchronous version of .validate; validates a set of requirements over the given context.
+
+    Validation always runs over `context`, in the caller's own context type, so requirements
+    (including adapter-backed ones) see the same conversation the model saw. `output`
+    designates *which* output is under judgement: it is appended to `context` unless it is
+    already the context's last entry, and the requirement then validates that output. An
+    `output` that appears earlier in `context` is appended too, so validating an output from
+    a previous turn works and the judge still sees the conversation around it.
 
     Args:
         reqs: A single `Requirement` or a list of them to validate.
-        context: The current conversation context.
+        context: The context to validate over.
         backend: The backend used for LLM-as-a-judge requirements.
-        output: Optional model output to validate against instead of the context.
+        output: Optional model output designating the validation target. When `None`, the
+            context's last output is validated.
         format: Optional Pydantic model for constrained decoding.
         model_options: Additional model options to merge with backend defaults.
         generate_logs: Optional list to append generation logs to.
-        input: Optional input to include alongside `output` when validating.
+        input: Optional input to append to the validation context, for judging an output
+            against a specific input rather than the whole conversation. It is added ahead
+            of `output`  if `output` is provided, so the judge sees the pair in order. It only reaches
+            the model if the context renders history: on a context whose `view_for_generation()`
+            is empty (`SimpleContext`), nothing added here is visible to the judge.
 
     Returns:
         List of `ValidationResult` objects, one per requirement.
@@ -1050,15 +1673,51 @@ async def avalidate(
 
     validation_id = str(uuid.uuid4())
 
-    if output is None:
-        validation_target_ctx = context
-    else:
-        validation_target_ctx = SimpleContext()
+    validation_target_ctx = context
 
-        # Add the input/output to the validation context
-        if input is not None:
-            validation_target_ctx = validation_target_ctx.add(input)
+    if input is not None:
+        validation_target_ctx = validation_target_ctx.add(input)
+
+    # `output` designates the validation target rather than replacing the context, and
+    # `Requirement.validate` re-derives that target from `ctx.last_output()` -- so `output`
+    # has to end up last. It is added unless it is already the final entry, which is the
+    # sampling path: ComputedModelOutputThunk reassigns __class__ in place, so the thunk
+    # passed here *is* the one already at the tail, and re-adding it would only render the
+    # judged output twice. Anything else is added, including an `output` that appears
+    # earlier in the chain (validating an older output); `Context.as_list` tolerates a
+    # repeated span because its cycle guard tracks nodes rather than data.
+    if output is not None and validation_target_ctx.node_data is not output:
         validation_target_ctx = validation_target_ctx.add(output)
+
+    # A context that renders no history hands the judge nothing but the requirement and the
+    # inlined output, and `input` is the only thing that costs. A plain LLM-as-a-judge
+    # requirement loses nothing (its template inlines the output either way), and an
+    # adapter-backed requirement is already reported by the backend, which knows whether the
+    # adapter was actually reached: openai/huggingface raise or fall back with a warning,
+    # and the other backends reject aLoRA outright. Warning here too would duplicate that,
+    # and would misfire in the case where the named adapter is absent -- the backend then
+    # never takes the adapter path at all and LLM-as-a-judge handles it correctly.
+    view = validation_target_ctx.view_for_generation()
+    if input is not None and not view and validation_target_ctx.as_list():
+        ctx_type = type(validation_target_ctx).__name__
+        # `view_for_generation()` returning None means the history is non-linear and
+        # cannot be rendered at all; [] means it renders, but to nothing.
+        detail = (
+            f"view_for_generation() is None: {ctx_type} has a non-linear history, so no"
+            " conversation can be rendered"
+            if view is None
+            else f"view_for_generation() is empty: {ctx_type} renders no conversation"
+        )
+        # Deduped the way the backends' `_warned_about` guards are: without this, the
+        # warning fires on every single `avalidate` call.
+        warn_key = f"{ctx_type}:{view is None}"
+        if warn_key not in _validation_empty_view_warned:
+            _validation_empty_view_warned.add(warn_key)
+            MelleaLogger.get_logger().warning(
+                f"validating over a context whose {detail}, so `input` never reaches the"
+                " judge. Pass a context that renders history (e.g. ChatContext) to"
+                " validate against the input."
+            )
 
     # --- validation_pre_check hook ---
     if has_plugins(HookType.VALIDATION_PRE_CHECK):
@@ -1076,6 +1735,20 @@ async def avalidate(
         )
         reqs = pre_payload.requirements
         model_options = pre_payload.model_options or model_options
+
+    # Compute the spans the requirements will read *before* fanning out. Every requirement
+    # binds the same validation target, `Requirement.parts()` exposes it, and each backend
+    # awaits the uncomputed leaves of its action -- so with two or more requirements the
+    # gather below would have two tasks calling `avalue()` on one uncomputed thunk at once.
+    # That deadlocks: `ModelOutputThunk.astream()` supports a single consumer, so one task
+    # takes the completion signal and the other waits forever for a chunk that never comes.
+    # Awaiting here, sequentially, means the fan-out only ever sees computed thunks.
+    if isinstance(input, ModelOutputThunk) and not input.is_computed():
+        await input.avalue()
+
+    validation_target = validation_target_ctx.last_output()
+    if validation_target is not None and not validation_target.is_computed():
+        await validation_target.avalue()
 
     rvs: list[ValidationResult] = []
     coroutines: list[Coroutine[Any, Any, ValidationResult]] = []
@@ -1135,12 +1808,73 @@ async def avalidate(
 async def aquery(
     obj: Any,
     query: str,
+    context: ContextT,
+    backend: Backend,
+    *,
+    format: type[BaseModelSubclass] | None = None,
+    model_options: dict | None = None,
+    tool_calls: bool = False,
+    allow_context_type_change: Literal[False] = False,
+    await_result: Literal[True],
+) -> tuple[ComputedModelOutputThunk, ContextT]: ...
+
+
+@overload
+async def aquery(
+    obj: Any,
+    query: str,
     context: Context,
     backend: Backend,
     *,
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
+    allow_context_type_change: Literal[True],
+    await_result: Literal[True],
+) -> tuple[ComputedModelOutputThunk, Context]: ...
+
+
+@overload
+async def aquery(
+    obj: Any,
+    query: str,
+    context: ContextT,
+    backend: Backend,
+    *,
+    format: type[BaseModelSubclass] | None = None,
+    model_options: dict | None = None,
+    tool_calls: bool = False,
+    allow_context_type_change: Literal[False] = False,
+    await_result: Literal[False] = False,
+) -> tuple[ModelOutputThunk, ContextT]: ...
+
+
+@overload
+async def aquery(
+    obj: Any,
+    query: str,
+    context: Context,
+    backend: Backend,
+    *,
+    format: type[BaseModelSubclass] | None = None,
+    model_options: dict | None = None,
+    tool_calls: bool = False,
+    allow_context_type_change: Literal[True],
+    await_result: Literal[False] = False,
+) -> tuple[ModelOutputThunk, Context]: ...
+
+
+@overload
+async def aquery(
+    obj: Any,
+    query: str,
+    context: Context,
+    backend: Backend,
+    *,
+    format: type[BaseModelSubclass] | None = None,
+    model_options: dict | None = None,
+    tool_calls: bool = False,
+    allow_context_type_change: bool,
     await_result: Literal[True],
 ) -> tuple[ComputedModelOutputThunk, Context]: ...
 
@@ -1155,6 +1889,7 @@ async def aquery(
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
+    allow_context_type_change: bool,
     await_result: Literal[False] = False,
 ) -> tuple[ModelOutputThunk, Context]: ...
 
@@ -1162,12 +1897,13 @@ async def aquery(
 async def aquery(
     obj: Any,
     query: str,
-    context: Context,
+    context: ContextT,
     backend: Backend,
     *,
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
+    allow_context_type_change: bool = False,
     await_result: bool = False,
 ) -> tuple[ModelOutputThunk, Context]:
     """Query method for retrieving information from an object.
@@ -1180,10 +1916,14 @@ async def aquery(
         format:  format for output parsing.
         model_options: Model options to pass to the backend.
         tool_calls: If true, the model may make tool calls. Defaults to False.
+        allow_context_type_change: if True, permits the returned context to be a different `Context` subtype than `context`. By default (False), a differing type raises `ContextTypeMismatchError`.
         await_result: if False (default), returns uncomputed ModelOutputThunk. If True, awaits and returns ComputedModelOutputThunk.
 
     Returns:
         tuple[ModelOutputThunk, Context]: The result of the query and updated context.
+
+    Raises:
+        ContextTypeMismatchError: if the returned context type differs from the input context type and `allow_context_type_change` is `False`.
     """
     if not isinstance(obj, MObjectProtocol):
         obj = mify(obj)
@@ -1200,11 +1940,26 @@ async def aquery(
         format=format,
         model_options=model_options,
         tool_calls=tool_calls,
+        allow_context_type_change=allow_context_type_change,
         await_result=await_result,  # type: ignore[call-overload]
     )
     return answer
 
 
+@overload
+async def atransform(
+    obj: Any,
+    transformation: str,
+    context: ContextT,
+    backend: Backend,
+    *,
+    format: type[BaseModelSubclass] | None = None,
+    model_options: dict | None = None,
+    allow_context_type_change: Literal[False] = False,
+) -> tuple[ModelOutputThunk | Any, ContextT]: ...
+
+
+@overload
 async def atransform(
     obj: Any,
     transformation: str,
@@ -1213,6 +1968,32 @@ async def atransform(
     *,
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
+    allow_context_type_change: Literal[True],
+) -> tuple[ModelOutputThunk | Any, Context]: ...
+
+
+@overload
+async def atransform(
+    obj: Any,
+    transformation: str,
+    context: Context,
+    backend: Backend,
+    *,
+    format: type[BaseModelSubclass] | None = None,
+    model_options: dict | None = None,
+    allow_context_type_change: bool,
+) -> tuple[ModelOutputThunk | Any, Context]: ...
+
+
+async def atransform(
+    obj: Any,
+    transformation: str,
+    context: ContextT,
+    backend: Backend,
+    *,
+    format: type[BaseModelSubclass] | None = None,
+    model_options: dict | None = None,
+    allow_context_type_change: bool = False,
 ) -> tuple[ModelOutputThunk | Any, Context]:
     """Transform method for creating a new object with the transformation applied.
 
@@ -1223,11 +2004,15 @@ async def atransform(
         backend: the backend used to generate the response.
         format: format for output parsing; usually not needed with transform.
         model_options: Model options to pass to the backend.
+        allow_context_type_change: if True, permits the returned context to be a different `Context` subtype than `context`. By default (False), a differing type raises `ContextTypeMismatchError`.
 
     Returns:
         tuple[ModelOutputThunk | Any, Context]: The result of the transformation and updated context.
         If no tools were called, the first element will always be ModelOutputThunk. If a tool was called,
         the first element will be the return type of the function called, usually the type of the object passed in.
+
+    Raises:
+        ContextTypeMismatchError: if the returned context type differs from the input context type and `allow_context_type_change` is `False`.
     """
     if not isinstance(obj, MObjectProtocol):
         obj = mify(obj)
@@ -1246,6 +2031,8 @@ async def atransform(
         format=format,
         model_options=model_options,
         tool_calls=True,
+        # Runtime bool — matches neither Literal overload; the impl handles it.
+        allow_context_type_change=allow_context_type_change,  # type: ignore[call-overload]
         await_result=True,  # Must be computed for tool calls.
     )
 

@@ -10,7 +10,7 @@ import jinja2
 import jinja2.sandbox
 import pytest
 
-from mellea.backends.model_ids import IBM_GRANITE_4_1_3B, ModelIdentifier
+from mellea.backends.model_ids import IBM_GRANITE_4_2_3B, ModelIdentifier
 from mellea.core import (
     CBlock,
     Component,
@@ -302,7 +302,7 @@ def test_no_template(tf: TemplateFormatter):
 
 
 def test_load_with_model_id(instr: Instruction):
-    tf = TemplateFormatter(IBM_GRANITE_4_1_3B)
+    tf = TemplateFormatter(IBM_GRANITE_4_2_3B)
     tmpl = tf._load_template(instr.format_for_llm())
     assert tmpl.name is not None
     assert "granite" in tmpl.name, (

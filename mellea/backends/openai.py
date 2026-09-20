@@ -4,10 +4,12 @@
 """A generic OpenAI compatible backend that wraps around the openai python sdk."""
 
 import asyncio
+import contextlib
 import datetime
 import functools
 import inspect
 import os
+import threading
 from collections.abc import Coroutine, Sequence
 from typing import Any
 
@@ -46,6 +48,7 @@ from ..helpers import (
     is_vllm_server_with_structured_output,
     message_to_openai_message,
     messages_to_docs,
+    prefetch_audio_urls,
     send_to_queue,
     should_replay_reasoning,
 )
@@ -53,7 +56,19 @@ from ..stdlib.components import Intrinsic, Message
 from ..stdlib.requirements import LLMaJRequirement
 from ..telemetry.context import generate_request_id, with_context
 from ._options import resolve_model_options
-from .adapters.adapter import AdapterInput, AdapterMixin, EmbeddedIntrinsicAdapter
+from .adapters import EmbeddedActivationRequest, EmbeddedBinding, Identity
+from .adapters._core import (
+    Adapter as _AdapterCore,
+    _await_embedded_generation,
+    _fire_embedded_invocation_complete,
+)
+from .adapters.adapter import (
+    AdapterInput,
+    AdapterMixin,
+    EmbeddedIntrinsicAdapter,
+    _composed_adapter_key,
+    _discover_embedded_adapters,
+)
 from .backend import FormatterBackend
 from .model_options import ModelOption
 from .tools import (
@@ -115,6 +130,8 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         ValueError: If `model_id` is an empty string, if neither `api_key` nor
             `OPENAI_API_KEY` is set, or if `model_id` is a `ModelIdentifier` with no `openai_name` set.
     """
+
+    _supports_composed_adapters = True
 
     def __init__(
         self,
@@ -218,6 +235,19 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         self.default_to_constraint_checking_alora = default_to_constraint_checking_alora
         self._default_extra_body: dict = default_extra_body or {}
 
+        # Construction-time `extra_body` passed via the generic `model_options`
+        # dict (as opposed to the dedicated `default_extra_body` param) must not
+        # outrank a per-call `ModelOption.THINKING` the way `default_extra_body`
+        # doesn't. Fold it into `_default_extra_body`'s tier now and exclude it
+        # from `self.model_options` in `_simplify_and_merge`, so it can no longer
+        # re-enter the per-call precedence chain as if it were caller-supplied
+        # `extra_body` (#1617).
+        construction_extra_body = self.model_options.get("extra_body")
+        if isinstance(construction_extra_body, dict):
+            self._default_extra_body = ModelOption._merge_extra_body(
+                construction_extra_body, self._default_extra_body
+            )
+
         self._provider: str = "openai"
 
         self._adapter_source = adapter_source
@@ -270,9 +300,23 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             base_url=str(self._client.base_url), headers=self._client._custom_headers
         )
 
-        self._client_cache = ClientCache(2)
+        self._client_cache: ClientCache = ClientCache(
+            2, aclose=lambda client: client.close()
+        )
 
-        self._added_adapters: dict[str, EmbeddedIntrinsicAdapter] = {}
+        # EmbeddedIntrinsicAdapter is itself an _AdapterCore subclass, so this
+        # single type covers both the shim and composed-Adapter realities.
+        self._added_adapters: dict[str, _AdapterCore] = {}
+        # Raw io.yaml config for composed Adapter instances (Epic #929, issue
+        # #1144), keyed by _composed_adapter_key(). A composed Adapter has no
+        # `.config` field (that's shim-only state); see
+        # _intrinsic_adapter_name_and_config.
+        self._composed_adapter_configs: dict[str, dict] = {}
+        self._adapter_lock = threading.RLock()
+        # Backs _adapter_resolve_lock() — deliberately separate from
+        # _adapter_lock (`_adapter_activation_lock()`); see that method's
+        # docstring for the deadlock a shared lock would risk.
+        self._adapter_resolve_lock_obj = threading.RLock()
 
         # Call once to create an async_client and populate the cache.
         _ = self._async_client
@@ -303,41 +347,91 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
     # AdapterMixin implementation
     # ------------------------------------------------------------------
 
-    def add_adapter(self, adapter: AdapterInput) -> None:
+    def add_adapter(self, adapter: AdapterInput, *, config: dict | None = None) -> None:
         """Register an adapter with this backend.
 
         Accepts the full `AdapterInput` union to honour the mixin contract, but
         currently only `EmbeddedIntrinsicAdapter` (the Embedded/Granite Switch
-        reality) is supported; other realities are rejected at runtime.
+        reality) is supported; other realities are rejected at runtime. As a
+        side effect, an `EmbeddedBinding` weights handler is stamped with this
+        backend's `base_model_name` in its `source` field. Refuses a name
+        already registered instead of silently overwriting it.
 
         Args:
             adapter (AdapterInput): The adapter to register. Must be an
-                `EmbeddedIntrinsicAdapter`.
+                `EmbeddedIntrinsicAdapter` or a composed `Adapter` whose
+                `weights` is an `EmbeddedBinding`.
+            config (dict | None): Raw io.yaml config for a composed `Adapter`.
+                Required for that shape (its config cannot be cheaply
+                re-derived later); rejected for `EmbeddedIntrinsicAdapter`,
+                which already carries its own `.config`.
 
         Raises:
-            TypeError: If `adapter` is not an `EmbeddedIntrinsicAdapter`.
+            TypeError: If `adapter` is not a supported Embedded adapter, or
+                `config` is given for an `EmbeddedIntrinsicAdapter`.
+            ValueError: If `adapter` is a composed `Adapter` and `config` is
+                not given — registering it without one would make it
+                discoverable but permanently unable to generate.
         """
-        if not isinstance(adapter, EmbeddedIntrinsicAdapter):
-            raise TypeError(
-                f"OpenAIBackend currently only supports EmbeddedIntrinsicAdapter. "
-                f"Got: {type(adapter).__name__}"
-            )
-        adapter.backend = self
-        self._added_adapters[adapter.qualified_name] = adapter
+        if isinstance(adapter, EmbeddedIntrinsicAdapter):
+            if config is not None:
+                raise TypeError(
+                    "config= is not accepted for an EmbeddedIntrinsicAdapter; "
+                    "it already carries its own .config."
+                )
+            if adapter.qualified_name in self._added_adapters:
+                MelleaLogger.get_logger().warning(
+                    f"attempted to add adapter {adapter.qualified_name!r} but it is "
+                    "already registered; refusing to overwrite it."
+                )
+                return
+            adapter.backend = self
+            if isinstance(adapter.weights, EmbeddedBinding):
+                adapter.weights.source = self.base_model_name
+            self._added_adapters[adapter.qualified_name] = adapter
+            return
 
-    def render_controls(self, adapter_qualified_name: str, active: bool) -> None:
-        """No-op for embedded adapters — weights are baked into the model.
+        if isinstance(adapter, _AdapterCore):
+            if not isinstance(adapter.weights, EmbeddedBinding):
+                raise TypeError(
+                    "OpenAIBackend only supports the Embedded/Granite Switch "
+                    f"reality for a composed Adapter; got {type(adapter.weights).__name__}."
+                )
+            # Validated ahead of the duplicate-registration guard below: a
+            # malformed config= argument must raise even when the call would
+            # otherwise be a silently-refused duplicate.
+            if config is None:
+                raise ValueError(
+                    f"No io.yaml config given for composed embedded adapter "
+                    f"{adapter.identity.name!r}; registering it without one "
+                    "would leave it discoverable but unable to generate. "
+                    "Pass config=, or register it via "
+                    "register_embedded_adapter_model() or resolve_adapter()."
+                )
+            key = _composed_adapter_key(adapter)
+            # Locked: a direct add_adapter() call (unlike resolve_adapter(),
+            # which already holds this lock around its own add_adapter()
+            # calls) is otherwise an unguarded check-then-write across
+            # _added_adapters/_composed_adapter_configs — two concurrent
+            # callers registering under the same key could each pass the
+            # duplicate check below before either writes, then pair one
+            # call's adapter with the other's config. Reentrant, so a caller
+            # already holding it (resolve_adapter()) is unaffected.
+            with self._adapter_activation_lock():
+                if key in self._added_adapters:
+                    MelleaLogger.get_logger().warning(
+                        f"attempted to add adapter {key!r} but it is already "
+                        "registered; refusing to overwrite it."
+                    )
+                    return
+                adapter.weights.source = self.base_model_name
+                self._added_adapters[key] = adapter
+                self._composed_adapter_configs[key] = config
+            return
 
-        Args:
-            adapter_qualified_name (str): The `adapter.qualified_name` of the
-                adapter to activate or deactivate.
-            active (bool): `True` to activate the adapter, `False` to
-                deactivate it.
-        """
-        MelleaLogger.get_logger().debug(
-            "render_controls is a no-op for OpenAIBackends (adapter: %s, active: %s)",
-            adapter_qualified_name,
-            active,
+        raise TypeError(
+            "OpenAIBackend currently only supports EmbeddedIntrinsicAdapter or a "
+            f"composed Adapter. Got: {type(adapter).__name__}"
         )
 
     def list_adapters(self) -> list[str]:
@@ -348,48 +442,182 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         """
         return list(self._added_adapters.keys())
 
+    def _adapter_activation_lock(
+        self,
+    ) -> contextlib.AbstractContextManager[bool | None]:
+        """Serialize `add_adapter()`'s registration-dict writes for this backend."""
+        return self._adapter_lock
+
+    def _adapter_resolve_lock(self) -> contextlib.AbstractContextManager[bool | None]:
+        """A separate lock for `resolve_adapter()`/registration orchestration.
+
+        Not `_adapter_lock` (the lock `_adapter_activation_lock()` returns):
+        see that method's docstring, and the base class's
+        `_adapter_resolve_lock()` docstring, for the deadlock a shared lock
+        would risk.
+        """
+        return self._adapter_resolve_lock_obj
+
     # ------------------------------------------------------------------
     # Convenience registration helpers
     # ------------------------------------------------------------------
 
+    def _intrinsic_adapter_name_and_config(
+        self, adapter: "EmbeddedIntrinsicAdapter | _AdapterCore"
+    ) -> tuple[str, dict]:
+        """Return the adapter-function name and raw io.yaml config for an adapter.
+
+        `EmbeddedIntrinsicAdapter` carries both directly (`.name`/`.config`).
+        A composed `Adapter` carries neither — `io_contract` does not yet
+        drive `IntrinsicsRewriter`/`IntrinsicsResultProcessor` (Epic #929,
+        issue #1144) — so its config is looked up from
+        `_composed_adapter_configs`, cached at registration time (see
+        `add_adapter`/`register_embedded_adapter_model`) since it comes from
+        `adapter_index.json`/`io.yaml` and cannot be cheaply re-derived.
+
+        Args:
+            adapter: The adapter to resolve a name and config for.
+
+        Returns:
+            tuple[str, dict]: The adapter-function name and its parsed
+            io.yaml config.
+
+        Raises:
+            ValueError: A composed adapter has no cached config (never
+                registered via `add_adapter`/`register_embedded_adapter_model`).
+        """
+        if isinstance(adapter, EmbeddedIntrinsicAdapter):
+            return adapter.name, adapter.config
+        key = _composed_adapter_key(adapter)
+        config = self._composed_adapter_configs.get(key)
+        if config is None:
+            raise ValueError(
+                f"No io.yaml config cached for composed adapter {key!r}; register "
+                "it via register_embedded_adapter_model() or resolve_adapter()."
+            )
+        return adapter.identity.name, config
+
     def register_embedded_adapter_model(
-        self, source: str, *, revision: str = "main", cache_dir: str | None = None
+        self,
+        source: str,
+        *,
+        revision: str = "main",
+        cache_dir: str | None = None,
+        intrinsic_name: str | None = None,
     ) -> list[str]:
-        """Register all embedded adapters from an Embedded Adapter model.
+        """Register embedded adapters from an Embedded Adapter model.
 
         Args:
             source (str): A local model directory path or Hugging Face Hub repo ID.
             revision (str): Git revision when loading from Hugging Face Hub.
             cache_dir (str | None): Cache directory for HF downloads.
+            intrinsic_name (str | None): If provided, register only the adapter
+                matching this adapter function name. `None` registers all
+                adapters found in `source`.
 
         Returns:
             list[str]: Names of the registered intrinsics.
+
+        Raises:
+            ImportError: If Hugging Face Hub support is not installed.
+            PermissionError: If the model repository is private or gated.
+            FileNotFoundError: If the source has no adapter index.
+            ValueError: If the source has no matching embedded adapter functions.
+            TypeError: If an adapter from the source has an unsupported binding.
         """
-        import os
-
-        adapters = EmbeddedIntrinsicAdapter.from_source(
-            source, revision=revision, cache_dir=cache_dir
-        )
-
-        for adapter in adapters:
-            self.add_adapter(adapter)
-
-        return [a.intrinsic_name for a in adapters]
+        # Locked (unlike __init__'s call to this, which still runs
+        # single-threaded during construction, before the backend is exposed
+        # to any other thread): this method is now also the documented
+        # post-construction replacement for `EmbeddedIntrinsicAdapter.from_hub()`
+        # on a live backend, so a caller here can race another thread's
+        # `add_adapter`/`resolve_adapter` — both `add_adapter`'s
+        # read-then-write across `_added_adapters` and `_discover_embedded_adapters`'
+        # mutation of global `warnings` filter state need the same lock
+        # `add_adapter` itself would take via `resolve_adapter`.
+        # `_adapter_resolve_lock()`, not `_adapter_activation_lock()`: see the
+        # lock-order note on the latter — this method's own I/O (this Hub
+        # discovery call) must not run under the lock `add_adapter()` briefly
+        # takes around its dict writes.
+        with self._adapter_resolve_lock():
+            discovered = _discover_embedded_adapters(
+                source,
+                revision=revision,
+                cache_dir=cache_dir,
+                intrinsic_name=intrinsic_name,
+            )
+            names = []
+            for adapter, config in discovered:
+                key = _composed_adapter_key(adapter)
+                # add_adapter() caches config atomically with registration now, so
+                # a refused duplicate (a different object already holding `key`)
+                # never reaches that write — no separate clobber guard needed for
+                # the config. The identity check below is still required, though:
+                # add_adapter() returns None on both success and silent refusal,
+                # so this is the only way to know whether *this* adapter is the
+                # one that actually ended up registered, for the `names` result.
+                self.add_adapter(adapter, config=config)
+                with self._adapter_activation_lock():
+                    registered = self._added_adapters.get(key) is adapter
+                if not registered:
+                    continue
+                names.append(adapter.identity.name)
+            return names
 
     @property
     def _async_client(self) -> openai.AsyncOpenAI:
-        """OpenAI's client usually handles changing event loops but explicitly handle it here for edge cases."""
-        key = id(get_current_event_loop())
+        """OpenAI's client usually handles changing event loops but explicitly handle it here for edge cases.
 
-        _async_client = self._client_cache.get(key)
-        if _async_client is None:
-            _async_client = openai.AsyncOpenAI(
+        Raises:
+            RuntimeError: If `close` or `aclose` has already closed this backend.
+        """
+        # Every generation path reaches its client through here, so this is where reuse
+        # after close() has to stop. Without the guard the SDK's own failure mode is
+        # worse than useless: a closed sync client surfaces as `APIConnectionError`,
+        # indistinguishable from the server being down, and an async call rebuilds a
+        # client into the emptied cache that then holds its sockets for the life of the
+        # process.
+        self._raise_if_closed()
+        # get_or_create, not get/put: sync callers all key on None, so two threads
+        # calling in would otherwise each build a client and leak one of them.
+        return self._client_cache.get_or_create(
+            get_current_event_loop(),
+            lambda: openai.AsyncOpenAI(
                 api_key=self._api_key,
                 base_url=self._base_url,
                 **self._openai_client_kwargs,
-            )
-            self._client_cache.put(key, _async_client)
-        return _async_client
+            ),
+        )
+
+    def close(self) -> None:
+        """Close the sync and cached async OpenAI clients, releasing their connections.
+
+        Safe to call more than once; subsequent calls close nothing further.
+
+        Teardown only, not a reset: the backend is marked closed, and generating with
+        it afterwards raises `RuntimeError` instead of reopening a client. Build a new
+        backend to keep generating.
+        """
+        # Marked closed before anything is closed: the flag is what stops a concurrent
+        # caller from rebuilding a client into the cache `clear()` is about to empty.
+        self._closed = True
+        try:
+            self._client.close()
+        except Exception as e:
+            MelleaLogger.get_logger().debug(f"Failed to close OpenAI client: {e}")
+        self._client_cache.clear()
+
+    async def aclose(self) -> None:
+        """Async counterpart to `close`.
+
+        Safe to call more than once; subsequent calls close nothing further. Leaves
+        the backend closed to reuse on the same terms as `close`.
+        """
+        self._closed = True
+        try:
+            self._client.close()
+        except Exception as e:
+            MelleaLogger.get_logger().debug(f"Failed to close OpenAI client: {e}")
+        await self._client_cache.aclear()
 
     @staticmethod
     def filter_openai_client_kwargs(**kwargs) -> dict:
@@ -461,16 +689,33 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         Returns:
             a new dict
+
+        Raises:
+            ValueError: If `model_options` attempts to select a model. An
+                OpenAIBackend's model is fixed when the backend is constructed.
         """
         remap_dict = self.to_mellea_model_opts_map_chats
         if not is_chat_context:
             remap_dict = self.to_mellea_model_opts_map_completions
 
-        return resolve_model_options(
-            backend_defaults=self.model_options,
+        resolved_options = resolve_model_options(
+            # `extra_body` is excluded here: it was already folded into
+            # `_default_extra_body` at construction time (see `__init__`), so
+            # merging it again would let it re-enter the per-call precedence
+            # chain and outrank a per-call `ModelOption.THINKING`.
+            backend_defaults={
+                k: v for k, v in self.model_options.items() if k != "extra_body"
+            },
             remap=remap_dict,
             call_options=model_options,
         )
+        if "model" in resolved_options:
+            raise ValueError(
+                "model cannot be set via model_options on OpenAIBackend — model "
+                "selection happens at the backend/session level (construct a backend "
+                "per model, or start a session against the chosen model_id)."
+            )
+        return resolved_options
 
     def _make_backend_specific_and_remove(
         self, model_options: dict[str, Any], is_chat_context: bool
@@ -507,6 +752,47 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             model_opts = self.filter_completions_kwargs(backend_specific)
 
         return model_opts
+
+    def _map_thinking_option(
+        self, thinking: Any, extra_body: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Maps `ModelOption.THINKING` to the correct backend parameter(s).
+
+        Two mechanisms, both set (when applicable) so the right server picks
+        up whichever it understands:
+          - `extra_body["chat_template_kwargs"]["enable_thinking"]`: vLLM/Qwen3
+          - `reasoning_effort`: OpenAI/DeepSeek/Ollama (string level; True →
+            "medium", False → "none")
+
+        Ollama-served models (e.g. granite4.2) think by default unless
+        `reasoning_effort="none"` is sent (Ollama >= 0.33.1); real OpenAI
+        rejects `"none"`, so that value is scoped to non-OpenAI servers.
+
+        Args:
+            thinking: the raw `ModelOption.THINKING` value (bool, string
+                reasoning-effort level, or None).
+            extra_body: the in-progress `extra_body` dict for this request;
+                mutated in place to add `chat_template_kwargs` if `thinking`
+                is a bool.
+
+        Returns:
+            dict[str, Any]: `reasoning_effort` params to merge into the
+            request's top-level kwargs, or `{}` if `thinking` is None.
+        """
+        reasoning_params: dict[str, Any] = {}
+        if thinking is None:  # False is a valid value — cannot use `if thinking`
+            return reasoning_params
+        if type(thinking) is bool:
+            ctk = extra_body.get("chat_template_kwargs", {}) or {}
+            ctk["enable_thinking"] = thinking
+            extra_body["chat_template_kwargs"] = ctk
+            if thinking:
+                reasoning_params["reasoning_effort"] = "medium"
+            elif self._server_type != _ServerType.OPENAI:
+                reasoning_params["reasoning_effort"] = "none"
+        else:
+            reasoning_params["reasoning_effort"] = thinking
+        return reasoning_params
 
     def _merge_user_extra_body(
         self, base: dict[str, Any], user: dict[str, Any] | None
@@ -590,6 +876,10 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             tool_calls (bool): If `True`, expose available tools to the model and
                 parse tool-call responses.
 
+        Raises:
+            ValueError: If `action` is an `ALoraRequirement` but `ctx` renders no
+                conversation, leaving the requirement-check adapter nothing to judge.
+
         Returns:
             tuple[ModelOutputThunk[C], Context]: A thunk holding the (lazy) model output
                 and an updated context that includes `action` and the new output.
@@ -621,7 +911,18 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                     )
                     alora_action = ALoraRequirement(action.description, adapter_name)
 
-                alora_req_adapter = self._find_adapter(adapter_name, ("alora",))
+                # An explicit adapter_types override (Epic #929, issue #1144)
+                # is honoured here — e.g. a custom, LoRA-only adapter would
+                # never be found by the ("alora",)-only default search,
+                # silently falling back to regular generation regardless of
+                # what the caller asked for.
+                explicit_types = getattr(alora_action, "_adapter_types", None)
+                search_types = (
+                    tuple(t.value for t in explicit_types)
+                    if explicit_types
+                    else ("alora",)
+                )
+                alora_req_adapter = self._find_adapter(adapter_name, search_types)
                 if alora_req_adapter is None:
                     if reroute_to_alora and isinstance(action, ALoraRequirement):
                         MelleaLogger.get_logger().warning(
@@ -632,6 +933,43 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                     reroute_to_alora = False
 
                 if issubclass(type(action), LLMaJRequirement):
+                    reroute_to_alora = False
+
+                # The requirement-check adapter judges the last assistant turn of the
+                # conversation it is given, and this path never renders the requirement
+                # template -- so unlike LLM-as-a-judge it has no inlined copy of the output
+                # to fall back on. A context that renders nothing leaves it nothing to judge.
+                adapter_view = ctx.view_for_generation()
+                if reroute_to_alora and not adapter_view:
+                    # `None` means the history is non-linear and cannot be rendered at all;
+                    # `[]` means it renders, but to nothing. Neither gives the adapter an
+                    # assistant turn, so both are fatal here -- only the wording differs.
+                    empty_view_reason = (
+                        "its history is non-linear, so no conversation can be rendered"
+                        if adapter_view is None
+                        else "it renders no conversation"
+                    )
+                    if isinstance(action, ALoraRequirement):
+                        raise ValueError(
+                            f"cannot validate an ALoraRequirement over a "
+                            f"{type(ctx).__name__}: {empty_view_reason}, so the "
+                            f"{adapter_name} adapter has no assistant turn to judge. "
+                            "Validate over a context that renders history (e.g. ChatContext), "
+                            "or use a plain Requirement, which falls back to LLM-as-a-judge."
+                        )
+                    # Auto-rerouting a plain Requirement is an optimisation, not a request:
+                    # fall back to LLM-as-a-judge, which inlines the output and still works.
+                    warn_key = (
+                        f"alora_reroute_empty_view_{type(ctx).__name__}"
+                        f"_{adapter_view is None}"
+                    )
+                    if warn_key not in self._warned_about:
+                        self._warned_about.add(warn_key)
+                        MelleaLogger.get_logger().warning(
+                            f"not rerouting requirements to the {adapter_name} adapter: "
+                            f"{type(ctx).__name__} gives it nothing to judge -- "
+                            f"{empty_view_reason}; using LLM-as-a-judge instead."
+                        )
                     reroute_to_alora = False
 
                 if reroute_to_alora:
@@ -691,9 +1029,16 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             intrinsic output.
 
         Raises:
+            NotImplementedError: If the context isn't a chat context, or if
+                streaming is requested (intrinsic post-processing requires
+                the complete response).
             ValueError: If no embedded adapter is registered for the requested
-                intrinsic.
-            TypeError: If the adapter isn't an EmbeddedIntrinsicAdapter.
+                intrinsic, or a composed `Adapter` has no io.yaml config
+                cached (see `_intrinsic_adapter_name_and_config`).
+            TypeError: If the adapter is neither an `EmbeddedIntrinsicAdapter`
+                nor a composed `Adapter`, or its `weights` isn't an
+                `EmbeddedBinding` (for the shim, only reachable if a caller
+                reassigns `.weights` after construction).
         """
         if not ctx.is_chat_context:
             raise NotImplementedError("Intrinsics require a chat context.")
@@ -715,16 +1060,20 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         # TODO: OpenAIBackend only supports EmbeddedAdapters.
         #       It should be refactored into a specific adapter.transform() function.
-        if not isinstance(adapter, EmbeddedIntrinsicAdapter):
+        # EmbeddedIntrinsicAdapter is itself an _AdapterCore subclass, so checking
+        # for _AdapterCore alone covers both the shim and composed-Adapter realities.
+        if not isinstance(adapter, _AdapterCore):
             raise TypeError(
-                f"OpenAIBackend only supports EmbeddedIntrinsicAdapter, got: {type(adapter).__name__}"
+                "OpenAIBackend only supports EmbeddedIntrinsicAdapter or a composed "
+                f"Adapter, got: {type(adapter).__name__}"
             )
 
-        intrinsic_config = adapter.config
-        assert intrinsic_config is not None
+        adapter_name, intrinsic_config = self._intrinsic_adapter_name_and_config(
+            adapter
+        )
 
         rewriter = granite_formatters.IntrinsicsRewriter(
-            config_dict=intrinsic_config, model_name=adapter.name
+            config_dict=intrinsic_config, model_name=adapter_name
         )
         result_processor = granite_formatters.IntrinsicsResultProcessor(
             config_dict=intrinsic_config
@@ -740,6 +1089,27 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         #       Intrinsics modify the context through their rewriters.
         messages: list[Message] = self.formatter.to_chat_messages(linearized_context)
 
+        # Intrinsics render through IntrinsicsRewriter, which validates the conversation
+        # against a strict ChatCompletion whose message `content` must be a plain string.
+        # Any multimodal content list fails that with a dozen pydantic errors naming
+        # message variants the caller never chose, so reject it here with something
+        # actionable. Mirrors LocalHFBackend, which guards its intrinsic path the same way
+        # (see `_check_no_multimodal_blocks`). Checked before the prefetch below so a URL
+        # block is not downloaded only to be rejected.
+        if any(m.audio for m in messages):
+            raise ValueError(
+                "OpenAIBackend does not support audio on the intrinsic path: intrinsics "
+                "are evaluated over a text-only conversation. Remove audio from the "
+                "context before calling an intrinsic, or transcribe it and pass the "
+                "transcript as text."
+            )
+
+        # Same off-thread resolution as the chat path below. The shared cache makes this
+        # a hit whenever a prior generation touched the URL, but an intrinsic run against
+        # a hand-built ChatContext (the documented pattern for the intrinsic helpers)
+        # would otherwise download it inline and block the event loop.
+        await prefetch_audio_urls(messages)
+
         # Extract system prompt and prepend to conversation.
         system_prompt = model_options.get(ModelOption.SYSTEM_PROMPT, "")
         conversation: list[dict] = []
@@ -749,7 +1119,9 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         # conversation, not multi-turn generation, so reasoning is never replayed
         # here (no `replay_reasoning=`) — unlike the chat path in
         # `_generate_from_context`, which applies `should_replay_reasoning`.
-        conversation.extend([message_to_openai_message(m) for m in messages])
+        conversation.extend(
+            [message_to_openai_message(m, provider=self._provider) for m in messages]
+        )
 
         docs = messages_to_docs(messages)
 
@@ -771,15 +1143,6 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         if rewriter.parameters:
             api_params.update(rewriter.parameters)
 
-        # Embedded adapters activate via control tokens in the chat template.
-        if isinstance(adapter, EmbeddedIntrinsicAdapter):
-            chat_template_kwargs = extra_body.pop("chat_template_kwargs", {}) or {}
-            chat_template_kwargs["adapter_name"] = action.intrinsic_name
-            extra_body["chat_template_kwargs"] = chat_template_kwargs
-            # The rewriter config may set `model` to the adapter name, but
-            # for embedded adapters the actual model is self._model_id.
-            api_params.pop("model", None)
-
         # Collect tools if tool_calls is enabled.
         tools: dict[str, AbstractMelleaTool] = dict()
         if tool_calls:
@@ -796,26 +1159,45 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             model_options, is_chat_context=True
         )
         user_extra_body = user_api_params.pop("extra_body", None)
+        if user_extra_body is not None:
+            protected_extra_body_keys = {
+                "messages",
+                "model",
+                "parallel_tool_calls",
+                "stream",
+                "stream_options",
+                "tool_choice",
+                "tools",
+            }
+            overridden_keys = protected_extra_body_keys.intersection(user_extra_body)
+            if overridden_keys:
+                raise ValueError(
+                    "extra_body cannot override intrinsic request fields: "
+                    + ", ".join(sorted(overridden_keys))
+                )
         api_params.update(user_api_params)
 
-        # Map THINKING to the correct backend parameter(s). Two mechanisms:
-        # - chat_template_kwargs.enable_thinking: vLLM/Qwen3 (bool toggle)
-        # - reasoning_effort: OpenAI/DeepSeek (string level, or True → "medium")
-        # Both are set for True so the right server picks up whichever it understands.
         thinking = model_options.get(ModelOption.THINKING)
-        if thinking is not None:  # False is a valid value — cannot use `if thinking`
-            if type(thinking) is bool:
-                ctk = extra_body.get("chat_template_kwargs", {}) or {}
-                ctk["enable_thinking"] = thinking
-                extra_body["chat_template_kwargs"] = ctk
-                if thinking:
-                    api_params["reasoning_effort"] = "medium"
-                # False: don't send reasoning_effort — OpenAI disables reasoning by
-                # default when the param is absent; passing False would be invalid.
-            else:
-                api_params["reasoning_effort"] = thinking
+        api_params.update(self._map_thinking_option(thinking, extra_body))
 
         extra_body = self._merge_user_extra_body(extra_body, user_extra_body)
+
+        # Embedded adapters activate via control tokens in the chat template;
+        # the binding owns the final request edit so callers cannot override
+        # the adapter selected for this intrinsic. `adapter.weights` is always
+        # an EmbeddedBinding here — EmbeddedIntrinsicAdapter.__init__
+        # constructs one unconditionally — but the shim permits attribute
+        # mutation, so a caller reassigning `.weights` must fail loudly here
+        # rather than silently skip activation and send an unactivated request.
+        if not isinstance(adapter.weights, EmbeddedBinding):
+            raise TypeError(
+                f"EmbeddedIntrinsicAdapter.weights must be an EmbeddedBinding; "
+                f"got {type(adapter.weights).__name__}. Activation cannot proceed."
+            )
+        activation_request = EmbeddedActivationRequest(
+            extra_body=extra_body, api_params=api_params
+        )
+        await adapter.weights.apply_activation(activation_request, adapter.identity)
 
         # --- call the OpenAI-compatible API --------------------------------
         # The rewriter may add instruction messages where 'role' is a default
@@ -828,12 +1210,15 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 d["role"] = m.role
             messages_dicts.append(d)
 
-        chat_response = self._async_client.chat.completions.create(
-            model=self._model_id,
-            messages=messages_dicts,  # type: ignore
-            tools=formatted_tools if use_tools else None,  # type: ignore
-            extra_body=extra_body,
-            **api_params,
+        chat_response = _await_embedded_generation(
+            self._async_client.chat.completions.create(
+                model=self._model_id,
+                messages=messages_dicts,  # type: ignore
+                tools=formatted_tools if use_tools else None,  # type: ignore
+                extra_body=extra_body,
+                **api_params,
+            ),
+            adapter.identity,
         )
 
         # --- wire up ModelOutputThunk with intrinsic post-processing ------
@@ -848,26 +1233,43 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             chunk: ChatCompletion,
             rewritten: granite_formatters.ChatCompletion,
             result_processor: granite_formatters.IntrinsicsResultProcessor,
+            identity: Identity,
         ):
             """Accumulate content and apply intrinsic result processing."""
             import json as _json
 
-            # Delegate standard metadata storage to the shared processing method.
-            await self.processing(mot, chunk)
-
-            # Apply intrinsic-specific result transformation on top.
-            response_dict = chunk.model_dump()
+            # Kept in one try, including the self.processing() call: a
+            # response with an empty choices list raises IndexError there
+            # (openai.py's processing() indexes chunk.choices[0].message
+            # unguarded), and that must still fire outcome="error" rather
+            # than skip the fire site entirely.
             try:
+                # Delegate standard metadata storage to the shared processing method.
+                await self.processing(mot, chunk)
+
+                response_dict = chunk.model_dump()
                 res = result_processor.transform(response_dict, rewritten)
+                # Kept inside the try: a malformed `res` (e.g. an empty
+                # choices list) must still fire outcome="error", not success
+                # then raise — the exact bug #1559 reverted.
+                mot._underlying_value = res.choices[0].message.content
             except _json.JSONDecodeError as e:
+                await _fire_embedded_invocation_complete(
+                    identity=identity, outcome="schema_error", error=e
+                )
                 raise Exception(
                     f"Intrinsic did not return a JSON: "
                     f"{chunk.choices[0].message.content}"
                 ) from e
-
-            # Overwrite the value accumulated by processing() with the
-            # post-processed intrinsic output.
-            mot._underlying_value = res.choices[0].message.content
+            except Exception as e:
+                await _fire_embedded_invocation_complete(
+                    identity=identity, outcome="error", error=e
+                )
+                raise
+            else:
+                await _fire_embedded_invocation_complete(
+                    identity=identity, outcome="success", error=None
+                )
 
         # Processing functions only pass the ModelOutputThunk (and current chunk
         # of response). Bind the other vars necessary for each processing step.
@@ -875,6 +1277,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             granite_formatters_processing,
             rewritten=rewritten,
             result_processor=result_processor,
+            identity=adapter.identity,
         )
 
         output._gen.post_process = functools.partial(
@@ -898,7 +1301,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             output._gen.generate = asyncio.create_task(
                 send_to_queue(
                     chat_response,
-                    output._gen.queue,
+                    output,
                     chunk_timeout=model_options.get(
                         ModelOption.STREAM_TIMEOUT, DEFAULT_CHUNK_TIMEOUT
                     ),
@@ -975,13 +1378,19 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         conversation: list[dict] = []
 
+        # Resolve any audio URLs off-thread so the sync serializer below hits the cache
+        # instead of blocking the event loop on a download.
+        await prefetch_audio_urls(messages)
+
         system_prompt = model_opts.get(ModelOption.SYSTEM_PROMPT, "")
         if system_prompt != "":
             conversation.append({"role": "system", "content": system_prompt})
         replay_flags = should_replay_reasoning(messages, self._provider)
         conversation.extend(
             [
-                message_to_openai_message(m, self.formatter, replay_reasoning=replay)
+                message_to_openai_message(
+                    m, self.formatter, replay_reasoning=replay, provider=self._provider
+                )
                 for m, replay in zip(messages, replay_flags)
             ]
         )
@@ -1037,25 +1446,11 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         formatted_tools = convert_tools_to_json(tools)
         use_tools = len(formatted_tools) > 0
 
-        # Map THINKING to the correct backend parameter(s). Two mechanisms:
-        # - chat_template_kwargs.enable_thinking: vLLM/Qwen3 (bool toggle)
-        # - reasoning_effort: OpenAI/DeepSeek (string level, or True → "medium")
-        # NOTE: don't pass reasoning_effort to non-reasoning models (e.g. gpt-4o).
+        # NOTE: don't pass THINKING to non-reasoning models (e.g. gpt-4o).
         thinking = model_opts.get(ModelOption.THINKING)
-        reasoning_params: dict[str, Any] = {}
-        if thinking is not None:  # False is a valid value — cannot use `if thinking`
-            if type(thinking) is bool:
-                ctk_body: dict[str, Any] = extra_params.get("extra_body", {}) or {}
-                ctk = ctk_body.get("chat_template_kwargs", {}) or {}
-                ctk["enable_thinking"] = thinking
-                ctk_body["chat_template_kwargs"] = ctk
-                extra_params["extra_body"] = ctk_body
-                if thinking:
-                    reasoning_params["reasoning_effort"] = "medium"
-                # False: don't send reasoning_effort — OpenAI disables reasoning by
-                # default when the param is absent; passing False would be invalid.
-            else:
-                reasoning_params["reasoning_effort"] = thinking
+        ctk_body: dict[str, Any] = extra_params.get("extra_body", {}) or {}
+        reasoning_params = self._map_thinking_option(thinking, ctk_body)
+        extra_params["extra_body"] = ctk_body
 
         # Request usage information in streaming responses
         if model_opts.get(ModelOption.STREAM, False):
@@ -1115,7 +1510,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             output._gen.generate = asyncio.create_task(
                 send_to_queue(
                     chat_response,
-                    output._gen.queue,
+                    output,
                     chunk_timeout=model_opts.get(
                         ModelOption.STREAM_TIMEOUT, DEFAULT_CHUNK_TIMEOUT
                     ),

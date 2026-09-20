@@ -4,9 +4,14 @@
 """Unit tests for mellea.helpers.async_helpers."""
 
 import asyncio
+import datetime
+import threading
+import time
 
 import pytest
 
+from mellea.core.base import ModelOutputThunk
+from mellea.helpers import async_helpers
 from mellea.helpers.async_helpers import (
     DEFAULT_CHUNK_TIMEOUT,
     ClientCache,
@@ -17,6 +22,19 @@ from mellea.helpers.async_helpers import (
 # --- send_to_queue ---
 
 
+def _make_thunk(*, streaming: bool = False) -> ModelOutputThunk:
+    """A bare thunk whose `_gen.queue` receives `send_to_queue` output.
+
+    With `streaming=True` the thunk is primed so `_record_ttfb()` stamps `ttfb_ms`
+    at first-chunk receipt.
+    """
+    mot: ModelOutputThunk = ModelOutputThunk(value=None)
+    if streaming:
+        mot.generation.streaming = True
+        mot._gen.start = datetime.datetime.now()
+    return mot
+
+
 class TestSendToQueue:
     async def test_coroutine_single_value(self):
         """Coroutine returning a non-iterator value is put into queue followed by sentinel."""
@@ -24,8 +42,9 @@ class TestSendToQueue:
         async def produce():
             return "result"
 
-        q: asyncio.Queue = asyncio.Queue()
-        await send_to_queue(produce(), q)
+        mot = _make_thunk()
+        q = mot._gen.queue
+        await send_to_queue(produce(), mot)
         assert await q.get() == "result"
         assert await q.get() is None  # sentinel
 
@@ -39,8 +58,9 @@ class TestSendToQueue:
 
             return _gen()
 
-        q: asyncio.Queue = asyncio.Queue()
-        await send_to_queue(produce(), q)
+        mot = _make_thunk()
+        q = mot._gen.queue
+        await send_to_queue(produce(), mot)
         assert await q.get() == "a"
         assert await q.get() == "b"
         assert await q.get() is None
@@ -52,8 +72,9 @@ class TestSendToQueue:
             yield 1
             yield 2
 
-        q: asyncio.Queue = asyncio.Queue()
-        await send_to_queue(_gen(), q)
+        mot = _make_thunk()
+        q = mot._gen.queue
+        await send_to_queue(_gen(), mot)
         assert await q.get() == 1
         assert await q.get() == 2
         assert await q.get() is None
@@ -64,8 +85,9 @@ class TestSendToQueue:
         async def explode():
             raise ValueError("boom")
 
-        q: asyncio.Queue = asyncio.Queue()
-        await send_to_queue(explode(), q)
+        mot = _make_thunk()
+        q = mot._gen.queue
+        await send_to_queue(explode(), mot)
         item = await q.get()
         assert isinstance(item, ValueError)
         assert str(item) == "boom"
@@ -77,8 +99,9 @@ class TestSendToQueue:
             yield "ok"
             raise RuntimeError("mid-stream")
 
-        q: asyncio.Queue = asyncio.Queue()
-        await send_to_queue(_gen(), q)
+        mot = _make_thunk()
+        q = mot._gen.queue
+        await send_to_queue(_gen(), mot)
         assert await q.get() == "ok"
         item = await q.get()
         assert isinstance(item, RuntimeError)
@@ -91,8 +114,9 @@ class TestSendToQueue:
             await asyncio.sleep(1)  # longer than chunk_timeout
             yield "never"  # pragma: no cover
 
-        q: asyncio.Queue = asyncio.Queue()
-        await send_to_queue(_stalling_gen(), q, chunk_timeout=0.05)
+        mot = _make_thunk()
+        q = mot._gen.queue
+        await send_to_queue(_stalling_gen(), mot, chunk_timeout=0.05)
 
         assert await q.get() == "first"
         item = await q.get()
@@ -113,9 +137,10 @@ class TestSendToQueue:
             await asyncio.sleep(1)
             yield "never"  # pragma: no cover
 
-        q: asyncio.Queue = asyncio.Queue()
+        mot = _make_thunk()
+        q = mot._gen.queue
         await send_to_queue(
-            _stalling_gen(), q, chunk_timeout=0.05, on_timeout=on_timeout
+            _stalling_gen(), mot, chunk_timeout=0.05, on_timeout=on_timeout
         )
 
         assert await q.get() == "first"
@@ -132,9 +157,10 @@ class TestSendToQueue:
             await asyncio.sleep(1)
             yield "never"  # pragma: no cover
 
-        q: asyncio.Queue = asyncio.Queue()
+        mot = _make_thunk()
+        q = mot._gen.queue
         await send_to_queue(
-            _stalling_gen(), q, chunk_timeout=0.05, on_timeout=on_timeout
+            _stalling_gen(), mot, chunk_timeout=0.05, on_timeout=on_timeout
         )
 
         item = await q.get()
@@ -152,9 +178,10 @@ class TestSendToQueue:
         async def _completed_gen():
             yield "done"
 
-        q: asyncio.Queue = asyncio.Queue()
+        mot = _make_thunk()
+        q = mot._gen.queue
         await send_to_queue(
-            _completed_gen(), q, chunk_timeout=0.05, on_timeout=on_timeout
+            _completed_gen(), mot, chunk_timeout=0.05, on_timeout=on_timeout
         )
 
         assert await q.get() == "done"
@@ -173,9 +200,10 @@ class TestSendToQueue:
             raise TimeoutError("backend timeout")
             yield  # pragma: no cover
 
-        q: asyncio.Queue = asyncio.Queue()
+        mot = _make_thunk()
+        q = mot._gen.queue
         await send_to_queue(
-            _backend_timeout(), q, chunk_timeout=1, on_timeout=on_timeout
+            _backend_timeout(), mot, chunk_timeout=1, on_timeout=on_timeout
         )
 
         item = await q.get()
@@ -191,12 +219,55 @@ class TestSendToQueue:
             await asyncio.sleep(0.05)
             yield "b"
 
-        q: asyncio.Queue = asyncio.Queue()
-        await send_to_queue(_slow_gen(), q, chunk_timeout=None)
+        mot = _make_thunk()
+        q = mot._gen.queue
+        await send_to_queue(_slow_gen(), mot, chunk_timeout=None)
 
         assert await q.get() == "a"
         assert await q.get() == "b"
         assert await q.get() is None  # sentinel present on clean completion
+
+    async def test_ttfb_stamped_at_first_chunk_for_streaming(self):
+        """A streaming response stamps ttfb_ms on the thunk at first-chunk receipt."""
+
+        async def _gen():
+            yield "a"
+            yield "b"
+
+        mot = _make_thunk(streaming=True)
+        await send_to_queue(_gen(), mot)
+
+        # Stamped during production, before any consumer dequeues.
+        assert mot.generation.ttfb_ms is not None
+        assert mot.generation.ttfb_ms >= 0
+
+    async def test_ttfb_not_stamped_for_non_iterator(self):
+        """A non-iterator (non-streaming) response leaves ttfb_ms unset."""
+
+        async def produce():
+            return "result"
+
+        mot = _make_thunk(streaming=True)
+        await send_to_queue(produce(), mot)
+
+        assert await mot._gen.queue.get() == "result"
+        assert mot.generation.ttfb_ms is None
+
+    async def test_chunk_intervals_captured_per_chunk(self):
+        """send_to_queue records one receipt interval per chunk: None first, then floats."""
+
+        async def _gen():
+            yield "a"
+            yield "b"
+            yield "c"
+
+        mot = _make_thunk(streaming=True)
+        await send_to_queue(_gen(), mot)
+
+        intervals = list(mot._gen.chunk_intervals)
+        assert len(intervals) == 3
+        assert intervals[0] is None
+        assert all(isinstance(i, float) and i >= 0 for i in intervals[1:])
 
     def test_default_chunk_timeout_value(self):
         """DEFAULT_CHUNK_TIMEOUT is 120 seconds."""
@@ -250,6 +321,301 @@ class TestClientCache:
         cache.put(1, "new")
         assert cache.get(1) == "new"
         assert cache.current_size() == 1
+
+
+class TestClientCacheGetOrCreate:
+    def test_calls_factory_on_a_miss_and_caches_the_result(self):
+        cache = ClientCache(capacity=2)
+        assert cache.get_or_create(None, lambda: "built") == "built"
+        assert cache.get(None) == "built"
+
+    def test_does_not_call_factory_on_a_hit(self):
+        cache = ClientCache(capacity=2)
+        cache.put(None, "cached")
+
+        def factory():
+            raise AssertionError("factory ran on a cache hit")
+
+        assert cache.get_or_create(None, factory) == "cached"
+
+    def test_refreshes_lru_order_on_a_hit(self):
+        cache = ClientCache(capacity=2)
+        cache.put(1, "a")
+        cache.put(2, "b")
+        cache.get_or_create(1, lambda: "unused")  # refresh key 1 — key 2 is now LRU
+        cache.get_or_create(3, lambda: "c")  # evicts key 2
+        assert cache.get(1) == "a"
+        assert cache.get(2) is None
+
+    def test_evicts_and_closes_the_lru_entry(self):
+        closed = []
+        done = threading.Event()
+
+        async def aclose(client):
+            closed.append(client)
+            done.set()
+
+        cache = ClientCache(capacity=1, aclose=aclose)
+        cache.put(1, "a")
+        cache.get_or_create(2, lambda: "b")  # evicts "a"
+
+        assert done.wait(timeout=5.0), "evicted client was never closed"
+        assert closed == ["a"]
+
+    def test_factory_error_propagates_and_caches_nothing(self):
+        cache = ClientCache(capacity=2)
+
+        def factory():
+            raise ValueError("no client for you")
+
+        with pytest.raises(ValueError, match="no client for you"):
+            cache.get_or_create(None, factory)
+        assert cache.current_size() == 0
+        # The lock was released, so the cache is still usable.
+        assert cache.get_or_create(None, lambda: "built") == "built"
+
+    def test_concurrent_sync_callers_share_one_client(self):
+        """Two threads calling a backend synchronously both key on `None`.
+
+        With a bare `get`/`put` pair the second `put` displaces the first thread's
+        client without closing it — the leak this cache exists to prevent.
+        """
+        threads = 8
+        lined_up = threading.Barrier(threads)
+        built = []
+        results: list[object] = [None] * threads
+
+        def factory():
+            client = object()
+            built.append(client)
+            return client
+
+        def call(index: int) -> None:
+            # Line every thread up on the cache call so they contend for the miss.
+            lined_up.wait(timeout=5.0)
+            results[index] = cache.get_or_create(None, factory)
+
+        cache = ClientCache(capacity=2)
+        workers = [threading.Thread(target=call, args=(i,)) for i in range(threads)]
+        for worker in workers:
+            worker.start()
+        for worker in workers:
+            worker.join(timeout=5.0)
+            assert not worker.is_alive()
+
+        assert len(built) == 1, "more than one client was constructed under key None"
+        assert results == [built[0]] * threads
+        assert cache.current_size() == 1
+
+
+class TestClientCacheClose:
+    def test_put_evicts_and_closes_via_callback(self):
+        closed = []
+        done = threading.Event()
+
+        async def aclose(client):
+            closed.append(client)
+            done.set()
+
+        cache = ClientCache(capacity=2, aclose=aclose)
+        cache.put(1, "a")
+        cache.put(2, "b")
+        cache.put(3, "c")  # evicts key 1
+
+        assert done.wait(timeout=5.0), "evicted client was never closed"
+        assert closed == ["a"]
+
+    def test_put_does_not_wait_for_the_evicted_close(self):
+        """Eviction happens on `generate`'s path; it must not stall the caller."""
+        release = threading.Event()
+        started = threading.Event()
+        finished = threading.Event()
+
+        async def aclose(client):
+            started.set()
+            await asyncio.to_thread(release.wait, 5.0)
+            finished.set()
+
+        cache = ClientCache(capacity=1, aclose=aclose)
+        cache.put(1, "a")
+        cache.put(2, "b")  # evicts "a"
+
+        assert started.wait(timeout=5.0), "evicted client's close was never scheduled"
+        assert not finished.is_set(), "put() waited for the close to finish"
+        release.set()
+        assert finished.wait(timeout=5.0)
+
+    def test_put_over_an_existing_key_does_not_close_the_displaced_client(self):
+        """A same-key put displaces a client its own creator is about to use."""
+        closed = []
+
+        async def aclose(client):
+            closed.append(client)
+
+        cache = ClientCache(capacity=2, aclose=aclose)
+        cache.put(None, "first")
+        cache.put(None, "second")  # replaces, rather than evicting, "first"
+
+        assert cache.get(None) == "second"
+        assert cache.current_size() == 1
+        # Only LRU eviction closes; closing here would break the request the
+        # caller that put "first" is running on it.
+        assert closed == []
+
+    def test_put_without_aclose_does_not_error_on_eviction(self):
+        cache = ClientCache(capacity=1)
+        cache.put(1, "a")
+        cache.put(2, "b")  # evicts "a"; no aclose configured, nothing to close
+        assert cache.get(2) == "b"
+
+    def test_clear_closes_every_entry(self):
+        closed = []
+
+        async def aclose(client):
+            closed.append(client)
+
+        cache = ClientCache(capacity=3, aclose=aclose)
+        cache.put(1, "a")
+        cache.put(2, "b")
+        cache.clear()
+
+        assert sorted(closed) == ["a", "b"]
+        assert cache.current_size() == 0
+
+    def test_clear_empties_cache_even_if_closer_raises(self):
+        """A raising closer must not leave a stale entry behind."""
+
+        async def aclose(client):
+            raise RuntimeError("boom")
+
+        cache = ClientCache(capacity=1, aclose=aclose)
+        cache.put(1, "a")
+        cache.clear()  # the closer's error is caught and logged, not raised
+
+        assert cache.current_size() == 0
+
+    def test_clear_bounds_its_wait_on_an_unbound_client(self, monkeypatch):
+        """`close()`'s own path: a busy background loop must time out, not hang."""
+        monkeypatch.setattr(async_helpers, "CLIENT_CLOSE_TIMEOUT", 0.1)
+        release = threading.Event()
+        finished = threading.Event()
+
+        async def aclose(client):
+            await asyncio.to_thread(release.wait, 10.0)
+            finished.set()
+
+        cache = ClientCache(capacity=1, aclose=aclose)
+        cache.put(None, "a")  # the key every sync-constructed backend uses
+
+        try:
+            start = time.monotonic()
+            cache.clear()
+            elapsed = time.monotonic() - start
+
+            assert elapsed < 5.0, "clear() waited without a timeout"
+            assert cache.current_size() == 0
+        finally:
+            release.set()
+
+        # Timing out abandons the wait, not the close.
+        assert finished.wait(timeout=5.0), "the close was cancelled, not just unwaited"
+
+    def test_clear_without_aclose_just_empties(self):
+        cache = ClientCache(capacity=2)
+        cache.put(1, "a")
+        cache.put(2, "b")
+        cache.clear()
+        assert cache.current_size() == 0
+
+    async def test_aclear_closes_current_loop_and_unbound_entries(self):
+        closed = []
+
+        async def aclose(client):
+            closed.append(client)
+
+        loop = asyncio.get_running_loop()
+        cache = ClientCache(capacity=2, aclose=aclose)
+        cache.put(loop, "a")
+        cache.put(None, "b")
+        await cache.aclear()
+
+        assert sorted(closed) == ["a", "b"]
+        assert cache.current_size() == 0
+
+    async def test_clear_from_inside_the_owning_loop_schedules_the_close(self):
+        """The sync path can't await the running loop's own client, but must not drop it."""
+        closed = []
+        done = asyncio.Event()
+
+        async def aclose(client):
+            closed.append(client)
+            done.set()
+
+        cache = ClientCache(capacity=2, aclose=aclose)
+        cache.put(asyncio.get_running_loop(), "a")
+        cache.clear()
+
+        assert cache.current_size() == 0
+        assert closed == [], "clear() cannot await a client owned by the running loop"
+        await asyncio.wait_for(done.wait(), timeout=5.0)
+        assert closed == ["a"]
+
+    async def test_aclear_drives_a_stopped_loop_to_close_its_entry(self):
+        """A loop that is neither running nor closed can only be driven off-loop."""
+        ran_on = []
+
+        async def aclose(client):
+            ran_on.append(asyncio.get_running_loop())
+
+        stopped_loop = asyncio.new_event_loop()
+        try:
+            cache = ClientCache(capacity=2, aclose=aclose)
+            cache.put(stopped_loop, "a")
+            await cache.aclear()
+
+            # `run_until_complete` from inside this coroutine's loop would raise and be
+            # swallowed, leaving the client to GC.
+            assert ran_on == [stopped_loop], "the stopped loop's client was not closed"
+            assert cache.current_size() == 0
+        finally:
+            stopped_loop.close()
+
+    async def test_aclear_closes_an_entry_owned_by_a_foreign_loop(self):
+        """A client on another thread's loop closes there, without blocking this one."""
+        ran_on = []
+
+        async def aclose(client):
+            ran_on.append(asyncio.get_running_loop())
+            await asyncio.sleep(0.2)  # holds the foreign loop, not ours
+
+        foreign_loop = asyncio.new_event_loop()
+        thread = threading.Thread(target=foreign_loop.run_forever, daemon=True)
+        thread.start()
+
+        ticks = 0
+
+        async def tick():
+            nonlocal ticks
+            while True:
+                await asyncio.sleep(0.01)
+                ticks += 1
+
+        try:
+            cache = ClientCache(capacity=2, aclose=aclose)
+            cache.put(foreign_loop, "a")
+
+            ticker = asyncio.create_task(tick())
+            await cache.aclear()
+            ticker.cancel()
+
+            assert ran_on == [foreign_loop]
+            assert cache.current_size() == 0
+            # A blocking wait would have parked this thread before `tick` ever ran.
+            assert ticks > 0, "aclear() blocked its own event loop while closing"
+        finally:
+            foreign_loop.call_soon_threadsafe(foreign_loop.stop)
+            thread.join(timeout=5.0)
+            foreign_loop.close()
 
 
 if __name__ == "__main__":

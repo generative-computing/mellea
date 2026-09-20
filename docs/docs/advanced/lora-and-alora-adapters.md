@@ -15,11 +15,17 @@ and use it as a requirement validator in any Mellea program.
 Apple Silicon Mac with sufficient VRAM for the chosen base model. Uploading requires a
 Hugging Face account.
 
-> **Backend note:** Custom-trained adapters can only be loaded into `LocalHFBackend`.
-> They do not work with Ollama, OpenAI, or other remote backends.
+> **Backend note:** Custom-trained adapters can only be loaded directly into
+> `LocalHFBackend`. Ollama can use a custom adapter bundled into a model with a
+> Modelfile `ADAPTER` line, but Mellea does not discover custom Ollama adapter
+> functions from `adapter_models` alone. Register a composed adapter with its
+> `io.yaml` explicitly, then map its name to the bundled model tag. See
+> [Adapter functions](./intrinsics.md) for the supported catalogue-adapter
+> workflow.
 >
 > Granite Switch models ship with pre-trained adapter functions embedded in the
-> model weights, which can be used via `OpenAIBackend` with
+> model weights. Use them through `OpenAIBackend` with a served checkpoint, or
+> through `LocalHFBackend` with a local checkpoint and
 > `load_embedded_adapters=True`. See [Adapter functions](./intrinsics.md) for details.
 
 ## LoRA vs aLoRA
@@ -116,34 +122,41 @@ m alora upload ./checkpoints/my_adapter \
 
 ## Use the adapter in Mellea
 
-Load the trained adapter into a `LocalHFBackend` using `CustomIntrinsicAdapter`.
-
-> **Note:** `CustomIntrinsicAdapter` is deprecated in favor of the `Adapter` /
-> `WeightsBinding` model, but is still the only working way to load a
-> locally-trained custom adapter — `Adapter`'s weight-loading is not yet
-> implemented. This example will move to `Adapter` once that lands; see #1144.
+Load the trained adapter into a `LocalHFBackend` by composing an `Adapter`
+directly — `LocalFileBinding` accepts an arbitrary `repo_id`, so a locally
+trained, non-catalog adapter does not need a dedicated shim class.
 
 ```python
 from mellea.backends.huggingface import LocalHFBackend
-from mellea.backends.adapters.adapter import CustomIntrinsicAdapter
+from mellea.backends.adapters import Adapter, Identity, LocalFileBinding, get_io_contract
+from mellea.backends.adapters.catalog import AdapterType
 from mellea.stdlib.context import ChatContext
 from mellea import MelleaSession
 from mellea.stdlib.requirements import ALoraRequirement
 
 backend = LocalHFBackend(model_id="ibm-granite/granite-3.2-8b-instruct")
 
-adapter = CustomIntrinsicAdapter(
-    model_id="your-org/my-adapter",  # HF repo ID or local checkpoint path
-    base_model_name="granite-3.2-8b-instruct",
-    intrinsic_name="custom-failure-check",
+adapter = Adapter(
+    identity=Identity(name="custom-failure-check", adapter_type="alora"),
+    # get_io_contract falls back to a permissive dict contract for names
+    # outside the built-in catalog, so this works for a custom adapter too.
+    io_contract=get_io_contract("custom-failure-check"),
+    weights=LocalFileBinding(
+        name="custom-failure-check",
+        adapter_type=AdapterType.ALORA,
+        repo_id="your-org/my-adapter",  # HF repo ID or local checkpoint path
+        revision="main",  # a custom adapter has no catalog entry to resolve this from
+    ),
 )
-backend.add_adapter(adapter)
+backend.add_adapter(adapter)  # downloads and loads the weights
 
 m = MelleaSession(backend, ctx=ChatContext())
 
 failure_check = ALoraRequirement(
     "The failure mode must not be 'no_failure'.",
     intrinsic_name="custom-failure-check",
+    # Required for a name outside the intrinsics catalog — see Intrinsic.
+    adapter_types=(AdapterType.ALORA,),
 )
 result = m.instruct(
     "Write a triage summary based on this technician note: {{note}}",
@@ -154,17 +167,13 @@ print(str(result))
 # Output will vary — LLM responses depend on model and temperature.
 ```
 
-> **Note:** `CustomIntrinsicAdapter` emits an advisory `UserWarning` because
-> custom capability names are not part of Mellea's built-in capability registry.
-> The adapter is still registered for routing.
-
 `ALoraRequirement` routes validation through the adapter with the matching
-`intrinsic_name`. Create `CustomIntrinsicAdapter` before the requirement: its
-compatibility shim registers the custom name, which lets `ALoraRequirement`
-resolve it. The adapter runs at the `check_requirement` prompt position. Its
-`io.yaml` must transform the output into the
-`{"requirement_check": {"score": <float>}}` response schema; label-only
-adapter output is not compatible with `ALoraRequirement`.
+`intrinsic_name`. Call `backend.add_adapter(adapter)` before the requirement
+runs — it registers the custom name so `ALoraRequirement` can resolve it. The
+adapter runs at the `check_requirement` prompt position. Its `io.yaml` must
+transform the output into the `{"requirement_check": {"score": <float>}}`
+response schema; label-only adapter output is not compatible with
+`ALoraRequirement`.
 
 ## How automatic routing works
 
@@ -179,14 +188,40 @@ adapter is preferred whenever one is loaded, with three exceptions:
    asking for LLM-as-a-judge regardless of what adapters are loaded.
 3. The adapter is unavailable (e.g. cannot be loaded) — Mellea falls back to
    LLM-as-a-judge automatically. This is the *only* fallback case: if the
-   adapter runs but its output fails schema validation, the error propagates
-   rather than silently falling back.
+   adapter runs but its output fails schema validation, `validate()` does not
+   fall back. Instead it surfaces the schema error on `ValidationResult.error`
+   and fails the check closed (`bool(result)` is `False`), so callers can tell
+   an unparsable adapter response apart from an ordinary "requirement not met".
 
 If you want to force the adapter path even when using `generate_from_context`
 directly (bypassing the normal `validate()` call), use `ALoraRequirement` from
 `mellea.stdlib.requirements` — this bypasses `default_to_constraint_checking_alora`,
 but still requires a matching adapter to actually be registered. If none is found,
 Mellea logs a warning and falls back to regular generation rather than erroring.
+
+### What the adapter sees
+
+The `requirement-check` adapter judges the last assistant turn of the conversation it is
+given, so the routing above only produces useful verdicts if that conversation actually
+reaches it. Mellea builds the adapter's message list from the validation context's
+`view_for_generation()`, and validation runs over the post-generation context — the same
+conversation the model generated into, with the generated output last.
+
+That only works on a context that renders history, which the default session does not
+provide: `start_session()` returns a session backed by `SimpleContext`, which retains
+`last_output()` but whose `view_for_generation()` is always empty by design. An
+adapter-backed requirement has no conversation to judge there, so an explicit
+`ALoraRequirement` raises `ValueError` and a plain `Requirement` logs a warning and falls
+back to LLM-as-a-judge. Ask for a chat context explicitly:
+
+```python
+import mellea
+
+# Adapter-backed requirements need a context that renders the assistant turn.
+m = mellea.start_session(context_type="chat")
+```
+
+See [What the validator sees](../concepts/requirements-system.md#what-the-validator-sees).
 
 ## Disable adapter validation
 
@@ -200,6 +235,6 @@ Set it back to `True` to re-enable. This flag is per-backend instance and does n
 affect other sessions.
 
 **See also:** [Adapter functions](./intrinsics.md) |
-[The Requirements System](../concepts/requirements-system) |
-[Write Custom Verifiers](../how-to/write-custom-verifiers) |
-[CLI Reference](../reference/cli)
+[The Requirements System](../concepts/requirements-system.md) |
+[Write Custom Verifiers](../how-to/write-custom-verifiers.md) |
+[CLI Reference](../reference/cli.md)

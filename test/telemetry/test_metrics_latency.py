@@ -79,7 +79,7 @@ def test_record_request_duration_non_streaming(clean_metrics_env):
 
     provider.force_flush()
     data_points = _find_histogram(
-        reader.get_metrics_data(), "gen_ai.client.operation.duration"
+        reader.get_metrics_data(), "mellea.llm.request.duration"
     )
 
     assert len(data_points) == 1
@@ -116,7 +116,7 @@ def test_record_request_duration_streaming(clean_metrics_env):
 
     provider.force_flush()
     data_points = _find_histogram(
-        reader.get_metrics_data(), "gen_ai.client.operation.duration"
+        reader.get_metrics_data(), "mellea.llm.request.duration"
     )
 
     assert len(data_points) == 2
@@ -144,7 +144,7 @@ def test_record_request_duration_with_error(clean_metrics_env):
 
     provider.force_flush()
     data_points = _find_histogram(
-        reader.get_metrics_data(), "gen_ai.client.operation.duration"
+        reader.get_metrics_data(), "mellea.llm.request.duration"
     )
 
     assert len(data_points) == 1
@@ -165,7 +165,7 @@ def test_record_request_duration_negative_skipped(clean_metrics_env):
 
     provider.force_flush()
     data_points = _find_histogram(
-        reader.get_metrics_data(), "gen_ai.client.operation.duration"
+        reader.get_metrics_data(), "mellea.llm.request.duration"
     )
     assert data_points == []
 

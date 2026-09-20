@@ -299,6 +299,16 @@ class TestDiscriminatedUnionValidation:
         with pytest.raises(ValidationError):
             validate_tool_arguments(mt, {"pet": {"name": "Rex"}}, strict=True)
 
+    def test_strict_rejects_invalid_discriminator_value(self):
+        """A kind value outside the allowed set must be rejected."""
+        mt = MelleaTool.from_callable(act)
+        with pytest.raises(ValidationError):
+            validate_tool_arguments(
+                mt,
+                {"pet": {"kind": "horse", "name": "Bob", "breed": "lab"}},
+                strict=True,
+            )
+
     def test_optional_accepts_omitted(self):
         """The optional variant accepts the parameter being omitted."""
         mt = MelleaTool.from_callable(act_optional)

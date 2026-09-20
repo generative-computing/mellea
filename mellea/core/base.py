@@ -22,10 +22,11 @@ import base64
 import binascii
 import datetime
 import enum
+import errno
 import logging
 import os
 import threading
-from collections import OrderedDict
+from collections import OrderedDict, deque
 from collections.abc import Callable, Coroutine, Iterable, Mapping
 from copy import copy, deepcopy
 from dataclasses import dataclass, field
@@ -246,6 +247,29 @@ class ImageUrlBlock(CBlock):
         return f"ImageUrlBlock({self.value}, {self._meta.__repr__()})"
 
 
+_ERROR_ECHO_MAX_CHARS: int = 120
+"""Longest prefix of a caller-supplied string echoed back in an error message."""
+
+
+def _truncate_for_error(s: str) -> str:
+    """Quote a caller-supplied string for an error message, bounding its length.
+
+    Audio helpers accept paths and URLs, so a caller who passes a base64 payload by
+    mistake would otherwise put an entire clip into an exception -- and from there into
+    logs. Truncating at the point of formatting keeps that bounded.
+
+    Args:
+        s (str): The caller-supplied string to echo.
+
+    Returns:
+        str: A repr-quoted value, suffixed with an elision marker and the original
+            length when it was truncated.
+    """
+    if len(s) <= _ERROR_ECHO_MAX_CHARS:
+        return repr(s)
+    return f"{s[:_ERROR_ECHO_MAX_CHARS]!r}... ({len(s)} chars total)"
+
+
 class AudioBlock(CBlock):
     """An `AudioBlock` represents audio as base64 data.
 
@@ -331,6 +355,178 @@ class AudioBlock(CBlock):
         except (binascii.Error, ValueError):
             return False
 
+    @staticmethod
+    def detect_format(data: bytes) -> str | None:
+        """Identify an audio format from the magic bytes of raw (decoded) audio data.
+
+        Detection is by content, not by file extension, so a mislabelled file is
+        reported accurately. Formats other than `wav` and `mp3` are still reported —
+        OpenAI-compatible endpoints accept only those two, but other backends may
+        accept more, matching the pass-through behaviour of the data-URI path.
+
+        Args:
+            data (bytes): The raw, already-decoded audio bytes to inspect.
+
+        Returns:
+            str | None: The detected format (e.g. `"wav"`), or `None` if the bytes
+                do not match a format this function recognises.
+        """
+        # WAV / RIFF: form type must be WAVE, so a RIFF-wrapped AVI is not mistaken for audio.
+        if data[:4] == b"RIFF" and data[8:12] == b"WAVE":
+            return "wav"
+        if data[:4] == b"fLaC":
+            return "flac"
+        if data[:4] == b"OggS":
+            return "ogg"
+        # MP3: an ID3v2 tag, or a bare MPEG audio frame header.
+        if data[:3] == b"ID3":
+            return "mp3"
+        if (
+            len(data) >= 2
+            and data[0] == 0xFF
+            and (data[1] & 0xE0) == 0xE0
+            # The 11-bit sync word alone also matches ADTS AAC, whose sync is 12 bits
+            # (0xFFF...) — so 0xF1 passes the check above and AAC would be reported as
+            # mp3. The 2-bit layer field separates them: MPEG audio uses Layer I/II/III
+            # (0b11/0b10/0b01) while ADTS always encodes 0b00.
+            and (data[1] & 0x06) != 0
+        ):
+            return "mp3"
+        return None
+
+    @classmethod
+    def from_bytes(
+        cls, data: bytes, format: str | None = None, meta: dict[str, Any] | None = None
+    ) -> AudioBlock:
+        """Creates an `AudioBlock` from raw audio bytes, base64-encoding them.
+
+        Args:
+            data (bytes): The raw audio bytes.
+            format (str | None): The audio format. When `None`, it is detected from
+                the data's magic bytes via `detect_format`.
+            meta (dict[str, Any] | None): Optional metadata to associate with the block.
+
+        Returns:
+            AudioBlock: A new `AudioBlock` wrapping the base64-encoded audio.
+
+        Raises:
+            ValueError: If `format` is `None` and the format cannot be detected from
+                the data.
+        """
+        if format is None:
+            detected = cls.detect_format(data)
+            if detected is None:
+                raise ValueError(
+                    "Could not detect the audio format from the data. "
+                    "Pass format explicitly (e.g. format='wav') if you know it."
+                )
+            format = detected
+        return cls(base64.b64encode(data).decode("utf-8"), format, meta)
+
+    @classmethod
+    def from_file(
+        cls,
+        path: str | os.PathLike[str],
+        format: str | None = None,
+        meta: dict[str, Any] | None = None,
+    ) -> AudioBlock:
+        """Creates an `AudioBlock` by reading an audio file from disk.
+
+        This saves callers from base64-encoding the file by hand. The format is
+        detected from the file's contents rather than its extension.
+
+        Args:
+            path (str | os.PathLike[str]): Path to an audio file.
+            format (str | None): The audio format. When `None`, it is detected from
+                the file's magic bytes via `detect_format`.
+            meta (dict[str, Any] | None): Optional metadata to associate with the block.
+
+        Returns:
+            AudioBlock: A new `AudioBlock` wrapping the base64-encoded file contents.
+
+        Raises:
+            ValueError: If `path` cannot be opened (reported as a bad path rather than
+                surfacing the raw OS error, whose text would repeat the whole argument),
+                or if `format` is `None` and the format cannot be detected from the
+                file's contents.
+        """
+        # Callers reach here with a mistaken URL or base64 payload, so anything echoed
+        # back must be truncated -- a full clip's base64 in an exception ends up in logs.
+        shown = _truncate_for_error(os.fspath(path))
+        try:
+            with open(path, "rb") as f:
+                data = f.read()
+        except OSError as e:
+            # Deliberately not interpolating `e`: OSError's str() repeats the untruncated
+            # filename, which defeats the truncation above. The type and errno are the
+            # actionable parts.
+            code = errno.errorcode.get(e.errno, e.errno) if e.errno is not None else "?"
+            raise ValueError(
+                f"Could not read audio file {shown}: expected a path to an audio file "
+                f"on disk ({type(e).__name__}: {code}). To load remote audio use "
+                "AudioBlock.from_url() or AudioUrlBlock; for raw bytes use "
+                "AudioBlock.from_bytes(); for base64 data use "
+                "AudioBlock(value, format=...)."
+            ) from e
+        if format is None:
+            # Detect once here so the error can name the path, then hand the result to
+            # from_bytes rather than making it sniff the same bytes again.
+            format = cls.detect_format(data)
+            if format is None:
+                raise ValueError(
+                    f"Could not identify the audio format of {shown}. "
+                    "Pass format explicitly (e.g. format='wav') if you know it."
+                )
+        return cls.from_bytes(data, format, meta)
+
+    @classmethod
+    def from_url(
+        cls, url: str, format: str | None = None, meta: dict[str, Any] | None = None
+    ) -> AudioBlock:
+        """Creates an `AudioBlock` by downloading audio from a URL.
+
+        Use this when you want the fetch to happen now and to fail here if it cannot.
+        Passing an `AudioUrlBlock` instead defers the same download to send time, where
+        it is memoized per URL — prefer that when the clip is reused across turns.
+
+        Args:
+            url (str): An `http://` or `https://` URL pointing to an audio file.
+            format (str | None): The audio format. When `None`, it is detected from the
+                downloaded bytes' magic bytes via `detect_format`.
+            meta (dict[str, Any] | None): Optional metadata to associate with the block.
+
+        Returns:
+            AudioBlock: A new `AudioBlock` wrapping the base64-encoded audio.
+
+        Raises:
+            ValueError: If `url` is not an `http://`/`https://` URL, the download fails
+                or exceeds the size cap, or `format` is `None` and the format cannot be
+                detected from the downloaded bytes.
+        """
+        if not url.startswith(("http://", "https://")):
+            raise ValueError(
+                f"AudioBlock.from_url requires an http:// or https:// URL; got: "
+                f"{_truncate_for_error(url)}. For a local file use "
+                "AudioBlock.from_file()."
+            )
+        encoded = _cached_download_audio_as_base64(url)
+        if format is None:
+            format = cls.detect_format(base64.b64decode(encoded))
+            if format is None:
+                # The download is already cached at this point. A URL that transiently
+                # served a non-audio 200 would otherwise stay cached, so every retry
+                # would replay the bad body instead of re-fetching. Drop it.
+                # A concurrent reader can still observe the entry between insert and
+                # eviction; closing that window means holding the cache lock across the
+                # download, which is not worth it for a transient error path.
+                _evict_audio_url_from_cache(url)
+                raise ValueError(
+                    f"Could not identify the audio format of the data at "
+                    f"{_truncate_for_error(url)}. Pass format explicitly "
+                    "(e.g. format='wav') if you know it."
+                )
+        return cls(encoded, format, meta)
+
     def __repr__(self) -> str:
         """Provides a python-parsable representation of the block (usually)."""
         return f"AudioBlock({self.value}, {self.format}, {self._meta.__repr__()})"
@@ -338,6 +534,12 @@ class AudioBlock(CBlock):
 
 class AudioUrlBlock(CBlock):
     """An `AudioUrlBlock` represents audio as a URL.
+
+    OpenAI Chat Completions has no audio-by-URL content part, so backends resolve the
+    URL to base64 on your behalf via
+    `resolve_base64`, mirroring how `ImageUrlBlock` is handled for backends that
+    require inline images. The download is memoized per URL, so re-sending the same
+    clip across conversation turns fetches it once.
 
     Args:
         value (str): A URL string pointing to the audio.
@@ -362,9 +564,139 @@ class AudioUrlBlock(CBlock):
         super().__init__(value, meta)
         self.format = format
 
+    def resolve_base64(self) -> str:
+        """Return the audio as raw base64, downloading it once per URL.
+
+        Providers require audio inline, so this is how an `AudioUrlBlock` reaches a
+        backend. The result is memoized in a process-wide, URL-keyed cache, so reusing
+        the URL across conversation turns does not re-fetch it. This call is blocking;
+        async callers should offload it with `asyncio.to_thread`.
+
+        Returns:
+            str: The base64-encoded audio at the URL, with no data URI prefix.
+
+        Raises:
+            ValueError: If the response exceeds the size cap, or the audio cannot be
+                downloaded.
+        """
+        return _cached_download_audio_as_base64(str(self.value))
+
     def __repr__(self) -> str:
         """Provides a python-parsable representation of the block (usually)."""
         return f"AudioUrlBlock({self.value}, {self.format}, {self._meta.__repr__()})"
+
+
+_AUDIO_DOWNLOAD_TIMEOUT_S: float = 30.0
+"""Socket timeout (seconds) applied to audio URL downloads.
+
+Longer than the image timeout: audio bodies are typically far larger.
+"""
+
+_AUDIO_DOWNLOAD_MAX_BYTES: int = 50 * 1024 * 1024
+"""Maximum accepted size (bytes) of a downloaded audio body."""
+
+_AUDIO_CACHE_MAX_ENTRIES: int = 32
+"""Maximum number of URL -> base64 entries retained by the audio download cache.
+
+Smaller than the image cache because audio payloads are much larger per entry.
+"""
+
+_audio_base64_cache: OrderedDict[str, str] = OrderedDict()
+"""Process-wide LRU cache mapping audio URLs to their base64-encoded payload."""
+
+_audio_base64_cache_lock = threading.Lock()
+
+
+def _evict_audio_url_from_cache(url: str) -> None:
+    """Drop a URL's cached payload so the next request re-downloads it.
+
+    Used when a download succeeded at the HTTP level but the body turned out not to be
+    usable audio: keeping it would make every retry replay the bad response.
+
+    Args:
+        url: The URL whose cache entry to remove. A no-op if absent.
+    """
+    with _audio_base64_cache_lock:
+        _audio_base64_cache.pop(url, None)
+
+
+def _cached_download_audio_as_base64(url: str) -> str:
+    """Download audio as base64, memoizing the result per URL.
+
+    Mirrors `_cached_download_image_as_base64`: the download runs outside the lock so
+    concurrent fetches of distinct URLs proceed in parallel, and only the small cache
+    read/write is serialized. Consequently two callers racing on a cold URL may both
+    fetch it — the result is identical and the last writer simply wins, so the duplicate
+    work is the only cost.
+
+    Args:
+        url: An `http://` or `https://` URL pointing to an audio file.
+
+    Returns:
+        str: The base64-encoded audio at the URL.
+
+    Raises:
+        ValueError: If the response exceeds the size cap or the audio cannot be
+            downloaded.
+    """
+    with _audio_base64_cache_lock:
+        cached = _audio_base64_cache.get(url)
+        if cached is not None:
+            _audio_base64_cache.move_to_end(url)  # mark as most-recently used
+            return cached
+
+    encoded = _download_audio_as_base64(url)
+
+    with _audio_base64_cache_lock:
+        _audio_base64_cache[url] = encoded
+        _audio_base64_cache.move_to_end(url)
+        while len(_audio_base64_cache) > _AUDIO_CACHE_MAX_ENTRIES:
+            _audio_base64_cache.popitem(last=False)  # evict least-recently used
+    return encoded
+
+
+def _download_audio_as_base64(url: str) -> str:
+    """Download audio from a URL and return it base64-encoded.
+
+    Unlike the image equivalent there is no decode/re-encode step: audio bytes are
+    passed through as-is, so the caller's declared format stays authoritative and no
+    transcoding is implied.
+
+    A timeout bounds slow responses and the body is streamed with a size cap to guard
+    against memory exhaustion. This function is blocking; async callers should offload
+    it with `asyncio.to_thread`.
+
+    Args:
+        url: An `http://` or `https://` URL pointing to an audio file.
+
+    Returns:
+        str: The base64-encoded audio bytes.
+
+    Raises:
+        ValueError: If the response exceeds the size cap or the audio cannot be
+            downloaded.
+    """
+    try:
+        with requests.get(  # scheme validated by caller
+            url, timeout=_AUDIO_DOWNLOAD_TIMEOUT_S, stream=True
+        ) as response:
+            response.raise_for_status()
+            declared = response.headers.get("Content-Length")
+            if declared is not None and int(declared) > _AUDIO_DOWNLOAD_MAX_BYTES:
+                raise ValueError(
+                    f"Audio at {url!r} exceeds the {_AUDIO_DOWNLOAD_MAX_BYTES}-byte limit"
+                )
+            # Stream so an undeclared/lying Content-Length can't exhaust memory.
+            raw = response.raw.read(_AUDIO_DOWNLOAD_MAX_BYTES + 1, decode_content=True)
+        if len(raw) > _AUDIO_DOWNLOAD_MAX_BYTES:
+            raise ValueError(
+                f"Audio at {url!r} exceeds the {_AUDIO_DOWNLOAD_MAX_BYTES}-byte limit"
+            )
+        if not raw:
+            raise ValueError(f"Audio at {url!r} was empty")
+    except (requests.RequestException, OSError, ValueError) as e:
+        raise ValueError(f"Failed to download audio from URL {url!r}: {e}") from e
+    return base64.b64encode(raw).decode("utf-8")
 
 
 _IMAGE_DOWNLOAD_TIMEOUT_S: float = 10.0
@@ -740,6 +1072,10 @@ class _CallInfo:
     generation_id: str | None = None
 
 
+# Max chunks buffered per stream before the producer blocks; bounded for memory.
+_STREAM_QUEUE_MAXSIZE = 20
+
+
 @dataclass
 class _GenerationState:
     """In-flight computation machinery for a `ModelOutputThunk`.
@@ -770,12 +1106,13 @@ class _GenerationState:
         post_process: Backend coroutine run once after the value is complete.
         on_computed: Coroutine run when the thunk becomes computed.
         start: Wall-clock start time of generation, for latency metrics.
-        last_chunk_time: Wall-clock time the previous streamed chunk was
-            processed, for per-chunk inter-arrival timing. `None` until the
-            first chunk is processed.
+        chunk_intervals: Per-chunk receipt intervals in milliseconds (`None` for
+            the first chunk), captured in `send_to_queue` and drained by `astream`.
     """
 
-    queue: asyncio.Queue = field(default_factory=lambda: asyncio.Queue(maxsize=20))
+    queue: asyncio.Queue = field(
+        default_factory=lambda: asyncio.Queue(maxsize=_STREAM_QUEUE_MAXSIZE)
+    )
     chunk_size: int = 3
     first_chunk_received: bool = False
     processed_chunk_index: int = 0
@@ -787,7 +1124,7 @@ class _GenerationState:
     post_process: Callable[[ModelOutputThunk], Coroutine] | None = None
     on_computed: Callable[[ModelOutputThunk], Coroutine] | None = None
     start: datetime.datetime | None = None
-    last_chunk_time: datetime.datetime | None = None
+    chunk_intervals: deque[float | None] = field(default_factory=deque)
 
 
 class ModelOutputThunk(Generic[S]):
@@ -860,12 +1197,8 @@ class ModelOutputThunk(Generic[S]):
         return (datetime.datetime.now() - self._gen.start).total_seconds() * 1000
 
     def _record_ttfb(self) -> None:
-        """Record time-to-first-byte if streaming and not yet recorded."""
-        if (
-            self.generation.streaming
-            and not self._gen.first_chunk_received
-            and self._gen.start is not None
-        ):
+        """Record time-to-first-byte if not yet recorded."""
+        if not self._gen.first_chunk_received and self._gen.start is not None:
             self.generation.ttfb_ms = self._elapsed_ms()
             self._gen.first_chunk_received = True
 
@@ -893,7 +1226,7 @@ class ModelOutputThunk(Generic[S]):
 
         Draining the internal queue after cancellation is necessary to release
         any `asyncio.Queue.put()` call that the generation task was blocked on
-        (queue maxsize=20).
+        (the queue is bounded).
 
         Args:
             error: Optional cause attached to the `generation_error` hook
@@ -1137,7 +1470,6 @@ class ModelOutputThunk(Generic[S]):
             try:
                 item = self._gen.queue.get_nowait()
                 chunks.append(item)
-                self._record_ttfb()
             except asyncio.QueueEmpty:
                 # We've exhausted the current items in the queue.
                 break
@@ -1153,7 +1485,6 @@ class ModelOutputThunk(Generic[S]):
 
             item = await self._gen.queue.get()
             chunks.append(item)
-            self._record_ttfb()
 
         # Process the sentinel value if it's there.
         if chunks[-1] is None:
@@ -1193,19 +1524,19 @@ class ModelOutputThunk(Generic[S]):
             assert self._gen.process is not None
             prev_len = len(str(self._underlying_value or ""))
             await self._gen.process(self, chunk)
+            # Drain this chunk's receipt interval (from send_to_queue) 1:1 with
+            # processed chunks, even when events are off, to keep it bounded.
+            interval_ms = (
+                self._gen.chunk_intervals.popleft()
+                if self._gen.chunk_intervals
+                else None
+            )
             if emit_chunk_events:
-                now = datetime.datetime.now()
-                time_since_last_chunk_ms = (
-                    (now - self._gen.last_chunk_time).total_seconds() * 1000
-                    if self._gen.last_chunk_time is not None
-                    else None
-                )
-                self._gen.last_chunk_time = now
                 await self._emit_event(
                     "chunk_processed",
                     chunk_index=self._gen.processed_chunk_index,
                     chunk_text_length=len(str(self._underlying_value or "")) - prev_len,
-                    time_since_last_chunk_ms=time_since_last_chunk_ms,
+                    time_since_last_chunk_ms=interval_ms,
                 )
             self._gen.processed_chunk_index += 1
 
@@ -1216,23 +1547,7 @@ class ModelOutputThunk(Generic[S]):
             assert self._gen.post_process is not None
             await self._gen.post_process(self)
 
-            match self._call.action:
-                case Component():
-                    self.parsed_repr = self._call.action._parse(self)
-                case CBlock():
-                    assert self.value is not None, (
-                        "value must be non-None since this thunk is computed"
-                    )
-                    self.parsed_repr = self.value  # type: ignore
-                case ModelOutputThunk():
-                    assert self.value is not None, (
-                        "value must be non-None since this thunk is computed"
-                    )
-                    self.parsed_repr = self.value  # type: ignore
-                case _:
-                    raise ValueError(
-                        "attempted to astream from a model output thunk with no originating action set"
-                    )
+            self._set_parsed_repr()
             assert self.parsed_repr is not None, (
                 "enforce constraint that a computed ModelOutputThunk has a non-None parsed_repr"
             )
@@ -1327,6 +1642,47 @@ class ModelOutputThunk(Generic[S]):
     async def __aexit__(self, *exc_info: object) -> None:
         """Exit the context manager, cancelling any in-flight generation."""
         await self.aclose()
+
+    def _set_parsed_repr(self) -> None:
+        """Compute `parsed_repr` from the originating action once the thunk is computed.
+
+        Dispatches on the originating `action`: a `Component` action parses via its
+        own `_parse`; a `ModelOutputThunk` action (a computed thunk reused as the
+        next incoming turn) is re-parsed through `Message._parse` so its role,
+        tool calls, and reasoning survive the round-trip rather than degrading to a
+        raw string; a `CBlock` action keeps its raw string value.
+
+        Raises:
+            ValueError: If the thunk has no originating action set.
+        """
+        match self._call.action:
+            case Component():
+                self.parsed_repr = self._call.action._parse(self)
+            case CBlock():
+                assert self.value is not None, (
+                    "value must be non-None since this thunk is computed"
+                )
+                self.parsed_repr = self.value  # type: ignore[assignment]
+            case ModelOutputThunk():
+                assert self.value is not None, (
+                    "value must be non-None since this thunk is computed"
+                )
+                # A computed thunk reused as the incoming turn is re-parsed through
+                # `Message._parse` (the same provider-native recovery the `Component`
+                # /`Message` action path uses) so its role, tool calls, and reasoning
+                # survive rather than degrading to the raw string value.
+                # Deferred import: `chat` imports `mellea.core`, so a top-level import
+                # here would be circular. `Message._parse` reads only its `computed`
+                # argument, so a throwaway `Message` instance is a safe vehicle.
+                from ..stdlib.components.chat import Message
+
+                self.parsed_repr = Message(role="assistant", content=self.value)._parse(
+                    self
+                )  # type: ignore[assignment]
+            case _:
+                raise ValueError(
+                    "attempted to astream from a model output thunk with no originating action set"
+                )
 
     def __str__(self) -> str:
         """Stringifies the thunk value."""
@@ -1654,6 +2010,32 @@ class ContextTurn:
 ContextT = TypeVar("ContextT", bound="Context")
 
 
+class ContextTypeMismatchError(TypeError):
+    """Raised when a function returns a different `Context` subtype than it was given.
+
+    Mellea's convention is that the context type flowing out of a function equals
+    the context type flowing in (see issue #1522). This error enforces that
+    invariant. It is raised by the functional layer when a backend or sampling
+    strategy produces a context whose type differs from the input context's type,
+    unless the caller opted in to a deliberate type change via
+    `allow_context_type_change=True`.
+
+    Args:
+        input_type (type): The type of the context passed into the function.
+        output_type (type): The type of the context the function produced.
+    """
+
+    def __init__(self, input_type: type, output_type: type) -> None:
+        """Build the error message from the mismatched input and output context types."""
+        super().__init__(
+            f"Context type changed during generation: input was "
+            f"{input_type.__name__!r} but output is {output_type.__name__!r}. "
+            "Mellea functions must return the same Context subtype they were "
+            "given. If this change is deliberate (e.g. switching the context type "
+            "associated with a session), pass allow_context_type_change=True."
+        )
+
+
 class Context(abc.ABC):
     """A `Context` is used to track the state of a `MelleaSession`.
 
@@ -1666,12 +2048,23 @@ class Context(abc.ABC):
         node_data (Span | None): The data associated with this context node,
             or `None` for the root node.
         is_chat_context (bool): Whether this context operates in chat (multi-turn) mode.
+
+    Class Attributes:
+        _propagated_fields: Instance-attribute names copied from the source node
+            onto every node built by `from_previous()` (and, for `ChatContext`,
+            `_make_root()` / `_rebuild_chat_context()`). Because those factories
+            build via `cls.__new__(cls)` and never re-run `__init__`, a subclass
+            that stores state in its constructor must register the attribute here
+            or it is lost on the next `add()`. Empty on the base `Context`;
+            subclasses override with their own tuple (extend the parent's rather
+            than replacing it, e.g. `(*Context._propagated_fields, "my_field")`).
     """
 
     _previous: Context | None
     _data: Span | None
     _is_root: bool
     _is_chat_context: bool = True
+    _propagated_fields: tuple[str, ...] = ()
 
     def __init__(self) -> None:
         """Constructs a new root context with no content."""
@@ -1685,23 +2078,41 @@ class Context(abc.ABC):
     def from_previous(cls: type[ContextT], previous: Context, data: Span) -> ContextT:
         """Constructs a new context node linked to an existing context node.
 
+        The node is built with `cls.__new__(cls)` and its linked-list fields are
+        set directly, rather than by calling `cls()`. This deliberately does not
+        re-run the subclass `__init__`, so a subclass with required constructor
+        arguments (e.g. `def __init__(self, tag: str)`) still works when `add()`
+        reaches this factory — calling `cls()` would raise `TypeError`. Because
+        `__init__` is skipped, any subclass state that would otherwise be set
+        there must be registered in `_propagated_fields`; every such attribute is
+        copied from `previous` onto the new node here, so subclasses that carry
+        configuration keep it across `add()` without relying on `__init__`
+        re-running.
+
         Args:
             previous (Context): The existing context to extend.
             data (Span): The component, content block, or model output to associate with the new node.
 
         Returns:
             ContextT: A new context instance whose `previous_node` is `previous`.
+
+        Raises:
+            AssertionError: If `previous` is not a `Context`, or if `data` is `None`.
         """
         assert isinstance(previous, Context), (
             "Cannot create a new context from a non-Context object."
         )
         assert data is not None, "Cannot create a new context from None data."
 
-        x = cls()
+        x = cls.__new__(cls)
         x._previous = previous
         x._data = data
         x._is_root = False
         x._is_chat_context = previous._is_chat_context
+        # Skipping `__init__` (above) means subclass-owned state would be lost;
+        # copy every registered field from the source node so it survives.
+        for field_name in cls._propagated_fields:
+            setattr(x, field_name, getattr(previous, field_name))
         return x
 
     @classmethod
@@ -1721,8 +2132,16 @@ class Context(abc.ABC):
         configuration (e.g. `ChatContext` with `model_id` and `window_size`)
         should override this to propagate their config into the fresh instance.
 
+        The base signature returns `Context` (not `Self`) so that existing typed
+        third-party subclasses whose override is annotated `-> Context` — the
+        previous base contract, which the docstring invites — continue to satisfy
+        mypy's override check. Built-in contexts narrow the return to their own
+        type on their concrete overrides (e.g. `ChatContext.new_instance` returns
+        `ChatContext`), preserving subtype inference for callers.
+
         Returns:
-            Context: A freshly initialised root context of the same type.
+            Context: A freshly initialised root context of the same runtime type.
+            Concrete built-in subclasses narrow this to their own type.
         """
         return self.reset_to_new()
 
@@ -1761,6 +2180,11 @@ class Context(abc.ABC):
 
         If `last_n_components` is `None`, then all components are returned.
 
+        The same `Span` may legitimately appear more than once in the returned list: adding
+        an earlier output back onto a context to designate it as a validation target is the
+        motivating case. Only a repeated context *node* is a cycle, and that is what the
+        guard on this walk rejects.
+
         Args:
             last_n_components (int | None): Maximum number of most-recent components to include.
                 Pass `None` to return the full history.
@@ -1770,16 +2194,19 @@ class Context(abc.ABC):
         """
         context_list: list[Span] = []
         current_context: Context = self
+        visited_nodes: set[int] = set()
 
         last_n_count = 0
         while not current_context.is_root_node and (
             last_n_components is None or last_n_count < last_n_components
         ):
-            data = current_context.node_data
-            assert data is not None, "Data cannot be None (except for root context)."
-            assert data not in context_list, (
+            assert id(current_context) not in visited_nodes, (
                 "There might be a cycle in the context tree. That is not allowed."
             )
+            visited_nodes.add(id(current_context))
+
+            data = current_context.node_data
+            assert data is not None, "Data cannot be None (except for root context)."
             context_list.append(data)
             last_n_count += 1
 
@@ -1855,11 +2282,20 @@ class Context(abc.ABC):
     def add(self, c: Span) -> Context:
         """Returns a new context obtained by appending `c` to this context.
 
+        The abstract signature returns the base `Context` so that existing typed
+        third-party subclasses whose override is annotated `-> Context` continue
+        to satisfy mypy's override check (changing this to `Self` would be a
+        breaking API change for them). Built-in contexts narrow the return to
+        `Self` on their concrete overrides, so `ChatContext.add(...)` statically
+        yields a `ChatContext` and a subclass yields its own type.
+
         Args:
             c (Span): The component, content block, or model output to add to the context.
 
         Returns:
-            Context: A new context node with `c` as its data and this context as its previous node.
+            Context: A new context node of the same runtime type with `c` as its
+            data and this context as its previous node. Concrete built-in
+            subclasses narrow this to `Self`.
         """
         # something along ....from_previous(self, c)
         ...
@@ -1942,13 +2378,30 @@ class TemplateRepresentation:
             tool calls to carry onto the serialized message. Defaults to `None`.
         tool_call_id (str | None): For a `role="tool"` component, the provider-supplied
             tool-call id, when available. Defaults to `None`.
+        tool_name (str | None): For a `role="tool"` component, the name of the tool
+            whose result this message carries (e.g. Ollama's tool-result turn keys on
+            it). Defaults to `None`.
+        provider_fields (dict[str, dict[str, Any]] | None): Optional author-declared
+            extra wire fields, keyed by provider target. Each outer key is a provider
+            (matched against the backend's provider string, with the `"openai"`
+            wire-family alias and a `"*"` wildcard); each inner dict holds fields
+            merged into the wire message for that target. Mellea's known fields always
+            win on a key collision. A named target that the request does not hit (and
+            no `"*"`) is a hard error at serialization. Defaults to `None`.
 
     """
 
     obj: Any
     args: dict[
         str,
-        str | Component | CBlock | Iterable | Mapping | TemplateRepresentation | None,
+        str
+        | Component
+        | CBlock
+        | ModelOutputThunk
+        | Iterable
+        | Mapping
+        | TemplateRepresentation
+        | None,
     ]
     tools: dict[str, AbstractMelleaTool] | None = (
         None  # the key must be the name of the function.
@@ -1962,6 +2415,8 @@ class TemplateRepresentation:
     thinking: str | None = None
     tool_calls: list[dict[str, Any]] | None = None
     tool_call_id: str | None = None
+    tool_name: str | None = None
+    provider_fields: dict[str, dict[str, Any]] | None = None
 
 
 @dataclass
@@ -2050,57 +2505,129 @@ def blockify(s: str | Span) -> Span:
             raise Exception("Type Error")
 
 
+def _attachments_from_representation(
+    c: Component, field: str, expected: tuple[type, ...]
+) -> None | list:
+    """Read an attachment list off a component's `TemplateRepresentation`.
+
+    A component can carry attachments two ways: as an attribute (`Message.audio`,
+    `Instruction.images`) or purely by declaring them on the `TemplateRepresentation`
+    its `format_for_llm` returns. Attribute-less components are invisible to the
+    attribute check, so backends that reject unsupported modalities would drop their
+    attachments silently — the failure this fallback exists to prevent.
+
+    Only called when the attribute is absent, so components that expose one (every
+    built-in carrier does) never pay for the extra `format_for_llm` call.
+
+    Args:
+        c: The `Component` whose representation is inspected.
+        field: The `TemplateRepresentation` field to read — `"images"` or `"audio"`.
+        expected: The block types every element must be an instance of. Validated here
+            so the declared return type is not a lie the backend discovers later.
+
+    Returns:
+        The non-empty attachment list declared on the representation, or `None` when
+        the component declares none, does not return a `TemplateRepresentation`, or
+        raises while building one.
+
+    Raises:
+        AssertionError: If the declared attachments are not a list, or any element is
+            not an instance of one of `expected`.
+    """
+    try:
+        tr = c.format_for_llm()
+    except Exception as e:
+        # A guard must not become a new source of failure; treat an unrenderable
+        # component as carrying nothing and let the real render surface the error.
+        # Logged so a genuinely broken format_for_llm is not silently invisible.
+        logging.getLogger(__name__).debug(
+            f"could not read {field} from {type(c).__name__}.format_for_llm(); "
+            f"treating it as carrying no {field}: {e!r}"
+        )
+        return None
+    if not isinstance(tr, TemplateRepresentation):
+        return None
+    attachments = getattr(tr, field, None)
+    if not attachments:
+        return None
+    assert isinstance(attachments, list), (
+        f"TemplateRepresentation.{field} must be a list."
+    )
+    assert all(isinstance(a, expected) for a in attachments), (
+        f"all elements of TemplateRepresentation.{field} must be one of: "
+        f"{', '.join(t.__name__ for t in expected)}."
+    )
+    return list(attachments)
+
+
 def get_images_from_component(c: Component) -> None | list[ImageBlock | ImageUrlBlock]:
     """Return the images attached to a `Component`, or `None` if absent or empty.
+
+    Checks the component's `images` attribute first. When it has none, falls back to
+    the `images` declared on the `TemplateRepresentation` returned by
+    `format_for_llm`, so components that only declare attachments there are still
+    visible to backend capability checks.
+
+    The fallback fires only when the attribute is *absent*, not when it is present and
+    empty. A component that exposes `images = None` while declaring images on its
+    representation is therefore invisible here, yet the formatter still copies them onto
+    the `Message` — a backend that cannot carry them would drop them silently. That
+    combination is unsupported: a component's attribute must agree with its
+    representation. The alternative, falling back whenever the attribute yields nothing,
+    would add a `format_for_llm()` call for every attachment-free component on every
+    capability scan, which is why this is a deliberate trade rather than an oversight.
 
     Args:
         c: The `Component` whose `images` attribute is inspected.
 
     Returns:
         A non-empty list of `ImageBlock` or `ImageUrlBlock` objects if the
-        component has an `images` attribute with at least one element;
-        `None` otherwise.
+        component has an `images` attribute with at least one element, or declares
+        images on its `TemplateRepresentation`; `None` otherwise.
     """
-    if hasattr(c, "images"):
-        imgs = c.images  # type: ignore
-        if imgs is not None:
-            assert isinstance(imgs, list), "images field must be a list."
-            assert all(isinstance(im, (ImageBlock, ImageUrlBlock)) for im in imgs), (
-                "all elements of images list must be ImageBlock or ImageUrlBlock."
-            )
-            if len(imgs) == 0:
-                return None
-            else:
-                return imgs
-        else:
-            return None
-    else:
+    if not hasattr(c, "images"):
+        return _attachments_from_representation(
+            c, "images", (ImageBlock, ImageUrlBlock)
+        )
+
+    imgs = c.images  # type: ignore
+    if imgs is None:
         return None
+    assert isinstance(imgs, list), "images field must be a list."
+    assert all(isinstance(im, (ImageBlock, ImageUrlBlock)) for im in imgs), (
+        "all elements of images list must be ImageBlock or ImageUrlBlock."
+    )
+    return imgs if len(imgs) > 0 else None
 
 
 def get_audio_from_component(c: Component) -> None | list[AudioBlock | AudioUrlBlock]:
     """Return the audio attached to a `Component`, or `None` if absent or empty.
+
+    Checks the component's `audio` attribute first. When it has none, falls back to
+    the `audio` declared on the `TemplateRepresentation` returned by `format_for_llm`,
+    so components that only declare attachments there are still visible to backend
+    capability checks.
+
+    The fallback fires only when the attribute is *absent*, not when it is present and
+    empty — see `get_images_from_component` for why that is deliberate. A component's
+    `audio` attribute must agree with the `audio` on its representation.
 
     Args:
         c: The `Component` whose `audio` attribute is inspected.
 
     Returns:
         A non-empty list of `AudioBlock` or `AudioUrlBlock` objects if the
-        component has an `audio` attribute with at least one element;
-        `None` otherwise.
+        component has an `audio` attribute with at least one element, or declares
+        audio on its `TemplateRepresentation`; `None` otherwise.
     """
-    if hasattr(c, "audio"):
-        audio = c.audio  # type: ignore
-        if audio is not None:
-            assert isinstance(audio, list), "audio field must be a list."
-            assert all(isinstance(a, (AudioBlock, AudioUrlBlock)) for a in audio), (
-                "all elements of audio list must be AudioBlock or AudioUrlBlock."
-            )
-            if len(audio) == 0:
-                return None
-            else:
-                return audio
-        else:
-            return None
-    else:
+    if not hasattr(c, "audio"):
+        return _attachments_from_representation(c, "audio", (AudioBlock, AudioUrlBlock))
+
+    audio = c.audio  # type: ignore
+    if audio is None:
         return None
+    assert isinstance(audio, list), "audio field must be a list."
+    assert all(isinstance(a, (AudioBlock, AudioUrlBlock)) for a in audio), (
+        "all elements of audio list must be AudioBlock or AudioUrlBlock."
+    )
+    return audio if len(audio) > 0 else None

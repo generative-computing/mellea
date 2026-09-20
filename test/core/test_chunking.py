@@ -8,7 +8,7 @@ from collections.abc import Callable
 
 import pytest
 
-from mellea.stdlib.chunking import (
+from mellea.core.chunking import (
     Chunker,
     ChunkingStrategy,
     ParagraphChunking,

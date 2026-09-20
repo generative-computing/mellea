@@ -14,14 +14,21 @@ Terminal state (`failed_early`, `full_text`, `final_validations`,
 import asyncio
 import time
 from contextlib import contextmanager
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
 from mellea.core.backend import Backend
-from mellea.core.base import CBlock, Context, GenerateType, ModelOutputThunk
+from mellea.core.base import (
+    _STREAM_QUEUE_MAXSIZE,
+    CBlock,
+    Context,
+    GenerateType,
+    ModelOutputThunk,
+)
 from mellea.core.requirement import (
     PartialValidationResult,
+    PartialValidationSummary,
     Requirement,
     ValidationResult,
 )
@@ -37,6 +44,7 @@ from mellea.stdlib.streaming import (
     ChunkEvent,
     CompletedEvent,
     ErrorEvent,
+    EventStreamer,
     FullValidationEvent,
     QuickCheckEvent,
     RetryEvent,
@@ -147,6 +155,51 @@ class StreamingMockBackend(Backend):
         raise NotImplementedError
 
 
+async def _feed_tokens_then_error(
+    mot: ModelOutputThunk, response: str, token_size: int
+) -> None:
+    """Feed `response` one token at a time, then push an exception onto the queue."""
+    i = 0
+    while i < len(response):
+        await mot._gen.queue.put(response[i : i + token_size])
+        await asyncio.sleep(0)
+        i += token_size
+    await mot._gen.queue.put(RuntimeError("stream boom"))
+
+
+class StreamingErrorBackend(Backend):
+    """Streams a few tokens, then raises mid-generation."""
+
+    _model_id: str = "streaming-error-model"
+    _provider: str = "streaming-error-provider"
+
+    def __init__(self, response: str, token_size: int = 2) -> None:
+        self._response = response
+        self._token_size = token_size
+
+    async def _generate_from_context(
+        self,
+        action: Any,
+        ctx: Context,
+        *,
+        format: Any = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+    ) -> tuple[ModelOutputThunk, Context]:
+        _ = format, model_options, tool_calls
+        mot = _make_mot()
+        task = asyncio.create_task(
+            _feed_tokens_then_error(mot, self._response, self._token_size)
+        )
+        _ = task
+        return mot, ctx.add(action).add(mot)
+
+    async def _generate_from_raw(
+        self, actions: Any, ctx: Any, **kwargs: Any
+    ) -> tuple[list[ModelOutputThunk], dict[str, Any] | None]:
+        raise NotImplementedError
+
+
 # ---------------------------------------------------------------------------
 # Requirement test doubles
 # ---------------------------------------------------------------------------
@@ -158,7 +211,7 @@ class AlwaysUnknownReq(Requirement):
     def format_for_llm(self) -> str:
         return "always unknown"
 
-    async def stream_validate(
+    async def _stream_validate(
         self, chunk: str, *, backend: Any, ctx: Any
     ) -> PartialValidationResult:
         return PartialValidationResult("unknown")
@@ -184,7 +237,7 @@ class FailAfterWordsReq(Requirement):
     def format_for_llm(self) -> str:
         return f"fail after {self._threshold} words"
 
-    async def stream_validate(
+    async def _stream_validate(
         self, chunk: str, *, backend: Any, ctx: Any
     ) -> PartialValidationResult:
         self._word_count += len(chunk.split())
@@ -213,7 +266,7 @@ class BackendRecordingReq(Requirement):
     def format_for_llm(self) -> str:
         return "backend recorder"
 
-    async def stream_validate(
+    async def _stream_validate(
         self, chunk: str, *, backend: Any, ctx: Any
     ) -> PartialValidationResult:
         _ = chunk
@@ -242,7 +295,7 @@ class ChunkRecordingReq(Requirement):
     def format_for_llm(self) -> str:
         return "chunk recorder"
 
-    async def stream_validate(
+    async def _stream_validate(
         self, chunk: str, *, backend: Any, ctx: Any
     ) -> PartialValidationResult:
         self.seen_chunks.append(chunk)
@@ -489,7 +542,7 @@ async def test_early_exit_on_trailing_fragment() -> None:
         def format_for_llm(self) -> str:
             return "fail on second sentence"
 
-        async def stream_validate(
+        async def _stream_validate(
             self, chunk: str, *, backend: Any, ctx: Any
         ) -> PartialValidationResult:
             _ = chunk, backend, ctx
@@ -546,7 +599,7 @@ async def test_multiple_chunks_in_one_batch_with_mid_batch_fail() -> None:
         def format_for_llm(self) -> str:
             return "fail on third chunk"
 
-        async def stream_validate(
+        async def _stream_validate(
             self, chunk: str, *, backend: Any, ctx: Any
         ) -> PartialValidationResult:
             _ = backend, ctx
@@ -620,7 +673,7 @@ class _FailOnSecondReq(Requirement):
     def format_for_llm(self) -> str:
         return "fail on second"
 
-    async def stream_validate(
+    async def _stream_validate(
         self, chunk: str, *, backend: Any, ctx: Any
     ) -> PartialValidationResult:
         _ = chunk, backend, ctx
@@ -681,7 +734,7 @@ async def test_full_text_spans_multiple_emitted_chunks_on_early_exit(
         def format_for_llm(self) -> str:
             return "fail on third"
 
-        async def stream_validate(
+        async def _stream_validate(
             self, chunk: str, *, backend: Any, ctx: Any
         ) -> PartialValidationResult:
             _ = chunk, backend, ctx
@@ -957,11 +1010,11 @@ async def test_external_cancellation_mid_stream_still_finalizes() -> None:
 async def test_early_exit_does_not_deadlock() -> None:
     """A high-throughput stream that fails early must not hang.
 
-    The response is far longer than the MOT queue (maxsize 20), so an early
-    fail must not leave the producer blocked on a full queue after the consumer
-    stops. A hang trips the timeout.
+    The response is far longer than the MOT queue, so an early fail must not
+    leave the producer blocked on a full queue after the consumer stops. A hang
+    trips the timeout.
     """
-    response = "word " * 200
+    response = "word " * (_STREAM_QUEUE_MAXSIZE * 10)
     backend = StreamingMockBackend(response, token_size=5)
     req = FailAfterWordsReq(threshold=3)
 
@@ -1062,7 +1115,7 @@ async def test_requirement_copy_contract() -> None:
         def format_for_llm(self) -> str:
             return "raising copy"
 
-        async def stream_validate(
+        async def _stream_validate(
             self, chunk: str, *, backend: Any, ctx: Any
         ) -> PartialValidationResult:
             return PartialValidationResult("unknown")
@@ -1115,7 +1168,7 @@ async def test_exception_in_stream_validate_propagates_and_cancels() -> None:
         def format_for_llm(self) -> str:
             return "raiser"
 
-        async def stream_validate(
+        async def _stream_validate(
             self, chunk: str, *, backend: Any, ctx: Any
         ) -> PartialValidationResult:
             raise RuntimeError("validate boom")
@@ -1142,6 +1195,21 @@ async def test_exception_in_stream_validate_propagates_and_cancels() -> None:
 
     # The generation was cancelled during teardown, not merely finished.
     assert streamer._mot._cancelled is True
+    assert streamer._mot.is_computed() is True
+
+
+@pytest.mark.asyncio
+async def test_backend_error_mid_stream_propagates_and_cancels() -> None:
+    """A backend error during generation propagates from the loop and cancels gen."""
+    backend = StreamingErrorBackend("One. Two. ", token_size=2)
+
+    streamer = await stream(_action(), backend, _ctx(), chunking="sentence")
+    with pytest.raises(RuntimeError, match="stream boom"):
+        async with streamer:
+            async for _chunk in streamer:
+                pass
+
+    assert streamer.completed_normally is False
     assert streamer._mot.is_computed() is True
 
 
@@ -1195,7 +1263,7 @@ async def test_cancels_peer_validators() -> None:
         def format_for_llm(self) -> str:
             return "raiser"
 
-        async def stream_validate(
+        async def _stream_validate(
             self, chunk: str, *, backend: Any, ctx: Any
         ) -> PartialValidationResult:
             raise RuntimeError("validator failed")
@@ -1214,7 +1282,7 @@ async def test_cancels_peer_validators() -> None:
         def format_for_llm(self) -> str:
             return "slow"
 
-        async def stream_validate(
+        async def _stream_validate(
             self, chunk: str, *, backend: Any, ctx: Any
         ) -> PartialValidationResult:
             await asyncio.sleep(5.0)
@@ -1258,7 +1326,11 @@ def test_stream_event_types_have_auto_timestamp() -> None:
             chunk_index=0,
             attempt=1,
             passed=True,
-            results=[PartialValidationResult("unknown")],
+            results=[
+                PartialValidationSummary.from_results(
+                    [PartialValidationResult("unknown")]
+                )
+            ],
         ),
         StreamingDoneEvent(attempt=1, full_text="hello"),
         FullValidationEvent(
@@ -1318,6 +1390,40 @@ async def test_event_emission_order_happy_path() -> None:
     # before it is emitted.
     for ci in range(2):
         assert events.index(qc_events[ci]) < events.index(chunk_events[ci])
+
+
+@_cpex_skip
+@pytest.mark.asyncio
+async def test_terminal_flush_quickcheck_has_no_paired_chunk() -> None:
+    """A requirement's end-of-stream residual flush emits an unpaired QuickCheckEvent.
+
+    Raw stream with a `chunking="sentence"` requirement on text ending mid-sentence: the
+    residual is validated only at flush, emitting a trailing QuickCheckEvent at a chunk_index
+    no ChunkEvent uses. A `chunking=None` sibling reports `"unknown"` in that event.
+    """
+    backend = StreamingMockBackend(
+        "Hello world", token_size=3
+    )  # no sentence terminator
+
+    with _record_events() as events:
+        async with await stream(
+            _action(),
+            backend,
+            _ctx(),
+            requirements=[AlwaysUnknownReq(chunking="sentence"), AlwaysUnknownReq()],
+            chunking=None,
+        ) as streamer:
+            async for _chunk in streamer:
+                pass
+
+    chunk_events = [e for e in events if isinstance(e, ChunkEvent)]
+    qc_events = [e for e in events if isinstance(e, QuickCheckEvent)]
+    # One extra quick-check beyond the per-delta pairs: the terminal residual flush.
+    assert len(qc_events) == len(chunk_events) + 1
+    terminal = qc_events[-1]
+    assert terminal.chunk_index not in {e.chunk_index for e in chunk_events}
+    # The chunking=None sibling (requirements[1]) reports "unknown" on the flush.
+    assert terminal.results[1].success == "unknown"
 
 
 @_cpex_skip
@@ -1396,7 +1502,7 @@ async def test_error_event_on_stream_validate_exception() -> None:
         def format_for_llm(self) -> str:
             return "raiser"
 
-        async def stream_validate(
+        async def _stream_validate(
             self, chunk: str, *, backend: Any, ctx: Any
         ) -> PartialValidationResult:
             raise RuntimeError("boom")
@@ -1430,6 +1536,691 @@ async def test_error_event_on_stream_validate_exception() -> None:
     assert len(error_events) == 1
     assert error_events[0].exception_type == "RuntimeError"
     assert "boom" in error_events[0].detail
+
+
+# ---------------------------------------------------------------------------
+# EventStreamer (stream(as_events=True))
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_as_events_returns_event_streamer() -> None:
+    """stream(as_events=True) returns an EventStreamer; the default returns a Streamer."""
+    backend = StreamingMockBackend("One. ", token_size=2)
+    es = await stream(_action(), backend, _ctx(), as_events=True, chunking="sentence")
+    assert isinstance(es, EventStreamer)
+    await es.aclose()
+
+    backend2 = StreamingMockBackend("One. ", token_size=2)
+    s = await stream(_action(), backend2, _ctx(), chunking="sentence")
+    assert isinstance(s, Streamer)
+    await s.aclose()
+
+
+@pytest.mark.asyncio
+async def test_event_streamer_natural_completion() -> None:
+    """Iterating events yields per-chunk pairs, then Done/FullValidation/Completed."""
+    response = "One. Two. "
+    backend = StreamingMockBackend(response, token_size=2)
+
+    events: list[StreamEvent] = []
+    async with await stream(
+        _action(),
+        backend,
+        _ctx(),
+        requirements=[AlwaysUnknownReq()],
+        chunking="sentence",
+        as_events=True,
+    ) as es:
+        async for ev in es:
+            events.append(ev)
+
+    types = [type(e) for e in events]
+    # Per-chunk QuickCheck/Chunk pairs precede the terminal trio.
+    assert types[0] is QuickCheckEvent
+    assert types[1] is ChunkEvent
+    assert types[-3:] == [StreamingDoneEvent, FullValidationEvent, CompletedEvent]
+    # Terminal CompletedEvent is delivered through the iterator on success.
+    assert isinstance(events[-1], CompletedEvent)
+    assert events[-1].success is True
+    # ChunkEvent.text carries each chunk — the same chunks a Streamer would yield.
+    chunk_texts = [e.text for e in events if isinstance(e, ChunkEvent)]
+    assert chunk_texts == ["One.", "Two."]
+    # Outcome properties mirror the wrapped Streamer.
+    assert es.completed_normally is True
+    assert es.full_text == response
+    assert es.failed_early is False
+
+
+@pytest.mark.asyncio
+async def test_event_streamer_requirement_fail_no_raise() -> None:
+    """A mid-stream requirement failure yields a failing QuickCheck + Completed, no raise."""
+    response = "one two three four five six "
+    backend = StreamingMockBackend(response, token_size=2)
+
+    events: list[StreamEvent] = []
+    async with await stream(
+        _action(),
+        backend,
+        _ctx(),
+        requirements=[FailAfterWordsReq(threshold=3)],
+        chunking="word",
+        as_events=True,
+    ) as es:
+        async for ev in es:
+            events.append(ev)
+
+    quick_checks = [e for e in events if isinstance(e, QuickCheckEvent)]
+    assert quick_checks[-1].passed is False
+    # No natural-completion events on early exit; Completed is still delivered.
+    assert not any(
+        isinstance(e, (StreamingDoneEvent, FullValidationEvent)) for e in events
+    )
+    assert isinstance(events[-1], CompletedEvent)
+    assert events[-1].success is False
+    assert es.failed_early is True
+
+
+@pytest.mark.asyncio
+async def test_event_streamer_error_reraises() -> None:
+    """A mid-stream error yields Error + Completed, then the loop re-raises."""
+
+    class _RaisingReq(Requirement):
+        def format_for_llm(self) -> str:
+            return "raiser"
+
+        async def _stream_validate(
+            self, chunk: str, *, backend: Any, ctx: Any
+        ) -> PartialValidationResult:
+            raise RuntimeError("boom")
+
+        async def validate(
+            self,
+            backend: Any,
+            ctx: Any,
+            *,
+            format: Any = None,
+            model_options: Any = None,
+        ) -> ValidationResult:
+            return ValidationResult(result=True)
+
+    backend = StreamingMockBackend("Hello world. ", token_size=3)
+
+    events: list[StreamEvent] = []
+    with pytest.raises(RuntimeError, match="boom"):
+        async with await stream(
+            _action(),
+            backend,
+            _ctx(),
+            requirements=[_RaisingReq()],
+            chunking="sentence",
+            as_events=True,
+        ) as es:
+            async for ev in es:
+                events.append(ev)
+
+    # The consumer still sees the terminal events before the exception surfaces.
+    error_events = [e for e in events if isinstance(e, ErrorEvent)]
+    assert len(error_events) == 1
+    assert error_events[0].exception_type == "RuntimeError"
+    assert isinstance(events[-1], CompletedEvent)
+    assert events[-1].success is False
+
+
+@pytest.mark.asyncio
+async def test_event_streamer_early_break_releases_pump() -> None:
+    """An early break releases the background pump without leaking the task."""
+    response = "One. Two. Three. Four. Five. "
+    backend = StreamingMockBackend(response, token_size=2)
+
+    seen = 0
+    async with await stream(
+        _action(), backend, _ctx(), chunking="sentence", as_events=True
+    ) as es:
+        async for ev in es:
+            if isinstance(ev, ChunkEvent):
+                seen += 1
+                if seen == 2:
+                    break
+
+    assert seen == 2
+    # aclose() (via __aexit__) cancelled and awaited the pump — no orphan task.
+    assert es._pump_task is not None
+    assert es._pump_task.done() is True
+    assert es.completed_normally is False
+    # A second aclose() on the done+cancelled pump must be an idempotent no-op.
+    assert es._pump_task.cancelled() is True
+    await es.aclose()
+
+
+@pytest.mark.asyncio
+async def test_event_streamer_resume_after_break_drains_remainder() -> None:
+    """Iterating again after an early break resumes and drains the terminal events."""
+    response = "One. Two. Three. Four. Five. "
+    backend = StreamingMockBackend(response, token_size=2)
+
+    first: list[StreamEvent] = []
+    rest: list[StreamEvent] = []
+    async with await stream(
+        _action(), backend, _ctx(), chunking="sentence", as_events=True
+    ) as es:
+        async for ev in es:
+            first.append(ev)
+            if isinstance(ev, ChunkEvent):
+                break  # stop after the first chunk
+        # Same handle, second loop: resumes from the next queued event.
+        async for ev in es:
+            rest.append(ev)
+
+    # Resume drained every remaining chunk — nothing lost between the loops.
+    chunk_texts = [e.text for e in first + rest if isinstance(e, ChunkEvent)]
+    assert chunk_texts == ["One.", "Two.", "Three.", "Four.", "Five."]
+    # It ran to natural completion, ending on a successful CompletedEvent.
+    assert isinstance(rest[-1], CompletedEvent)
+    assert rest[-1].success is True
+    # No event is delivered to both loops.
+    assert not (set(map(id, first)) & set(map(id, rest)))
+    assert es._exhausted is True
+
+
+@pytest.mark.asyncio
+async def test_event_streamer_drain_after_close_is_cancel_tolerant() -> None:
+    """Draining leftover events after the context closes returns them without raising."""
+    response = "One. Two. Three. Four. Five. "
+    backend = StreamingMockBackend(response, token_size=2)
+
+    async with await stream(
+        _action(), backend, _ctx(), chunking="sentence", as_events=True
+    ) as es:
+        async for ev in es:
+            if isinstance(ev, ChunkEvent):
+                break
+
+    # aclose() cancelled the still-running pump on block exit; draining the
+    # queued leftovers must not surface the pump's own CancelledError.
+    tail = [ev async for ev in es]
+    assert es._exhausted is True
+    # Exactly one terminal event, marked unsuccessful — confirming we drained
+    # the cancelled path (finalize queued it during cancellation), not a stream
+    # that happened to finish on its own.
+    completed = [e for e in tail if isinstance(e, CompletedEvent)]
+    assert len(completed) == 1
+    assert completed[0].success is False
+    assert es.completed_normally is False
+
+
+@pytest.mark.asyncio
+async def test_event_streamer_aclose_propagates_outer_cancellation() -> None:
+    """Outer cancellation of the task running aclose() must propagate, not be absorbed."""
+    inner_cancelled = asyncio.Event()
+
+    async def _absorbs_first_cancel() -> None:
+        try:
+            await asyncio.sleep(60)
+        except asyncio.CancelledError:
+            # aclose() has issued its .cancel(); it is now blocked awaiting us.
+            inner_cancelled.set()
+            await asyncio.sleep(60)  # absorb so aclose stays at the await
+
+    es = EventStreamer()
+    es._pump_task = asyncio.create_task(_absorbs_first_cancel())
+    await asyncio.sleep(0)
+
+    close_task = asyncio.create_task(es.aclose())
+    await asyncio.wait_for(inner_cancelled.wait(), timeout=2.0)
+
+    # Cancel the aclose task from outside (simulates a wait_for timeout or an
+    # outer TaskGroup cancelling this coroutine).
+    close_task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(close_task, timeout=2.0)
+
+    es._pump_task.cancel()
+    try:
+        await asyncio.wait_for(es._pump_task, timeout=1.0)
+    except (TimeoutError, asyncio.CancelledError):
+        pass
+
+
+@pytest.mark.asyncio
+async def test_event_streamer_iteration_after_exhaustion_stops() -> None:
+    """A second full iteration terminates immediately, not blocking on an empty queue."""
+    backend = StreamingMockBackend("One. Two. ", token_size=2)
+
+    async with await stream(
+        _action(), backend, _ctx(), chunking="sentence", as_events=True
+    ) as es:
+        async for _ev in es:
+            pass
+        assert es._exhausted is True
+
+        async def _drain_all() -> list[StreamEvent]:
+            return [ev async for ev in es]
+
+        # Would hang on an empty queue without the exhaustion guard.
+        again = await asyncio.wait_for(_drain_all(), timeout=1.0)
+
+    assert again == []
+
+
+@pytest.mark.asyncio
+async def test_event_streamer_abandoned_faulted_pump_retrieved_on_close() -> None:
+    """aclose() retrieves a faulted, undrained pump's exception so it isn't orphaned."""
+    es = await stream(
+        _action(),
+        StreamingErrorBackend("Hi. ", token_size=2),
+        _ctx(),
+        chunking="sentence",
+        as_events=True,
+    )
+    # Let the pump run to its faulted completion WITHOUT draining the queue, so
+    # nothing has retrieved its exception yet.
+    assert es._pump_task is not None
+    for _ in range(1000):
+        if es._pump_task.done():
+            break
+        await asyncio.sleep(0)
+    task = es._pump_task
+    assert task.done() and not task.cancelled()
+    # `_log_traceback` is asyncio's own flag: True while the exception is
+    # unretrieved (and would be logged "never retrieved" at GC), False once read.
+    assert task._log_traceback is True
+
+    await es.aclose()
+
+    assert task._log_traceback is False  # aclose() retrieved it
+
+
+@pytest.mark.asyncio
+async def test_event_streamer_baseexception_in_setup_does_not_hang(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A bare BaseException during pump setup surfaces to the caller instead of hanging."""
+
+    class _SetupBoom(BaseException):
+        pass
+
+    async def _boom(*_a: Any, **_k: Any) -> Streamer:
+        raise _SetupBoom("setup boom")
+
+    monkeypatch.setattr("mellea.stdlib.streaming._stream", _boom)
+    with pytest.raises(_SetupBoom, match="setup boom"):
+        await asyncio.wait_for(
+            stream(
+                _action(),
+                StreamingMockBackend("x", token_size=1),
+                _ctx(),
+                as_events=True,
+            ),
+            timeout=2.0,
+        )
+
+
+@pytest.mark.asyncio
+async def test_event_streamer_setup_error_raises_from_stream() -> None:
+    """A setup failure (precomputed MOT) raises eagerly from stream(), like Streamer.
+
+    The pump runs setup before signalling ready; stream() waits on that and
+    re-raises, so a non-streaming backend fails at the call, not on iteration.
+    """
+
+    class PrecomputedBackend(Backend):
+        _model_id: str = "precomputed-mock-model"
+        _provider: str = "precomputed-mock-provider"
+
+        async def _generate_from_context(
+            self,
+            action: Any,
+            ctx: Any,
+            *,
+            format: Any = None,
+            model_options: dict | None = None,
+            tool_calls: bool = False,
+        ) -> tuple[ModelOutputThunk, Any]:
+            return ModelOutputThunk(value="already done"), ctx
+
+        async def _generate_from_raw(
+            self, actions: Any, ctx: Any, **kwargs: Any
+        ) -> tuple[list[ModelOutputThunk], dict[str, Any] | None]:
+            raise NotImplementedError
+
+    with pytest.raises(RuntimeError, match="already-computed MOT"):
+        await stream(_action(), PrecomputedBackend(), _ctx(), as_events=True)
+
+
+# ---------------------------------------------------------------------------
+# Per-requirement chunking (independent of the stream's chunking)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_per_requirement_chunking_independent_of_stream() -> None:
+    """A requirement chunks into its own units, independent of the stream's chunking.
+    With stream `chunking=None` the consumer receives raw deltas, while a requirement with
+    `chunking="sentence"` re-chunks those deltas into sentences for its own validation.
+    """
+    captured: list[Any] = []
+
+    class SentenceRecorder(Requirement):
+        def __init__(self) -> None:
+            super().__init__(chunking="sentence")
+            self.seen: list[str] = []
+
+        def __copy__(self) -> "SentenceRecorder":
+            clone = cast(SentenceRecorder, super().__copy__())  # resets _chunker
+            clone.seen = []  # fresh list; do not share with the original
+            captured.append(clone)
+            return clone
+
+        def format_for_llm(self) -> str:
+            return "sentence recorder"
+
+        async def _stream_validate(
+            self, chunk: str, *, backend: Any, ctx: Any
+        ) -> PartialValidationResult:
+            _ = backend, ctx
+            self.seen = [*self.seen, chunk]
+            return PartialValidationResult("unknown")
+
+        async def validate(
+            self,
+            backend: Any,
+            ctx: Any,
+            *,
+            format: Any = None,
+            model_options: Any = None,
+        ) -> ValidationResult:
+            return ValidationResult(result=True)
+
+    response = "First one. Second two. Third three."
+    backend = StreamingMockBackend(response, token_size=3)
+    req = SentenceRecorder()
+
+    yielded: list[str] = []
+    async with await stream(
+        _action(), backend, _ctx(), requirements=[req], chunking=None
+    ) as streamer:
+        async for chunk in streamer:
+            yielded.append(chunk)
+
+    assert streamer.completed_normally is True
+    # Consumer sees raw deltas reassembling to the whole text;
+    # the requirement re-chunks them into its own sentences.
+    assert "".join(yielded) == response
+    assert captured[0].seen == ["First one.", "Second two.", "Third three."]
+
+
+@pytest.mark.asyncio
+async def test_per_requirement_chunking_early_fail_at_own_granularity() -> None:
+    """A requirement fails at its own sentence granularity even when the stream is unchunked."""
+
+    class FailOnSecondSentence(Requirement):
+        def __init__(self) -> None:
+            super().__init__(chunking="sentence")
+            self._count = 0
+
+        def format_for_llm(self) -> str:
+            return "fail on second sentence"
+
+        async def _stream_validate(
+            self, chunk: str, *, backend: Any, ctx: Any
+        ) -> PartialValidationResult:
+            _ = chunk, backend, ctx
+            self._count += 1
+            if self._count >= 2:
+                return PartialValidationResult("fail", reason="second sentence")
+            return PartialValidationResult("unknown")
+
+        async def validate(
+            self,
+            backend: Any,
+            ctx: Any,
+            *,
+            format: Any = None,
+            model_options: Any = None,
+        ) -> ValidationResult:
+            return ValidationResult(result=True)
+
+    response = "First one. Second two. Third three."
+    # Whole response arrives as one delta; the requirement re-chunks it into sentences.
+    backend = StreamingMockBackend(response, token_size=len(response))
+    req = FailOnSecondSentence()
+
+    yielded: list[str] = []
+    async with await stream(
+        _action(), backend, _ctx(), requirements=[req], chunking=None
+    ) as streamer:
+        async for chunk in streamer:
+            yielded.append(chunk)
+
+    assert streamer.failed_early is True
+    assert len(streamer.streaming_failures) == 1
+    _r, pvr = streamer.streaming_failures[0]
+    assert pvr.success == "fail"
+    assert pvr.reason == "second sentence"
+    assert streamer.final_validations == []
+    # The single raw delta failed on the second sentence before being yielded.
+    assert yielded == []
+
+
+@pytest.mark.asyncio
+async def test_both_levels_chunked_requirement_rechunks_stream_chunks() -> None:
+    """The requirement re-chunks the stream's chunks, not the raw deltas."""
+    captured: list[Any] = []
+
+    class SentenceRecorder(Requirement):
+        def __init__(self) -> None:
+            super().__init__(chunking="sentence")
+            self.seen: list[str] = []
+
+        def __copy__(self) -> "SentenceRecorder":
+            clone = cast(SentenceRecorder, super().__copy__())  # resets _chunker
+            clone.seen = []
+            captured.append(clone)
+            return clone
+
+        def format_for_llm(self) -> str:
+            return "sentence recorder"
+
+        async def _stream_validate(
+            self, chunk: str, *, backend: Any, ctx: Any
+        ) -> PartialValidationResult:
+            _ = backend, ctx
+            self.seen.append(chunk)
+            return PartialValidationResult("unknown")
+
+        async def validate(
+            self,
+            backend: Any,
+            ctx: Any,
+            *,
+            format: Any = None,
+            model_options: Any = None,
+        ) -> ValidationResult:
+            return ValidationResult(result=True)
+
+    response = "First one. Second two.\n\nThird three. Fourth four.\n\n"
+    backend = StreamingMockBackend(response, token_size=4)
+
+    yielded: list[str] = []
+    async with await stream(
+        _action(),
+        backend,
+        _ctx(),
+        requirements=[SentenceRecorder()],
+        chunking="paragraph",
+    ) as streamer:
+        async for chunk in streamer:
+            yielded.append(chunk)
+
+    assert streamer.completed_normally is True
+    assert len(yielded) == 2  # consumer sees the two paragraph chunks
+    # Fused, not a typo: the requirement sees only the stream's paragraph chunks, not raw deltas.
+    assert captured[0].seen == ["First one.", "Second two.Third three.", "Fourth four."]
+
+
+@pytest.mark.asyncio
+async def test_flushed_residual_can_fail_the_stream() -> None:
+    """A failing residual fails the stream at flush, after all content was delivered.
+
+    A `chunking="sentence"` requirement validates each sentence; the trailing unterminated
+    sentence is withheld until end of stream, where the flush validates it. If that residual
+    fails, the stream fails just as a mid-stream failure would.
+    """
+
+    class NoBadSentence(Requirement):
+        def format_for_llm(self) -> str:
+            return "no bad sentences"
+
+        async def _stream_validate(
+            self, chunk: str, *, backend: Any, ctx: Any
+        ) -> PartialValidationResult:
+            _ = backend, ctx
+            if "bad" in chunk:
+                return PartialValidationResult(
+                    "fail", reason=f"bad sentence: {chunk!r}"
+                )
+            return PartialValidationResult("unknown")
+
+        async def validate(
+            self,
+            backend: Any,
+            ctx: Any,
+            *,
+            format: Any = None,
+            model_options: Any = None,
+        ) -> ValidationResult:
+            return ValidationResult(result=True)
+
+    # "Fine one." passes while streaming; "this is bad" is the trailing residual (no
+    # terminator), validated only when flushed at end of stream.
+    backend = StreamingMockBackend("Fine one. this is bad", token_size=4)
+    async with await stream(
+        _action(),
+        backend,
+        _ctx(),
+        requirements=[NoBadSentence(chunking="sentence")],
+        chunking=None,
+    ) as streamer:
+        async for _chunk in streamer:
+            pass
+
+    assert streamer.failed_early is True
+    assert streamer.completed_normally is False
+    pvr = streamer.streaming_failures[0][1]
+    assert "this is bad" in (pvr.reason or "")
+
+
+@pytest.mark.asyncio
+async def test_requirement_residual_flushed_when_stream_flush_is_empty() -> None:
+    r"""A requirement's residual is flushed even when the stream chunker has none.
+
+    Stream `chunking="paragraph"` on text ending in `\n\n` emits a complete paragraph and
+    flushes nothing, but a `chunking="sentence"` requirement still holds "Hello world" (no
+    sentence boundary). The requirement flush runs independently of the stream chunker's, so
+    that residual is still validated at end of stream.
+    """
+    captured: list[Any] = []
+
+    class SentenceRecorder(Requirement):
+        def __init__(self) -> None:
+            super().__init__(chunking="sentence")
+            self.seen: list[str] = []
+
+        def __copy__(self) -> "SentenceRecorder":
+            clone = cast(SentenceRecorder, super().__copy__())
+            clone.seen = []
+            captured.append(clone)
+            return clone
+
+        def format_for_llm(self) -> str:
+            return "sentence recorder"
+
+        async def _stream_validate(
+            self, chunk: str, *, backend: Any, ctx: Any
+        ) -> PartialValidationResult:
+            _ = backend, ctx
+            self.seen = [*self.seen, chunk]
+            return PartialValidationResult("unknown")
+
+        async def validate(
+            self,
+            backend: Any,
+            ctx: Any,
+            *,
+            format: Any = None,
+            model_options: Any = None,
+        ) -> ValidationResult:
+            return ValidationResult(result=True)
+
+    backend = StreamingMockBackend("Hello world\n\n", token_size=3)
+    async with await stream(
+        _action(),
+        backend,
+        _ctx(),
+        requirements=[SentenceRecorder()],
+        chunking="paragraph",
+    ) as streamer:
+        async for _chunk in streamer:
+            pass
+
+    assert streamer.completed_normally is True
+    assert captured[0].seen == ["Hello world"]
+
+
+@pytest.mark.asyncio
+async def test_requirement_residual_flushed_via_stream_chunker_flush() -> None:
+    """When the stream chunker itself flushes a residual, requirement residuals flush once.
+
+    Stream `chunking="sentence"` on text with no sentence boundary withholds everything until
+    its own flush; that flushed fragment feeds a `chunking="word"` requirement, whose trailing
+    word residual is then flushed too — exactly once (not skipped, not doubled).
+    """
+    captured: list[Any] = []
+
+    class WordRecorder(Requirement):
+        def __init__(self) -> None:
+            super().__init__(chunking="word")
+            self.seen: list[str] = []
+
+        def __copy__(self) -> "WordRecorder":
+            clone = cast(WordRecorder, super().__copy__())
+            clone.seen = []
+            captured.append(clone)
+            return clone
+
+        def format_for_llm(self) -> str:
+            return "word recorder"
+
+        async def _stream_validate(
+            self, chunk: str, *, backend: Any, ctx: Any
+        ) -> PartialValidationResult:
+            _ = backend, ctx
+            self.seen = [*self.seen, chunk]
+            return PartialValidationResult("unknown")
+
+        async def validate(
+            self,
+            backend: Any,
+            ctx: Any,
+            *,
+            format: Any = None,
+            model_options: Any = None,
+        ) -> ValidationResult:
+            return ValidationResult(result=True)
+
+    # No sentence boundary: the stream's sentence chunker withholds everything and releases
+    # "alpha beta gamm" only via its own flush, feeding the word requirement in one shot.
+    backend = StreamingMockBackend("alpha beta gamm", token_size=4)
+    async with await stream(
+        _action(), backend, _ctx(), requirements=[WordRecorder()], chunking="sentence"
+    ) as streamer:
+        async for _chunk in streamer:
+            pass
+
+    assert streamer.completed_normally is True
+    # "gamm" is the trailing residual, flushed once.
+    assert captured[0].seen == ["alpha", "beta", "gamm"]
 
 
 if __name__ == "__main__":

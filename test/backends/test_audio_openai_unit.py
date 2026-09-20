@@ -125,9 +125,26 @@ def test_audio_block_in_instruct_payload_shape(
     )
 
 
-def test_audio_url_block_rejected_by_openai(mocked_openai_session: tuple):
-    """AudioUrlBlock raises ValueError before the request is sent."""
-    session, _ = mocked_openai_session
+def test_audio_url_block_downloaded_and_inlined_by_openai(mocked_openai_session: tuple):
+    """AudioUrlBlock is fetched and sent as an inline input_audio part.
+
+    OpenAI Chat Completions has no audio-by-URL content part, so the URL is resolved
+    rather than rejected — mirroring how Ollama inlines `ImageUrlBlock`. The download is
+    patched out, so this asserts the wiring rather than the network.
+    """
+    session, mock_client = mocked_openai_session
     url_block = AudioUrlBlock("https://example.com/audio.wav", format="wav")
-    with pytest.raises(ValueError, match="AudioUrlBlock"):
+
+    with patch.object(AudioUrlBlock, "resolve_base64", return_value=_B64_WAV):
         session.instruct("Transcribe this.", audio=[url_block], strategy=None)
+
+    messages = mock_client.chat.completions.create.await_args.kwargs["messages"]
+    audio_parts = [
+        part
+        for m in messages
+        if isinstance(m.get("content"), list)
+        for part in m["content"]
+        if part.get("type") == "input_audio"
+    ]
+    assert len(audio_parts) == 1
+    assert audio_parts[0]["input_audio"] == {"data": _B64_WAV, "format": "wav"}

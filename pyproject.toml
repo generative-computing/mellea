@@ -42,6 +42,7 @@ m = "cli.m:cli"
 hf = [
     "accelerate>=1.9.0",
     "datasets>=4.0.0",
+    "granite-switch[hf]>=0.1.0",
     "llguidance",
     "peft>=0.18.1", # Native aLoRA support added in PEFT 0.18.0
     "transformers>5.5.0,<6.0.0", # 5.5.0 broke granite 4.0
@@ -138,7 +139,9 @@ test = [
     "pytest-json-report",  # For JSON test reports in nightly CI
     "pytest-rerunfailures",  # For auto-retrying transient e2e backend flakes
     "psutil",  # For test infrastructure: RAM detection in conftest.py
-    "nbmake>=1.5.5",  # Notebook testing
+    # Upper bound is deliberate: notebook collection depends on nbmake creating one
+    # pytest item per .ipynb, which the timeout wiring and marker gating both assume.
+    "nbmake>=1.5.5,<2",  # Notebook testing
     "sentencepiece==0.2.1",  # Necessary for test_huggingface_tools test because of Mistral model
     "jsonschema",
     # Example-only dependencies (run via pytest)
@@ -237,6 +240,20 @@ help = "Start the Docusaurus dev server (http://localhost:3000)"
 [tool.poe.tasks.docs-build]
 shell = "cd docs && DOCS_BASE_URL=/mellea/ npm run build"
 help = "Build the Docusaurus site for fork preview (baseUrl: /mellea/)"
+
+# Notebooks need --nbmake to be collected at all, and they opt in through a `mellea`
+# block in their own notebook metadata. --no-cov because each notebook runs in its own
+# kernel process. The `slow` ones are deselected by the `-m "not slow"` in addopts; add
+# `-m e2e` to include them.
+#
+# Both timeouts are needed and they measure different things: --nbmake-timeout bounds
+# each cell, while nbmake runs a whole notebook as a single pytest item, so pytest-timeout's
+# --timeout bounds the notebook end to end. Without the explicit --timeout the notebook
+# would inherit the 900s from addopts, which is below the per-cell budget and would make
+# --nbmake-timeout unreachable.
+[tool.poe.tasks.nbtest]
+cmd = "pytest --nbmake docs/examples/notebooks -v -rs --no-cov --nbmake-timeout=600 --timeout=1800"
+help = "Execute the example notebooks with nbmake (needs ollama; skips slow notebooks)"
 
 # -----------------------------
 # Ruff - Linting and Formatting
@@ -392,7 +409,6 @@ filterwarnings = [
 
     # Keep specific deprecations visible (important for migration)
     "default:.*Watsonx Backend is deprecated.*:DeprecationWarning",
-    "default:.*check_context_relevance.*:DeprecationWarning",
 ]
 
 # -----------------------------
@@ -425,6 +441,13 @@ exclude_lines = [
 
 [tool.coverage.html]
 directory = "htmlcov"
+
+[tool.uv]
+constraint-dependencies = ["click>=8.3.3"]
+# granite-switch 0.1.0 declares transformers<5.10.0. Mellea's local Granite
+# Switch e2e passes on 5.10.2; retain Mellea's tested HF range until upstream
+# publishes widened Granite Switch metadata.
+override-dependencies = ["transformers>5.5.0,<6.0.0"]
 
 [tool.uv.sources]
 mellea = { workspace = true }

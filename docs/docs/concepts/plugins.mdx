@@ -18,9 +18,9 @@ When an event fires during Mellea's execution (e.g., "about to call the LLM" or 
 Plugins are organized into six hook categories:
 
 - **Session Lifecycle** — session init, reset, and cleanup (`session_pre_init`, `session_post_init`, `session_reset`, `session_cleanup`)
-- **[Component](../reference/glossary#component) Lifecycle** — before and after component execution (`component_pre_execute`, `component_post_success`, `component_post_error`)
+- **[Component](../reference/glossary.md#component) Lifecycle** — before and after component execution (`component_pre_execute`, `component_post_success`, `component_post_error`)
 - **Generation Pipeline** — before and after LLM calls (`generation_pre_call`, `generation_post_call`, `generation_error`)
-- **Validation** — before and after [requirement](../reference/glossary#requirement) checks (`validation_pre_check`, `validation_post_check`)
+- **Validation** — before and after [requirement](../reference/glossary.md#requirement) checks (`validation_pre_check`, `validation_post_check`)
 - **Sampling Pipeline** — sampling loop events (`sampling_loop_start`, `sampling_iteration`, `sampling_repair`, `sampling_loop_end`)
 - **Tool Execution** — before and after tool invocations (`tool_pre_invoke`, `tool_post_invoke`)
 
@@ -246,7 +246,7 @@ unregister(log_generation)
 
 ### Session scope
 
-Pass plugins to [`start_session()`](../reference/glossary#melleasession), fires only within that session.
+Pass plugins to [`start_session()`](../reference/glossary.md#melleasession), fires only within that session.
 
 ```python
 from mellea import start_session
@@ -810,7 +810,7 @@ See the [execution modes example](https://github.com/generative-computing/mellea
 
 ## Tool hooks — securing tool calls
 
-The `tool_pre_invoke` and `tool_post_invoke` hooks give you fine-grained control over tool-call governance. See the [MCP integration guide](/integrations/mcp) for tool calling basics.
+The `tool_pre_invoke` and `tool_post_invoke` hooks give you fine-grained control over tool-call governance. See the [MCP integration guide](../integrations/mcp.md) for tool calling basics.
 
 ### Tool allow-listing
 
@@ -886,7 +886,7 @@ See the [full tool hooks example](https://github.com/generative-computing/mellea
 
 ### Control-flow tools
 
-Mellea's frameworks use internal tools for control flow. For example, the [ReAct loop](../reference/glossary#react) uses a `final_answer` tool to signal that the agent has finished reasoning. These tools flow through the same invocation path as user-defined tools — hooks always fire for them — but the payload carries an `is_control_flow` flag so each plugin can decide its own policy.
+Mellea's frameworks use internal tools for control flow. For example, the [ReAct loop](../reference/glossary.md#react) uses a `final_answer` tool to signal that the agent has finished reasoning. These tools flow through the same invocation path as user-defined tools — hooks always fire for them — but the payload carries an `is_control_flow` flag so each plugin can decide its own policy.
 
 The recommended pattern for allowlist plugins is to skip control-flow tools explicitly:
 
@@ -1048,4 +1048,4 @@ from mellea.plugins import (
 
 ---
 
-**See also:** [Glossary](../reference/glossary), [Tools and Agents](../how-to/tools-and-agents), [Safety Guardrails](../how-to/safety-guardrails), [OpenTelemetry Tracing](../observability/tracing)
+**See also:** [Glossary](../reference/glossary.md), [Tools and Agents](../how-to/tools-and-agents.md), [Safety Guardrails](../how-to/safety-guardrails.md), [OpenTelemetry Tracing](../observability/tracing.md)

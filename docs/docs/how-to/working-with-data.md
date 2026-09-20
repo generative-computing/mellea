@@ -4,7 +4,7 @@ description: "Ground instructions with documents, build RAG pipelines, and use M
 # diataxis: how-to
 ---
 
-**Prerequisites:** [Quick Start](../getting-started/quickstart) complete, `pip install mellea`,
+**Prerequisites:** [Quick Start](../getting-started/quickstart.md) complete, `pip install mellea`,
 Ollama running locally. RAG examples require `faiss-cpu` and `sentence-transformers`.
 `RichDocument` requires `pip install "mellea[docling]"` or `docling` installed separately.
 
@@ -250,4 +250,4 @@ tools during `transform()` calls automatically.
 
 ---
 
-**See also:** [act() and aact()](../how-to/act-and-aact) | [MObjects and mify](../concepts/mobjects-and-mify)
+**See also:** [act() and aact()](./act-and-aact.md) | [MObjects and mify](../concepts/mobjects-and-mify.md)

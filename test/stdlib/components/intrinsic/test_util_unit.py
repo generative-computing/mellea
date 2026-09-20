@@ -1,11 +1,14 @@
 # Copyright IBM Corp. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Unit tests for `call_intrinsic`'s model_options resolution.
+"""Unit tests for `call_intrinsic`'s model_options resolution and contract
+wiring.
 
 Exercises the model_options precedence without a real backend or model —
 guards against the PR #972 bug class (caller-supplied model_options silently
-discarded behind a hardcoded default) resurfacing.
+discarded behind a hardcoded default) resurfacing. Also covers the issue #1516
+change: the output contract is taken from the adapter that `resolve_adapter()`
+returns, and `call_intrinsic` no longer accepts an `io_contract` kwarg.
 """
 
 import json
@@ -107,3 +110,40 @@ def test_call_intrinsic_rejects_empty_chat_context(monkeypatch):
 
     backend.resolve_adapter.assert_not_called()
     assert calls == []
+
+
+def test_call_intrinsic_parses_via_resolved_adapters_io_contract(monkeypatch):
+    """The output contract must come from resolve_adapter's return value, not a
+    parallel argument (issue #1516)."""
+    calls: list[dict | None] = []
+    monkeypatch.setattr(_util.mfuncs, "act", _fake_act_capturing(calls))
+
+    resolved_adapter = MagicMock()
+    resolved_adapter.io_contract.parse.return_value = {"parsed": "by-resolved-adapter"}
+    backend = MagicMock()
+    backend.resolve_adapter.return_value = resolved_adapter
+    context = ChatContext().add(Message("user", "hi"))
+
+    result = _util.call_intrinsic("answerability", context, backend)
+
+    resolved_adapter.io_contract.parse.assert_called_once_with(
+        json.dumps({"result": "ok"})
+    )
+    assert result == {"parsed": "by-resolved-adapter"}
+
+
+def test_call_intrinsic_no_longer_accepts_io_contract_kwarg(monkeypatch):
+    """A caller can no longer pass a separate, possibly-mismatched io_contract."""
+    calls: list[dict | None] = []
+    monkeypatch.setattr(_util.mfuncs, "act", _fake_act_capturing(calls))
+
+    backend = MagicMock()
+    context = ChatContext().add(Message("user", "hi"))
+
+    with pytest.raises(TypeError, match="io_contract"):
+        _util.call_intrinsic(
+            "answerability",
+            context,
+            backend,
+            io_contract=MagicMock(),  # type: ignore[call-arg]
+        )

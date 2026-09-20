@@ -13,7 +13,7 @@ import pytest
 torch = pytest.importorskip("torch", reason="torch not installed — install mellea[hf]")
 
 from mellea.backends.huggingface import LocalHFBackend
-from mellea.backends.model_ids import IBM_GRANITE_4_1_3B, IBM_GRANITE_4_MICRO_3B
+from mellea.backends.model_ids import IBM_GRANITE_4_1_3B
 from mellea.core import ModelOutputThunk
 from mellea.stdlib.components import Document, Message
 from mellea.stdlib.components.intrinsic import rag
@@ -48,22 +48,6 @@ def _backend():
     # No adapters for hybrid version.
     with hf_skip():
         backend_ = LocalHFBackend(model_id=IBM_GRANITE_4_1_3B.hf_model_name)
-    yield backend_
-
-    from test.conftest import cleanup_gpu_backend
-
-    cleanup_gpu_backend(backend_, "rag")
-
-
-@pytest.fixture(name="backend_4_0", scope="module")
-def _backend_4_0():
-    """Granite 4.0 backend used only by tests that don't have Granite 4.1 models."""
-    # Prevent thrashing if the default device is CPU
-    torch.set_num_threads(4)
-
-    # No adapters for hybrid version.
-    with hf_skip():
-        backend_ = LocalHFBackend(model_id=IBM_GRANITE_4_MICRO_3B.hf_model_name)
     yield backend_
 
     from test.conftest import cleanup_gpu_backend
@@ -174,24 +158,6 @@ def test_citations(backend):
     # Second call hits a different code path from the first one
     result = rag.find_citations(assistant_response, docs, context, backend)
     assert result == expected
-
-
-@pytest.mark.qualitative
-@pytest.mark.filterwarnings("ignore::DeprecationWarning")
-def test_context_relevance(backend_4_0):
-    """Verify that the context relevance intrinsic functions properly."""
-    context, question, docs = _read_input_json("context_relevance.json")
-
-    # Context relevance can only check against a single document at a time.
-    document = docs[0]
-
-    # First call triggers adapter loading
-    result = rag.check_context_relevance(question, document, context, backend_4_0)
-    assert result == "irrelevant"
-
-    # Second call hits a different code path from the first one
-    result = rag.check_context_relevance(question, document, context, backend_4_0)
-    assert result == "irrelevant"
 
 
 def _compare_hallucination(result: list[dict], expected: list[dict]):
@@ -307,18 +273,6 @@ def test_citations_resolve(backend):
         assert result == expected
     except AssertionError as ae:
         pytest.xfail(f"Known differences across platforms. Diff was: {ae}")
-
-
-@pytest.mark.qualitative
-@pytest.mark.filterwarnings("ignore::DeprecationWarning")
-def test_context_relevance_resolve(backend_4_0):
-    """Verify context relevance when question is resolved from context."""
-    context, question, docs = _read_input_json("context_relevance.json")
-    context = context.add(Message("user", question))
-    document = docs[0]
-
-    result = rag.check_context_relevance(None, document, context, backend_4_0)
-    assert result == "irrelevant"
 
 
 @pytest.mark.qualitative

@@ -65,7 +65,7 @@ class ChunkingStrategy(ABC):
         that did not reach a terminator.
 
         The default implementation returns an empty list — the trailing
-        fragment is discarded.  Built-in chunkers override this to return
+        fragment is discarded.  Built-in strategies override this to return
         the withheld fragment as a single-element list when non-empty.
 
         Args:

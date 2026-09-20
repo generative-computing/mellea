@@ -638,9 +638,16 @@ def validate_tool_arguments(
             item_type = _build_pydantic_type_from_schema(item_schema)
             return list[item_type]  # type: ignore
 
-        # Handle comma-separated types (Union types)
-        if isinstance(json_type, str) and "," in json_type:
-            type_list = [t.strip() for t in json_type.split(",")]
+        # Handle multi-type unions. JSON Schema expresses these as a list
+        # (`["string", "integer"]`); older code paths may still hand us a
+        # comma-joined string, so accept both.
+        if isinstance(json_type, list) or (
+            isinstance(json_type, str) and "," in json_type
+        ):
+            if isinstance(json_type, list):
+                type_list = [str(t).strip() for t in json_type]
+            else:
+                type_list = [t.strip() for t in json_type.split(",")]
             python_types = [JSON_TYPE_TO_PYTHON.get(t, Any) for t in type_list]
             seen = set()
             unique_types = []
@@ -688,6 +695,15 @@ def validate_tool_arguments(
                     result = Annotated[result, Field(discriminator=discriminator_field)]  # type: ignore
 
             return (result | None) if has_null else result
+
+        # Handle enum constraint (e.g. Literal["read", "write"] on a plain field)
+        if "enum" in schema:
+            enum_vals = tuple(schema["enum"])
+            return Literal[enum_vals]  # type: ignore
+
+        # Handle const constraint (e.g. a bare {"type": "string", "const": "cat"})
+        if "const" in schema:
+            return Literal[schema["const"]]  # type: ignore
 
         # Simple type mapping
         return JSON_TYPE_TO_PYTHON.get(json_type, Any)
@@ -1353,18 +1369,25 @@ def convert_function_to_ollama_tool(
     # This schema never consumes the return annotation, so an unresolvable one
     # is left as a string rather than being allowed to fail the conversion.
     sig = resolve_signature_annotations(func)
-    schema = type(
-        func.__name__,
-        (BaseModel,),
-        {
-            "__annotations__": {
-                k: v.annotation if v.annotation != inspect._empty else str
-                for k, v in sig.parameters.items()
-            },
-            "__signature__": sig,
-            "__doc__": parsed_docstring[doc_string_hash],
+    model_attrs: dict[str, Any] = {
+        "__annotations__": {
+            k: v.annotation if v.annotation != inspect._empty else str
+            for k, v in sig.parameters.items()
         },
-    ).model_json_schema()  # type: ignore
+        "__signature__": sig,
+        "__doc__": parsed_docstring[doc_string_hash],
+    }
+    # Set each parameter's default as a field value on the dynamic model.
+    # Pydantic derives a field's required-ness and schema `default` from the
+    # value assigned on the model, not from `__signature__` (which is only
+    # informational). Without this, every parameter is treated as required and
+    # default values are dropped from the emitted schema. Compare against
+    # `inspect._empty` (not truthiness) so falsy defaults like 0/""/False are
+    # preserved.
+    for param_name, param in sig.parameters.items():
+        if param.default is not inspect._empty:
+            model_attrs[param_name] = param.default
+    schema = type(func.__name__, (BaseModel,), model_attrs).model_json_schema()  # type: ignore
 
     defs = schema.get("$defs", schema.get("definitions", {}))
 
@@ -1380,8 +1403,14 @@ def convert_function_to_ollama_tool(
             # Resolve the reference and inline it
             ref_schema = _resolve_ref(v["$ref"], defs)
             if ref_schema:
-                # Inline the referenced schema (deep copy to avoid mutations)
+                # Inline the referenced schema (deep copy to avoid mutations),
+                # then merge in the wrapper's sibling metadata (e.g. `default`).
+                # Rebuilding from the $ref alone would drop keys Pydantic
+                # attaches alongside it, such as a complex parameter's default.
                 inlined = copy.deepcopy(ref_schema)
+                for wrapper_key, wrapper_value in v.items():
+                    if wrapper_key != "$ref":
+                        inlined[wrapper_key] = wrapper_value
                 # Add description from docstring if available
                 if parsed_docstring.get(k):
                     inlined["description"] = parsed_docstring[k]
@@ -1422,18 +1451,49 @@ def convert_function_to_ollama_tool(
             # This now handles Optional[primitive] types correctly
             if "anyOf" in v:
                 types = {t.get("type", "string") for t in v.get("anyOf")}
+                # Collect enum values from each non-null anyOf branch
+                # (handles Optional[Literal[...]] which Pydantic emits as anyOf)
+                enum_values: list | None = None
+                for sub in v.get("anyOf", []):
+                    if sub.get("type") == "null":
+                        continue
+                    if "enum" in sub:
+                        enum_values = list(sub["enum"])
+                        break
             else:
                 types = {v.get("type", "string")}
+                if "enum" in v:
+                    enum_values = list(v["enum"])
+                elif "const" in v:
+                    # Single-value Literal — normalise to a one-element enum so
+                    # both schema generation and the validator share one code path
+                    enum_values = [v["const"]]
+                else:
+                    enum_values = None
 
             if "null" in types:
                 if k in schema.get("required", []):
                     schema["required"].remove(k)
                 types.discard("null")
 
-            schema["properties"][k] = {
+            # JSON Schema emits multiple types as a list (`["string",
+            # "integer"]`), not the comma-joined string the vendored Ollama
+            # source used. Sort for determinism; collapse one type to a scalar.
+            sorted_types = sorted(types)
+            type_value: str | list[str] = (
+                sorted_types[0] if len(sorted_types) == 1 else sorted_types
+            )
+            simple_prop: dict[str, Any] = {
                 "description": parsed_docstring.get(k, ""),
-                "type": ", ".join(types),
+                "type": type_value,
             }
+            if enum_values is not None:
+                simple_prop["enum"] = enum_values
+            # Preserve the parameter's default value; rebuilding the property
+            # from scratch would otherwise drop it.
+            if "default" in v:
+                simple_prop["default"] = v["default"]
+            schema["properties"][k] = simple_prop
 
     # Final pass: recursively inline all remaining $refs at any depth.
     # This catches dangling references in nested model properties that weren't

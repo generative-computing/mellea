@@ -9,6 +9,10 @@ resolution-markers = [
     "python_full_version < '3.12'",
 ]
 
+[manifest]
+constraints = [{ name = "click", specifier = ">=8.3.3" }]
+overrides = [{ name = "transformers", specifier = ">5.5.0,<6.0.0" }]
+
 [[package]]
 name = "absl-py"
 version = "2.4.0"
@@ -686,31 +690,10 @@ wheels = [
 
 [[package]]
 name = "click"
-version = "8.1.8"
-source = { registry = "https://pypi.org/simple" }
-resolution-markers = [
-    "python_full_version == '3.13.*'",
-    "python_full_version == '3.12.*'",
-]
-dependencies = [
-    { name = "colorama", marker = "python_full_version >= '3.12' and python_full_version < '3.14' and sys_platform == 'win32'" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/b9/2e/0090cbf739cee7d23781ad4b89a9894a41538e4fcf4c31dcdd705b78eb8b/click-8.1.8.tar.gz", hash = "sha256:ed53c9d8990d83c2a27deae68e4ee337473f6330c040a31d4225c9574d16096a", size = 226593, upload-time = "2024-12-21T18:38:44.339Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/7e/d4/7ebdbd03970677812aac39c869717059dbb71a4cfc033ca6e5221787892c/click-8.1.8-py3-none-any.whl", hash = "sha256:63c132bbbed01578a06712a2d1f497bb62d9c1c0d329b7903a866228027263b2", size = 98188, upload-time = "2024-12-21T18:38:41.666Z" },
-]
-
-[[package]]
-name = "click"
 version = "8.4.1"
 source = { registry = "https://pypi.org/simple" }
-resolution-markers = [
-    "python_full_version >= '3.15'",
-    "python_full_version == '3.14.*'",
-    "python_full_version < '3.12'",
-]
 dependencies = [
-    { name = "colorama", marker = "(python_full_version < '3.12' and sys_platform == 'win32') or (python_full_version >= '3.14' and sys_platform == 'win32')" },
+    { name = "colorama", marker = "sys_platform == 'win32'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/9b/98/518d8e5081007684232226f475082b30087d0f585e8457db087298259f49/click-8.4.1.tar.gz", hash = "sha256:918b5633eddf6b41c32d4f454bf0de810065c74e3f7dbf8ee5452f8be88d3e96", size = 353007, upload-time = "2026-05-22T04:08:37.769Z" }
 wheels = [
@@ -1048,8 +1031,7 @@ name = "ddgs"
 version = "9.14.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "click", version = "8.1.8", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12' and python_full_version < '3.14'" },
-    { name = "click", version = "8.4.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12' or python_full_version >= '3.14'" },
+    { name = "click" },
     { name = "lxml" },
     { name = "primp" },
 ]
@@ -1611,6 +1593,24 @@ wheels = [
 ]
 
 [[package]]
+name = "granite-switch"
+version = "0.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "torch" },
+    { name = "transformers" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/da/e6/8f3a7d59c8de8fb26f3612ed71a7a6d2e434627c620ba2c20193c21ee5d5/granite_switch-0.1.0.tar.gz", hash = "sha256:2535a6d0501b36213204150e5f0125db154b7607b23431f93fda9b4b2d5a8407", size = 110952, upload-time = "2026-07-07T14:53:39.345Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d2/9c/c8790201bd44953f6113b77e1cd4a42598389cec89dc17c5bb90ad3dceeb/granite_switch-0.1.0-py3-none-any.whl", hash = "sha256:800935ce446b631b2ed1fc3d27bc6e371568baa42f687e1fd02e228492db6803", size = 123691, upload-time = "2026-07-07T14:53:37.796Z" },
+]
+
+[package.optional-dependencies]
+hf = [
+    { name = "accelerate" },
+]
+
+[[package]]
 name = "greenlet"
 version = "3.5.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1905,7 +1905,7 @@ resolution-markers = [
     "python_full_version < '3.12'",
 ]
 dependencies = [
-    { name = "click", version = "8.4.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12' or python_full_version >= '3.14'" },
+    { name = "click", marker = "python_full_version < '3.12' or python_full_version >= '3.14'" },
     { name = "filelock", marker = "python_full_version < '3.12' or python_full_version >= '3.14'" },
     { name = "fsspec", marker = "python_full_version < '3.12' or python_full_version >= '3.14'" },
     { name = "hf-xet", marker = "(python_full_version < '3.12' and platform_machine == 'AMD64') or (python_full_version >= '3.14' and platform_machine == 'AMD64') or (python_full_version < '3.12' and platform_machine == 'aarch64') or (python_full_version >= '3.14' and platform_machine == 'aarch64') or (python_full_version < '3.12' and platform_machine == 'amd64') or (python_full_version >= '3.14' and platform_machine == 'amd64') or (python_full_version < '3.12' and platform_machine == 'arm64') or (python_full_version >= '3.14' and platform_machine == 'arm64') or (python_full_version < '3.12' and platform_machine == 'x86_64') or (python_full_version >= '3.14' and platform_machine == 'x86_64')" },
@@ -2840,8 +2840,7 @@ source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp", version = "3.13.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12' and python_full_version < '3.14'" },
     { name = "aiohttp", version = "3.13.5", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12' or python_full_version >= '3.14'" },
-    { name = "click", version = "8.1.8", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12' and python_full_version < '3.14'" },
-    { name = "click", version = "8.4.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12' or python_full_version >= '3.14'" },
+    { name = "click" },
     { name = "fastuuid" },
     { name = "httpx" },
     { name = "importlib-metadata", version = "8.5.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12' and python_full_version < '3.14'" },
@@ -3246,6 +3245,7 @@ all = [
     { name = "docling" },
     { name = "elasticsearch" },
     { name = "fastapi" },
+    { name = "granite-switch", extra = ["hf"] },
     { name = "grpcio" },
     { name = "httpx" },
     { name = "huggingface-hub", version = "1.16.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12' and python_full_version < '3.14'" },
@@ -3276,6 +3276,7 @@ backends = [
     { name = "accelerate" },
     { name = "boto3" },
     { name = "datasets" },
+    { name = "granite-switch", extra = ["hf"] },
     { name = "huggingface-hub", version = "1.16.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12' and python_full_version < '3.14'" },
     { name = "huggingface-hub", version = "1.18.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12' or python_full_version >= '3.14'" },
     { name = "ibm-watsonx-ai" },
@@ -3301,6 +3302,7 @@ granite-retriever = [
 hf = [
     { name = "accelerate" },
     { name = "datasets" },
+    { name = "granite-switch", extra = ["hf"] },
     { name = "huggingface-hub", version = "1.16.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12' and python_full_version < '3.14'" },
     { name = "huggingface-hub", version = "1.18.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12' or python_full_version >= '3.14'" },
     { name = "llguidance" },
@@ -3423,6 +3425,7 @@ requires-dist = [
     { name = "docling", marker = "extra == 'docling'", specifier = ">=2.45.0" },
     { name = "elasticsearch", marker = "extra == 'granite-retriever'", specifier = ">=8.0.0,<9.0.0" },
     { name = "fastapi", marker = "extra == 'server'" },
+    { name = "granite-switch", extras = ["hf"], marker = "extra == 'hf'", specifier = ">=0.1.0" },
     { name = "grpcio", marker = "extra == 'hooks'", specifier = ">=1.78.0" },
     { name = "httpx", marker = "extra == 'tools'", specifier = ">=0.27" },
     { name = "huggingface-hub", marker = "extra == 'hf'", specifier = ">=0.33.4" },
@@ -3478,7 +3481,7 @@ dev = [
     { name = "mdxify", specifier = ">=0.2.37" },
     { name = "mellea", extras = ["server"], editable = "." },
     { name = "mypy", specifier = ">=1.17.0" },
-    { name = "nbmake", specifier = ">=1.5.5" },
+    { name = "nbmake", specifier = ">=1.5.5,<2" },
     { name = "pdm", specifier = ">=2.24.0" },
     { name = "poethepoet", specifier = ">=0.42.1" },
     { name = "pre-commit", specifier = ">=4.2.0" },
@@ -3512,7 +3515,7 @@ test = [
     { name = "ddgs", specifier = ">=9.0.0" },
     { name = "jsonschema" },
     { name = "langchain-community", specifier = ">=0.3.0" },
-    { name = "nbmake", specifier = ">=1.5.5" },
+    { name = "nbmake", specifier = ">=1.5.5,<2" },
     { name = "psutil" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -3920,8 +3923,7 @@ name = "nltk"
 version = "3.9.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "click", version = "8.1.8", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12' and python_full_version < '3.14'" },
-    { name = "click", version = "8.4.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12' or python_full_version >= '3.14'" },
+    { name = "click" },
     { name = "joblib" },
     { name = "regex" },
     { name = "tqdm" },
@@ -4201,8 +4203,7 @@ name = "ocrmac"
 version = "1.0.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "click", version = "8.1.8", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12' and python_full_version < '3.14'" },
-    { name = "click", version = "8.4.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12' or python_full_version >= '3.14'" },
+    { name = "click" },
     { name = "pillow" },
     { name = "pyobjc-framework-vision" },
 ]
@@ -7375,8 +7376,7 @@ version = "0.21.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "annotated-doc" },
-    { name = "click", version = "8.1.8", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12' and python_full_version < '3.14'" },
-    { name = "click", version = "8.4.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12' or python_full_version >= '3.14'" },
+    { name = "click" },
     { name = "rich" },
     { name = "shellingham" },
 ]
@@ -7517,8 +7517,7 @@ name = "uvicorn"
 version = "0.46.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "click", version = "8.1.8", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12' and python_full_version < '3.14'" },
-    { name = "click", version = "8.4.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12' or python_full_version >= '3.14'" },
+    { name = "click" },
     { name = "h11" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/1f/93/041fca8274050e40e6791f267d82e0e2e27dd165627bd640d3e0e378d877/uvicorn-0.46.0.tar.gz", hash = "sha256:fb9da0926999cc6cb22dc7cd71a94a632f078e6ae47ff683c5c420750fb7413d", size = 88758, upload-time = "2026-04-23T07:16:00.151Z" }

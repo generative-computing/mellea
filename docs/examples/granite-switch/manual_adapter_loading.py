@@ -5,7 +5,9 @@
 Instead of using `load_embedded_adapters=True` (which loads all adapters from
 the model repo at init), this example shows how to create an OpenAIBackend with
 `load_embedded_adapters=False` and then manually load individual adapters using
-`EmbeddedIntrinsicAdapter.from_hub()` or `from_model_directory()`.
+`register_embedded_adapter_model(intrinsic_name=...)`, which composes an
+`Adapter` (Identity + IOContract + EmbeddedBinding) instead of the deprecated
+`EmbeddedIntrinsicAdapter` shim.
 
 This is useful when:
 - You only need a subset of the model's embedded adapters.
@@ -35,7 +37,6 @@ except requests.ConnectionError:
     print(f"Skipped: vLLM server not reachable at {VLLM_BASE_URL}", file=sys.stderr)
     raise SystemExit(1)
 
-from mellea.backends.adapters.adapter import EmbeddedIntrinsicAdapter
 from mellea.backends.model_ids import IBM_GRANITE_SWITCH_4_1_3B_PREVIEW
 from mellea.backends.openai import OpenAIBackend
 from mellea.formatters import TemplateFormatter
@@ -56,19 +57,13 @@ backend = OpenAIBackend(
 )
 
 # --- Option A: Load a single adapter from Hugging Face Hub ---
-adapters = EmbeddedIntrinsicAdapter.from_hub(
-    SWITCH_MODEL_ID, intrinsic_name="answerability"
-)
-for adapter in adapters:
-    backend.add_adapter(adapter)
+backend.register_embedded_adapter_model(SWITCH_MODEL_ID, intrinsic_name="answerability")
 
 # --- Option B (alternative): Load from a local model directory ---
-# adapters = EmbeddedIntrinsicAdapter.from_model_directory(
+# backend.register_embedded_adapter_model(
 #     "/path/to/local/granite-switch-model",
 #     intrinsic_name="answerability",
 # )
-# for adapter in adapters:
-#     backend.add_adapter(adapter)
 
 print(f"Registered adapters: {backend.list_adapters()}")
 

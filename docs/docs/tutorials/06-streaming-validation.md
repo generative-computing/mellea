@@ -17,12 +17,13 @@ By the end you will have covered:
 - Consuming validated chunks with `async for` inside `async with`
 - Early-exit cancellation and reading `streaming_failures`
 - Choosing between `"word"`, `"sentence"`, and `"paragraph"` chunking
+- Requirement `chunking=` — validators at different granularities on one stream
 - Observing the typed event vocabulary (`ChunkEvent`, `QuickCheckEvent`, …)
-  through the `streaming_event` hook
+  by iterating `stream(as_events=True)`
 - Subclassing `ChunkingStrategy` to define a custom split boundary
 
-**Prerequisites:** [Tutorial 02](./streaming-and-async) (async and streaming),
-[Tutorial 04](./making-agents-reliable) (requirements and validation),
+**Prerequisites:** [Tutorial 02](./02-streaming-and-async.md) (async and streaming),
+[Tutorial 04](./04-making-agents-reliable.md) (requirements and validation),
 `pip install mellea`, Ollama running locally with `granite4.1:3b` downloaded.
 
 ---
@@ -61,7 +62,7 @@ class MaxSentencesReq(Requirement):
     def format_for_llm(self) -> str:
         return f"The response must be at most {self._limit} sentences."
 
-    async def stream_validate(
+    async def _stream_validate(
         self, chunk: str, *, backend: Backend, ctx: Context
     ) -> PartialValidationResult:
         self._count += len(_SENTENCE_END.findall(chunk))
@@ -150,7 +151,7 @@ class MaxSentencesReq(Requirement):
     def format_for_llm(self) -> str:
         return f"The response must be at most {self._limit} sentences."
 
-    async def stream_validate(
+    async def _stream_validate(
         self, chunk: str, *, backend: Backend, ctx: Context
     ) -> PartialValidationResult:
         self._count += len(_SENTENCE_END.findall(chunk))
@@ -252,7 +253,7 @@ class ForbiddenWordReq(Requirement):
     def format_for_llm(self) -> str:
         return f"Do not use any of the following words: {', '.join(sorted(_FORBIDDEN))}."
 
-    async def stream_validate(
+    async def _stream_validate(
         self, chunk: str, *, backend: Backend, ctx: Context
     ) -> PartialValidationResult:
         word = chunk.strip().lower().strip(".,!?;:\"'")
@@ -322,11 +323,10 @@ common English word like `"and"` or `"the"`.
 
 ## Step 4: Observing the event lifecycle
 
-The `async for` loop gives you validated chunks. To observe the full lifecycle —
-per-chunk validation results, stream completion, final validation, errors —
-subscribe to the `streaming_event` hook. `stream()` fires one typed `StreamEvent`
-per lifecycle moment through this hook, so a plugin can watch a run without
-touching the chunk iterator.
+The `async for` loop above yields validated chunks. To observe the full lifecycle
+instead — per-chunk validation results, stream completion, final validation,
+errors — pass `as_events=True`: `stream()` then returns an `EventStreamer` that
+yields one typed `StreamEvent` per lifecycle moment in place of chunks.
 
 ```python
 # Requires: mellea
@@ -337,7 +337,6 @@ import re
 from mellea.core.backend import Backend
 from mellea.core.base import Context
 from mellea.core.requirement import PartialValidationResult, Requirement, ValidationResult
-from mellea.plugins import hook, register
 from mellea.stdlib.components import Instruction
 from mellea.stdlib.streaming import (
     ChunkEvent,
@@ -360,7 +359,7 @@ class MaxSentencesReq(Requirement):
     def format_for_llm(self) -> str:
         return f"The response must be at most {self._limit} sentences."
 
-    async def stream_validate(
+    async def _stream_validate(
         self, chunk: str, *, backend: Backend, ctx: Context
     ) -> PartialValidationResult:
         self._count += len(_SENTENCE_END.findall(chunk))
@@ -376,40 +375,33 @@ class MaxSentencesReq(Requirement):
         return ValidationResult(result=self._count <= self._limit)
 
 
-@hook("streaming_event")
-async def print_events(payload, ctx) -> None:
-    event = payload.event
-    match event:
-        case ChunkEvent():
-            print(f"  chunk[{event.chunk_index}]: {event.text!r}")
-        case QuickCheckEvent(passed=False):
-            print(f"  FAIL at chunk {event.chunk_index}: {event.results[0].reason}")
-        case StreamingDoneEvent():
-            print(f"  stream done — {len(event.full_text)} chars")
-        case FullValidationEvent():
-            print(f"  final validation: {'pass' if event.passed else 'fail'}")
-        case CompletedEvent():
-            print(f"  completed — success={event.success}")
-        case _:
-            pass
-
-
 async def main() -> None:
     from mellea.stdlib.session import start_session
 
     m = start_session()
-    register(print_events)
 
-    # Draining the stream drives generation; print_events fires per event.
     async with await stream(
         Instruction("Write a two-sentence summary of the water cycle."),
         m.backend,
         m.ctx,
         requirements=[MaxSentencesReq(limit=3)],
         chunking="sentence",
+        as_events=True,
     ) as streamer:
-        async for _chunk in streamer:
-            pass
+        async for event in streamer:
+            match event:
+                case ChunkEvent():
+                    print(f"  chunk[{event.chunk_index}]: {event.text!r}")
+                case QuickCheckEvent(passed=False):
+                    print(f"  FAIL at chunk {event.chunk_index}: {event.results[0].reason}")
+                case StreamingDoneEvent():
+                    print(f"  stream done — {len(event.full_text)} chars")
+                case FullValidationEvent():
+                    print(f"  final validation: {'pass' if event.passed else 'fail'}")
+                case CompletedEvent():
+                    print(f"  completed — success={event.success}")
+                case _:
+                    pass
 
 
 asyncio.run(main())
@@ -467,7 +459,7 @@ import re
 from mellea.core.backend import Backend
 from mellea.core.base import Context
 from mellea.core.requirement import PartialValidationResult, Requirement, ValidationResult
-from mellea.stdlib.chunking import ChunkingStrategy
+from mellea.core.chunking import ChunkingStrategy
 from mellea.stdlib.components import Instruction
 from mellea.stdlib.streaming import stream
 
@@ -497,7 +489,7 @@ class NumberedLineReq(Requirement):
     def format_for_llm(self) -> str:
         return "Every line must begin with a number followed by a period (e.g. '1. ')."
 
-    async def stream_validate(
+    async def _stream_validate(
         self, chunk: str, *, backend: Backend, ctx: Context
     ) -> PartialValidationResult:
         if not _NUMBERED_LINE.match(chunk):
@@ -555,7 +547,7 @@ Completed normally
 `validate()` on `NumberedLineReq` always returns `True` because all format
 checking happens during streaming. If any line fails, the stream is cancelled
 before reaching `validate()`. Lines that do reach it have already passed
-`stream_validate()`. This pattern — enforce in `stream_validate`, pass in
+`_stream_validate()`. This pattern — enforce in `_stream_validate`, pass in
 `validate` — is common for requirements whose invariant is a property of
 individual chunks rather than the full output.
 
@@ -570,6 +562,79 @@ explicitly or subclass to override `flush()`.
 
 ---
 
+## Step 6: Requirement chunking
+
+So far one `chunking=` on `stream()` decides the granularity for the consumer **and** every
+requirement. But a requirement can also carry its **own** `chunking=`, so different validators
+can validate at different granularities on the same stream — a sentence-level check and a
+word-level check side by side:
+
+```python
+class MaxWordsPerSentence(Requirement):
+    def __init__(self, limit: int) -> None:
+        super().__init__(chunking="sentence")  # this requirement validates whole sentences
+        self._limit = limit
+
+    async def _stream_validate(
+        self, chunk: str, *, backend: Backend, ctx: Context
+    ) -> PartialValidationResult:
+        if len(chunk.split()) > self._limit:
+            return PartialValidationResult("fail", reason="sentence too long")
+        return PartialValidationResult("unknown")
+
+
+class NoBannedWord(Requirement):
+    def __init__(self, banned: set[str]) -> None:
+        super().__init__(chunking="word")  # this one validates word by word
+        self._banned = banned
+
+    async def _stream_validate(
+        self, chunk: str, *, backend: Backend, ctx: Context
+    ) -> PartialValidationResult:
+        if chunk.strip(".,!?").lower() in self._banned:
+            return PartialValidationResult("fail", reason=f"banned word: {chunk!r}")
+        return PartialValidationResult("unknown")
+```
+
+When a requirement sets its own `chunking=`, the `stream_validate` driver feeds the stream
+chunks it receives to the requirement's own chunker and calls `_stream_validate` on each chunk
+it produces. Until that chunker completes a chunk, the requirement reports nothing yet (the
+neutral state). This composes with the stream's own `chunking=`, including `chunking=None`,
+where the consumer receives raw deltas while each requirement chunks independently.
+
+### Mixing granularities
+
+A requirement's chunker is fed the *stream's* chunks, not the raw deltas, and it accumulates
+them in one stateful chunker — so the stream's chunks must carry the boundaries the requirement
+needs. The built-in strategies — `WordChunking`, `SentenceChunking`, and `ParagraphChunking` —
+all split on a form of whitespace and discard it, so when the stream and a requirement chunk
+differently, those boundaries never reach the requirement's chunker; no built-in pairing is safe.
+
+A requirement *coarser* than the stream may never reach a boundary mid-stream; it stays
+`"unknown"` until the end-of-stream flush, which then validates the leftover as a single chunk,
+fused wherever the stream's chunker dropped a separator.
+
+A *finer* requirement hits the same fusion mid-stream, and `sentence` → `word` is the clearest
+case: sentence chunking eats the space between sentences, which is exactly the boundary `word`
+chunking needs. Feed a word-level requirement the sentence chunks `"A cat jumped the dog."` then
+`"The dog caught the horse."`; with no space between them in the requirement's accumulated buffer,
+it sees:
+
+```python
+["A", "cat", "jumped", "the", "dog.The", "dog", "caught", "the", "horse."]
+```
+
+`"dog.The"` fused across the boundary, so a check for the word `"The"` never fires. So set the
+stream to `chunking=None` whenever a requirement carries its own `chunking` and let each
+requirement re-chunk the raw deltas independently. A custom chunking strategy that keeps its separator can
+still compose with a different stream granularity; the constraint is specific to the built-in
+three.
+
+> **See also:** [`docs/examples/streaming/per_requirement_chunking.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/streaming/per_requirement_chunking.py)
+> for a runnable version with two requirements validating one stream at different granularities.
+
+---
+
 ## What you built
 
 | Concept | What it gives you |
@@ -577,13 +642,14 @@ explicitly or subclass to override `flush()`.
 | `stream()` + `requirements=` | Per-chunk validation with automatic early exit |
 | `async for chunk in streamer` | Validated chunks as they arrive, inside `async with` for safe cleanup |
 | `streamer.failed_early` / `streamer.streaming_failures` | Detect and inspect a mid-stream requirement failure |
-| `streaming_event` hook | Typed event stream — observe every chunk, validation result, and lifecycle signal |
+| `stream(as_events=True)` | Typed event stream (an `EventStreamer`) — observe every chunk, validation result, and lifecycle signal |
 | `"word"` / `"sentence"` / `"paragraph"` | Built-in chunking strategies trading reaction speed for context |
 | `ChunkingStrategy` subclass | Custom split boundaries for structured output (lists, code, CSV) |
+| Requirement `chunking=` | Each requirement validates at its own granularity, independent of the stream |
 
 ---
 
 > **See also:**
-> [How-to: Streaming with per-chunk validation](../how-to/use-async-and-streaming#streaming-with-per-chunk-validation) |
-> [Concepts: The Requirements System — Streaming validation](../concepts/requirements-system#streaming-validation) |
+> [How-to: Streaming with per-chunk validation](../how-to/use-async-and-streaming.md#streaming-with-per-chunk-validation) |
+> [Concepts: The Requirements System — Streaming validation](../concepts/requirements-system.md#streaming-validation) |
 > [Examples: streaming/](https://github.com/generative-computing/mellea/tree/main/docs/examples/streaming)

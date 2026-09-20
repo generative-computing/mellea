@@ -6,6 +6,7 @@
 import json
 import os
 import pathlib
+from typing import Literal
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -77,6 +78,14 @@ def model_dir(tmp_path):
     (cit_dir / "io.yaml").write_text(yaml.dump(_CITATIONS_CONFIG))
 
     return tmp_path
+
+
+@pytest.fixture
+def hub_cache_dir(tmp_path, monkeypatch):
+    """Redirect the default Hugging Face cache outside the mocked snapshot."""
+    cache_dir = tmp_path.parent / f"{tmp_path.name}-hub-cache"
+    monkeypatch.setattr("huggingface_hub.constants.HF_HUB_CACHE", str(cache_dir))
+    return cache_dir
 
 
 # ---- EmbeddedIntrinsicAdapter.__init__ ----
@@ -295,39 +304,122 @@ class TestFromModelDirectory:
 class TestFromHub:
     def test_downloads_and_delegates(self, model_dir):
         """from_hub calls snapshot_download then delegates to from_model_directory."""
+        cache_dir = model_dir.parent / "cache"
         with patch(
             "huggingface_hub.snapshot_download", return_value=str(model_dir)
         ) as mock_dl:
             adapters = EmbeddedIntrinsicAdapter.from_hub(
                 "ibm-granite/granite-switch-micro",
                 revision="test-rev",
-                cache_dir="/tmp/test-cache",
+                cache_dir=str(cache_dir),
             )
 
         mock_dl.assert_called_once_with(
             repo_id="ibm-granite/granite-switch-micro",
             allow_patterns=["adapter_index.json", "io_configs/**"],
-            cache_dir="/tmp/test-cache",
+            cache_dir=str(cache_dir),
             revision="test-rev",
         )
         assert len(adapters) == 2
 
     def test_filter_single_intrinsic(self, model_dir):
+        cache_dir = model_dir.parent / "cache"
         with patch(
             "huggingface_hub.snapshot_download", return_value=str(model_dir)
         ) as mock_dl:
             adapters = EmbeddedIntrinsicAdapter.from_hub(
-                "ibm-granite/granite-switch-micro", intrinsic_name="citations"
+                "ibm-granite/granite-switch-micro",
+                cache_dir=str(cache_dir),
+                intrinsic_name="citations",
             )
 
         mock_dl.assert_called_once_with(
             repo_id="ibm-granite/granite-switch-micro",
             allow_patterns=["adapter_index.json", "io_configs/**"],
-            cache_dir=None,
+            cache_dir=str(cache_dir),
             revision="main",
         )
         assert len(adapters) == 1
         assert adapters[0].intrinsic_name == "citations"
+
+    def test_from_hub_materialises_hub_snapshot(self, model_dir, tmp_path):
+        """from_hub materialises Hub blob symlinks into its persistent local directory."""
+        source_files = [
+            model_dir / "adapter_index.json",
+            *model_dir.glob("io_configs/*/io.yaml"),
+        ]
+
+        def snapshot_download(**_):
+            snapshot_dir = tmp_path / "snapshots" / "revision"
+            blob_dir = tmp_path / "blobs"
+            for source in source_files:
+                destination = snapshot_dir / source.relative_to(model_dir)
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                destination.write_bytes(source.read_bytes())
+
+            for io_config in snapshot_dir.glob("io_configs/*/io.yaml"):
+                blob = blob_dir / io_config.parent.name
+                blob.parent.mkdir(parents=True, exist_ok=True)
+                blob.write_bytes(io_config.read_bytes())
+                io_config.unlink()
+                io_config.symlink_to(os.path.relpath(blob, io_config.parent))
+            (snapshot_dir / "model.safetensors").write_bytes(b"weights")
+
+            return str(snapshot_dir)
+
+        with patch("huggingface_hub.snapshot_download", side_effect=snapshot_download):
+            adapters = EmbeddedIntrinsicAdapter.from_hub(
+                "ibm-granite/granite-switch-micro", cache_dir=str(tmp_path / "cache")
+            )
+
+        assert {adapter.intrinsic_name for adapter in adapters} == {
+            "answerability",
+            "citations",
+        }
+        materialized_dir = next(
+            (tmp_path / "cache" / "mellea" / "embedded-adapter-configs").iterdir()
+        )
+        assert not (materialized_dir / "model.safetensors").exists()
+
+    def test_from_hub_materialises_each_snapshot_revision(self, model_dir, tmp_path):
+        """from_hub keeps materialised configs isolated by immutable snapshot revision."""
+        source_files = [
+            model_dir / "adapter_index.json",
+            *model_dir.glob("io_configs/*/io.yaml"),
+        ]
+
+        def make_snapshot(name):
+            snapshot_dir = tmp_path / "snapshots" / name
+            for source in source_files:
+                destination = snapshot_dir / source.relative_to(model_dir)
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                destination.write_bytes(source.read_bytes())
+            return snapshot_dir
+
+        main_snapshot = make_snapshot("main-commit")
+        v2_snapshot = make_snapshot("v2-commit")
+        cache_dir = tmp_path / "cache"
+        with patch(
+            "huggingface_hub.snapshot_download",
+            side_effect=[str(main_snapshot), str(main_snapshot), str(v2_snapshot)],
+        ) as mock_dl:
+            EmbeddedIntrinsicAdapter.from_hub(
+                "ibm-granite/granite-switch-micro", cache_dir=str(cache_dir)
+            )
+            EmbeddedIntrinsicAdapter.from_hub(
+                "ibm-granite/granite-switch-micro", cache_dir=str(cache_dir)
+            )
+            EmbeddedIntrinsicAdapter.from_hub(
+                "ibm-granite/granite-switch-micro",
+                cache_dir=str(cache_dir),
+                revision="v2",
+            )
+
+        assert mock_dl.call_count == 3
+        materialized_dirs = list(
+            (cache_dir / "mellea" / "embedded-adapter-configs").iterdir()
+        )
+        assert len(materialized_dirs) == 2
 
     def test_missing_huggingface_hub_raises(self):
         with patch.dict("sys.modules", {"huggingface_hub": None}):
@@ -360,7 +452,9 @@ class TestFromHub:
         # Original HF error is chained for debugging.
         assert exc.value.__cause__ is hf_error
 
-    def test_missing_index_after_download_raises_clear_file_not_found(self, tmp_path):
+    def test_missing_index_after_download_raises_clear_file_not_found(
+        self, tmp_path, hub_cache_dir
+    ):
         """A snapshot without adapter_index.json raises a repo-scoped FileNotFoundError.
 
         snapshot_download can return a path that lacks the index (wrong
@@ -397,7 +491,7 @@ class TestFromSource:
         assert len(adapters) == 1
         assert adapters[0].intrinsic_name == "answerability"
 
-    def test_hub_repo_id(self, model_dir):
+    def test_hub_repo_id(self, model_dir, hub_cache_dir):
         """Non-local string routes to from_hub."""
         with patch(
             "huggingface_hub.snapshot_download", return_value=str(model_dir)
@@ -468,23 +562,10 @@ class TestOpenAIBackendRegistration:
         )
         assert set(backend.list_adapters()) == {"answerability_alora", "citations_lora"}
 
-    def test_render_controls_is_noop(self, backend):
-        """render_controls succeeds silently for embedded adapters."""
-        backend.add_adapter(
-            EmbeddedIntrinsicAdapter(
-                "answerability", config=_ANSWERABILITY_CONFIG, technology="alora"
-            )
-        )
-        # These should not raise.
-        backend.render_controls("answerability_alora", active=True)
-        backend.render_controls("answerability_alora", active=False)
-        # Adapter is still registered after activating/deactivating.
-        assert "answerability_alora" in backend._added_adapters
-
     def test_base_model_name(self, backend):
         assert backend.base_model_name == "granite-switch"
 
-    def test_register_embedded_adapter_model(self, backend, model_dir):
+    def test_register_embedded_adapter_model(self, backend, model_dir, hub_cache_dir):
         with patch("huggingface_hub.snapshot_download", return_value=str(model_dir)):
             names = backend.register_embedded_adapter_model(
                 "ibm-granite/granite-switch-micro"
@@ -499,7 +580,12 @@ class TestOpenAIBackendRegistration:
         assert set(names) == {"answerability", "citations"}
         assert len(backend._added_adapters) == 2
 
-    def test_register_overwrites_existing(self, backend):
+    def test_add_adapter_refuses_duplicate_name(self, backend):
+        """A second add_adapter() for an already-registered name is refused, not applied.
+
+        Matches LocalHFBackend's own duplicate-registration guard (issue #1562):
+        the first registration wins, the second is a no-op.
+        """
         config1 = {"model": None, "parameters": {"max_completion_tokens": 10}}
         config2 = {"model": None, "parameters": {"max_completion_tokens": 20}}
 
@@ -510,10 +596,10 @@ class TestOpenAIBackendRegistration:
             backend._added_adapters["test_lora"].config["parameters"][
                 "max_completion_tokens"
             ]
-            == 20
+            == 10
         )
 
-    def test_embedded_adapters_flag_loads_from_model_id(self, model_dir):
+    def test_embedded_adapters_flag_loads_from_model_id(self, model_dir, hub_cache_dir):
         """embedded_adapters=True auto-registers adapters using model_id as source."""
         from mellea.backends.openai import OpenAIBackend
 
@@ -546,7 +632,7 @@ class TestOpenAIBackendRegistration:
         assert len(backend._added_adapters) == 2
         assert backend._model_id == "granite-switch"
 
-    def test_adapter_source_defaults_to_model_id(self, model_dir):
+    def test_adapter_source_defaults_to_model_id(self, model_dir, hub_cache_dir):
         """Without adapter_source, model_id is used (existing behavior)."""
         from mellea.backends.openai import OpenAIBackend
 
@@ -558,6 +644,83 @@ class TestOpenAIBackendRegistration:
                 load_embedded_adapters=True,
             )
         assert len(backend._added_adapters) == 2
+
+
+class TestOpenAIBackendComposedAdapterRegistration:
+    """Composed-`Adapter` counterpart of `TestOpenAIBackendRegistration` (Epic
+    #929, issue #1144): `add_adapter` must accept a composed `Adapter` whose
+    `weights` is an `EmbeddedBinding` directly, alongside the deprecated shim.
+    """
+
+    @pytest.fixture
+    def backend(self):
+        os.environ.setdefault("OPENAI_API_KEY", "test-key")
+        from mellea.backends.openai import OpenAIBackend
+
+        return OpenAIBackend(
+            model_id="granite-switch", base_url="http://localhost:8000/v1"
+        )
+
+    @staticmethod
+    def _make_composed_adapter(
+        name: str = "answerability", adapter_type: Literal["lora", "alora"] = "alora"
+    ):
+        from mellea.backends.adapters._core import Adapter, EmbeddedBinding, Identity
+        from mellea.backends.adapters.io_contracts import get_io_contract
+
+        return Adapter(
+            identity=Identity(name=name, adapter_type=adapter_type, capability=name),
+            io_contract=get_io_contract(name),
+            weights=EmbeddedBinding(),
+        )
+
+    def test_add_composed_adapter(self, backend):
+        adapter = self._make_composed_adapter()
+        backend.add_adapter(adapter, config={"parameters": {}})
+        assert "answerability_alora" in backend._added_adapters
+        assert backend._added_adapters["answerability_alora"] is adapter
+        assert adapter.weights.source == backend.base_model_name  # type: ignore[union-attr]
+        assert backend._composed_adapter_configs["answerability_alora"] == {
+            "parameters": {}
+        }
+
+    def test_add_composed_adapter_without_config_raises(self, backend):
+        adapter = self._make_composed_adapter()
+        with pytest.raises(ValueError, match=r"No io\.yaml config given"):
+            backend.add_adapter(adapter)
+        assert "answerability_alora" not in backend._added_adapters
+
+    def test_add_composed_adapter_rejects_non_embedded_weights(self, backend):
+        from mellea.backends.adapters._core import Adapter, Identity, LocalFileBinding
+
+        adapter = Adapter(
+            identity=Identity(name="answerability", adapter_type="lora"),
+            io_contract=self._make_composed_adapter().io_contract,
+            weights=LocalFileBinding.from_catalog("answerability"),
+        )
+        with pytest.raises(TypeError, match="Embedded/Granite Switch"):
+            backend.add_adapter(adapter)
+
+    def test_add_composed_adapter_refuses_duplicate_name(self, backend):
+        first = self._make_composed_adapter()
+        second = self._make_composed_adapter()
+        backend.add_adapter(first, config={"parameters": {}})
+        backend.add_adapter(second, config={"parameters": {}})
+        assert backend._added_adapters["answerability_alora"] is first
+
+    def test_composed_adapter_discoverable_by_capability(self, backend):
+        adapter = self._make_composed_adapter()
+        backend.add_adapter(adapter, config={"parameters": {}})
+        assert backend._find_adapter("answerability") is adapter
+
+    def test_list_adapters_includes_composed_adapter(self, backend):
+        backend.add_adapter(self._make_composed_adapter(), config={"parameters": {}})
+        backend.add_adapter(
+            EmbeddedIntrinsicAdapter(
+                "citations", config=_CITATIONS_CONFIG, technology="lora"
+            )
+        )
+        assert set(backend.list_adapters()) == {"answerability_alora", "citations_lora"}
 
 
 if __name__ == "__main__":

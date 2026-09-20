@@ -212,6 +212,38 @@ def test_simplify_and_merge_per_call_overrides_backend():
     assert result[ModelOption.MAX_NEW_TOKENS] == 512
 
 
+@pytest.mark.parametrize("is_chat_context", [True, False])
+def test_simplify_and_merge_rejects_model_option(
+    backend: OpenAIBackend, is_chat_context: bool
+) -> None:
+    """Regression (#1575): model selection is rejected for both OpenAI APIs.
+
+    Without this check, the raw `model` option reaches the API call alongside
+    OpenAIBackend's fixed model argument and raises a duplicate-keyword error.
+    """
+    with pytest.raises(ValueError, match="model cannot be set via model_options"):
+        backend._simplify_and_merge(
+            {"model": "other-model"}, is_chat_context=is_chat_context
+        )
+
+
+async def test_openai_backend_rejects_model_option_on_standard_chat_path():
+    """Regression (#1575): standard chat rejects per-call model selection.
+
+    Without this check, the user-supplied `model` collides with the backend's
+    fixed `model` keyword argument at the OpenAI client call site.
+    """
+    from mellea.core.base import CBlock
+    from mellea.stdlib.context import ChatContext
+
+    backend = _make_backend()
+
+    with pytest.raises(ValueError, match="model cannot be set via model_options"):
+        await backend.generate_from_chat_context(
+            CBlock(value="hello"), ChatContext(), model_options={"model": "other-model"}
+        )
+
+
 # --- _make_backend_specific_and_remove ---
 
 
@@ -714,7 +746,205 @@ async def test_standard_chat_path_applies_default_extra_body_without_per_call_ov
         await mot.avalue()
 
     call_kwargs = mock_create.call_args.kwargs
+    assert call_kwargs["model"] == "gpt-4o"
     assert call_kwargs["extra_body"]["chat_template_kwargs"]["enable_thinking"] is True
+
+
+async def test_thinking_true_sends_reasoning_effort_medium_and_enable_thinking():
+    """THINKING=True sends reasoning_effort="medium" AND
+    extra_body.chat_template_kwargs.enable_thinking=True, so each server type
+    (OpenAI-style vs vLLM-style) picks up the mechanism it understands."""
+    from mellea.core.base import CBlock
+    from mellea.stdlib.context import ChatContext
+
+    backend = OpenAIBackend(
+        model_id="gpt-4o", base_url="http://localhost:9999/v1", api_key="test-key"
+    )
+
+    with patch.object(
+        backend._async_client.chat.completions, "create", new_callable=AsyncMock
+    ) as mock_create:
+        mock_create.return_value = ChatCompletion(
+            id="test",
+            choices=[
+                Choice(
+                    finish_reason="stop",
+                    index=0,
+                    message=ChatCompletionMessage(role="assistant", content="ok"),
+                )
+            ],
+            created=0,
+            model="gpt-4o",
+            object="chat.completion",
+        )
+        mot, _ = await backend.generate_from_chat_context(
+            CBlock(value="hello"),
+            ChatContext(),
+            model_options={ModelOption.THINKING: True},
+        )
+        await mot.avalue()
+
+    call_kwargs = mock_create.call_args.kwargs
+    assert call_kwargs["reasoning_effort"] == "medium"
+    assert call_kwargs["extra_body"]["chat_template_kwargs"]["enable_thinking"] is True
+
+
+async def test_thinking_false_sends_reasoning_effort_none_and_disable():
+    """THINKING=False sends reasoning_effort="none" AND
+    extra_body.chat_template_kwargs.enable_thinking=False.
+
+    Ollama's /v1 endpoint (>= 0.33.1) maps reasoning_effort="none" to
+    think=false; absent the param, thinking-capable models (e.g. granite4.2)
+    default to thinking on. vLLM picks up the chat_template_kwargs mechanism
+    instead. Regression guard for the granite4.2 CI wedge: the /v1 tests
+    must be able to turn thinking off (runs 33093698028, 33104419835).
+    """
+    from mellea.core.base import CBlock
+    from mellea.stdlib.context import ChatContext
+
+    backend = OpenAIBackend(
+        model_id="granite4.2:3b",
+        base_url="http://localhost:9999/v1",
+        api_key="test-key",
+    )
+
+    with patch.object(
+        backend._async_client.chat.completions, "create", new_callable=AsyncMock
+    ) as mock_create:
+        mock_create.return_value = ChatCompletion(
+            id="test",
+            choices=[
+                Choice(
+                    finish_reason="stop",
+                    index=0,
+                    message=ChatCompletionMessage(role="assistant", content="ok"),
+                )
+            ],
+            created=0,
+            model="granite4.2:3b",
+            object="chat.completion",
+        )
+        mot, _ = await backend.generate_from_chat_context(
+            CBlock(value="hello"),
+            ChatContext(),
+            model_options={ModelOption.THINKING: False},
+        )
+        await mot.avalue()
+
+    call_kwargs = mock_create.call_args.kwargs
+    assert call_kwargs["reasoning_effort"] == "none"
+    assert call_kwargs["extra_body"]["chat_template_kwargs"]["enable_thinking"] is False
+
+
+async def test_construction_time_extra_body_thinking_does_not_outrank_per_call_thinking():
+    """Regression for #1617 review: a construction-time `enable_thinking` set via
+    the generic `model_options["extra_body"]` (as opposed to `default_extra_body`)
+    must not silently override a per-call `ModelOption.THINKING`.
+
+    Before the fix, `_simplify_and_merge` merged this construction-time
+    `extra_body` together with any per-call `extra_body` via `merge_model_options`,
+    and the combined blob was then treated as highest-priority in
+    `_merge_user_extra_body` — beating the correctly-resolved per-call THINKING
+    value computed by `_map_thinking_option`.
+    """
+    from mellea.core.base import CBlock
+    from mellea.stdlib.context import ChatContext
+
+    backend = OpenAIBackend(
+        model_id="gpt-4o",
+        base_url="http://localhost:9999/v1",
+        api_key="test-key",
+        model_options={
+            "extra_body": {"chat_template_kwargs": {"enable_thinking": True}}
+        },
+    )
+
+    with patch.object(
+        backend._async_client.chat.completions, "create", new_callable=AsyncMock
+    ) as mock_create:
+        mock_create.return_value = ChatCompletion(
+            id="test",
+            choices=[
+                Choice(
+                    finish_reason="stop",
+                    index=0,
+                    message=ChatCompletionMessage(role="assistant", content="ok"),
+                )
+            ],
+            created=0,
+            model="gpt-4o",
+            object="chat.completion",
+        )
+        mot, _ = await backend.generate_from_chat_context(
+            CBlock(value="hello"),
+            ChatContext(),
+            model_options={ModelOption.THINKING: False},
+        )
+        await mot.avalue()
+
+    call_kwargs = mock_create.call_args.kwargs
+    assert call_kwargs["extra_body"]["chat_template_kwargs"]["enable_thinking"] is False
+
+
+def test_simplify_and_merge_excludes_construction_extra_body():
+    """Construction-time `extra_body` must not reappear in `_simplify_and_merge`'s
+    output — it is folded into `_default_extra_body` at `__init__` time instead,
+    so it can't re-enter the per-call precedence chain as `user_extra_body`."""
+    backend = OpenAIBackend(
+        model_id="gpt-4o",
+        base_url="http://localhost:9999/v1",
+        api_key="test-key",
+        model_options={"extra_body": {"chat_template_kwargs": {"foo": "bar"}}},
+    )
+    result = backend._simplify_and_merge({}, is_chat_context=True)
+    assert "extra_body" not in result
+    assert backend._default_extra_body == {"chat_template_kwargs": {"foo": "bar"}}
+
+
+async def test_thinking_false_omits_reasoning_effort_against_real_openai():
+    """THINKING=False must NOT send reasoning_effort="none" to api.openai.com.
+
+    "none" is only accepted by newer OpenAI reasoning models; most current
+    ones reject it outright. reasoning_effort="none" is a workaround for
+    Ollama's /v1 endpoint specifically (see
+    test_thinking_false_sends_reasoning_effort_none_and_disable) and must not
+    reach a real OpenAI target, where it would turn previously-working
+    THINKING=False calls into a 400. chat_template_kwargs.enable_thinking is
+    still set for vLLM-style servers reached through this same code path.
+    """
+    from mellea.core.base import CBlock
+    from mellea.stdlib.context import ChatContext
+
+    backend = OpenAIBackend(
+        model_id="o3", base_url="https://api.openai.com/v1", api_key="test-key"
+    )
+
+    with patch.object(
+        backend._async_client.chat.completions, "create", new_callable=AsyncMock
+    ) as mock_create:
+        mock_create.return_value = ChatCompletion(
+            id="test",
+            choices=[
+                Choice(
+                    finish_reason="stop",
+                    index=0,
+                    message=ChatCompletionMessage(role="assistant", content="ok"),
+                )
+            ],
+            created=0,
+            model="o3",
+            object="chat.completion",
+        )
+        mot, _ = await backend.generate_from_chat_context(
+            CBlock(value="hello"),
+            ChatContext(),
+            model_options={ModelOption.THINKING: False},
+        )
+        await mot.avalue()
+
+    call_kwargs = mock_create.call_args.kwargs
+    assert "reasoning_effort" not in call_kwargs
+    assert call_kwargs["extra_body"]["chat_template_kwargs"]["enable_thinking"] is False
 
 
 if __name__ == "__main__":

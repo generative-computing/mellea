@@ -12,7 +12,10 @@ Mocks the OpenAI async client to verify that `_generate_from_intrinsic` correctl
 - raises when no adapter is registered or streaming is requested
 """
 
+import asyncio
+import base64
 import json
+import logging
 import pathlib
 from copy import deepcopy
 from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
@@ -30,9 +33,11 @@ from openai.types.completion_usage import CompletionUsage
 from mellea.backends import ModelOption
 from mellea.backends.adapters.adapter import EmbeddedIntrinsicAdapter
 from mellea.backends.openai import OpenAIBackend
+from mellea.core import ModelOutputThunk, Requirement
 from mellea.stdlib import functional as mfuncs
 from mellea.stdlib.components import Intrinsic, Message
-from mellea.stdlib.context import ChatContext
+from mellea.stdlib.context import ChatContext, SimpleContext
+from mellea.stdlib.requirements import ALoraRequirement
 
 _TEST_DIR = pathlib.Path(__file__).parent
 _INTRINSICS_DATA = _TEST_DIR / "test_adapters" / "intrinsics-data"
@@ -175,6 +180,37 @@ def _make_context() -> ChatContext:
     return ChatContext().add(Message("user", "What is the square root of 4?"))
 
 
+def _make_backend_with_composed_adapter(config: dict) -> OpenAIBackend:
+    """Return an OpenAIBackend with a composed `Adapter` registered directly.
+
+    Composed-Adapter counterpart of `_make_backend_with_adapter` (Epic #929,
+    issue #1144): `add_adapter` and `_generate_from_intrinsic` must drive the
+    same generation path for a composed `Adapter` as for the deprecated
+    `EmbeddedIntrinsicAdapter` shim.
+    """
+    from mellea.backends.adapters._core import (
+        Adapter as _AdapterCore,
+        EmbeddedBinding,
+        Identity,
+    )
+    from mellea.backends.adapters.io_contracts import get_io_contract
+
+    backend = OpenAIBackend(
+        model_id="granite-switch",
+        api_key="fake-key",
+        base_url="http://localhost:9999/v1",
+    )
+    adapter = _AdapterCore(
+        identity=Identity(
+            name="answerability", adapter_type="alora", capability="answerability"
+        ),
+        io_contract=get_io_contract("answerability"),
+        weights=EmbeddedBinding(),
+    )
+    backend.add_adapter(adapter, config=config)
+    return backend
+
+
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
@@ -205,6 +241,75 @@ async def test_chat_template_kwargs_set():
     extra_body = call_kwargs.kwargs.get("extra_body", {})
 
     assert "chat_template_kwargs" in extra_body
+    assert extra_body["chat_template_kwargs"]["adapter_name"] == "answerability"
+
+
+async def test_composed_adapter_drives_generate_from_intrinsic():
+    """A composed `Adapter` (not the `EmbeddedIntrinsicAdapter` shim) drives
+    the same generation path — activation, name/config resolution — as the
+    shim (Epic #929, issue #1144)."""
+    backend = _make_backend_with_composed_adapter(_SIMPLE_CONFIG)
+    ctx = _make_context()
+    mock_create = AsyncMock(return_value=_simple_chat_completion())
+
+    mock_client = MagicMock()
+    mock_client.chat.completions.create = mock_create
+
+    with patch.object(
+        OpenAIBackend,
+        "_async_client",
+        new_callable=PropertyMock,
+        return_value=mock_client,
+    ):
+        mot, _ = await mfuncs.aact(
+            Intrinsic("answerability"), ctx, backend, strategy=None
+        )
+        await mot.avalue()
+
+    mock_create.assert_called_once()
+    call_kwargs = mock_create.call_args
+    extra_body = call_kwargs.kwargs.get("extra_body", {})
+
+    assert "chat_template_kwargs" in extra_body
+    assert extra_body["chat_template_kwargs"]["adapter_name"] == "answerability"
+
+
+async def test_construction_time_extra_body_default_survives_intrinsic_call():
+    """A construction-time extra_body default must survive an intrinsic call
+    that supplies its own unrelated per-call extra_body, alongside the
+    adapter's own chat_template_kwargs.adapter_name write."""
+    backend = _make_backend_with_adapter(
+        _SIMPLE_CONFIG,
+        model_options={
+            "extra_body": {"chat_template_kwargs": {"enable_thinking": False}}
+        },
+    )
+    ctx = _make_context()
+    mock_create = AsyncMock(return_value=_simple_chat_completion())
+
+    mock_client = MagicMock()
+    mock_client.chat.completions.create = mock_create
+
+    with patch.object(
+        OpenAIBackend,
+        "_async_client",
+        new_callable=PropertyMock,
+        return_value=mock_client,
+    ):
+        mot, _ = await mfuncs.aact(
+            Intrinsic("answerability"),
+            ctx,
+            backend,
+            strategy=None,
+            model_options={"extra_body": {"some_unrelated_field": 123}},
+        )
+        await mot.avalue()
+
+    mock_create.assert_called_once()
+    extra_body = mock_create.call_args.kwargs.get("extra_body", {})
+
+    assert extra_body["some_unrelated_field"] == 123
+    assert extra_body["chat_template_kwargs"]["enable_thinking"] is False
     assert extra_body["chat_template_kwargs"]["adapter_name"] == "answerability"
 
 
@@ -324,6 +429,25 @@ async def test_model_options_override_io_yaml_defaults():
     assert call_kwargs.kwargs.get("seed") == 42
     # io.yaml parameters not overridden by the user should still be present.
     assert call_kwargs.kwargs.get("max_completion_tokens") == 64
+
+
+async def test_openai_backend_rejects_model_option_on_intrinsic_path():
+    """Regression (#1575): intrinsic calls reject per-call model selection.
+
+    Without this check, `model` survives the user option overlay after adapter
+    activation and collides with the backend's fixed OpenAI client argument.
+    """
+    backend = _make_backend_with_adapter(_SIMPLE_CONFIG)
+    ctx = _make_context()
+
+    with pytest.raises(ValueError, match="model cannot be set via model_options"):
+        await mfuncs.aact(
+            Intrinsic("answerability"),
+            ctx,
+            backend,
+            strategy=None,
+            model_options={"model": "answerability_alora"},
+        )
 
 
 async def test_model_options_forwarded():
@@ -524,6 +648,63 @@ async def test_user_extra_body_merges_into_intrinsic_extra_body():
     assert call_kwargs["reasoning_effort"] == "medium"
 
 
+async def test_user_extra_body_cannot_override_embedded_adapter():
+    """The resolved embedded adapter overrides a caller-supplied adapter_name."""
+    backend = _make_backend_with_adapter(_SIMPLE_CONFIG)
+    ctx = _make_context()
+    mock_create = AsyncMock(return_value=_simple_chat_completion())
+
+    mock_client = MagicMock()
+    mock_client.chat.completions.create = mock_create
+
+    with patch.object(
+        OpenAIBackend,
+        "_async_client",
+        new_callable=PropertyMock,
+        return_value=mock_client,
+    ):
+        mot, _ = await mfuncs.aact(
+            Intrinsic("answerability"),
+            ctx,
+            backend,
+            strategy=None,
+            model_options={
+                "extra_body": {
+                    "chat_template_kwargs": {"adapter_name": "caller-selected"}
+                }
+            },
+        )
+        await mot.avalue()
+
+    extra_body = mock_create.call_args.kwargs["extra_body"]
+    assert extra_body["chat_template_kwargs"]["adapter_name"] == "answerability"
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [("model", "other-model"), ("messages", []), ("stream", True), ("tools", [])],
+)
+async def test_intrinsic_extra_body_rejects_protected_request_fields(
+    field: str, value: object
+):
+    """Provider-specific extra_body values cannot override intrinsic invariants."""
+    backend = _make_backend_with_adapter(_SIMPLE_CONFIG)
+    ctx = _make_context()
+
+    with pytest.raises(
+        ValueError,
+        match=rf"extra_body cannot override intrinsic request fields: {field}",
+    ):
+        mot, _ = await mfuncs.aact(
+            Intrinsic("answerability"),
+            ctx,
+            backend,
+            strategy=None,
+            model_options={"extra_body": {field: value}},
+        )
+        await mot.avalue()
+
+
 async def test_user_extra_body_without_thinking():
     """User extra_body merges when THINKING is unset; the #1241 reproduction."""
     backend = _make_backend_with_adapter(_SIMPLE_CONFIG)
@@ -590,7 +771,10 @@ async def test_user_extra_body_is_not_mutated():
 
 
 async def test_reasoning_effort_bool_false():
-    """THINKING: False sets chat_template_kwargs.enable_thinking=False; no reasoning_effort."""
+    """THINKING: False sets chat_template_kwargs.enable_thinking=False and
+    reasoning_effort="none" (Ollama /v1 disables thinking only via
+    reasoning_effort; absence means the model default, which is ON for
+    e.g. granite4.2)."""
     backend = _make_backend_with_adapter(_SIMPLE_CONFIG)
     ctx = _make_context()
     mock_create = AsyncMock(return_value=_simple_chat_completion())
@@ -614,8 +798,9 @@ async def test_reasoning_effort_bool_false():
         await mot.avalue()
 
     call_kwargs = mock_create.call_args
-    assert "reasoning_effort" not in call_kwargs.kwargs, (
-        "reasoning_effort must not be sent for THINKING=False (invalid for OpenAI)"
+    assert call_kwargs.kwargs.get("reasoning_effort") == "none", (
+        "reasoning_effort should be 'none' for THINKING=False "
+        "(disables thinking on Ollama /v1, which defaults it on)"
     )
     extra_body = call_kwargs.kwargs.get("extra_body", {})
     assert extra_body.get("chat_template_kwargs", {}).get("enable_thinking") is False
@@ -668,3 +853,224 @@ async def test_tools_passed_to_api():
     assert tools is not None
     assert len(tools) == 1
     assert tools[0]["function"]["name"] == "get_temperature"
+
+
+# ---------------------------------------------------------------------------
+# Requirement rerouting requires a context the adapter can actually judge
+# ---------------------------------------------------------------------------
+
+
+def _make_backend_with_requirement_adapter() -> OpenAIBackend:
+    """Return a backend whose `requirement-check` aLoRA would capture Requirements."""
+    backend = OpenAIBackend(
+        model_id="granite-switch",
+        api_key="fake-key",
+        base_url="http://localhost:9999/v1",
+    )
+    backend.add_adapter(
+        EmbeddedIntrinsicAdapter(
+            intrinsic_name="requirement-check",
+            config=deepcopy(_SIMPLE_CONFIG),
+            technology="alora",
+        )
+    )
+    return backend
+
+
+async def test_alora_requirement_over_a_context_that_renders_nothing_raises():
+    """An explicit `ALoraRequirement` cannot be honoured over an empty generation view.
+
+    The `requirement-check` adapter judges the last assistant turn of the conversation it
+    is handed, and this path never renders the requirement template, so there is no inlined
+    output to fall back on. Asking for the adapter anyway is a caller error, not something
+    to silently downgrade.
+    """
+    backend = _make_backend_with_requirement_adapter()
+    ctx = SimpleContext().add(ModelOutputThunk("The capital of France is Paris."))
+
+    with pytest.raises(ValueError, match="renders no conversation"):
+        await ALoraRequirement("must mention Paris").validate(backend, ctx)
+
+
+async def test_plain_requirement_over_empty_view_falls_back_to_llmaj(caplog):
+    """Auto-rerouting is an optimisation, so a plain `Requirement` degrades instead.
+
+    The reroute is mellea's choice rather than the caller's, so an unusable adapter must
+    not break validation: it falls through to LLM-as-a-judge, whose template inlines the
+    output and therefore still works over a context that renders nothing.
+    """
+    backend = _make_backend_with_requirement_adapter()
+    ctx = SimpleContext().add(ModelOutputThunk("The capital of France is Paris."))
+
+    mock_create = AsyncMock(return_value=_simple_chat_completion("yes"))
+    mock_client = MagicMock()
+    mock_client.chat.completions.create = mock_create
+
+    with (
+        patch.object(
+            OpenAIBackend,
+            "_async_client",
+            new_callable=PropertyMock,
+            return_value=mock_client,
+        ),
+        patch.object(
+            OpenAIBackend, "_generate_from_intrinsic", new_callable=AsyncMock
+        ) as mock_intrinsic,
+        caplog.at_level(logging.WARNING),
+    ):
+        await Requirement("must mention Paris").validate(backend, ctx)
+
+    mock_intrinsic.assert_not_called()
+    assert mock_create.await_count == 1, (
+        "should fall through to ordinary chat generation"
+    )
+    sent = mock_create.await_args.kwargs["messages"]
+    assert any("The capital of France is Paris." in str(m) for m in sent), (
+        "the LLMaJ template must inline the output, which is what makes validation still"
+        " work over a context that renders no history"
+    )
+    assert "not rerouting requirements" in caplog.text
+
+
+_WAV_B64 = base64.b64encode(
+    b"RIFF$\x00\x00\x00WAVEfmt "
+    b"\x10\x00\x00\x00\x01\x00\x01\x00"
+    b"@\x1f\x00\x00\x80>\x00\x00"
+    b"\x02\x00\x10\x00data\x00\x00\x00\x00"
+).decode()
+
+
+def _audio_cases():
+    """Both audio block types, since each reached the rewriter by a different route."""
+    from mellea.core import AudioBlock, AudioUrlBlock
+
+    return [
+        pytest.param(AudioBlock(_WAV_B64, format="wav"), id="AudioBlock"),
+        pytest.param(
+            AudioUrlBlock("https://example.com/clip.wav", format="wav"),
+            id="AudioUrlBlock",
+        ),
+    ]
+
+
+@pytest.mark.parametrize("audio_block", _audio_cases())
+async def test_intrinsic_path_rejects_audio_with_actionable_error(audio_block):
+    """Audio in an intrinsic context must fail clearly, not as a pydantic dump.
+
+    `IntrinsicsRewriter` validates the conversation against a strict `ChatCompletion`
+    whose message `content` must be a plain string, so a multimodal content list raises
+    a dozen validation errors naming message variants the caller never chose. The guard
+    turns that into one sentence. `LocalHFBackend` guards its intrinsic path the same way.
+    """
+    backend = _make_backend_with_adapter(_SIMPLE_CONFIG)
+    ctx = ChatContext().add(Message("user", "Is the sky blue?", audio=[audio_block]))
+    mock_create = AsyncMock(return_value=_simple_chat_completion())
+    mock_client = MagicMock()
+    mock_client.chat.completions.create = mock_create
+
+    with patch.object(
+        OpenAIBackend,
+        "_async_client",
+        new_callable=PropertyMock,
+        return_value=mock_client,
+    ):
+        with pytest.raises(ValueError, match="does not support audio on the intrinsic"):
+            mot, _ = await mfuncs.aact(
+                Intrinsic("answerability"), ctx, backend, strategy=None
+            )
+            await mot.avalue()
+
+    mock_create.assert_not_called()
+
+
+async def test_intrinsic_path_does_not_download_audio_it_will_reject():
+    """The guard runs before the prefetch, so a rejected URL block is never fetched."""
+    from mellea.core import AudioUrlBlock
+
+    backend = _make_backend_with_adapter(_SIMPLE_CONFIG)
+    ctx = ChatContext().add(
+        Message(
+            "user",
+            "Is the sky blue?",
+            audio=[AudioUrlBlock("https://example.com/clip.wav", format="wav")],
+        )
+    )
+    mock_client = MagicMock()
+    mock_client.chat.completions.create = AsyncMock(
+        return_value=_simple_chat_completion()
+    )
+
+    with (
+        patch(
+            "mellea.core.base._cached_download_audio_as_base64", return_value=_WAV_B64
+        ) as mock_dl,
+        patch.object(
+            OpenAIBackend,
+            "_async_client",
+            new_callable=PropertyMock,
+            return_value=mock_client,
+        ),
+    ):
+        with pytest.raises(ValueError, match="does not support audio on the intrinsic"):
+            mot, _ = await mfuncs.aact(
+                Intrinsic("answerability"), ctx, backend, strategy=None
+            )
+            await mot.avalue()
+
+    mock_dl.assert_not_called()
+
+
+def test_register_embedded_adapter_model_refused_duplicate_does_not_clobber_cached_config():
+    """register_embedded_adapter_model() must not overwrite a live adapter's cached
+    config, or falsely report it as (re-)registered, when add_adapter() refuses
+    a duplicate name.
+
+    Regression: add_adapter() silently refuses (logs a warning, returns) rather
+    than raising for an already-registered qualified name. The loop here used to
+    write `discovered`'s config into `_composed_adapter_configs` and append the
+    name unconditionally — mirrors the identical bug fixed on LocalHFBackend.
+    """
+    from mellea.backends.adapters._core import (
+        Adapter as _AdapterCore,
+        EmbeddedBinding as _EmbeddedBinding,
+        Identity as _Identity,
+    )
+    from mellea.backends.adapters.io_contracts import get_io_contract
+
+    backend = OpenAIBackend(
+        model_id="granite-switch",
+        api_key="fake-key",
+        base_url="http://localhost:9999/v1",
+    )
+
+    def _make_composed():
+        return _AdapterCore(
+            identity=_Identity(
+                name="answerability", adapter_type="alora", capability="answerability"
+            ),
+            io_contract=get_io_contract("answerability"),
+            weights=_EmbeddedBinding(),
+        )
+
+    first_config = {"version": "first"}
+    with patch(
+        "mellea.backends.openai._discover_embedded_adapters",
+        return_value=[(_make_composed(), first_config)],
+    ):
+        names = backend.register_embedded_adapter_model(
+            "some/repo", intrinsic_name="answerability"
+        )
+    assert names == ["answerability"]
+    assert backend._composed_adapter_configs["answerability_alora"] is first_config
+
+    second_config = {"version": "second"}
+    with patch(
+        "mellea.backends.openai._discover_embedded_adapters",
+        return_value=[(_make_composed(), second_config)],
+    ):
+        names = backend.register_embedded_adapter_model(
+            "some/other-repo", intrinsic_name="answerability"
+        )
+
+    assert names == []
+    assert backend._composed_adapter_configs["answerability_alora"] is first_config

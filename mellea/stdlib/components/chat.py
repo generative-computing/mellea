@@ -58,6 +58,11 @@ class Message(Component["Message"]):
             back to the assistant tool call that produced it (issue #1389).
             `ToolMessage` sources this from its `ModelToolCall` instead; set it
             directly only when constructing a bare `role="tool"` `Message`.
+        tool_name (str | None): Optional name of the tool whose result a
+            `role="tool"` message carries. Some backends (e.g. Ollama) key their
+            tool-result turn on the tool name rather than a call id. A component
+            declaring `role="tool"` can supply it directly; `ToolMessage` instead
+            carries it as `.name`.
         thinking (str | None): Optional reasoning trace produced by a thinking
             model on the turn that generated this message. Populated by `_parse`
             from `ModelOutputThunk.thinking`; carried through `as_chat_history`
@@ -65,6 +70,13 @@ class Message(Component["Message"]):
             policy. `None` or empty for messages that carry no reasoning (e.g.
             user turns, or assistant turns from non-thinking models); the replay
             policy and serializers treat both falsy cases identically.
+        provider_fields (dict[str, dict[str, Any]] | None): Optional author-declared
+            extra wire fields Mellea does not model, keyed by provider target. Each
+            outer key is a provider (matched against the backend's provider string,
+            with the `"openai"` wire-family alias and a `"*"` wildcard); each inner
+            dict holds fields merged into the wire message for that target. Mellea's
+            known fields always win on a key collision, and a named target the request
+            does not hit (with no `"*"`) raises at serialization. Defaults to `None`.
 
     Attributes:
         Role (type): Type alias for the allowed role literals: `"system"`,
@@ -83,9 +95,11 @@ class Message(Component["Message"]):
         documents: None | Iterable[str | Document] = None,
         tool_calls: list[dict[str, Any]] | None = None,
         tool_call_id: str | None = None,
+        tool_name: str | None = None,
         thinking: str | None = None,
+        provider_fields: dict[str, dict[str, Any]] | None = None,
     ):
-        """Initialize a Message with a role, text content, optional images, audio, documents, tool calls, an optional tool-call id, and an optional reasoning trace."""
+        """Initialize a Message with a role, text content, optional images, audio, documents, tool calls, an optional tool-call id, an optional tool name, an optional reasoning trace, and optional author-declared provider fields."""
         if role not in get_args(Message.Role):
             raise ValueError(
                 f"Invalid role {role!r}. Must be one of: {list(get_args(Message.Role))}"
@@ -99,6 +113,8 @@ class Message(Component["Message"]):
         self._docs = _coerce_to_documents(documents)
         self._tool_calls = tool_calls
         self._tool_call_id = tool_call_id
+        self._tool_name = tool_name
+        self._provider_fields = provider_fields
 
     @property
     def images(self) -> None | list[ImageBlock | ImageUrlBlock]:
@@ -119,6 +135,16 @@ class Message(Component["Message"]):
     def tool_call_id(self) -> str | None:
         """Returns the tool-call id this `role="tool"` message references, if any."""
         return self._tool_call_id
+
+    @property
+    def tool_name(self) -> str | None:
+        """Returns the name of the tool whose result this `role="tool"` message carries, if any."""
+        return self._tool_name
+
+    @property
+    def provider_fields(self) -> dict[str, dict[str, Any]] | None:
+        """Returns the author-declared provider-keyed extra wire fields, if any."""
+        return self._provider_fields
 
     def parts(self) -> list[Span]:
         """Return the constituent parts of this message, including content, documents, images, and audio.
@@ -156,6 +182,8 @@ class Message(Component["Message"]):
             thinking=self.thinking,
             tool_calls=self._tool_calls,
             tool_call_id=self._tool_call_id,
+            tool_name=self._tool_name,
+            provider_fields=self._provider_fields,
         )
 
     def __repr__(self) -> str:
@@ -211,6 +239,12 @@ class Message(Component["Message"]):
                     tool_calls=tool_calls,
                     thinking=thinking,
                 )
+            # NOTE: this tuple groups providers by *response* shape (a
+            # `choices[0].message` dict) and deliberately excludes HuggingFace, which
+            # returns token tensors here, not a dict. Do NOT unify it with
+            # `OPENAI_COMPATIBLE_WIRE_PROVIDERS` (openai_compatible_helpers.py), which
+            # groups by *request/wire* shape and includes HF: they are separate on
+            # purpose (see #1565). Merging them would break parsing here.
             if provider in ("openai", "watsonx", "litellm") and isinstance(
                 response, dict
             ):
@@ -305,8 +339,8 @@ def message_from_template_representation(
     component's declared role and tool metadata are honored consistently across both
     conversion paths. The representation's `role` overrides `default_role` when set;
     role validation is deferred to `Message`, which raises `ValueError` for anything
-    outside `Message.Role`. `thinking`, `tool_calls`, and (for `role="tool"`)
-    `tool_call_id` are carried onto the resulting message.
+    outside `Message.Role`. `thinking`, `tool_calls`, `provider_fields`, and (for
+    `role="tool"`) `tool_call_id`/`tool_name` are carried onto the resulting message.
 
     Args:
         tr: The template representation returned by the component's `format_for_llm`.
@@ -324,7 +358,9 @@ def message_from_template_representation(
         audio=tr.audio,
         tool_calls=tr.tool_calls,
         tool_call_id=tr.tool_call_id,
+        tool_name=tr.tool_name,
         thinking=tr.thinking,
+        provider_fields=tr.provider_fields,
     )
 
 

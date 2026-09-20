@@ -57,6 +57,8 @@ See **[test/README.md](test/README.md)** for classification rules, authoring gui
 """Example description..."""
 ```
 
+**Notebooks in `docs/examples/notebooks/`** opt in through a `mellea` block in their own top-level notebook metadata (`{"markers": [...], "packages": [...]}`), since a notebook has nowhere to put a `# pytest:` comment. They are collected only when `--nbmake` is passed: `uv run poe nbtest`. A notebook without that block is skipped, and `test/test_example_collection.py` fails. `--nbmake-timeout` is per cell; a whole notebook is one pytest item bounded by `--timeout`, so raise both together.
+
 ⚠️ Don't add `qualitative` to trivial tests — keep the fast loop fast.
 ⚠️ Mark tests taking >1 minute with `slow`.
 
@@ -82,20 +84,31 @@ mkdir -p .bob && ln -s ../.agents/skills .bob/skills
 
 ## 5. Coding Standards
 - **Types required** on all core functions
-- **Docstrings are prompts** — be specific, the LLM reads them
+- **Public API docstrings are published in the public API reference** — be specific and accurate.
 - **Google-style docstrings** — `Args:` on the **class docstring only**; `__init__` gets a single summary sentence. Add `Attributes:` only when a stored value differs in type/behaviour from its constructor input (type transforms, computed values, class constants). See CONTRIBUTING.md for a full example. **No RST directives inside docstrings** — never use `Example::`, `.. deprecated::`, `:param:`, `:type:`, or other RST markup inside a docstring; Google-style sections (`Example:`, `Raises:`, etc.) use plain Markdown. **Code examples use triple-backtick fences** (` ```python `) — not `>>>` doctest prompts (output is not verified). **Inline code uses single backticks** (`` `name` ``) — never double backticks (`` ``name`` ``); Mellea uses Markdown-style docstrings where double backticks are RST syntax and render incorrectly. See CONTRIBUTING.md for the full rationale and examples.
 - **Ruff** for linting/formatting
 - Use `...` in `@generative` function bodies
 - Prefer primitives over classes
 - **Friendly Dependency Errors**: Wraps optional backend imports in `try/except ImportError` with a helpful message (e.g., "Please pip install mellea[hf]"). See `mellea/stdlib/session.py` for examples.
 - **CLI command docstrings**: Typer command functions in `cli/` follow an enriched convention with `Prerequisites:` and `See Also:` sections — these feed the auto-generated CLI reference page. See [`docs/CONTRIBUTING_DOCS.md`](docs/CONTRIBUTING_DOCS.md) for the full pattern. Regenerate after changes: `uv run poe clidocs`. Test the generator: `uv run pytest tooling/docs-autogen/test_cli_reference.py -v`. Full pipeline docs: [`tooling/docs-autogen/README.md`](tooling/docs-autogen/README.md).
-- **Backend telemetry fields**: All backends must populate `mot.generation.usage` (dict with `prompt_tokens`, `completion_tokens`, `total_tokens`), `mot.generation.model` (str), and `mot.generation.provider` (str) in their `post_processing()` method. These fields live on `mot.generation`, a `GenerationMetadata` dataclass. `mot.generation.streaming` (bool) and `mot.generation.ttfb_ms` (float | None) are set automatically in `astream()` — backends do not need to set them. Metrics are automatically recorded by `TokenMetricsPlugin`, `LatencyMetricsPlugin`, and `ErrorMetricsPlugin` — don't add manual `record_token_usage_metrics()`, `record_request_duration()`, or `record_error()` calls.
+- **Backend telemetry fields**: All backends must populate `mot.generation.usage` (dict with `prompt_tokens`, `completion_tokens`, `total_tokens`), `mot.generation.model` (str), and `mot.generation.provider` (str) in their `post_processing()` method. These fields live on `mot.generation`, a `GenerationMetadata` dataclass. `mot.generation.streaming` (bool) is set in `astream()`; `mot.generation.ttfb_ms` (float | None) is stamped at the provider's first-chunk receipt inside `send_to_queue()` — backends set neither manually. Metrics are automatically recorded by `TokenMetricsPlugin`, `LatencyMetricsPlugin`, and `ErrorMetricsPlugin` — don't add manual `record_token_usage_metrics()`, `record_request_duration()`, or `record_error()` calls.
 - **Adding or editing telemetry (spans/metrics)**: Telemetry is emitted by **hook-fired plugins**, not direct calls. Core fires lifecycle hooks; a `*TracingPlugin` in `mellea/telemetry/tracing_plugins.py` emits spans and a `*MetricsPlugin` in `mellea/telemetry/metrics_plugins.py` emits metrics, both subscribing to those hooks. Core does **not** call `start_*_span`/`finish_*_span` from `mellea/telemetry/tracing.py` directly (the only exception is sync code that can't fire paired hooks). Matching helper names in `tracing.py` is not enough — read the plugins, and use the existing one whose span shape matches yours as the template. Emitting a span needs a start/pre hook to open it and a matching end/post hook to close it; a hook that only fires at completion, with no paired opener, can feed a metric but cannot anchor a span.
 
 ## 6. Commits & Hooks
 [Angular format](https://github.com/angular/angular/blob/main/CONTRIBUTING.md#commit): `feat:`, `fix:`, `docs:`, `test:`, `refactor:`, `release:`
 
 Pre-commit runs: ruff, mypy, uv-lock, codespell, license-headers
+
+**Pull request template**: opening a PR fills the body from [`.github/pull_request_template.md`](.github/pull_request_template.md), which ends with four type checkboxes - `Component`, `Requirement`, `Sampling Strategy`, `Tool`. If your PR adds or modifies one of those, check the matching box; the `PR Bot` workflow ([`.github/workflows/pr-update.yml`](.github/workflows/pr-update.yml)) then posts a comment with the type-specific review checklist from `.github/PULL_REQUEST_TEMPLATE/`:
+
+| Checked box | Checklist template |
+|-------------|--------------------|
+| `Component` | `.github/PULL_REQUEST_TEMPLATE/component.md` |
+| `Requirement` | `.github/PULL_REQUEST_TEMPLATE/requirement.md` |
+| `Sampling Strategy` | `.github/PULL_REQUEST_TEMPLATE/sampling.md` |
+| `Tool` | `.github/PULL_REQUEST_TEMPLATE/tool.md` |
+
+This matters when a PR is opened outside the GitHub UI (`gh pr create --body`, from a fork, or by an agent): the template isn't applied automatically. When you open such a PR and it adds or modifies one of the four types, build the body from `.github/pull_request_template.md` with the matching box checked (if relevant) so the bot posts the checklist.
 
 **Review states**: when reviewing a PR, see [CONTRIBUTING.md → Review States](CONTRIBUTING.md#review-states) for when to use `APPROVE` vs `REQUEST CHANGES` vs `COMMENT`.
 
@@ -157,10 +170,16 @@ Key rules that differ from typical Markdown habits:
 
 - **No H1 in the body** — Docusaurus renders the frontmatter `title` automatically;
   a body `# Heading` produces a duplicate title in the published site
-- **Use `.md` extensions in relative cross-doc links** — use `../concepts/requirements-system.md`,
-  not `../concepts/requirements-system`. Docusaurus treats links with `.md` as doc
-  cross-references (baseUrl-aware); links without `.md` are treated as raw URL paths
-  and fail the broken-link check when the site is built with a non-root `baseUrl`.
+- **Cross-doc links: relative, with the extension** — use `../concepts/requirements-system.md`,
+  not `../concepts/requirements-system`, and never a root-absolute `/concepts/requirements-system`.
+  With the extension Docusaurus resolves against the **source file**, so a rename breaks the
+  build loudly and the link also works when browsing on GitHub. Extensionless links are raw
+  URL paths checked only against the route table, and root-absolute ones are version-blind —
+  from a page in `docs/docs/` (the `next` version) they resolve to the *released* version's
+  route. Numbered files keep their prefix in the link
+  (`../tutorials/02-streaming-and-async.md`). The Docusaurus build does **not** reject
+  extensionless links, so check with the `rg` sweep in
+  [`docs/CONTRIBUTING_DOCS.md`](docs/CONTRIBUTING_DOCS.md) → Links.
 - **Frontmatter required** — every page needs `title` and `description`; add
   `sidebar_label` if the title is long
 - **markdownlint gate** — run `npx markdownlint-cli2 "docs/docs/**/*.md"` and fix
@@ -194,7 +213,6 @@ Adapter functions are specialized LoRA/aLoRA adapters that add task-specific cap
 | `rag` | `rewrite_question(question, context, backend)` | Rewrite question into a retrieval query |
 | `rag` | `clarify_query(question, documents, context, backend)` | Generate clarification or return "CLEAR" |
 | `rag` | `find_citations(response, documents, context, backend)` | Document sentences supporting the response |
-| `rag` | `check_context_relevance(question, document, context, backend)` | **Deprecated.** Granite 4.0 only; no Granite 4.1 adapter and none planned. Will be removed in a future release. Use a prompted relevance check instead. |
 | `rag` | `flag_hallucinated_content(response, documents, context, backend)` | Flag potentially hallucinated sentences |
 
 ```python
@@ -214,6 +232,20 @@ score = core.check_certainty(context, backend)
 
 For lower-level control (custom adapters, model options), use `mfuncs.act()` with `Intrinsic` directly — see examples in `docs/examples/intrinsics/`.
 
+### Weights binding shapes
+
+`Adapter.weights` normalizes each deployment's activation mechanism behind three
+shapes — a `WeightsBinding` lifecycle for weights you stage yourself,
+`EmbeddedBinding.apply_activation` for weights already in the served model, or
+`ServerMediatedBinding` for a model tag selected by the provider. The
+post-activation shape each produces:
+
+| Binding | Reality | Lifecycle verbs | Caller invokes | Normalized post-activation state |
+|---------|---------|------------------|-----------------|-----------------------------------|
+| `LocalFileBinding` | LocalFile/PEFT | `prepare` / `activate` / `deactivate` / `release` | `activate()` / `deactivate()`, via `adapter_scope` | Backend-internal PEFT adapter state toggled; the outgoing request is untouched |
+| `EmbeddedBinding` | Embedded/Granite Switch | none — weights are already in the served model | `apply_activation(request, identity)` | `request.extra_body["chat_template_kwargs"]["adapter_name"]` set; `request.api_params["model"]` removed if present |
+| `ServerMediatedBinding` | Ollama bundled adapter model | none for the current Ollama path | select the configured model tag during intrinsic generation | Ollama request's `model` is the bundled adapter tag; full lifecycle telemetry remains follow-up work |
+
 ### Project Resources
 
 - **Canonical catalog**: `mellea/backends/adapters/catalog.py` — source of truth for adapter function names, HF repo IDs, and adapter types
@@ -228,7 +260,7 @@ When adding support for a new adapter function (not just using an existing one),
 
 | Repo | Purpose | Adapter functions |
 |------|---------|------------|
-| [`ibm-granite/granitelib-rag-r1.0`](https://huggingface.co/ibm-granite/granitelib-rag-r1.0) | RAG pipeline | answerability, citations, context_relevance, hallucination_detection, query_rewrite, query_clarification |
+| [`ibm-granite/granitelib-rag-r1.0`](https://huggingface.co/ibm-granite/granitelib-rag-r1.0) | RAG pipeline | answerability, citations, hallucination_detection, query_rewrite, query_clarification |
 | [`ibm-granite/granitelib-core-r1.0`](https://huggingface.co/ibm-granite/granitelib-core-r1.0) | Core capabilities | context-attribution, requirement-check, uncertainty |
 | [`ibm-granite/granitelib-guardian-r1.0`](https://huggingface.co/ibm-granite/granitelib-guardian-r1.0) | Safety & compliance | guardian-core, policy-guardrails, factuality-detection, factuality-correction |
 

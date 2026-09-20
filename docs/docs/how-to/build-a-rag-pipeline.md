@@ -4,7 +4,7 @@ description: "Combine vector retrieval with Mellea's generative filtering and gr
 # diataxis: how-to
 ---
 
-**Prerequisites:** [Quick Start](../getting-started/quickstart) complete,
+**Prerequisites:** [Quick Start](../getting-started/quickstart.md) complete,
 `pip install mellea faiss-cpu sentence-transformers`, Ollama running locally.
 Step 5 (groundedness checking) additionally requires `pip install "mellea[hf]"`.
 
@@ -77,7 +77,7 @@ filter acceptance rates.
 ## Step 2: Filter candidates with `@generative`
 
 Vector similarity finds *topically related* documents but cannot determine
-whether a document actually answers the question. Add an [`@generative`](../reference/glossary#generative) LLM filter:
+whether a document actually answers the question. Add an [`@generative`](../reference/glossary.md#generative) LLM filter:
 
 ```python
 # Requires: mellea
@@ -127,7 +127,7 @@ else:
 
 ## Step 3: Generate with `grounding_context`
 
-Pass the surviving documents as named entries in [`grounding_context`](../reference/glossary#grounding_context). Mellea
+Pass the surviving documents as named entries in [`grounding_context`](../reference/glossary.md#grounding_context). Mellea
 injects them into the prompt and tracks them as separate context components:
 
 ```python
@@ -179,7 +179,7 @@ answer = m.instruct(
 
 ## Step 5: Check groundedness (optional)
 
-After generation, use [`guardian_check()`](../how-to/safety-guardrails) with
+After generation, use [`guardian_check()`](./safety-guardrails.md) with
 `criteria="groundedness"` to verify the answer does not hallucinate beyond the
 retrieved documents:
 
@@ -302,4 +302,4 @@ def rag(docs: list[str], query: str, *, check_groundedness: bool = True) -> str 
 
 ---
 
-**See also:** [Resilient RAG with Fallback Filtering](../examples/resilient-rag-fallback) | [Making Agents Reliable](../tutorials/making-agents-reliable) | [The Requirements System](../concepts/requirements-system)
+**See also:** [Resilient RAG with Fallback Filtering](../examples/resilient-rag-fallback.md) | [Making Agents Reliable](../tutorials/04-making-agents-reliable.md) | [The Requirements System](../concepts/requirements-system.md)

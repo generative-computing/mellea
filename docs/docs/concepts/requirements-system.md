@@ -4,7 +4,7 @@ description: "How Requirement, ValidationResult, and the IVR loop work together 
 # diataxis: explanation
 ---
 
-> **Looking to use this in code?** See [Write Custom Verifiers](../how-to/write-custom-verifiers) for practical examples and API details.
+> **Looking to use this in code?** See [Write Custom Verifiers](../how-to/write-custom-verifiers.md) for practical examples and API details.
 
 Requirements are Mellea's mechanism for enforcing constraints on generative output.
 They serve two roles simultaneously: they appear in the prompt so the model knows what
@@ -12,12 +12,12 @@ to aim for, and they are evaluated after generation so Mellea can detect and rep
 failures automatically.
 
 This page explains the requirements system in depth. For a quick introduction,
-see [The Instruction Model](./instruct-validate-repair).
+see [The Instruction Model](./instruct-validate-repair.md).
 
 ## What a requirement is
 
-A [`Requirement`](../reference/glossary#requirement) is a [`Component`](../reference/glossary#component) that wraps a natural-language description and an
-optional validation function. During the [instruct–validate–repair (IVR)](../reference/glossary#ivr-instruct-validate-repair) loop:
+A [`Requirement`](../reference/glossary.md#requirement) is a [`Component`](../reference/glossary.md#component) that wraps a natural-language description and an
+optional validation function. During the [instruct–validate–repair (IVR)](../reference/glossary.md#ivr-instruct-validate-repair) loop:
 
 1. Mellea renders the requirement descriptions into the prompt alongside the instruction.
 2. After the model generates output, each requirement is validated against that output.
@@ -162,15 +162,16 @@ last output.
 | `score` | `float \| None` | Optional numeric score from your validator. |
 | `thunk` | `ModelOutputThunk \| None` | The model output used, if your validator ran a backend call. |
 | `context` | `Context \| None` | The context snapshot at validation time. |
+| `error` | `Exception \| None` | The exception raised while parsing validator output, if any. When set, `bool(result)` is `False` (fails closed) and `reason` is `None`; lets callers tell an unparsable response apart from an ordinary "requirement not met". |
 
 The `reason` field is the most useful in practice — a clear reason string helps the
 model make a targeted repair rather than regenerating blindly.
 
 ## Preconditions in generative functions
 
-The [`@generative`](../reference/glossary#generative) decorator supports `precondition_requirements` alongside the
+The [`@generative`](../reference/glossary.md#generative) decorator supports `precondition_requirements` alongside the
 standard `requirements`. Preconditions are validated against the *inputs* to the
-function before generation starts. If they fail, Mellea raises [`PreconditionException`](../reference/glossary#preconditionexception)
+function before generation starts. If they fail, Mellea raises [`PreconditionException`](../reference/glossary.md#preconditionexception)
 immediately — no generation attempt is made and no IVR loop runs.
 
 ```python
@@ -220,8 +221,8 @@ requirement that failed, giving you a complete picture of what went wrong.
 
 ## Inspecting validation results
 
-When you use `return_sampling_results=True`, `instruct()` returns a [`SamplingResult`](../reference/glossary#samplingresult)
-instead of a [`ModelOutputThunk`](../reference/glossary#modeloutputthunk). This exposes per-attempt validation results:
+When you use `return_sampling_results=True`, `instruct()` returns a [`SamplingResult`](../reference/glossary.md#samplingresult)
+instead of a [`ModelOutputThunk`](../reference/glossary.md#modeloutputthunk). This exposes per-attempt validation results:
 
 ```python
 from mellea import start_session
@@ -292,9 +293,51 @@ reserve LLM-based requirements for subjective criteria that cannot be coded dire
 
 > **Advanced:** `ALoraRequirement` (from `mellea.stdlib.requirements`) uses a fine-tuned
 > LoRA adapter for validation instead of LLM-as-a-judge. It falls back to LLM-as-a-judge
-> if the adapter is unavailable. See [LoRA and aLoRA Adapters](../advanced/lora-and-alora-adapters).
+> if the adapter is unavailable. See [LoRA and aLoRA Adapters](../advanced/lora-and-alora-adapters.md).
 
-For a full walkthrough of using LLM-as-a-judge for output quality evaluation, see [Evaluate with LLM-as-a-Judge](../how-to/evaluate-with-llm-as-a-judge).
+For a full walkthrough of using LLM-as-a-judge for output quality evaluation, see [Evaluate with LLM-as-a-Judge](../how-to/evaluate-with-llm-as-a-judge.md).
+
+## What the validator sees
+
+Validation runs over the **post-generation context** — the same conversation the model
+just generated into, with the generated output as its last entry. This matters for all
+three validation approaches:
+
+- A `validation_fn` receives that context, so `ctx.last_output()` is the output under
+  judgement and `ctx.as_list()` is the conversation that produced it.
+- An LLM-as-a-judge requirement sends that conversation to the model, followed by the
+  specific output to judge. The judge prompt scopes the verdict to that output, while
+  telling the model the conversation is there to help it interpret the requirement —
+  which is what makes conversation-dependent requirements ("must answer the question
+  that was asked") judgeable at all.
+- An `ALoraRequirement` needs the conversation to reach the adapter at all — the
+  `requirement-check` adapter judges the last assistant turn of the conversation it is
+  given. See [LoRA and aLoRA Adapters](../advanced/lora-and-alora-adapters.md).
+
+The output under judgement is passed as the `ModelOutputThunk` itself, not a detached
+string copy, so its `parsed_repr` and any structured representation survive into the
+judge prompt.
+
+### Overriding the validation context
+
+`SamplingStrategy.sample()` takes an optional `validation_ctx` for validating over
+something other than the post-generation context — for example, a trimmed context that
+excludes long retrieved documents. When it is given, the sampled output is appended to it
+so it is still the validation target; when it is `None`, each attempt is validated over its
+own post-generation context.
+
+`instruct()`, `act()`, and their async counterparts always pass `None`, so the
+post-generation context is what you get unless you drive a strategy's `sample()` directly.
+
+`validate()` and `avalidate()` follow the same rule at a lower level: they validate over
+the `context` you hand them, in your own context type. Their `output` argument designates
+*which* output is under judgement rather than replacing the context — it is appended unless
+it is already the context's last entry. Passing an `output` from an earlier turn works too:
+it is appended so that it becomes the target, and the judge still sees the conversation
+around it.
+
+Preconditions are the one case that never sees the conversation: `precondition_requirements`
+are judged over the function arguments alone, in a fresh context.
 
 ## Composing requirements
 
@@ -329,9 +372,11 @@ issues in a single repair pass.
 once per semantic chunk as tokens arrive from the model, before the full output
 is available. Requirements that need to detect problems early — too many
 sentences, a prohibited keyword in the first paragraph, unexpected JSON
-structure mid-output — override `stream_validate()` to express that logic.
+structure mid-output — override `_stream_validate()` to express that logic. (The
+framework calls the public `stream_validate()` driver, which runs your
+`_stream_validate()` once per chunk.)
 
-`stream_validate()` returns a `PartialValidationResult` with a tri-state `success`
+`_stream_validate()` returns a `PartialValidationResult` with a tri-state `success`
 field:
 
 - `"unknown"` — no conclusion yet; the chunk is passed to the consumer and
@@ -348,4 +393,27 @@ mutated. Requirements that accumulate state across chunks (e.g. a running word
 count) should reassign mutable containers rather than mutate in place, since
 clones share the original's `__dict__` values at copy time.
 
-> **See also:** [Streaming with per-chunk validation](../how-to/use-async-and-streaming#streaming-with-per-chunk-validation)
+### Validation granularity
+
+By default a requirement validates the same chunks the stream produces: the
+`chunking=` passed to `stream()` sets the chunks both the consumer and the
+requirements see. A requirement can also set its own `chunking=` to validate at a
+different granularity, so a sentence-level check and a paragraph-level check can
+run on the same stream. The stream's `chunking=` controls what the consumer's
+`async for` receives; a requirement's `chunking=` controls only what that
+requirement validates, re-chunking whatever the stream hands it.
+
+The requirement's chunker is fed the stream's chunks, so a requirement that chunks
+*coarser* than the stream may not reach a chunk boundary mid-stream; it usually returns
+`"unknown"` until end of stream, when its chunker is flushed and the leftover is
+validated as one final chunk (whose result may still be `"unknown"`). A *finer*
+requirement composes only when the stream's chunker preserves the boundaries it needs,
+and `WordChunking`, `SentenceChunking`, and `ParagraphChunking` never do: each splits
+on a different form of whitespace and discards it. For example, `sentence` → `word` sees
+`"ran.The"` as one word once the inter-sentence space is gone, and `paragraph` →
+`sentence` sees two sentences as one once the blank line is gone. So set `chunking=None`
+on the stream whenever a requirement carries its own `chunking`, and each requirement
+chunks the raw deltas independently. A custom chunking strategy that preserves its separator can
+still compose across granularities; the constraint is specific to the built-in three.
+
+> **See also:** [Streaming with per-chunk validation](../how-to/use-async-and-streaming.md#streaming-with-per-chunk-validation)

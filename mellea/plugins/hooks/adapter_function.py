@@ -21,6 +21,18 @@ class AdapterFunctionInvocationCompletePayload(MelleaBasePayload):
         adapter_type: Adapter mechanism (e.g. `"lora"`, `"alora"`).
         outcome: `"success"`, `"schema_error"`, or `"error"`.
         error: The exception raised during invocation, or `None` on success.
+
+    Note:
+        The span of work `outcome` covers differs by `binding_type`, so
+        aggregating across bindings mixes events with different scope.
+        `"local_file"` covers activate→generate→deactivate only
+        (`AdapterMixin.adapter_scope` closes before parsing runs);
+        `"embedded"` covers generate+JSON-parse
+        (`_fire_embedded_invocation_complete` in
+        `mellea.backends.adapters._core`). Neither covers the later
+        contract-level `IOContract` validation in `call_intrinsic` — a
+        contract-mismatch on already-valid JSON records `"success"` for
+        either binding (tracked in #1611).
     """
 
     name: str
@@ -45,6 +57,18 @@ class AdapterFunctionPhaseCompletePayload(MelleaBasePayload):
         phase: Lifecycle phase (`"prepare"`, `"activate"`, `"generate"`,
             `"parse"`, or `"deactivate"`).
         duration_ms: Wall-clock duration of the phase in milliseconds.
+
+    Warning:
+        A subscriber to this hook must not synchronously call
+        `resolve_adapter()`, `register_embedded_adapter_model()`, or
+        `add_adapter()` with a composed `Adapter` on the same backend that
+        fired it. `LocalFileBinding.prepare()` dispatches this hook via a
+        blocking call onto a dedicated event-loop thread; those three
+        methods hold a backend-level lock across their whole body, so a
+        handler that re-enters one of them from that thread deadlocks
+        against the thread that's still waiting for the hook to return. See
+        `AdapterMixin._adapter_resolve_lock()`'s docstring for the full
+        mechanism.
     """
 
     name: str

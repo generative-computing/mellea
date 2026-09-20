@@ -1,5 +1,5 @@
 # pytest: skip, huggingface, e2e
-# SKIP REASON: Requires user input; tests same functionality as 101_example.py.
+# SKIP REASON: Requires user input (blocks on stdin in an infinite loop).
 
 from stembolts_intrinsic import (
     async_stembolt_failure_analysis,
@@ -11,6 +11,8 @@ from mellea.backends.huggingface import LocalHFBackend
 from mellea.stdlib.context import ChatContext
 
 if __name__ == "__main__":
+    # nfulton/stembolts currently provides this adapter for Granite 3.3 2B;
+    # no Granite 4.0 or 4.1 variant is available in the repository.
     backend = LocalHFBackend(
         model_id="ibm-granite/granite-3.3-2b-instruct", cache=SimpleLRUCache(5)
     )

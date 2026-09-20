@@ -261,6 +261,58 @@ class TestOptionalParameters:
         assert validated["optional"] is None
 
 
+class TestDefaultedParameters:
+    """Test that omitted defaulted parameters fall through to Python defaults."""
+
+    def test_omitted_default_not_materialized_as_none(self):
+        """An omitted defaulted parameter must not be forced to None.
+
+        Materializing it as None would override the callable's own default
+        (e.g. weather(location="London") reaching the function as units=None).
+        """
+
+        def weather(location: str, units: str = "celsius", days: int = 1) -> dict:
+            """Get weather.
+
+            Args:
+                location: City name
+                units: Temperature units
+                days: Number of days
+            """
+            return {"location": location, "units": units, "days": days}
+
+        tool = MelleaTool.from_callable(weather)
+        validated = validate_tool_arguments(tool, {"location": "London"})
+
+        assert validated == {"location": "London"}
+        assert "units" not in validated
+        assert "days" not in validated
+
+        # The Python defaults take effect when the callable actually runs.
+        result = ModelToolCall("weather", tool, validated).call_func()
+        assert result == {"location": "London", "units": "celsius", "days": 1}
+
+    def test_supplied_default_param_preserved(self):
+        """A defaulted parameter that IS supplied is kept (and coerced)."""
+
+        def weather(location: str, days: int = 1) -> dict:
+            """Get weather.
+
+            Args:
+                location: City name
+                days: Number of days
+            """
+            return {"location": location, "days": days}
+
+        tool = MelleaTool.from_callable(weather)
+        validated = validate_tool_arguments(
+            tool, {"location": "London", "days": "3"}, coerce_types=True
+        )
+
+        assert validated["days"] == 3
+        assert isinstance(validated["days"], int)
+
+
 class TestComplexTypes:
     """Test validation with complex types."""
 

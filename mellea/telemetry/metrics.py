@@ -58,7 +58,7 @@ Example - Multiple exporters:
 
 Built-in metrics (auto-recorded via plugins when metrics are enabled):
 - Token usage histogram: gen_ai.client.token.usage (unit: {token}), split by gen_ai.token.type (input/output)
-- Latency histograms: gen_ai.client.operation.duration (unit: s), gen_ai.client.operation.time_to_first_chunk (unit: s, streaming only), gen_ai.client.operation.time_per_output_chunk (unit: s, streaming only, opt-in via MELLEA_GENERATION_CHUNK_EVENTS)
+- Latency histograms: mellea.llm.request.duration (unit: s), gen_ai.client.operation.time_to_first_chunk (unit: s, streaming only), gen_ai.client.operation.time_per_output_chunk (unit: s, streaming only, opt-in via MELLEA_GENERATION_CHUNK_EVENTS)
 - Error counter: mellea.llm.errors (unit: {error}), categorized by semantic error type
 - Cost counter: mellea.llm.cost.usd (unit: USD), estimated cost when pricing data is available
 - Sampling counters: mellea.sampling.attempts, mellea.sampling.successes, mellea.sampling.failures (unit: {attempt}/{sample}/{failure})
@@ -283,7 +283,7 @@ def _setup_meter_provider() -> Any:
             ),
         ),
         View(  # type: ignore
-            instrument_name="gen_ai.client.operation.duration",
+            instrument_name="mellea.llm.request.duration",
             aggregation=ExplicitBucketHistogramAggregation(  # type: ignore
                 [
                     0.01,
@@ -660,8 +660,8 @@ def _get_latency_histograms() -> tuple[Any, Any]:
 
     if _duration_histogram is None:
         _duration_histogram = create_histogram(
-            "gen_ai.client.operation.duration",
-            description="GenAI operation duration",
+            "mellea.llm.request.duration",
+            description="Total LLM request duration",
             unit="s",
         )
 
@@ -783,9 +783,8 @@ def record_time_per_output_chunk(
 ) -> None:
     """Record the time between consecutive streamed output chunks.
 
-    Measured between chunk *processing* completions, an approximation of the
-    receive-to-receive interval the OTel GenAI spec defines. No-op when metrics
-    are disabled.
+    Measured from the previous chunk's receipt to the current chunk's receipt.
+    No-op when metrics are disabled.
 
     Args:
         time_s: Seconds between the previous chunk and this one.

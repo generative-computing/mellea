@@ -4,7 +4,7 @@ description: "Use async methods, parallel generation, and streaming output with 
 # diataxis: how-to
 ---
 
-**Prerequisites:** [Quick Start](../getting-started/quickstart) complete,
+**Prerequisites:** [Quick Start](../getting-started/quickstart.md) complete,
 `pip install mellea`, Ollama running locally.
 
 ## Async methods
@@ -204,7 +204,7 @@ mot = await m.ainstruct(
 )
 ```
 
-See [Configure model options — Streaming timeout](../how-to/configure-model-options#streaming-timeout)
+See [Configure model options — Streaming timeout](./configure-model-options.md#streaming-timeout)
 for the full reference.
 
 ## Async and context
@@ -274,7 +274,7 @@ class MaxSentencesReq(Requirement):
     def format_for_llm(self) -> str:
         return f"The response must be at most {self._limit} sentences."
 
-    async def stream_validate(
+    async def _stream_validate(
         self, chunk: str, *, backend: Backend, ctx: Context
     ) -> PartialValidationResult:
         self._count += 1
@@ -310,13 +310,48 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-To observe the run through typed `StreamEvent` objects instead, register a
-plugin on the `streaming_event` hook — see the
-[streaming validation tutorial](../tutorials/06-streaming-validation.md).
+### Consuming events with `EventStreamer`
 
-### The `stream_validate` tri-state
+The `Streamer` above yields validated chunks. To consume the run's typed events
+instead, pass `as_events=True` to `stream()`: it returns an `EventStreamer` you
+iterate the same way, each step yielding an event rather than a chunk:
 
-Each call to `stream_validate` returns a `PartialValidationResult` with one of
+```python
+from mellea.stdlib.streaming import (
+    ChunkEvent,
+    CompletedEvent,
+    FullValidationEvent,
+    QuickCheckEvent,
+    StreamingDoneEvent,
+)
+
+async with await stream(
+    action, m.backend, m.ctx, requirements=[req], chunking="sentence", as_events=True
+) as streamer:
+    async for event in streamer:
+        match event:
+            case ChunkEvent():
+                print(f"  chunk[{event.chunk_index}]: {event.text!r}")
+            case QuickCheckEvent(passed=False):
+                print(f"  quick-check[{event.chunk_index}]: FAIL")
+            case StreamingDoneEvent():
+                print(f"  done — {len(event.full_text)} chars")
+            case FullValidationEvent():
+                print(f"  final validation: {'pass' if event.passed else 'fail'}")
+            case CompletedEvent():
+                print(f"  completed — success={event.success}")
+            case _:
+                pass  # ErrorEvent
+
+print(f"Completed normally: {streamer.completed_normally}")
+```
+
+See the [Streaming Validation tutorial](../tutorials/06-streaming-validation.md)
+for a full walkthrough.
+
+### The `_stream_validate` tri-state
+
+Each call to `_stream_validate` returns a `PartialValidationResult` with one of
 three values:
 
 | Value | Meaning |
@@ -327,10 +362,21 @@ three values:
 
 After a natural stream end, `validate()` is called on every non-`"fail"`
 requirement (both `"pass"` and `"unknown"`). This means `"pass"` from
-`stream_validate` does **not** replace the final `validate()` call.
+`_stream_validate` does **not** replace the final `validate()` call.
 
-> **See also:** [The Requirements System — Streaming validation](../concepts/requirements-system#streaming-validation)
+### Requirement chunking
+
+The `chunking=` on `stream()` sets what the *consumer* receives. A requirement
+declares the granularity its own check needs, independent of the stream's: a
+sentence-level check knows it wants sentences, so it sets `chunking="sentence"` in
+its constructor. Because the built-in chunking strategies all discard their
+separators, set the stream's `chunking=None` when a requirement carries its own,
+so each requirement re-chunks the raw deltas independently. See
+[`docs/examples/streaming/per_requirement_chunking.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/streaming/per_requirement_chunking.py)
+for two requirements validating one stream at different granularities.
+
+> **See also:** [The Requirements System — Streaming validation](../concepts/requirements-system.md#streaming-validation)
 
 ---
 
-**See also:** [Tutorial 02: Streaming and Async](../tutorials/streaming-and-async) | [act() and aact()](../how-to/act-and-aact)
+**See also:** [Tutorial 02: Streaming and Async](../tutorials/02-streaming-and-async.md) | [act() and aact()](./act-and-aact.md)

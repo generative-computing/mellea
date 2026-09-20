@@ -19,7 +19,7 @@ runtime exactly what shape the result must have.
 
 ## Prerequisites
 
-- [Quick Start](../getting-started/quickstart) complete
+- [Quick Start](../getting-started/quickstart.md) complete
 - Ollama running locally with `granite4.1:3b` pulled
 
 ## The full example
@@ -35,7 +35,7 @@ m = start_session()
 
 `start_session()` with no arguments creates a session backed by the default
 local model. The `model_ids` import is available if you want to switch to a
-specific model later (see [Backends and configuration](../how-to/backends-and-configuration)).
+specific model later (see [Backends and configuration](../how-to/backends-and-configuration.md)).
 
 ### Declaring the extraction function
 
@@ -110,7 +110,7 @@ controlling extraction quality.
 **The return type is the schema.** `list[str]` is simple, but the same
 mechanism works for `Literal["positive", "negative", "neutral"]`, Pydantic
 models, or any other type that Mellea knows how to validate. See
-[Enforce structured output](../how-to/enforce-structured-output) for richer
+[Enforce structured output](../how-to/enforce-structured-output.md) for richer
 return types.
 
 **Sessions are explicit.** Passing `m` as the first argument makes the
@@ -121,13 +121,13 @@ the function definition.
 **What to try next:**
 
 - Replace `list[str]` with a Pydantic model to extract multiple fields at
-  once — see [Enforce structured output](../how-to/enforce-structured-output).
+  once — see [Enforce structured output](../how-to/enforce-structured-output.md).
 - Add `requirements` to the `@generative` call to enforce constraints on the
   extracted values — see the
-  [requirements system concept](../concepts/requirements-system).
+  [requirements system concept](../concepts/requirements-system.md).
 - Look at `docs/examples/information_extraction/advanced_with_m_instruct.py`
   for a version that uses `m.instruct()` directly with structured outputs.
 
 ---
 
-**See also:** [Enforce Structured Output](../how-to/enforce-structured-output) | [The Requirements System](../concepts/requirements-system) | [Examples Index](../examples)
+**See also:** [Enforce Structured Output](../how-to/enforce-structured-output.md) | [The Requirements System](../concepts/requirements-system.md) | [Examples Index](./index.md)

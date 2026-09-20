@@ -132,14 +132,14 @@ Mellea also supports building agentic programs directly, without an external
 orchestrator:
 
 - **ReACT loops** — implement thought/action/observation cycles using `m.chat()`
-  with [`ChatContext`](../reference/glossary#chatcontext) and the `@tool` decorator. See
-  [Tools and Agents](../how-to/tools-and-agents).
+  with [`ChatContext`](../reference/glossary.md#chatcontext) and the `@tool` decorator. See
+  [Tools and Agents](../how-to/tools-and-agents.md).
 - **Guarded agents** — combine the ReACT pattern with `requirements` and
   [Guardian adapter functions](../how-to/safety-guardrails.md) to enforce safety constraints
   at every step.
 - **Structured outputs** — use `@generative` with Pydantic models or `Literal` types
   to enforce type-safe structured output at each step. See
-  [Generative Functions](../how-to/generative-functions).
+  [Generative Functions](../how-to/generative-functions.md).
 
 For programs where the control flow is fixed in Python — a pipeline, an extraction
 workflow, a classification step — there is no need for a separate orchestrator.
@@ -211,5 +211,5 @@ tools or steps.
 
 ---
 
-**See also:** [Tools and Agents](../how-to/tools-and-agents) |
-[Safety Guardrails](../how-to/safety-guardrails)
+**See also:** [Tools and Agents](../how-to/tools-and-agents.md) |
+[Safety Guardrails](../how-to/safety-guardrails.md)

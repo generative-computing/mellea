@@ -22,7 +22,7 @@ operations, and the backend trace covers raw LLM calls.
 
 ## Prerequisites
 
-- [Quick Start](../getting-started/quickstart) complete
+- [Quick Start](../getting-started/quickstart.md) complete
 - Ollama running locally with `granite4.1:3b` pulled
 - (Optional) [Jaeger](https://www.jaegertracing.io/) running locally for span
   visualisation — see the Jaeger section below
@@ -320,7 +320,7 @@ applicable:
 
 - Set `OTEL_SERVICE_NAME=my-app` to customise the service name in your trace
   backend.
-- See [Tracing](../observability/tracing)
+- See [Tracing](../observability/tracing.md)
   for attribute schemas and advanced configuration.
 - Add `MELLEA_TRACES_CONSOLE=true` alongside an OTLP endpoint to confirm spans
   are generated even when the remote collector is unavailable.

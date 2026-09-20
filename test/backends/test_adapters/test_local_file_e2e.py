@@ -9,14 +9,20 @@ PEFT machinery, or model. Requires GPU and network/Hub access; not expected to
 run in CI or in sandboxes without hardware access (see test/README.md).
 
 `adapter_scope()` is asserted to really flip the real PEFT model's active
-adapter set. `generate_from_context()` on a plain `CBlock` is only a
-smoke-test that generation still succeeds afterwards — it does not run
-through the activated adapter, since the standard generation path always
-deactivates adapters first (`_generate_with_adapter_lock("", ...)`); wiring
-that path onto `adapter_scope` is deferred to #1465.
+adapter set, and to keep it active across a real generate call. The test holds
+`_generation_lock` across the scope and direct model call, matching the
+intrinsic generation path's reentrant lock shape. It bypasses
+`generate_from_context()` because that standard path always deactivates
+adapters first; the active-adapter assertion straddling the generate call is
+therefore proof that generation ran with the adapter active, not a smoke test
+that generation merely succeeded afterwards. A separate
+`generate_from_context()` call after the scope exits is the composition smoke
+test: mellea's own generation path must still work cleanly against a backend
+that has a scoped-and-released adapter registered — it does not exercise the
+adapter itself, since the standard path always deactivates first.
 
 Assertions are structural/functional only (adapter registered, real model
-reports it active, generation succeeds, adapter cleanly released), per
+reports it active during and after generation, adapter cleanly released), per
 test/README.md's e2e rules — no assertions on generated text content.
 """
 
@@ -88,27 +94,49 @@ async def test_local_file_binding_full_lifecycle_against_real_model(backend):
     assert binding.backend is backend
     assert binding.qualified_name in backend.list_adapters()
 
-    ctx = SimpleContext().add(CBlock("Is the sky blue?"))
-    with backend.adapter_scope(adapter):
-        # Confirms activate() really flipped the real PEFT model's active
-        # adapter — the generate call below does not run through it (see
-        # module docstring), so this is the only in-scope proof of activation.
-        assert binding.qualified_name in backend._model.active_adapters()  # type: ignore[union-attr]
+    # `_generate_intrinsic_with_adapter_scope()` holds this lock for its whole
+    # prepare -> activate -> generate -> deactivate critical section.
+    # `adapter_scope()` reacquires it during activation/deactivation, so this
+    # real-model test also proves that same-thread reentrancy works in practice.
+    with backend._generation_lock:
+        with backend.adapter_scope(adapter):
+            # Confirms activate() really flipped the real PEFT model's active adapter.
+            assert binding.qualified_name in backend._model.active_adapters()  # type: ignore[union-attr]
 
-        mot, _ = await backend.generate_from_context(
-            CBlock("Is the sky blue?"), ctx, model_options={}
-        )
-        value = await mot.avalue()
+            # Generate directly against the real model rather than through
+            # generate_from_context() — that standard path always deactivates
+            # adapters first, which would make this a smoke test that generation
+            # merely succeeds afterwards, not a demonstration that generation ran
+            # with the adapter active.
+            toks = backend._tokenizer("Is the sky blue?", return_tensors="pt").to(
+                backend._device
+            )  # type: ignore[union-attr]
+            with torch.no_grad():
+                backend._model.generate(**toks, max_new_tokens=8)  # type: ignore[union-attr]
+
+            # Still inside the scope: the adapter must still be the one active
+            # during generation, not just at scope-entry.
+            assert binding.qualified_name in backend._model.active_adapters()  # type: ignore[union-attr]
 
     assert binding.qualified_name not in backend._model.active_adapters()  # type: ignore[union-attr]
-    assert isinstance(value, str)
-    assert len(value) > 0
+
+    # Composition smoke test: generate_from_context() must still work once the
+    # scope has exited (see module docstring — it does not exercise the
+    # adapter itself, since the standard path always deactivates first).
+    ctx = SimpleContext().add(CBlock("Is the sky blue?"))
+    mot, _ = await backend.generate_from_context(
+        CBlock("Is the sky blue?"), ctx, model_options={}
+    )
+    composed_value = await mot.avalue()
+    assert isinstance(composed_value, str)
+    assert len(composed_value) > 0
 
     binding.release()
     assert binding.backend is None
-    # list_adapters() reports everything ever registered via add_adapter,
-    # regardless of load state — release() only reverses the load, so check
-    # the loaded-adapters bookkeeping directly instead.
+    # #1528: release() now deregisters via the backend's remove_adapter()
+    # inverse verb, so a released adapter no longer appears in
+    # list_adapters() either.
+    assert binding.qualified_name not in backend.list_adapters()
     assert binding.qualified_name not in backend._loaded_adapters
 
 

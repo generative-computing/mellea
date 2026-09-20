@@ -16,8 +16,8 @@ By the end you will have covered:
 - Detecting harmful outputs with `guardian.guardian_check`
 - Grounding safety checks against retrieved context
 
-**Prerequisites:** [Tutorial 02](./streaming-and-async) and
-[Tutorial 03](./using-generative-stubs) complete,
+**Prerequisites:** [Tutorial 02](./02-streaming-and-async.md) and
+[Tutorial 03](./03-using-generative-stubs.md) complete,
 `pip install mellea`, Ollama running locally with `granite4.1:3b` downloaded.
 
 ---
@@ -183,7 +183,7 @@ fails, Mellea retries with the failure reason embedded in the repair request.
 > verdict depends on the model — prefer
 > a Python validator for anything you can code, and reserve the judge (or, on Granite
 > models, the aLoRA `requirement-check` adapter) for genuinely subjective constraints. See
-> [Choosing a validation approach](../concepts/requirements-system#choosing-a-validation-approach).
+> [Choosing a validation approach](../concepts/requirements-system.md#choosing-a-validation-approach).
 
 ---
 
@@ -365,8 +365,8 @@ response = m.instruct(
 
 output_text = str(response)
 
-# Guardian adapter functions require a LocalHFBackend — they load LoRA adapters
-# that are not supported by OllamaModelBackend.
+# This tutorial uses LocalHFBackend. Ollama requires a compatible bundled model
+# for each Guardian adapter function; see Adapter functions for that setup.
 guardian_backend = LocalHFBackend(model_id="ibm-granite/granite-4.1-3b")
 
 # Build a context containing the exchange to check.
@@ -397,9 +397,11 @@ and dynamic applications with ease. The word "Mellea" consists of
 6 characters.
 ```
 
-> **Note:** Guardian adapter functions load LoRA adapters and require `LocalHFBackend`.
-> They cannot run against `OllamaModelBackend`. The main agent and the Guardian
-> checks can use different backends — only the Guardian calls need `LocalHFBackend`.
+> **Note:** This tutorial uses `LocalHFBackend` because it loads Guardian LoRA
+> adapters directly. `OllamaModelBackend` can run a Guardian adapter function
+> only when you provide an Ollama model tag that bundles that adapter through
+> `adapter_models`. The main agent and the Guardian checks can use different
+> backends.
 
 Scores are floats between 0.0 (safe) and 1.0 (risk detected); 0.5 is the
 threshold. The available criteria are: `"harm"`, `"jailbreak"`, `"social_bias"`,
@@ -408,7 +410,7 @@ threshold. The available criteria are: `"harm"`, `"jailbreak"`, `"social_bias"`,
 
 > **Note:** If you were using `GuardianRisk.SEXUAL_CONTENT` from the old API,
 > there is no direct equivalent key in `CRITERIA_BANK`. Use a custom free-text
-> criteria string instead — see [Custom criteria](../how-to/safety-guardrails#custom-criteria) in the Guardian how-to guide.
+> criteria string instead — see [Custom criteria](../how-to/safety-guardrails.md#custom-criteria) in the Guardian how-to guide.
 
 ---
 
@@ -489,7 +491,7 @@ The available criteria are: `"harm"`, `"jailbreak"`, `"social_bias"`,
 
 > **Note:** If you were using `GuardianRisk.SEXUAL_CONTENT` from the old API,
 > there is no direct equivalent key in `CRITERIA_BANK`. Use a custom free-text
-> criteria string instead — see [Custom criteria](../how-to/safety-guardrails#custom-criteria) in the Guardian how-to guide.
+> criteria string instead — see [Custom criteria](../how-to/safety-guardrails.md#custom-criteria) in the Guardian how-to guide.
 
 ---
 
@@ -682,4 +684,4 @@ agentic system:
 
 ---
 
-**See also:** [The Requirements System](../concepts/requirements-system) | [Tools and Agents](../how-to/tools-and-agents)
+**See also:** [The Requirements System](../concepts/requirements-system.md) | [Tools and Agents](../how-to/tools-and-agents.md)

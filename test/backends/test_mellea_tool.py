@@ -29,7 +29,7 @@ def langchain_tool(input: int) -> str:
 
 @pytest.fixture(scope="module")
 def session():
-    return mellea.start_session()
+    return mellea.start_session(model_options={ModelOption.THINKING: False})
 
 
 def test_from_callable():
@@ -67,7 +67,7 @@ def test_from_callable_generation(session: MelleaSession):
     t = MelleaTool.from_callable(callable, "mellea_tool")
 
     out = session.instruct(
-        "Call a mellea tool.",
+        "Call a mellea tool with an input of 42.",
         model_options={ModelOption.TOOLS: [t], ModelOption.SEED: 1},
         strategy=None,
         tool_calls=True,
@@ -139,7 +139,7 @@ def test_from_langchain_generation(session: MelleaSession):
     t: MelleaTool = MelleaTool.from_langchain(langchain_tool)
 
     out = session.instruct(
-        "Call the langchain_tool.",
+        "Call the langchain_tool with an input of 42.",
         model_options={ModelOption.TOOLS: [t], ModelOption.SEED: 1},
         strategy=None,
         tool_calls=True,

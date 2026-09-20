@@ -45,6 +45,7 @@ from ..helpers import (
     chat_completion_delta_merge,
     extract_model_tool_requests,
     get_current_event_loop,
+    merge_provider_fields,
     send_to_queue,
     should_replay_reasoning,
 )
@@ -62,6 +63,30 @@ from .tools import (
 from .utils import populate_response_metadata_openai_shape
 
 format: None = None  # typing this variable in order to shadow the global format function and ensure mypy checks for errors
+
+
+async def _aclose_model_inference(model: ModelInference) -> None:
+    """Release both HTTP clients held by a `ModelInference`, closing its sockets.
+
+    The SDK offers no way to release these. `aclose_persistent_connection()` and its
+    sync twin `close_persistent_connection()` are resets: each closes the httpx client
+    and immediately installs a fresh one in its place, so the connection pool is back a
+    moment later. Neither touches the sync `httpx_client` on the `APIClient` that every
+    `ModelInference` holds. Closing both clients on the `APIClient` directly is the only
+    way to hand the sockets back.
+
+    Args:
+        model: The `ModelInference` being evicted from the client cache.
+    """
+    api_client = getattr(model, "_client", None)
+    if api_client is None:
+        return
+    async_client = getattr(api_client, "async_httpx_client", None)
+    if async_client is not None:
+        await async_client.aclose()
+    sync_client = getattr(api_client, "httpx_client", None)
+    if sync_client is not None:
+        sync_client.close()
 
 
 class WatsonxAIBackend(FormatterBackend):
@@ -145,7 +170,7 @@ class WatsonxAIBackend(FormatterBackend):
         self._creds = Credentials(url=base_url, api_key=api_key)
         self._kwargs = kwargs
 
-        self._client_cache = ClientCache(2)
+        self._client_cache: ClientCache = ClientCache(2, aclose=_aclose_model_inference)
 
         # Call once to set up the model inference and prepopulate the cache.
         _ = self._model
@@ -200,22 +225,52 @@ class WatsonxAIBackend(FormatterBackend):
 
     @property
     def _model(self) -> ModelInference:
-        """Watsonx's client gets tied to a specific event loop. Reset it if needed here."""
-        key = id(get_current_event_loop())
+        """Watsonx's client gets tied to a specific event loop. Reset it if needed here.
 
-        _model_inference = self._client_cache.get(key)
-        if _model_inference is None:
-            _client = APIClient(credentials=self._creds)
-            _model_inference = ModelInference(
+        Raises:
+            RuntimeError: If `close` or `aclose` has already closed this backend.
+        """
+        # Every generation path reaches its ModelInference through here, so this is
+        # where reuse after close() has to stop: the cache is empty by then, and
+        # building another one would hold its sockets for the life of the process (and
+        # re-fetch an IAM token to do it).
+        self._raise_if_closed()
+        # get_or_create, not get/put: sync callers all key on None, so two threads
+        # calling in would otherwise each build a client and leak one of them.
+        return self._client_cache.get_or_create(
+            get_current_event_loop(),
+            lambda: ModelInference(
                 model_id=self._model_id,
-                api_client=_client,
+                api_client=APIClient(credentials=self._creds),
                 credentials=self._creds,
                 project_id=self._project_id,
                 params=self.model_options,
                 **self._kwargs,
-            )
-            self._client_cache.put(key, _model_inference)
-        return _model_inference
+            ),
+        )
+
+    def close(self) -> None:
+        """Close the HTTP clients held by every cached watsonx `ModelInference`.
+
+        Safe to call more than once; subsequent calls close nothing further.
+
+        Teardown only, not a reset: the backend is marked closed, and generating with
+        it afterwards raises `RuntimeError` instead of building another
+        `ModelInference`. Build a new backend to keep generating.
+        """
+        # Marked closed before anything is closed: the flag is what stops a concurrent
+        # caller from rebuilding a client into the cache `clear()` is about to empty.
+        self._closed = True
+        self._client_cache.clear()
+
+    async def aclose(self) -> None:
+        """Async counterpart to `close`.
+
+        Safe to call more than once; subsequent calls close nothing further. Leaves
+        the backend closed to reuse on the same terms as `close`.
+        """
+        self._closed = True
+        await self._client_cache.aclear()
 
     def filter_chat_completions_kwargs(self, model_options: dict) -> dict:
         """Filter kwargs to only include valid watsonx chat.completions.create parameters.
@@ -422,8 +477,21 @@ class WatsonxAIBackend(FormatterBackend):
                 "role": m.role,
                 "content": self.formatter.print(m),
             }
+            # Honor component-declared tool metadata. Watsonx is OpenAI-compatible,
+            # so `Message.tool_calls` (built by `build_tool_calls`) is passed
+            # verbatim, and a `role="tool"` turn references its originating call via
+            # `tool_call_id` (mirrors `message_to_openai_message`).
+            if m.tool_calls:
+                message_dict["tool_calls"] = m.tool_calls
+            if m.tool_call_id:
+                message_dict["tool_call_id"] = m.tool_call_id
             if replay and m.thinking:
                 message_dict["reasoning_content"] = m.thinking
+            # Merge any author-declared provider fields (Mellea's known fields win;
+            # a mismatched target raises). Must run after the known fields are set.
+            message_dict = merge_provider_fields(
+                message_dict, m.provider_fields, self._provider
+            )
             conversation.append(message_dict)
 
         if _format is not None:
@@ -514,7 +582,7 @@ class WatsonxAIBackend(FormatterBackend):
             output._gen.generate = asyncio.create_task(
                 send_to_queue(
                     chat_response,
-                    output._gen.queue,
+                    output,
                     chunk_timeout=model_opts.get(
                         ModelOption.STREAM_TIMEOUT, DEFAULT_CHUNK_TIMEOUT
                     ),

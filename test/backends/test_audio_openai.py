@@ -55,7 +55,7 @@ pytestmark = [
 
 from mellea import MelleaSession, start_session
 from mellea.backends import ModelOption
-from mellea.core import AudioBlock, ModelOutputThunk
+from mellea.core import AudioBlock, AudioUrlBlock, ModelOutputThunk
 from mellea.stdlib.components import Message
 
 
@@ -85,12 +85,58 @@ class AudioContent(BaseModel):
 
 
 @pytest.fixture(scope="module")
-def sample_audio_wav() -> str:
-    """Download the Gemma sample speech WAV ('Roses are red, violets are blue.')."""
+def sample_audio_bytes() -> bytes:
+    """Download the raw Gemma sample speech WAV ('Roses are red, violets are blue.')."""
     response = requests.get(_AUDIO_URL, timeout=30)
     response.raise_for_status()
-    encoded = base64.b64encode(response.content).decode("utf-8")
+    return response.content
+
+
+@pytest.fixture(scope="module")
+def sample_audio_wav(sample_audio_bytes: bytes) -> str:
+    """The Gemma sample speech WAV as a base64 data URI."""
+    encoded = base64.b64encode(sample_audio_bytes).decode("utf-8")
     return f"data:audio/wav;base64,{encoded}"
+
+
+@pytest.fixture(scope="module")
+def sample_audio_path(tmp_path_factory, sample_audio_bytes: bytes):
+    """The Gemma sample speech WAV written to a real file on disk.
+
+    Deliberately given a `.bin` extension so tests that load it exercise
+    content-based format detection rather than trusting the extension.
+    """
+    path = tmp_path_factory.mktemp("audio") / "roses-are.bin"
+    path.write_bytes(sample_audio_bytes)
+    return path
+
+
+def _assert_recognised_roses_and_violets(result) -> None:
+    """Assert the model heard 'Roses are red, violets are blue.' in the clip.
+
+    The prompt names neither a colour nor a flower, so these values can only come
+    from the audio actually reaching the model and being understood.
+
+    Args:
+        result: The `ModelOutputThunk` whose value is `AudioContent` JSON.
+    """
+    assert isinstance(result, ModelOutputThunk)
+    assert result.value is not None
+    parsed = AudioContent.model_validate_json(result.value)
+    colors = [c.lower() for c in parsed.colors]
+    flowers = [f.lower() for f in parsed.flowers]
+    assert any("red" in c or c == "red" for c in colors), (
+        f"Expected 'red' in colors, got: {parsed.colors!r}"
+    )
+    assert any("blue" in c or c == "blue" for c in colors), (
+        f"Expected 'blue' in colors, got: {parsed.colors!r}"
+    )
+    assert any("rose" in f for f in flowers), (
+        f"Expected 'rose(s)' in flowers, got: {parsed.flowers!r}"
+    )
+    assert any("violet" in f for f in flowers), (
+        f"Expected 'violet(s)' in flowers, got: {parsed.flowers!r}"
+    )
 
 
 def test_audio_block_construction(sample_audio_wav: str):
@@ -248,6 +294,87 @@ def test_session_chat_with_audio(sample_audio_wav: str):
         assert isinstance(turn.model_input, Message)
         assert turn.model_input.audio is not None
         assert len(turn.model_input.audio) > 0
+
+
+# --- File-loading paths, verified end to end ---
+#
+# The tests above build an AudioBlock from a base64 data URI. These cover the
+# from_file / bare-path entry points instead, so a regression in magic-byte
+# detection or in the path coercion is caught by a test that only passes when the
+# model actually understood the clip -- not merely when the payload was well-formed.
+
+
+@pytest.mark.qualitative
+def test_audio_from_file_reaches_model(sample_audio_path):
+    """A clip loaded with AudioBlock.from_file() is understood by the model.
+
+    Exercises detect_format -> from_file -> input_audio -> comprehension. The file has
+    a `.bin` extension, so passing also proves the format was detected from content.
+    """
+    audio_block = AudioBlock.from_file(sample_audio_path)
+    assert audio_block.format == "wav", (
+        "format must be detected from content, not the .bin extension"
+    )
+
+    with _make_session() as session:
+        result = session.instruct(
+            "Listen to the audio and return the colors and flowers mentioned.",
+            audio=[audio_block],
+            strategy=None,
+            format=AudioContent,
+        )
+        _assert_recognised_roses_and_violets(result)
+
+
+@pytest.mark.qualitative
+def test_audio_url_block_reaches_model():
+    """An AudioUrlBlock is downloaded at send time and understood by the model.
+
+    Unlike the mocked unit tests, this performs the real fetch, so it also proves the
+    download-and-inline path works end to end against a live provider.
+    """
+    clip = AudioUrlBlock(_AUDIO_URL, format="wav")
+
+    with _make_session() as session:
+        result = session.instruct(
+            "Listen to the audio and return the colors and flowers mentioned.",
+            audio=[clip],
+            strategy=None,
+            format=AudioContent,
+        )
+        _assert_recognised_roses_and_violets(result)
+
+
+@pytest.mark.qualitative
+def test_audio_from_url_reaches_model():
+    """A clip built with AudioBlock.from_url() is understood by the model."""
+    audio_block = AudioBlock.from_url(_AUDIO_URL)
+    assert audio_block.format == "wav", "format must be detected from downloaded bytes"
+
+    with _make_session() as session:
+        result = session.instruct(
+            "Listen to the audio and return the colors and flowers mentioned.",
+            audio=[audio_block],
+            strategy=None,
+            format=AudioContent,
+        )
+        _assert_recognised_roses_and_violets(result)
+
+
+@pytest.mark.qualitative
+def test_audio_from_bytes_reaches_model(sample_audio_bytes: bytes):
+    """A clip built with AudioBlock.from_bytes() is understood by the model."""
+    audio_block = AudioBlock.from_bytes(sample_audio_bytes)
+    assert audio_block.format == "wav"
+
+    with _make_session() as session:
+        result = session.instruct(
+            "Listen to the audio and return the colors and flowers mentioned.",
+            audio=[audio_block],
+            strategy=None,
+            format=AudioContent,
+        )
+        _assert_recognised_roses_and_violets(result)
 
 
 if __name__ == "__main__":

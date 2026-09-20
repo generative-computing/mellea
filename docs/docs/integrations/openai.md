@@ -301,7 +301,7 @@ m = MelleaSession(
 > **Note (review needed):** Direct Anthropic API compatibility via this path has not
 > been verified against the current Mellea version. If you are using Anthropic,
 > LiteLLM provides a verified integration — see
-> [Backends and Configuration](../how-to/backends-and-configuration).
+> [Backends and Configuration](../how-to/backends-and-configuration.md).
 
 ## Adapter functions with Granite Switch
 
@@ -348,7 +348,6 @@ The high-level adapter function wrappers (`rag.check_answerability`,
 For more control, load adapters manually with `load_embedded_adapters=False`:
 
 ```python
-from mellea.backends.adapters.adapter import EmbeddedIntrinsicAdapter
 from mellea.backends.openai import OpenAIBackend
 from mellea.backends.model_ids import IBM_GRANITE_SWITCH_4_1_3B_PREVIEW
 from mellea.formatters import TemplateFormatter
@@ -361,13 +360,13 @@ backend = OpenAIBackend(
     load_embedded_adapters=False,
 )
 
-# Load a single adapter from the model's Hugging Face repo
-adapters = EmbeddedIntrinsicAdapter.from_hub(
+# Discover and register a single adapter from the model's Hugging Face repo —
+# this composes an Adapter (Identity + IOContract + EmbeddedBinding) rather
+# than returning the deprecated EmbeddedIntrinsicAdapter shim.
+backend.register_embedded_adapter_model(
     IBM_GRANITE_SWITCH_4_1_3B_PREVIEW.hf_model_name,
     intrinsic_name="answerability",
 )
-for adapter in adapters:
-    backend.add_adapter(adapter)
 ```
 
 ## Troubleshooting
@@ -395,6 +394,13 @@ signature of a thinking-mode model that emitted only reasoning tokens and no
 final answer. The OpenAI backend reports the response faithfully — the model
 genuinely returned `content=None` — but the reasoning content is preserved
 separately on the underlying `ModelOutputThunk`.
+
+> **Preferred entry point:** for backends that honour it (this one included),
+> `ModelOption.THINKING` is the portable way to enable/disable/level thinking —
+> see [Reasoning and thinking mode](../how-to/configure-model-options.md#reasoning-and-thinking-mode).
+> The `extra_body`/`enable_thinking` pattern below remains useful as a fallback
+> for runtime-specific params `ModelOption.THINKING` doesn't cover, and for the
+> `default_extra_body` merge semantics described below.
 
 Diagnose with:
 
@@ -434,11 +440,13 @@ thinking setting is not silently dropped when a call also activates an
 intrinsic adapter (which writes its own `chat_template_kwargs.adapter_name`).
 
 Toggling thinking per call is also possible via `model_options={"extra_body":
-...}` on the call itself, but not via `model_options={"extra_body": ...}` at
-**construction** time — that older pattern is not deep-merged and can be
-silently overwritten by an unrelated per-call `extra_body` on some other
-call in the same session ([#1539](https://github.com/generative-computing/mellea/issues/1539)).
-Use `default_extra_body` for anything you want to persist across every call.
+...}` on the call itself. The older pattern of setting a persistent default
+via `model_options={"extra_body": ...}` at **construction** time also works —
+`chat_template_kwargs` in a construction-time `model_options["extra_body"]` is
+deep-merged with any per-call `extra_body`, so a call that passes its own,
+unrelated per-call `extra_body` does not drop it. Prefer `default_extra_body`
+regardless — it is the dedicated mechanism for values you want to persist
+across every call.
 
 Note also that switching `enable_thinking` mid-session changes the rendered
 chat-template prefix on servers like vLLM, which can invalidate that
@@ -452,6 +460,6 @@ reasoning trace from `result.thinking` rather than `result.value`.
 
 ---
 
-**See also:** [Backends and Configuration](../how-to/backends-and-configuration) |
-[Enforce Structured Output](../how-to/enforce-structured-output) |
+**See also:** [Backends and Configuration](../how-to/backends-and-configuration.md) |
+[Enforce Structured Output](../how-to/enforce-structured-output.md) |
 [Official Granite Switch Documentation](https://github.com/generative-computing/granite-switch)

@@ -30,6 +30,7 @@ from mellea.stdlib.components.chat import (
     ToolMessage,
     as_chat_history,
     as_generic_chat_history,
+    message_from_template_representation,
 )
 from mellea.stdlib.context import ChatContext
 
@@ -1167,6 +1168,34 @@ def test_openai_message_reads_tool_call_id_from_plain_message():
     result = message_to_openai_message(msg)
 
     assert result["tool_call_id"] == "call_5"
+
+
+# --- TemplateRepresentation -> Message carries tool_name ---
+
+
+def test_message_from_tr_carries_tool_name():
+    """A `tool_name` declared on a TemplateRepresentation reaches the built Message."""
+    tr = TemplateRepresentation(obj=object(), args={}, role="tool", tool_name="fn")
+
+    msg = message_from_template_representation(
+        tr, default_role="user", content="result"
+    )
+
+    assert msg.role == "tool"
+    assert msg.tool_name == "fn"
+
+
+def test_message_format_for_llm_round_trips_tool_name():
+    """`Message.tool_name` survives format_for_llm -> message_from_template_representation."""
+    original = Message("tool", "result", tool_name="fn")
+
+    tr = original.format_for_llm()
+    assert tr.tool_name == "fn"
+
+    rebuilt = message_from_template_representation(
+        tr, default_role="user", content="result"
+    )
+    assert rebuilt.tool_name == "fn"
 
 
 if __name__ == "__main__":

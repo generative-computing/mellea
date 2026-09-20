@@ -41,7 +41,7 @@ boundaries let you control exactly where the tokeniser makes splits.
 
 A `Component` is a declarative structure that can depend on other `Component`s or
 `CBlock`s. Components are the unit of composition in Mellea. `Message`,
-[`Instruction`](../reference/glossary#instruction), `@mify` objects, and `@generative` functions all produce `Component`s.
+[`Instruction`](../reference/glossary.md#instruction), `@mify` objects, and `@generative` functions all produce `Component`s.
 
 ### `ModelOutputThunk`
 
@@ -221,7 +221,7 @@ in parallel if the backend supports it), and returns `z`'s result.
 
 ### TemplateFormatter
 
-Mellea formats Python objects into LLM-readable text using a [`TemplateFormatter`](../reference/glossary#templateformatter).
+Mellea formats Python objects into LLM-readable text using a [`TemplateFormatter`](../reference/glossary.md#templateformatter).
 It uses Jinja2 templates stored in a `templates/prompts/` directory. Each
 component class can have its own template, looked up by class name.
 
@@ -248,7 +248,7 @@ The formatter returns the template from the deepest matching directory. A model 
 of `ibm-granite/granite-3.2-8b-instruct` matches `granite/granite-3-2/instruct`
 but not `ibm/` — only one path should match in any given templates directory.
 
-### [`TemplateRepresentation`](../reference/glossary#templaterepresentation)
+### [`TemplateRepresentation`](../reference/glossary.md#templaterepresentation)
 
 Each component's `format_for_llm()` method returns either a string or a
 `TemplateRepresentation`. The `TemplateRepresentation` specifies:
@@ -277,6 +277,6 @@ for a worked example.
 ---
 
 **See also:**
-[Generative Programming](../concepts/generative-programming) |
-[Working with Data](../how-to/working-with-data) |
-[Async and Streaming](../how-to/use-async-and-streaming)
+[Generative Programming](../concepts/generative-programming.md) |
+[Working with Data](../how-to/working-with-data.md) |
+[Async and Streaming](../how-to/use-async-and-streaming.md)

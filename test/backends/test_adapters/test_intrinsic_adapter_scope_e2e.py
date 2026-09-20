@@ -1,0 +1,123 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+"""Real e2e test: `LocalHFBackend`'s intrinsic `adapter_scope` path against a
+real PEFT-loaded model.
+
+Drives one real intrinsic call (`core.check_certainty`) through the public
+API against a real Granite model and the real "uncertainty" adapter, and
+asserts on the `ADAPTER_FUNCTION_*` hook payloads and real model adapter
+state — never on the generated certainty score itself.
+
+`check_certainty` still requires the adapter's raw output to parse as JSON
+containing a `certainty` key, so a parse failure surfaces as an exception
+from the call itself, before any hook assertion runs; `call_intrinsic` pins
+`temperature=0.0` to keep that residual risk low.
+
+A second call proves adapter re-loading is tolerated against the real model,
+not just a mocked error-message match.
+"""
+
+import os
+from unittest.mock import MagicMock
+
+import pytest
+
+pytest.importorskip("torch", reason="torch not installed — install mellea[hf]")
+
+from test.predicates import require_gpu
+
+pytestmark = [
+    pytest.mark.huggingface,
+    pytest.mark.e2e,
+    pytest.mark.slow,
+    # Matches the VRAM bound used elsewhere for this same base model;
+    # test_local_file_e2e.py's 20GB is for a heavier adapter+generation pattern.
+    require_gpu(min_vram_gb=12),
+    pytest.mark.skipif(
+        int(os.environ.get("CICD", 0)) == 1,
+        reason="Skipping HuggingFace e2e tests in CI",
+    ),
+]
+
+from mellea.backends import model_ids
+from mellea.backends.adapters.catalog import fetch_intrinsic_metadata
+from mellea.backends.huggingface import LocalHFBackend
+from mellea.stdlib.components import Message
+from mellea.stdlib.components.intrinsic import core
+from mellea.stdlib.context import ChatContext
+from test.backends.test_adapters._hook_capture import (
+    capture_adapter_hooks,
+    invocation_payloads,
+    phase_payloads,
+)
+from test.conftest import cleanup_gpu_backend, hf_skip
+
+_UNCERTAINTY_REVISION = fetch_intrinsic_metadata("uncertainty").revision
+
+
+@pytest.fixture(scope="module")
+def backend():
+    with hf_skip():
+        backend_ = LocalHFBackend(model_id=model_ids.IBM_GRANITE_4_1_3B)
+    yield backend_
+    cleanup_gpu_backend(backend_, backend_name="intrinsic_adapter_scope_e2e")
+
+
+@pytest.fixture
+def chat_context():
+    """A minimal user+assistant turn, satisfying `_assert_context_forwards_history`."""
+    return (
+        ChatContext()
+        .add(Message("user", "What is 2 + 2?"))
+        .add(Message("assistant", "4."))
+    )
+
+
+def _assert_single_success_invocation(mock_invoke: MagicMock) -> None:
+    """Asserts exactly one activate/deactivate phase pair, and one invocation
+    with the expected outcome, name, adapter_type, binding_type, and revision."""
+    phases = [p.phase for p in phase_payloads(mock_invoke)]
+    assert phases == ["activate", "deactivate"]
+
+    invocations = invocation_payloads(mock_invoke)
+    assert len(invocations) == 1
+    invocation = invocations[0]
+    assert invocation.outcome == "success"
+    assert invocation.name == "uncertainty"
+    assert invocation.adapter_type == "lora"
+    assert invocation.binding_type == "local_file"
+    assert invocation.revision == _UNCERTAINTY_REVISION
+
+
+def test_check_certainty_adapter_scope_fires_hooks_and_activates_real_adapter(
+    backend, chat_context
+):
+    """The first call resolves and downloads the adapter, so it needs `hf_skip`."""
+    with hf_skip(), capture_adapter_hooks() as mock_invoke:
+        core.check_certainty(chat_context, backend)
+
+    _assert_single_success_invocation(mock_invoke)
+
+    # Real PEFT model, cleanly deactivated after the scope exits.
+    assert backend._model.active_adapters() == []  # type: ignore[union-attr]
+
+
+def test_check_certainty_adapter_scope_repeat_call_is_idempotent(backend, chat_context):
+    """A repeat call to the same intrinsic on the same backend succeeds cleanly."""
+    with hf_skip(), capture_adapter_hooks() as first_invoke:
+        core.check_certainty(chat_context, backend)
+    _assert_single_success_invocation(first_invoke)
+
+    # The adapter is already loaded from the call above, so this second call
+    # does no network I/O — not wrapped in hf_skip, so a real failure here
+    # can't be misread as a skip.
+    with capture_adapter_hooks() as second_invoke:
+        core.check_certainty(chat_context, backend)
+    _assert_single_success_invocation(second_invoke)
+
+    assert backend._model.active_adapters() == []  # type: ignore[union-attr]
+
+
+if __name__ == "__main__":
+    pytest.main([__file__])

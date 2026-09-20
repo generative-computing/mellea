@@ -182,8 +182,10 @@ class LatencyMetricsPlugin(Plugin, name="latency_metrics", priority=1051):
     ) -> None:
         """Record inter-chunk timing from `chunk_processed` events.
 
-        Each streamed chunk after the first carries an interval; the first has
-        none and is skipped. `chunk_processed` events are opt-in via
+        The recorded interval is a client-side chunk-receipt cadence: work between
+        chunk receipts counts toward it, so it is not purely the provider's
+        token-generation rate. Each streamed chunk after the first carries an interval;
+        the first has none and is skipped. `chunk_processed` events are opt-in via
         `MELLEA_GENERATION_CHUNK_EVENTS`, so the
         `gen_ai.client.operation.time_per_output_chunk` histogram stays empty
         unless that flag is set.
@@ -511,11 +513,11 @@ class RequirementMetricsPlugin(Plugin, name="requirement_metrics", priority=1055
         ev = payload.event
         if not isinstance(ev, QuickCheckEvent):
             return
-        for req, pvr in zip(payload.requirements, ev.results):
+        for req, summary in zip(payload.requirements, ev.results):
             req_name = type(req).__name__
             record_requirement_check(req_name)
-            if pvr.success == "fail":
-                record_requirement_failure(req_name, pvr.reason or "")
+            if summary.success == "fail":
+                record_requirement_failure(req_name, summary.reason or "")
 
 
 class ToolMetricsPlugin(Plugin, name="tool_metrics", priority=1056):

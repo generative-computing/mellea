@@ -44,7 +44,7 @@ class TruncateOldest(InlineCompactor):
         items = ctx.as_list()
         if len(items) <= 1:
             return ctx
-        return _rebuild_chat_context(items[1:], compactor=ctx._compactor)
+        return _rebuild_chat_context(items[1:], source=ctx, compactor=ctx._compactor)
 
 
 def pattern_1_wired_into_context():

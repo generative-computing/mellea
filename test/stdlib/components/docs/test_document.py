@@ -7,11 +7,7 @@ import warnings
 
 from mellea.core import TemplateRepresentation
 from mellea.formatters.template_formatter import TemplateFormatter
-from mellea.stdlib.components.docs.document import (
-    Document,
-    _coerce_to_document,
-    _coerce_to_documents,
-)
+from mellea.stdlib.components.docs.document import Document, _coerce_to_documents
 
 
 def test_document_parts_returns_empty_list():
@@ -104,15 +100,3 @@ class TestCoerceDocuments:
 
     def test_empty(self):
         assert _coerce_to_documents([]) == []
-
-
-class TestCoerceDocument:
-    def test_string(self):
-        result = _coerce_to_document("hello")
-        assert isinstance(result, Document)
-        assert result.text == "hello"
-        assert result.doc_id is None
-
-    def test_passthrough(self):
-        doc = Document("existing", doc_id="1")
-        assert _coerce_to_document(doc) is doc

@@ -4,10 +4,10 @@ description: "Define type-safe LLM functions with @generative and Pydantic struc
 # diataxis: how-to
 ---
 
-**Prerequisites:** [Quick Start](../getting-started/quickstart) complete,
+**Prerequisites:** [Quick Start](../getting-started/quickstart.md) complete,
 `pip install mellea`, Ollama running locally.
 
-> **Concept overview:** [Generative functions](../concepts/generative-functions) explains the design and trade-offs.
+> **Concept overview:** [Generative functions](../concepts/generative-functions.md) explains the design and trade-offs.
 
 `@generative` is the idiomatic way to define type-safe LLM functions in Mellea. You
 write a function signature with type hints and a docstring — Mellea generates the
@@ -218,4 +218,4 @@ model's reasoning process.
 
 ---
 
-**See also:** [Generative Functions](../concepts/generative-functions) | [Enforce Structured Output](../how-to/enforce-structured-output) | [Write Custom Verifiers](../how-to/write-custom-verifiers)
+**See also:** [Generative Functions](../concepts/generative-functions.md) | [Enforce Structured Output](./enforce-structured-output.md) | [Write Custom Verifiers](./write-custom-verifiers.md)

@@ -36,7 +36,7 @@ The following table shows all available backends, their class names, import path
 | [Hugging Face](../integrations/huggingface.md) | `LocalHFBackend` | `mellea.backends.huggingface` | `mellea[hf]` | `backend_name="hf"` |
 | [WatsonX](../integrations/watsonx.md) | `WatsonxAIBackend` | `mellea.backends.watsonx` | `mellea[watsonx]` | `backend_name="watsonx"` (deprecated) |
 
-> **Note:** Vertex AI uses the LiteLLM backend with appropriate model IDs. See the [Vertex AI integration](../integrations/vertex-ai) for details. For detailed setup instructions, click the backend name in the table above.
+> **Note:** Vertex AI uses the LiteLLM backend with appropriate model IDs. See the [Vertex AI integration](../integrations/vertex-ai.md) for details. For detailed setup instructions, click the backend name in the table above.
 
 ## Switching the model
 
@@ -155,7 +155,7 @@ m = MelleaSession(backend=backend)
 
 > **Deprecated:** The native WatsonX backend is deprecated. Use the **LiteLLM** or
 > **OpenAI** backend with a WatsonX-compatible endpoint instead.
-> See [IBM WatsonX integration](/integrations/watsonx) for the recommended setup.
+> See [IBM WatsonX integration](../integrations/watsonx.md) for the recommended setup.
 
 ## Model options
 
@@ -257,4 +257,4 @@ Valid `backend_name` values: `"ollama"`, `"openai"`, `"hf"`, `"litellm"`, `"wats
 
 ---
 
-**See also:** [Configure Model Options](../how-to/configure-model-options) | [Integrations](../integrations/ollama)
+**See also:** [Configure Model Options](./configure-model-options.md) | [Integrations](../integrations/ollama.md)

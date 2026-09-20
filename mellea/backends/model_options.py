@@ -57,16 +57,29 @@ class ModelOption:
 
     Accepted values:
 
-    * `True` — sets `chat_template_kwargs.enable_thinking=True` (vLLM,
-      Ollama OpenAI-compat) **and** `reasoning_effort="medium"` (OpenAI
-      o-series, DeepSeek). Use this to engage reasoning on vLLM-served models
-      such as Qwen3, Gemma 4, and GLM-4.5 — `"medium"` alone is silently
-      ignored by those servers.
-    * `False` — sets `chat_template_kwargs.enable_thinking=False` to
-      suppress the think block. `reasoning_effort` is not sent (passing
-      `False` would be an invalid value for OpenAI).
-    * `"low"` / `"medium"` / `"high"` — passed directly as
-      `reasoning_effort` (OpenAI/DeepSeek only; no-op on vLLM).
+    * `True` — native Ollama backend: sends Ollama's `think` parameter.
+      OpenAI-compatible backends (OpenAI, LiteLLM, Ollama OpenAI-compat
+      endpoint): sets `chat_template_kwargs.enable_thinking=True` and
+      `reasoning_effort="medium"`. Use this to engage reasoning on vLLM-served
+      models such as Qwen3, Gemma 4, and GLM-4.5 — `"medium"` alone is
+      silently ignored by those servers.
+      HuggingFace: forwards the value to the recognised chat-template variable
+      (`think`, `thinking`, or `enable_thinking`).
+    * `False` — native Ollama backend: sends `think=False`.
+      OpenAI-compatible backends: sets `chat_template_kwargs.enable_thinking=False`
+      and `reasoning_effort="none"` to suppress the think block. Both are sent so
+      each server type picks up the mechanism it understands: vLLM honours
+      `chat_template_kwargs`, while Ollama's /v1 endpoint (>= 0.33.1) honours
+      `reasoning_effort` — and for models that default to thinking on (e.g.
+      granite4.2) absent `reasoning_effort` means thinking stays on.
+    * `"low"` / `"medium"` / `"high"` — OpenAI-compatible backends: passed
+      directly as `reasoning_effort` (no-op on vLLM). HuggingFace: forwarded
+      verbatim as the chat template's `reasoning_effort` variable if it
+      declares one (e.g. Granite 4.2, gpt-oss); a no-op otherwise.
+
+    For HuggingFace, any value is ignored if the tokenizer's chat template
+    does not declare the corresponding variable (`think`/`thinking`/
+    `enable_thinking` for bools, `reasoning_effort` for strings).
     """
     SEED = "@@@seed@@@"
     STREAM = "@@@stream@@@"
@@ -208,13 +221,56 @@ class ModelOption:
         return new_options
 
     @staticmethod
+    def _merge_extra_body(
+        base: dict[str, Any], overwrite: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Merge two `extra_body` dicts, deep-merging their `chat_template_kwargs`.
+
+        Every other key is a flat overwrite, matching `merge_model_options`. If
+        either side's `chat_template_kwargs` is present but not a dict, the
+        deep-merge is skipped and `overwrite`'s value wins when present, else
+        `base`'s.
+
+        Args:
+            base (dict[str, Any]): Lower-precedence `extra_body` dict.
+            overwrite (dict[str, Any]): Higher-precedence `extra_body` dict.
+
+        Returns:
+            dict[str, Any]: A new merged `extra_body` dict.
+        """
+        merged = dict(base)
+        base_ctk = merged.pop("chat_template_kwargs", None)
+
+        overwrite = dict(overwrite)
+        overwrite_ctk = overwrite.pop("chat_template_kwargs", None)
+
+        merged.update(overwrite)
+
+        base_ctk_ok = base_ctk is None or isinstance(base_ctk, dict)
+        overwrite_ctk_ok = overwrite_ctk is None or isinstance(overwrite_ctk, dict)
+
+        if base_ctk_ok and overwrite_ctk_ok:
+            if base_ctk is not None or overwrite_ctk is not None:
+                merged["chat_template_kwargs"] = {
+                    **(base_ctk or {}),
+                    **(overwrite_ctk or {}),
+                }
+        elif overwrite_ctk is not None:
+            merged["chat_template_kwargs"] = overwrite_ctk
+        elif base_ctk is not None:
+            merged["chat_template_kwargs"] = base_ctk
+        return merged
+
+    @staticmethod
     def merge_model_options(
         persistent_opts: dict[str, Any], overwrite_opts: dict[str, Any] | None
     ) -> dict[str, Any]:
         """Merge two model-options dicts, with `overwrite_opts` taking precedence on conflicts.
 
         Creates a new dict that contains all keys and values from persistent opts and overwrite opts.
-        If there are duplicate keys, overwrite opts key value pairs will be used.
+        If there are duplicate keys, overwrite opts key value pairs will be used, except for
+        `extra_body`: when both sides have a dict there, their `chat_template_kwargs` sub-dicts
+        are deep-merged (see `_merge_extra_body`) instead of one replacing the other.
 
         Args:
             persistent_opts (dict[str, Any]): Base model options (lower precedence).
@@ -231,5 +287,12 @@ class ModelOption:
 
         if overwrite_opts is not None:
             for k, v in overwrite_opts.items():
-                new_options[k] = v
+                if (
+                    k == "extra_body"
+                    and isinstance(v, dict)
+                    and isinstance(new_options.get(k), dict)
+                ):
+                    new_options[k] = ModelOption._merge_extra_body(new_options[k], v)
+                else:
+                    new_options[k] = v
         return new_options

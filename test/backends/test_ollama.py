@@ -3,27 +3,60 @@
 
 import asyncio
 import json
+import os
+import subprocess
+from pathlib import Path
 from typing import Annotated
+from unittest.mock import patch
 
 import ollama as _ollama
 import pydantic
 import pytest
 
 from mellea import start_session
-from mellea.backends import ModelOption
-from mellea.backends.model_ids import IBM_GRANITE_4_1_3B
+from mellea.backends import ModelOption, model_ids
+from mellea.backends.model_ids import IBM_GRANITE_4_2_3B
 from mellea.backends.ollama import OllamaModelBackend
 from mellea.core import CBlock, Requirement
-from mellea.stdlib.context import SimpleContext
+from mellea.stdlib import functional as mfuncs
+from mellea.stdlib.components import Intrinsic, Message
+from mellea.stdlib.components.intrinsic import core
+from mellea.stdlib.context import ChatContext, SimpleContext
 from mellea.stdlib.requirements import simple_validate
+from test.conftest import hf_skip
 
 # Mark all tests in this module as requiring Ollama
 pytestmark = [pytest.mark.ollama, pytest.mark.e2e]
 
+# Match granite4.2:3b's constrained default (Modelfile num_ctx: 8192) so the
+# runner is loaded once and never reloaded for a context-size mismatch.
+TEST_CONTEXT_WINDOW = 8192
+_UNCERTAINTY_ADAPTER_BUILDER = (
+    Path(__file__).parents[2] / "test/scripts/build_ollama_uncertainty_adapter.sh"
+)
+
+
+def _ollama_model_for_eval() -> str:
+    """Return the Ollama model tag driven by GRANITE42_MODEL env var.
+
+    Accepts either an Ollama tag (granite4.2:8b) or an HF model ID
+    (ibm-granite/granite-4.2-8b) — both select the right size.
+    Defaults to 3B.
+    """
+    name = os.environ.get("GRANITE42_MODEL", "")
+    if "8b" in name or "8B" in name:
+        assert model_ids.IBM_GRANITE_4_2_8B.ollama_name is not None
+        return model_ids.IBM_GRANITE_4_2_8B.ollama_name
+    if "30b" in name or "30B" in name:
+        assert model_ids.IBM_GRANITE_4_2_30B.ollama_name is not None
+        return model_ids.IBM_GRANITE_4_2_30B.ollama_name
+    assert IBM_GRANITE_4_2_3B.ollama_name is not None
+    return IBM_GRANITE_4_2_3B.ollama_name
+
 
 @pytest.fixture(scope="module", autouse=True)
 def _ensure_model_warm() -> None:
-    """Warm up the default model before tests run in this module.
+    """Warm up the selected model before tests run in this module.
 
     The conftest warms models when transitioning *into* the ollama test group, but
     that warm-up does not fire when this file is run in isolation (e.g.
@@ -34,23 +67,74 @@ def _ensure_model_warm() -> None:
 
     `keep_alive=-1` pins the model in memory until the conftest module-boundary
     eviction fires at the end of this test file.
+
+    Set GRANITE42_MODEL=granite4.2:8b (or ibm-granite/granite-4.2-8b)
+    to warm a different size.
     """
-    _model = IBM_GRANITE_4_1_3B.ollama_name
-    assert _model is not None  # IBM_GRANITE_4_1_3B always has ollama_name set
+    _model = _ollama_model_for_eval()
     try:
         _ollama.generate(
-            model=_model, prompt="hi", options={"num_predict": 1}, keep_alive=-1
+            model=_model,
+            prompt="hi",
+            options={"num_ctx": TEST_CONTEXT_WINDOW, "num_predict": 1},
+            keep_alive=-1,
         )
     except Exception:
         pass  # best-effort; per-test failures will be clearer than a fixture abort
 
 
+def _start_ollama_session(*, thinking: bool):
+    """Start an Ollama session with a fixed context window and THINKING default.
+
+    The model size is driven by GRANITE42_MODEL (see _ollama_model_for_eval).
+    """
+    return start_session(
+        model_id=_ollama_model_for_eval(),
+        model_options={
+            ModelOption.CONTEXT_WINDOW: TEST_CONTEXT_WINDOW,
+            ModelOption.THINKING: thinking,
+        },
+    )
+
+
 @pytest.fixture(scope="function")
 def session():
-    """Fresh Ollama session for each test."""
-    session = start_session()
+    """Fresh Ollama session for each test, with THINKING off at construction."""
+    session = _start_ollama_session(thinking=False)
     yield session
     session.reset()
+    session.backend.close()
+
+
+@pytest.fixture(scope="session")
+def uncertainty_adapter_model() -> str:
+    """Build and return the official uncertainty aLoRA Ollama model tag."""
+    if configured_model := os.environ.get("MELLEA_OLLAMA_UNCERTAINTY_MODEL"):
+        return configured_model
+    try:
+        completed = subprocess.run(
+            [_UNCERTAINTY_ADAPTER_BUILDER],
+            check=True,
+            stdout=subprocess.PIPE,
+            text=True,
+        )
+    except subprocess.CalledProcessError as e:
+        pytest.skip(f"uncertainty adapter build failed: {e}")
+    return completed.stdout.strip()
+
+
+@pytest.fixture(scope="function")
+def thinking_session():
+    """Fresh Ollama session with THINKING on at construction time.
+
+    Unlike the `session` fixture (THINKING=False at construction), this lets
+    tests verify that a per-call `THINKING: False` actually overrides the
+    construction-time default, rather than merely agreeing with it.
+    """
+    thinking_session = _start_ollama_session(thinking=True)
+    yield thinking_session
+    thinking_session.reset()
+    thinking_session.backend.close()
 
 
 @pytest.mark.qualitative
@@ -140,7 +224,7 @@ async def test_generate_from_raw(session) -> None:
         actions=[CBlock(value=prompt) for prompt in prompts],
         ctx=session.ctx,
         model_options={
-            ModelOption.CONTEXT_WINDOW: 2048,
+            ModelOption.CONTEXT_WINDOW: TEST_CONTEXT_WINDOW,
             # With raw prompts and high temperature, a response of arbitrary
             # length is normal operation.
             ModelOption.MAX_NEW_TOKENS: 100,
@@ -165,7 +249,7 @@ async def test_generate_from_raw_with_format(session) -> None:
         actions=[CBlock(value=prompt) for prompt in prompts],
         ctx=session.ctx,
         format=Answer,
-        model_options={ModelOption.CONTEXT_WINDOW: 2048},
+        model_options={ModelOption.CONTEXT_WINDOW: TEST_CONTEXT_WINDOW},
     )
 
     assert len(results) == len(prompts)
@@ -238,6 +322,74 @@ async def test_async_avalue(session) -> None:
     assert mot1.generation.ttfb_ms is None
 
 
+def test_uncertainty_adapter_function(uncertainty_adapter_model: str) -> None:
+    """A bundled aLoRA model serves the intrinsic and public certainty helper."""
+    backend = OllamaModelBackend(
+        model_id=uncertainty_adapter_model,
+        adapter_base_model_name="granite-4.1-3b",
+        model_options={ModelOption.CONTEXT_WINDOW: 4096},
+        adapter_models={"uncertainty": uncertainty_adapter_model},
+    )
+    context = (
+        ChatContext()
+        .add(Message("user", "What is the square root of 4?"))
+        .add(Message("assistant", "The square root of 4 is 2."))
+    )
+    with hf_skip():
+        adapter = backend.resolve_adapter("uncertainty")
+    requested_models: list[str] = []
+    original_chat = _ollama.AsyncClient.chat
+
+    async def record_model_selection(client, *args, **kwargs):
+        model = kwargs.get("model")
+        assert isinstance(model, str)
+        requested_models.append(model)
+        return await original_chat(client, *args, **kwargs)
+
+    with patch.object(_ollama.AsyncClient, "chat", new=record_model_selection):
+        output, _ = mfuncs.act(
+            Intrinsic("uncertainty"), context, backend, strategy=None
+        )
+        score = core.check_certainty(context, backend)
+
+    assert requested_models == [uncertainty_adapter_model, uncertainty_adapter_model]
+    assert output.generation.model == uncertainty_adapter_model
+    parsed = json.loads(output.value)
+    assert 0.0 <= parsed["certainty"] <= 1.0
+
+    assert 0.0 <= score <= 1.0
+    assert adapter.identity.adapter_type == "alora"
+
+
+@pytest.mark.qualitative
+def test_uncertainty_adapter_changes_base_model_score(
+    uncertainty_adapter_model: str,
+) -> None:
+    """The bundled aLoRA materially changes the base model's certainty score."""
+    context = (
+        ChatContext()
+        .add(Message("user", "What is the square root of 4?"))
+        .add(Message("assistant", "The square root of 4 is 2."))
+    )
+    model_options = {ModelOption.CONTEXT_WINDOW: 4096, ModelOption.TEMPERATURE: 0.0}
+    base_backend = OllamaModelBackend(
+        model_id="granite4.1:3b",
+        model_options=model_options,
+        adapter_models={"uncertainty": "granite4.1:3b"},
+    )
+    adapter_backend = OllamaModelBackend(
+        model_id="granite4.1:3b",
+        model_options=model_options,
+        adapter_models={"uncertainty": uncertainty_adapter_model},
+    )
+
+    with hf_skip():
+        base_score = core.check_certainty(context, base_backend)
+        adapter_score = core.check_certainty(context, adapter_backend)
+
+    assert abs(adapter_score - base_score) >= 0.2
+
+
 def test_multiple_asyncio_runs(session) -> None:
     async def test():
         result = await session.achat("hello")
@@ -289,6 +441,40 @@ def test_stop_sequences(session) -> None:
     assert stop not in result.value, (
         f"stop sequence leaked into output: {result.value!r}"
     )
+
+
+async def test_thinking_suppressed_per_call(thinking_session) -> None:
+    """THINKING=False per call overrides a THINKING=True construction-time default."""
+    mot, _ = await thinking_session.backend.generate_from_context(
+        CBlock("What is 1+1?"),
+        thinking_session.ctx,
+        model_options={ModelOption.THINKING: False},
+    )
+    await mot.avalue()
+    assert not mot.thinking, f"Expected no thinking trace, got: {mot.thinking!r}"
+
+
+async def test_thinking_enabled_mot_field_nonempty(session) -> None:
+    """THINKING=True per call overrides a THINKING=False construction-time default."""
+    mot, _ = await session.backend.generate_from_context(
+        CBlock("What is 1+1?"), session.ctx, model_options={ModelOption.THINKING: True}
+    )
+    await mot.avalue()
+    assert mot.thinking, (
+        f"Expected a non-empty thinking trace from "
+        f"{_ollama_model_for_eval()!r} but mot.thinking was empty/None"
+    )
+
+
+async def test_construction_time_thinking_default_suppresses(session) -> None:
+    """Backend constructed with THINKING=False suppresses thinking on all calls
+    without per-call model_options.
+    """
+    mot, _ = await session.backend.generate_from_context(
+        CBlock("What is 1+1?"), session.ctx
+    )
+    await mot.avalue()
+    assert not mot.thinking, f"Expected no thinking trace, got: {mot.thinking!r}"
 
 
 if __name__ == "__main__":

@@ -6,7 +6,7 @@ description: "Implement the Component Protocol to create reusable, testable gene
 
 > **Advanced:** This page is for developers who need to go beyond the standard
 > `@generative`, `instruct()`, and `m.chat()` API. If you are getting started
-> with Mellea, see the [Quick Start](../getting-started/quickstart) first.
+> with Mellea, see the [Quick Start](../getting-started/quickstart.md) first.
 
 The `Component` Protocol is the fundamental unit of composition in Mellea. Every
 high-level API call — `m.instruct()`, `@generative`, `m.chat()` — is backed by a
@@ -32,7 +32,7 @@ less boilerplate.
 
 ## The Component Protocol
 
-[`Component`](../reference/glossary#component) is a `Protocol` generic over `S`, the return type produced when the
+[`Component`](../reference/glossary.md#component) is a `Protocol` generic over `S`, the return type produced when the
 component parses LLM output:
 
 ```python
@@ -43,10 +43,10 @@ The protocol has three required methods and one public method that wraps `_parse
 
 | Method | Signature | Purpose |
 | ------ | --------- | ------- |
-| `parts()` | `-> list[Component \| CBlock]` | Returns child components and [`CBlock`](../reference/glossary#cblock) content blocks |
+| `parts()` | `-> list[Component \| CBlock]` | Returns child components and [`CBlock`](../reference/glossary.md#cblock) content blocks |
 | `format_for_llm()` | `-> TemplateRepresentation \| str` | Formats the component for LLM consumption |
 | `_parse()` | `(computed: ModelOutputThunk) -> S` | Parses LLM output into the return type `S` |
-| `parse()` | `(computed: ModelOutputThunk) -> S` | Public wrapper — catches exceptions as [`ComponentParseError`](../reference/glossary#componentparseerror) |
+| `parse()` | `(computed: ModelOutputThunk) -> S` | Public wrapper — catches exceptions as [`ComponentParseError`](../reference/glossary.md#componentparseerror) |
 
 You implement `parts()`, `format_for_llm()`, and `_parse()`. You do not override
 `parse()` — the base implementation calls `_parse()` and wraps any exception in a
@@ -135,7 +135,7 @@ with start_session() as m:
 ## Using TemplateRepresentation for Jinja2-based rendering
 
 For components that need model-specific prompt formatting, return a
-[`TemplateRepresentation`](../reference/glossary#templaterepresentation) from `format_for_llm()` instead of a plain string.
+[`TemplateRepresentation`](../reference/glossary.md#templaterepresentation) from `format_for_llm()` instead of a plain string.
 `TemplateRepresentation` is a dataclass with these fields:
 
 | Field | Type | Purpose |
@@ -154,7 +154,7 @@ For components that need model-specific prompt formatting, return a
 
 The formatter resolves template files from a `templates/prompts/` directory,
 traversing subdirectories that match the model ID before falling back to
-`default/`. See [Mellea Core Internals](../advanced/mellea-core-internals) for
+`default/`. See [Mellea Core Internals](./mellea-core-internals.md) for
 the full lookup order.
 
 ```python
@@ -337,9 +337,9 @@ class TestFeedbackForm:
 
 ## Next steps
 
-- [Mellea Core Internals](../advanced/mellea-core-internals) — understand
+- [Mellea Core Internals](./mellea-core-internals.md) — understand
   `CBlock`, `ModelOutputThunk`, and the full abstraction stack that custom
   components plug into.
-- [Write Custom Verifiers](../how-to/write-custom-verifiers) — combine custom
+- [Write Custom Verifiers](../how-to/write-custom-verifiers.md) — combine custom
   components with requirement validation to build structured output pipelines
   with automatic retry.

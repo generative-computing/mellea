@@ -16,7 +16,8 @@ without boilerplate.
 import re
 from collections.abc import Callable
 from copy import copy
-from typing import Literal
+from dataclasses import dataclass
+from typing import Literal, final
 
 from .backend import Backend, BaseModelSubclass
 from .base import (
@@ -27,6 +28,7 @@ from .base import (
     Span,
     TemplateRepresentation,
 )
+from .chunking import Chunker, ChunkingStrategy, resolve_chunking_strategy
 
 
 class ValidationResult:
@@ -38,6 +40,11 @@ class ValidationResult:
         score (float | None): Optional numeric score returned by the validator.
         thunk (ModelOutputThunk | None): The `ModelOutputThunk` produced during LLM-as-a-Judge validation, if applicable.
         context (Context | None): The context associated with the validation backend call, if applicable.
+        error (Exception | None): Set when validation could not produce a verdict because the
+            output could not be parsed — for example an `AdapterSchemaMismatchError` from a
+            custom `output_to_bool`. When set, `bool(result)` fails closed to `False`
+            regardless of `result`, so callers that ignore errors do not silently pass.
+            Inspect `error` to distinguish "requirement not met" from "output unparsable".
 
     """
 
@@ -49,6 +56,7 @@ class ValidationResult:
         score: float | None = None,
         thunk: ModelOutputThunk | None = None,
         context: Context | None = None,
+        error: Exception | None = None,
     ):
         """Initialize ValidationResult with a pass/fail boolean and optional metadata."""
         self._result = result
@@ -56,6 +64,7 @@ class ValidationResult:
         self._score = score
         self._thunk = thunk
         self._context = context
+        self._error = error
 
     @property
     def reason(self) -> str | None:
@@ -77,12 +86,29 @@ class ValidationResult:
         """The context associated with validation if a backend was used to generate the final result."""
         return self._context
 
+    @property
+    def error(self) -> Exception | None:
+        """The exception raised while parsing the validation output, if any.
+
+        Set when `validate()` could not produce a verdict because the output was
+        unparsable (e.g. an `AdapterSchemaMismatchError` from a custom
+        `output_to_bool`). `None` for an ordinary pass or fail. When set,
+        `as_bool()` returns `False` regardless of the underlying result.
+        """
+        return self._error
+
     def as_bool(self) -> bool:
         """Return a boolean value based on the validation result.
 
+        Fails closed when an `error` is set: an unparsable output is never
+        treated as a pass, so callers that only check the boolean fail safely
+        rather than silently accepting a result that was never computed.
+
         Returns:
-            bool: `True` if the requirement passed, `False` otherwise.
+            bool: `True` if the requirement passed and no error is set, `False` otherwise.
         """
+        if self._error is not None:
+            return False
         return self._result
 
     def __bool__(self) -> bool:
@@ -91,7 +117,10 @@ class ValidationResult:
 
     def __repr__(self) -> str:
         """Return a developer-readable representation of the validation result."""
-        return f"ValidationResult({self._result!r}, reason={self._reason!r}, score={self._score!r})"
+        return (
+            f"ValidationResult({self._result!r}, reason={self._reason!r}, "
+            f"score={self._score!r}, error={self._error!r})"
+        )
 
 
 class PartialValidationResult:
@@ -181,6 +210,56 @@ class PartialValidationResult:
         return f"PartialValidationResult({self._success!r}, reason={self._reason!r}, score={self._score!r})"
 
 
+@dataclass
+class PartialValidationSummary:
+    """Aggregate of the per-chunk `PartialValidationResult`s a requirement produces for one validated input.
+
+    A requirement re-chunks the text it is given and validates each chunk, so one input can
+    yield several results (one when it does not re-chunk). Build one with `from_results`.
+
+    Args:
+        results (list[PartialValidationResult]): The per-chunk results, in order.
+        success (Literal["pass", "fail", "unknown"]): Aggregate verdict — `"fail"` if any chunk
+            failed, `"pass"` if every chunk passed, else `"unknown"` (some chunk undecided, or
+            no results).
+        failure (PartialValidationResult | None): The failing chunk's result (at most one,
+            given `stream_validate` short-circuits at the first failure), or `None`.
+        reason (str | None): The failing chunk's `reason`, or `None` when no chunk failed.
+    """
+
+    results: list[PartialValidationResult]
+    success: Literal["pass", "fail", "unknown"]
+    failure: PartialValidationResult | None
+    reason: str | None
+
+    @classmethod
+    def from_results(
+        cls, results: list[PartialValidationResult]
+    ) -> "PartialValidationSummary":
+        """Summarize per-chunk `results` into a single verdict.
+
+        An empty `results` summarizes to `"unknown"` (no verdict) with no failure.
+
+        Args:
+            results: The per-chunk results for one validated input.
+
+        Returns:
+            PartialValidationSummary: `success` is `"fail"` if any result failed, `"pass"` if
+            every result passed, else `"unknown"`; `failure` (and its `reason`) come from the
+            failing result, or are `None`.
+        """
+        failure = next((r for r in results if r.success == "fail"), None)
+        success: Literal["pass", "fail", "unknown"]
+        if failure is not None:
+            success = "fail"
+        elif results and all(r.success == "pass" for r in results):
+            success = "pass"
+        else:
+            success = "unknown"
+        reason = failure.reason if failure is not None else None
+        return cls(results=results, success=success, failure=failure, reason=reason)
+
+
 def default_output_to_bool(x: CBlock | ModelOutputThunk | str) -> bool:
     """Convert a model output string to a boolean by checking for a "yes" answer.
 
@@ -217,6 +296,10 @@ class Requirement(Component[str]):
             Defaults to a "yes"-detection heuristic. May raise if the output does not match
             the expected format — see `validate` for details.
         check_only (bool): When `True`, the requirement description is excluded from `Instruction` prompts.
+        chunking (str | ChunkingStrategy | None): Chunking strategy for streaming validation.
+            When set, the requirement re-chunks the stream into its own validation chunks (see
+            `stream_validate`); an alias string is resolved. `None` (default) validates each
+            stream chunk as-is.
 
     Attributes:
         description (str | None): A natural-language description of the requirement.
@@ -226,6 +309,7 @@ class Requirement(Component[str]):
             function that bypasses the LLM-as-a-Judge strategy entirely.
         check_only (bool): When `True`, the requirement description is excluded from `Instruction`
             prompts to avoid influencing model output.
+        chunking (ChunkingStrategy | None): The resolved chunking strategy, or `None`.
     """
 
     def __init__(
@@ -236,15 +320,51 @@ class Requirement(Component[str]):
         output_to_bool: Callable[[CBlock | ModelOutputThunk | str], bool]
         | None = default_output_to_bool,
         check_only: bool = False,
+        chunking: str | ChunkingStrategy | None = None,
     ):
         """Initialize Requirement with an optional description, validation function, and output converter."""
         self.description = description
         self.output_to_bool = output_to_bool
         self.validation_fn = validation_fn
         self.check_only = check_only
+        self.chunking: ChunkingStrategy | None = resolve_chunking_strategy(chunking)
 
-        # Used for validation. Do not manually populate.
-        self._output: str | None = None
+        # The span under judgement. Bound only on the transient copy created inside
+        # `validate` (see `_bind_validation_target`). Do not manually populate.
+        self._validation_target: Span | None = None
+
+        # Per-stream chunker for streaming validation, built lazily.
+        self._chunker: Chunker | None = None
+
+    def _bind_validation_target(self, target: Span) -> "Requirement":
+        """Return a shallow copy of this requirement bound to the span under judgement.
+
+        Binding happens on a copy so that a `Requirement` object can be reused across
+        validation calls (and across sampling iterations) without accumulating state.
+
+        Args:
+            target: The `Component`, `CBlock`, or `ModelOutputThunk` being validated.
+
+        Returns:
+            Requirement: A copy of this requirement whose `_validation_target` is `target`.
+        """
+        bound = copy(self)
+        bound._validation_target = target
+        return bound
+
+    def __copy__(self) -> "Requirement":
+        """Return a shallow copy with the live `_chunker` reset to `None`.
+
+        The chunker holds per-stream state that must not be shared between copies. Subclasses
+        overriding `__copy__` should call `super().__copy__()` to preserve the reset.
+
+        Returns:
+            Requirement: A shallow copy whose `_chunker` is `None`.
+        """
+        clone = self.__class__.__new__(self.__class__)
+        clone.__dict__.update(self.__dict__)
+        clone._chunker = None
+        return clone
 
     async def validate(
         self,
@@ -266,15 +386,16 @@ class Requirement(Component[str]):
             model_options (dict | None): Optional model options to pass to the backend during the judgement call.
 
         Returns:
-            ValidationResult: The result of the validation, including a boolean pass/fail and optional metadata.
+            ValidationResult: The result of the validation, including a boolean pass/fail
+            and optional metadata. If `output_to_bool` raises while parsing the judgement
+            output (e.g. `AdapterSchemaMismatchError` on an unexpected adapter schema), the
+            exception is caught and stored on `result.error` rather than propagated: the
+            result fails closed (`bool(result)` is `False`), and callers can inspect
+            `result.error` to distinguish "requirement not met" from "output unparsable".
 
         Raises:
-            Exception: Any exception raised by `output_to_bool` propagates to the caller.
-                Custom `output_to_bool` functions (including adapter-backed ones such as
-                `requirement_check_to_bool`) may raise on malformed output — e.g.
-                `AdapterSchemaMismatchError` when the adapter returns an unexpected schema.
-                Callers that previously treated all non-`True` outcomes as "requirement not
-                met" must now catch these exceptions separately.
+            AssertionError: If the LLM-as-a-Judge strategy is selected but `output_to_bool`
+                is `None`, or if the context has no `ModelOutputThunk` as its last output.
         """
         if self.validation_fn is not None:
             # Python validation strategy
@@ -287,10 +408,10 @@ class Requirement(Component[str]):
                 " Context has no appropriate last output"
             )
 
-            # Create a copy of the requirement that holds the output
-            # and its template gets populated with the output correctly.
-            req_copy = copy(self)
-            req_copy._output = last_output.value
+            # Bind the output being judged to a copy of this requirement, so that the
+            # judgement request carries the output itself -- not a detached string copy
+            # of it -- and so that `self` is left unmodified.
+            req_copy = self._bind_validation_target(last_output)
             llm_as_a_judge_result, val_ctx = await backend.generate_from_context(
                 req_copy, ctx, format=format, model_options=model_options
             )
@@ -308,17 +429,85 @@ class Requirement(Component[str]):
                 if judge_output_str in ("yes", "no"):
                     reason = self.description
 
+            try:
+                result = self.output_to_bool(llm_as_a_judge_result)
+            except Exception as exc:
+                # A custom output_to_bool (e.g. the adapter-backed
+                # requirement_check_to_bool) can raise on unparsable output.
+                # Surface that as a third outcome rather than propagating: the
+                # result fails closed and carries the exception for callers that
+                # want to distinguish it from an ordinary failure.
+                #
+                # reason is deliberately None here. Repair strategies treat a
+                # truthy reason as literal prompt text; the judge output that
+                # triggered the parse error is malformed and would make useless
+                # repair guidance. None routes repair to the existing
+                # requirement-description fallback, while error and thunk retain
+                # the diagnostic for callers that inspect the result directly.
+                return ValidationResult(
+                    result=False,
+                    reason=None,
+                    thunk=llm_as_a_judge_result,
+                    context=val_ctx,
+                    error=exc,
+                )
+
             return ValidationResult(
-                result=self.output_to_bool(llm_as_a_judge_result),
+                result=result,
                 reason=reason,
                 thunk=llm_as_a_judge_result,
                 context=val_ctx,
             )
 
+    @final
     async def stream_validate(
+        self, delta: str, *, backend: Backend, ctx: Context, flush: bool = False
+    ) -> list[PartialValidationResult]:
+        """Validate one stream delta, re-chunked into this requirement's own chunks.
+
+        Feeds `delta` to this requirement's chunker (built from `chunking`) and runs
+        `_stream_validate` on each complete chunk until one fails, returning the results up to
+        and including that failure — later chunks are skipped. With `chunking=None` the delta is
+        validated as-is. When `delta` completes no chunk (the chunker is still accumulating),
+        the result is a single `"unknown"`. For a `chunking=None` requirement, an empty `delta`
+        returns a single `"unknown"` without invoking `_stream_validate`.
+
+        To add streaming validation, override `_stream_validate`, returning `"pass"`
+        (satisfied so far), `"fail"` (constraint violated), or `"unknown"` (no verdict yet)
+        for each chunk.
+
+        Args:
+            delta: The next piece of stream text to feed this requirement's chunker.
+            backend: The inference backend, for backend-assisted checks.
+            ctx: The current generation context.
+            flush: When `True` also validate the trailing residual withheld by this requirement's chunker.
+
+        Returns:
+            list[PartialValidationResult]: One result per validated chunk, ending at the first
+            failing chunk, or a single `"unknown"` when `delta` completes no chunk. Never empty.
+        """
+        if self.chunking is None:
+            return (
+                [await self._stream_validate(delta, backend=backend, ctx=ctx)]
+                if delta
+                else [PartialValidationResult("unknown")]
+            )
+        if self._chunker is None:
+            self._chunker = Chunker(self.chunking)
+        results: list[PartialValidationResult] = []
+        for chunk in self._chunker.feed(delta):
+            result = await self._stream_validate(chunk, backend=backend, ctx=ctx)
+            results.append(result)
+            if result.success == "fail":
+                break
+        if flush and not any(r.success == "fail" for r in results):
+            results.extend(await self.stream_flush(backend=backend, ctx=ctx))
+        return results or [PartialValidationResult("unknown")]
+
+    async def _stream_validate(
         self, chunk: str, *, backend: Backend, ctx: Context
     ) -> PartialValidationResult:
-        """Hook for per-chunk streaming validation.
+        """Validate a single chunk during streaming.
 
         The default implementation returns `PartialValidationResult("unknown")`
         — meaning insufficient data to decide yet. Subclasses override this method
@@ -331,9 +520,8 @@ class Requirement(Component[str]):
         Shallow-copy caveat: mutable container fields (e.g. `self._buffer = []`)
         are shared by reference under `copy()`. Reassign rather than mutate in
         place (`self._buffer = self._buffer + [chunk]`, not
-        `self._buffer.append(chunk)`), or override `__copy__` for proper
-        isolation.  If an override raises, the enclosing `stream()` call aborts
-        before any backend generation starts and the exception propagates unchanged.
+        `self._buffer.append(chunk)`), or override `__copy__` for proper isolation.
+
         Overrides with externally visible side effects (file writes, network
         calls) should perform them only after any logic that could raise, since
         the framework cannot roll them back.
@@ -345,16 +533,15 @@ class Requirement(Component[str]):
         `chunk` values they receive.
 
         Args:
-            chunk: A single complete semantic chunk produced by the chunking
+            chunk: A single complete, non-empty semantic chunk produced by the chunking
                 strategy (e.g. one sentence for `SentenceChunking`). This is
-                the delta since the previous `stream_validate` call for this
-                attempt, not the accumulated output. Requirements that need
-                earlier context should retain it on `self` across calls.
+                the delta since the previous call for this attempt, not the
+                accumulated output. Requirements that need earlier context
+                should retain it on `self` across calls.
             backend: The inference backend, available for backend-assisted checks.
             ctx: The current generation context. During streaming the MOT is
                 not yet computed, so `ctx` does not contain the generated
-                output; use `chunk` (and any state accumulated on `self`)
-                instead.
+                output; use `chunk` (and any state accumulated on `self`) instead.
 
         Returns:
             PartialValidationResult: `"unknown"` by default. Subclasses may return
@@ -364,32 +551,71 @@ class Requirement(Component[str]):
         """
         return PartialValidationResult("unknown")
 
+    async def stream_flush(
+        self, *, backend: Backend, ctx: Context
+    ) -> list[PartialValidationResult]:
+        """Validate the trailing residual withheld by this requirement's chunker.
+
+        The end-of-stream counterpart to `stream_validate`: with no new chunk, it releases the
+        final chunk the chunker held back (the text after its last boundary) and runs it through
+        `_stream_validate`. Returns one result per residual chunk (0 or 1 per the
+        `ChunkingStrategy.flush` contract), or an empty list when there is no chunker or nothing
+        was withheld.
+
+        Args:
+            backend: The inference backend, available for backend-assisted checks.
+            ctx: The current generation context.
+
+        Returns:
+            list[PartialValidationResult]: The residual chunk's result(s), or empty if none.
+        """
+        if self._chunker is None:
+            return []
+        return [
+            await self._stream_validate(chunk, backend=backend, ctx=ctx)
+            for chunk in self._chunker.flush()
+        ]
+
     def parts(self) -> list[Span]:
         """Returns all of the constituent parts of a Requirement.
 
+        Once a validation target has been bound (inside a `validate` call), that target is
+        the requirement's sole part. Exposing it here is what allows `generate_walk` to
+        await it if it has not been computed yet.
+
         Returns:
-            List of constituent components. Empty by default; subclasses override
-            to expose their internal structure.
+            List of constituent components. Empty unless a validation target is bound.
         """
-        return []
+        return [] if self._validation_target is None else [self._validation_target]
 
     def format_for_llm(self) -> TemplateRepresentation | str:
         """Returns a `TemplateRepresentation` for LLM-as-a-Judge evaluation of this requirement.
 
-        Populates the template with the requirement's `description` and the stored model
-        `_output`. Must only be called from within a `validate` call for this same requirement,
-        after `_output` has been set.
+        Populates the template with the requirement's `description` and the bound validation
+        target. Must only be called from within a `validate` call for this same requirement,
+        after the target has been bound by `_bind_validation_target`.
+
+        When the target is a `ModelOutputThunk` with a `Component` `parsed_repr`, the parsed
+        representation is used so that the judge sees the structured output rather than the
+        raw generated string.
 
         Returns:
             TemplateRepresentation | str: A `TemplateRepresentation` containing the description
             and the model output to be judged.
         """
-        assert self._output is not None, (
+        assert self._validation_target is not None, (
             "Object protocol error: should never try to templatize a Requirement except inside of a validate call for that same requirement."
         )
+
+        target: Span = self._validation_target
+        if isinstance(target, ModelOutputThunk) and isinstance(
+            target.parsed_repr, Component
+        ):
+            target = target.parsed_repr
+
         return TemplateRepresentation(
             obj=self,
-            args={"description": self.description, "output": self._output},
+            args={"description": self.description, "output": target},
             tools=None,
             template_order=["*", "Requirement"],
         )

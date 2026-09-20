@@ -38,10 +38,12 @@ def backend():
     if int(os.environ.get("CICD", 0)) == 1:
         pytest.skip("Skipping watsonx tests.")
     else:
-        return WatsonxAIBackend(
+        backend = WatsonxAIBackend(
             model_id=model_ids.IBM_GRANITE_4_HYBRID_SMALL,
             formatter=TemplateFormatter(model_id=model_ids.IBM_GRANITE_4_HYBRID_SMALL),
         )
+        yield backend
+        backend.close()
 
 
 @pytest.fixture(scope="function")
