@@ -668,7 +668,9 @@ class SOFAISamplingStrategy(SamplingStrategy):
             next_action = deepcopy(action)
             next_context: Context = context
 
-            show_progress = show_progress and flog.getEffectiveLevel() <= MelleaLogger.INFO
+            show_progress = (
+                show_progress and flog.getEffectiveLevel() <= MelleaLogger.INFO
+            )
             loop_iterator = (
                 tqdm.tqdm(range(effective_loop_budget), desc="S1 Solver")
                 if show_progress
