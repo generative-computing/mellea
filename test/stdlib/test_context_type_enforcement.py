@@ -448,6 +448,7 @@ class _StubStrategy(SamplingStrategy):
             success=True,
             sample_generations=gens,
             sample_contexts=list(self._contexts),
+            sample_actions=[action] * len(gens),
         )
 
 
