@@ -5,6 +5,7 @@
 
 import asyncio
 import json
+import logging
 import threading
 import time
 import warnings
@@ -41,7 +42,7 @@ from mellea.backends.adapters import (
     IntrinsicAdapter,
     ServerMediatedBinding,
 )
-from mellea.backends.adapters._core import Identity
+from mellea.backends.adapters._core import Adapter, Identity, IOContract, PromptBinding
 from mellea.backends.adapters.adapter import (
     EmbeddedIntrinsicAdapter,
     _ShimWeightsBinding,
@@ -706,7 +707,7 @@ async def test_embedded_intrinsic_invocation_complete_fires_error_on_generation_
 ):
     # A failure in the backend's own generation call never reaches
     # granite_formatters_processing — avalue() raises it straight off the
-    # queue — so _await_embedded_generation must fire outcome="error" instead.
+    # queue — so _await_generation_reporting_error must fire outcome="error" instead.
     pytest.importorskip("cpex", reason="cpex not installed — install mellea[hooks]")
     backend = _make_intrinsic_backend_stub(stub_backend)
     backend.processing = AsyncMock(return_value=None)
@@ -767,9 +768,9 @@ async def test_embedded_intrinsic_invocation_complete_fires_error_on_generation_
 async def test_legacy_peft_intrinsic_never_fires_embedded_invocation_complete(
     stub_backend,
 ):
-    # Drives the legacy PEFT path (embedded_identity=None) and pins that it
-    # never fires the embedded helper — guards the isinstance check that
-    # gates embedded_identity from silently double-firing.
+    # Drives the legacy PEFT path (shim weights, not Embedded/Prompt) and pins
+    # that it never fires invocation-complete — guards the isinstance check that
+    # gates the emit on adapter.weights from silently double-firing.
     pytest.importorskip("cpex", reason="cpex not installed — install mellea[hooks]")
     backend = _make_intrinsic_backend_stub(stub_backend)
     backend.processing = AsyncMock(return_value=None)
@@ -828,6 +829,68 @@ async def test_legacy_peft_intrinsic_never_fires_embedded_invocation_complete(
 
     fired_hook_types = [call.args[0] for call in mock_invoke.call_args_list]
     assert HookType.ADAPTER_FUNCTION_INVOCATION_COMPLETE not in fired_hook_types
+
+
+class _StubPromptContract(IOContract):
+    """Minimal IOContract; the prompt generation path never reads it."""
+
+    def build_prompt(self, **kwargs: object):
+        raise NotImplementedError
+
+    def parse(self, raw: str) -> dict[str, object]:
+        return {}
+
+
+def _make_prompt_generate_stub():
+    """A stub carrying only what `_generate_composed_prompt` touches."""
+    model = SimpleNamespace(
+        active_adapters=MagicMock(return_value=[]), set_adapter=MagicMock()
+    )
+    return SimpleNamespace(
+        _generation_lock=threading.RLock(),
+        _model=model,
+        deactivate_peft_adapter=MagicMock(),
+    )
+
+
+def test_generate_composed_prompt_runs_on_clean_base_model(caplog):
+    """The weightless prompt path clears any PEFT adapter, logs activation, generates."""
+    stub = _make_prompt_generate_stub()
+    adapter = Adapter(
+        identity=Identity(
+            name="answerability", adapter_type="prompt", capability="answerability"
+        ),
+        io_contract=_StubPromptContract(),
+        weights=PromptBinding(name="answerability", target_model_name="granite-4.2-8b"),
+    )
+
+    with caplog.at_level(logging.INFO, logger="mellea"):
+        out = LocalHFBackend._generate_composed_prompt(
+            stub, adapter, lambda *a, **k: "generated", "tok", stub._model, {}, {}
+        )
+
+    assert out == "generated"
+    # No adapter_scope on this path — the base model is cleared before generating.
+    stub.deactivate_peft_adapter.assert_called_once_with("")
+    # The soft adapter's activation is surfaced at real-adapter severity.
+    assert any("Prompt fallback activated" in r.message for r in caplog.records)
+
+
+def test_generate_composed_prompt_rejects_non_prompt_binding():
+    """It guards its contract: a non-PromptBinding composed Adapter is a TypeError."""
+    stub = _make_prompt_generate_stub()
+    adapter = Adapter(
+        identity=Identity(
+            name="answerability", adapter_type="alora", capability="answerability"
+        ),
+        io_contract=_StubPromptContract(),
+        weights=EmbeddedBinding(),
+    )
+
+    with pytest.raises(TypeError, match="PromptBinding"):
+        LocalHFBackend._generate_composed_prompt(
+            stub, adapter, lambda *a, **k: "x", "tok", stub._model, {}, {}
+        )
 
 
 @pytest.mark.asyncio

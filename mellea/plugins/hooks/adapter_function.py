@@ -17,7 +17,7 @@ class AdapterFunctionInvocationCompletePayload(MelleaBasePayload):
         name: Adapter function name (e.g. `"answerability"`).
         revision: Catalog revision of the adapter, or `None` if unpinned.
         binding_type: Weight-binding reality the adapter ran under (e.g.
-            `"local_file"`, `"embedded"`, `"server_mediated"`).
+            `"local_file"`, `"embedded"`, `"prompt"`, `"server_mediated"`).
         adapter_type: Adapter mechanism (e.g. `"lora"`, `"alora"`).
         outcome: `"success"`, `"schema_error"`, or `"error"`.
         error: The exception raised during invocation, or `None` on success.
@@ -27,12 +27,12 @@ class AdapterFunctionInvocationCompletePayload(MelleaBasePayload):
         aggregating across bindings mixes events with different scope.
         `"local_file"` covers activate→generate→deactivate only
         (`AdapterMixin.adapter_scope` closes before parsing runs);
-        `"embedded"` covers generate+JSON-parse
-        (`_fire_embedded_invocation_complete` in
+        `"embedded"` and `"prompt"` cover generate+JSON-parse
+        (`_afire_invocation_complete` in
         `mellea.backends.adapters._core`). Neither covers the later
         contract-level `IOContract` validation in `call_intrinsic` — a
         contract-mismatch on already-valid JSON records `"success"` for
-        either binding (tracked in #1611).
+        any binding (tracked in #1611).
     """
 
     name: str

@@ -17,7 +17,7 @@ from mellea.backends.adapters import (
     EmbeddedBinding,
     Identity,
 )
-from mellea.backends.adapters._core import _fire_embedded_invocation_complete
+from mellea.backends.adapters._core import _afire_invocation_complete
 from mellea.plugins.types import HookType
 
 
@@ -140,7 +140,7 @@ async def test_apply_activation_does_not_fire_invocation_complete():
     # apply_activation only edits the request — the real generate+parse
     # outcome isn't known yet at this point. Both backends fire
     # `adapter_function_invocation_complete` later instead, once generation
-    # and parsing resolve (see _fire_embedded_invocation_complete and its
+    # and parsing resolve (see _afire_invocation_complete and its
     # callers in openai.py/huggingface.py, issue #1560). Pin that
     # apply_activation itself still doesn't fire it, so nobody "fixes" this
     # back to a hardcoded success outcome guessed at request-mutation time.
@@ -161,9 +161,7 @@ async def test_apply_activation_does_not_fire_invocation_complete():
 
 
 @pytest.mark.parametrize("outcome", ["success", "schema_error", "error"])
-async def test_fire_embedded_invocation_complete_swallows_hook_dispatch_failure(
-    outcome,
-):
+async def test_afire_invocation_complete_swallows_hook_dispatch_failure(outcome):
     """A failing hook dispatch must not mask the real outcome/exception it's reporting."""
     pytest.importorskip("cpex", reason="cpex not installed — install mellea[hooks]")
 
@@ -175,8 +173,9 @@ async def test_fire_embedded_invocation_complete_swallows_hook_dispatch_failure(
         ),
     ):
         # Must not raise despite the hook dispatch failing.
-        await _fire_embedded_invocation_complete(
+        await _afire_invocation_complete(
             identity=_identity("answerability"),
+            binding_type="embedded",
             outcome=outcome,
             error=ValueError("boom") if outcome != "success" else None,
         )
