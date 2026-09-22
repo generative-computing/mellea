@@ -136,7 +136,8 @@ class SamplingStrategy(abc.ABC):
     loop_budget: int = 1
     requirements: list[Requirement] | None = None
 
-    def _get_repair_type(self) -> str:
+    @staticmethod
+    def _get_repair_type() -> str:
         """Return the repair-type label used in telemetry hooks.
 
         Subclasses override this to return a strategy-specific string.
