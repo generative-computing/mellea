@@ -1,0 +1,416 @@
+---
+title: "mellea.stdlib.streaming"
+sidebar_label: "mellea.stdlib.streaming"
+description: "Streaming generation: a single-task `async for` primitive."
+---
+
+Streaming generation: a single-task `async for` primitive.
+
+
+
+
+
+`stream()` starts a streaming generation and returns a `Streamer` you consume with
+`async for`. It drives token draining, chunking, and (when requirements are given)
+per-chunk and final validation.
+
+Consume inside `async with` so cleanup always runs: the stream runs on the caller's
+task, and leaving the block — normally, on early `break`, or on exception —
+cancels the generation and fires the `STREAMING_END` hook.
+
+Typed `StreamEvent` objects are emitted via the `STREAMING_EVENT` hook; subscribe a
+plugin to observe them (see `docs/examples/streaming/`). To iterate them directly
+instead, `stream(as_events=True)` returns an `EventStreamer` that yields events in
+place of chunks.
+
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `stream` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/stdlib/streaming.py#L899" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#stream}
+
+```python
+stream(action: Component[Any] | CBlock, backend: Backend, ctx: Context) -> Streamer | EventStreamer
+```
+
+
+Start a streaming generation.
+
+Generation begins eagerly, before this call returns. Consume the returned
+handle inside `async with` so the stream is always released. On early exit or
+`break`, `async with` cancels the in-flight generation:
+
+```python
+async with await stream(action, backend, ctx) as s:
+    async for chunk in s:
+        ...
+```
+
+By default this yields validated `str` chunks. Each iteration yields a chunk —
+a unit produced by the `chunking` strategy, or the raw model delta when
+`chunking` is `None`. A chunk is delivered once it has passed every
+requirement's `stream_validate`; a `"fail"` stops the stream early and cancels
+the backend. On natural completion, `validate()` runs on the full output. With
+no `requirements`, chunks are yielded without validation.
+
+With `as_events=True`, this returns an `EventStreamer` instead: iterating it
+yields the stream's typed `StreamEvent` objects (the same events otherwise seen
+only via the `STREAMING_EVENT` hook). The terminal `CompletedEvent`/`ErrorEvent`
+come through the iterator too; an early `break` leaves them queued, so iterating
+again drains them. Each `ChunkEvent` carries its text, so no output is lost.
+
+**Args:**
+- `action`: The component or content block to generate from.
+- `backend`: Backend used for generation and, unless `validation_backend`
+is set, validation.
+- `ctx`: The generation context.
+- `chunking`: A [`ChunkingStrategy`](../core/chunking#class-chunkingstrategy), a recognized alias string, or `None`
+(default) to yield raw deltas unchunked.
+- `requirements`: Requirements validated against each chunk during
+streaming and against the full output at stream end. `None` yields
+chunks without validation.
+- `validation_backend`: Backend for validation calls; defaults to `backend`.
+- `as_events`: When `True`, return an `EventStreamer` that iterates typed
+`StreamEvent` objects; when `False` (default), return a `Streamer`
+that iterates validated `str` chunks.
+
+**Returns:**
+- Streamer | EventStreamer: A `Streamer` over validated chunks, or — when
+`as_events=True` — an `EventStreamer` over the stream's events.
+
+**Raises:**
+- `ValueError`: If `chunking` is a string that is not a known alias.
+- `RuntimeError`: If the backend returns an already-computed thunk instead
+of a streaming one — i.e. it is not honouring `ModelOption.STREAM`.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `StreamEvent` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/stdlib/streaming.py#L49" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#class-streamevent}
+
+
+Base class for all streaming events emitted by `stream`.
+
+The `timestamp` field is auto-populated at instantiation time; callers
+do not set it.  Because `timestamp` has `init=False` it is never part
+of `__init__`, so subclasses may declare additional fields in any order
+without conflict.  Any new `init=False` fields on subclasses must also
+use `field(..., init=False)`.
+
+**Attributes:**
+- `timestamp`: Unix timestamp (seconds) at the moment the event was created.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `ChunkEvent` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/stdlib/streaming.py#L66" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#class-chunkevent}
+
+
+Emitted after each validated chunk is delivered to the consumer.
+
+Fired after all active requirements' `stream_validate` calls return
+non-`"fail"` for this chunk and the chunk has been yielded to the consumer.
+
+**Args:**
+- `text`: The chunk text that was validated and emitted.
+- `chunk_index`: Zero-based position of this chunk in the stream.
+- `attempt`: Sampling attempt number; currently always `1`.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `QuickCheckEvent` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/stdlib/streaming.py#L84" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#class-quickcheckevent}
+
+
+Emitted after each per-chunk streaming validation batch.
+
+Usually one event per chunk, covering all active requirements in parallel.
+Not emitted when there are no `requirements`.
+
+At end of stream a final event may validate residuals from requirements'
+own `chunking=`: its `chunk_index` has no matching `ChunkEvent`, and
+`chunking=None` requirements report `"unknown"` in it.
+
+**Args:**
+- `chunk_index`: Zero-based position of the chunk that was validated.
+- `attempt`: Sampling attempt number; currently always `1`.
+- `passed`: `True` if all active requirements returned non-`"fail"`
+for this chunk.
+- `results`: [`PartialValidationSummary`](../core/requirement#class-partialvalidationsummary) from each active requirement, in the
+same order as the active slice of `requirements`.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `StreamingDoneEvent` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/stdlib/streaming.py#L110" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#class-streamingdoneevent}
+
+
+Emitted after all chunks have been validated and delivered to the consumer.
+
+Fired after the regular token stream and any trailing fragment released by
+the chunker's `flush()` have both been processed.  Only emitted on natural
+completion — not on early exit (a requirement returned `"fail"`) or on
+exception.
+
+**Args:**
+- `attempt`: Sampling attempt number; currently always `1`.
+- `full_text`: Complete accumulated text at stream end.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `FullValidationEvent` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/stdlib/streaming.py#L128" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#class-fullvalidationevent}
+
+
+Emitted after the final `Requirement.validate` calls complete.
+
+Only emitted when the stream completed naturally (no requirement failed
+during streaming).  Not emitted on early exit.
+
+**Args:**
+- `attempt`: Sampling attempt number; currently always `1`.
+- `passed`: `True` if all final [`ValidationResult`](../core/requirement#class-validationresult) objects passed.
+- `results`: [`ValidationResult`](../core/requirement#class-validationresult) from each requirement, in requirement order.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `RetryEvent` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/stdlib/streaming.py#L146" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#class-retryevent}
+
+
+Reserved for future use.
+
+Defined for API completeness — `RetryEvent` is not currently emitted; today
+retry is caller-driven re-invocation of `stream`. If retry is added to
+streaming itself, this event will fire before each re-attempt.
+
+**Args:**
+- `attempt`: Attempt number being started (1-based).
+- `reason`: Human-readable reason for the retry.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `CompletedEvent` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/stdlib/streaming.py#L163" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#class-completedevent}
+
+
+Emitted when the stream exits, including early-exit cases.
+
+Always the last `StreamEvent` on every exit path.  `success` reflects
+whether the stream completed with no `"fail"` result and no exception.
+
+**Args:**
+- `success`: `True` if the stream completed normally (no `"fail"`
+result and no unhandled exception); `False` otherwise.
+- `full_text`: Validated-and-emitted output.  On early exit or exception,
+reflects whatever passed validation before the stop.
+- `attempts_used`: Number of stream attempts; currently always `1`.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `ErrorEvent` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/stdlib/streaming.py#L183" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#class-errorevent}
+
+
+Emitted when an unhandled exception occurs while streaming.
+
+**Args:**
+- `exception_type`: Python class name of the exception
+(e.g. `"ValueError"`).
+- `detail`: String representation of the exception.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `Streamer` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/stdlib/streaming.py#L201" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#class-streamer}
+
+
+Async-iterable handle for a `stream` call.
+
+Iterate the returned `Streamer` object with `async for` to receive the output
+as validated chunks, ideally inside `async with` so the stream is released on
+every exit. Each chunk is a `str` segment of the model output text, sized by the
+`chunking` strategy (or a raw model delta when `chunking` is `None`). The
+attributes below track progress and outcome. Instances are created by `stream`;
+do not instantiate directly.
+
+**Args:**
+- `mot`: The in-flight streaming thunk from the backend generation call.
+- `ctx`: The generation context, used for validation calls.
+- `chunking`: Resolved chunking strategy, or `None` for raw deltas.
+- `requirements`: Requirements to validate against; pre-copied by `stream`.
+- `validation_backend`: Backend used for validation calls.
+- `event_queue`: Optional queue; when set, every emitted `StreamEvent` is
+also pushed onto it. `None` for the plain chunk-iterating path.
+
+**Attributes:**
+- `failed_early`: `True` if a requirement returned `"fail"` during streaming
+and the stream stopped before natural completion.
+- `completed_normally`: `True` only if the stream reached its natural end,
+prior to final validation. `False` on requirement failure, an early
+`break`, or an exception — unlike `not failed_early`, which stays
+`True` after an early `break`.
+- `failure_reason`: Human-readable reason when `failed_early` is `True`.
+- `streaming_failures`: `(Requirement, PartialValidationResult)` pairs for
+every requirement that failed the offending chunk.
+- `full_text`: Validated-and-emitted output. On natural completion, the full
+accumulated text; on early exit, the accumulated text through the last
+emitted chunk.
+- `mot`: The computed thunk, set on natural completion; `None` otherwise.
+- `final_validations`: [`ValidationResult`](../core/requirement#class-validationresult) objects from the stream-end
+`validate()` calls; empty on early exit.
+- `streaming_id`: UUID correlating this stream's START/EVENT/END hooks.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `aclose` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/stdlib/streaming.py#L323" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#aclose}
+
+```python
+aclose(self) -> None
+```
+
+Release the stream, cancelling generation if it is still in flight.
+
+Runs the driver's cleanup (cancelling the backend generation and firing
+`STREAMING_END`). Safe and idempotent on every path: after natural
+completion, after an early exit/break, and on a `Streamer` that was never
+iterated — the eager generation is still cancelled in every case.
+
+Prefer consuming with `async with stream(...) as s:` so this runs
+automatically on every exit path; call `aclose()` directly only when not
+using the context manager.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `EventStreamer` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/stdlib/streaming.py#L354" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#class-eventstreamer}
+
+
+Async-iterator handle over a stream's `StreamEvent` objects.
+
+Returned by `stream(..., as_events=True)`; iterate with `async for` inside
+`async with`. It is its own iterator, so `break` then iterating again
+resumes from the next queued event. Events are produced eagerly, independent
+of consumption, so the stream can run ahead of iteration; outcome attributes
+(`full_text`, `completed_normally`, …) mirror the wrapped `Streamer`. Do not
+instantiate directly.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `aclose` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/stdlib/streaming.py#L443" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#aclose}
+
+```python
+aclose(self) -> None
+```
+
+Cancel the pump and release the underlying stream, idempotently.
+
+Prefer `async with stream(..., as_events=True) as s:` so this runs
+automatically on every exit path.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `failed_early` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/stdlib/streaming.py#L470" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#failed_early}
+
+```python
+failed_early(self) -> bool
+```
+
+`True` if a requirement failed during streaming and stopped it early.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `completed_normally` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/stdlib/streaming.py#L475" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#completed_normally}
+
+```python
+completed_normally(self) -> bool
+```
+
+`True` only if the stream reached its natural end, prior to final validation.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `failure_reason` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/stdlib/streaming.py#L482" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#failure_reason}
+
+```python
+failure_reason(self) -> str | None
+```
+
+Human-readable reason when `failed_early` is `True`; else `None`.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `streaming_failures` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/stdlib/streaming.py#L487" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#streaming_failures}
+
+```python
+streaming_failures(self) -> list[tuple[Requirement, PartialValidationResult]]
+```
+
+`(Requirement, PartialValidationResult)` pairs for each failing requirement.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `full_text` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/stdlib/streaming.py#L492" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#full_text}
+
+```python
+full_text(self) -> str
+```
+
+Validated-and-emitted output; the full text on natural completion.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `mot` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/stdlib/streaming.py#L497" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#mot}
+
+```python
+mot(self) -> ModelOutputThunk | None
+```
+
+The computed thunk, set on natural completion; `None` otherwise.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `final_validations` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/stdlib/streaming.py#L502" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#final_validations}
+
+```python
+final_validations(self) -> list[ValidationResult]
+```
+
+[`ValidationResult`](../core/requirement#class-validationresult) objects from the stream-end `validate()` calls.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `streaming_id` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/stdlib/streaming.py#L507" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#streaming_id}
+
+```python
+streaming_id(self) -> str | None
+```
+
+UUID correlating this stream's START/EVENT/END hooks; `None` pre-start.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

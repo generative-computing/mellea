@@ -1,0 +1,665 @@
+---
+title: "mellea.backends.adapters.adapter"
+sidebar_label: "mellea.backends.adapters.adapter"
+description: "Adapter classes for adding fine-tuned modules to inference backends."
+---
+
+Adapter classes for adding fine-tuned modules to inference backends.
+
+
+
+
+
+The primary public surface is :func:`AdapterMixin.resolve_adapter` (find or lazily
+register an adapter by capability name) and :meth:`AdapterMixin._find_adapter`
+(look up a registered adapter).  :class:`AdapterMixin` is mixed into backends that
+support runtime adapter loading and unloading.
+
+`LocalHFAdapter`, `IntrinsicAdapter`, and `EmbeddedIntrinsicAdapter` are
+**deprecation shims** retained for backwards compatibility.  They satisfy
+`isinstance(x, _core.Adapter)` but delegate all behaviour to the new dataclass.
+`get_adapter_for_intrinsic` is similarly deprecated; prefer `resolve_adapter`.
+
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `get_adapter_for_intrinsic` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/backends/adapters/adapter.py#L382" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#get_adapter_for_intrinsic}
+
+```python
+get_adapter_for_intrinsic(intrinsic_name: str, intrinsic_adapter_types: list[AdapterType] | tuple[AdapterType, ...], available_adapters: dict[str, T]) -> T | None
+```
+
+
+Find an adapter from a dict of available adapters based on the adapter function name and its allowed adapter types.
+
+**Args:**
+- `intrinsic_name`: The name of the adapter function, e.g. `"answerability"`.
+- `intrinsic_adapter_types`: The
+adapter types allowed for this adapter function, e.g.
+`[AdapterType.ALORA, AdapterType.LORA]`.
+- `available_adapters`: The available adapters to choose from;
+maps `adapter.qualified_name` to the adapter object.
+
+**Returns:**
+- T | None: The first matching adapter found, or `None` if no match exists.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `Adapter` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/backends/adapters/adapter.py#L48" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#class-adapter}
+
+
+An adapter that can be added to a single backend.
+
+An adapter can only be registered with one backend at a time. Use
+`adapter.qualified_name` when referencing the adapter after adding it.
+
+**Args:**
+- `name`: Human-readable name of the adapter.
+- `adapter_type`: Enum describing the adapter type (e.g.
+`AdapterType.LORA` or `AdapterType.ALORA`).
+
+**Attributes:**
+- `qualified_name`: Unique name used for loading and lookup; formed
+as `"<name>_<adapter_type.value>"`.
+- `backend`: The backend this adapter has been added to,
+or `None` if not yet added.
+- `path`: Filesystem path to the adapter weights; set when
+the adapter is added to a backend.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `LocalHFAdapter` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/backends/adapters/adapter.py#L82" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#class-localhfadapter}
+
+
+Abstract adapter subclass for locally loaded Hugging Face model backends.
+
+Subclasses must implement `get_local_hf_path` to return the filesystem path
+from which adapter weights should be loaded given a base model name.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `get_local_hf_path` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/backends/adapters/adapter.py#L90" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#get_local_hf_path}
+
+```python
+get_local_hf_path(self, base_model_name: str) -> str
+```
+
+Return the local filesystem path from which adapter weights should be loaded.
+
+**Args:**
+- `base_model_name`: The base model name; typically the last component
+of the Hugging Face model ID (e.g. `"granite-4.0-micro"`).
+
+**Returns:**
+- Filesystem path to the adapter weights directory.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `IntrinsicAdapter` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/backends/adapters/adapter.py#L123" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#class-intrinsicadapter}
+
+
+Deprecated shim for adapters that implement adapter functions.
+
+Subtype of :class:`Adapter` for models that:
+
+* implement adapter functions
+* are packaged as LoRA or aLoRA adapters on top of a base model
+* use the shared model loading code in `mellea.formatters.granite.intrinsics`
+* use the shared input and output processing code in
+  `mellea.formatters.granite.intrinsics`
+
+**Args:**
+- `intrinsic_name`: Name of the adapter function (e.g. `"answerability"`);
+the adapter's `qualified_name` will be derived from this.
+- `adapter_type`: Enum describing the adapter type; defaults to
+`AdapterType.ALORA`.
+- `config_file`: Path to a YAML config file defining
+the adapter function's I/O transformations; mutually exclusive with
+`config_dict`.
+- `config_dict`: Dict defining the adapter function's I/O
+transformations; mutually exclusive with `config_file`.
+- `base_model_name`: Base model name used to look up the I/O
+processing config when neither `config_file` nor `config_dict` are
+provided.
+
+**Attributes:**
+- `intrinsic_name`: Name of the adapter function this adapter implements.
+- `intrinsic_metadata`: Catalog metadata for the adapter function.
+- `base_model_name`: Base model name provided at construction, if any.
+- `adapter_type`: The adapter type (`LORA` or `ALORA`).
+- `config`: Parsed I/O transformation configuration for the adapter function.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `get_local_hf_path` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/backends/adapters/adapter.py#L262" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#get_local_hf_path}
+
+```python
+get_local_hf_path(self, base_model_name: str) -> str
+```
+
+Return the local filesystem path from which adapter weights should be loaded.
+
+Downloads the adapter weights if they are not already cached locally.
+
+**Args:**
+- `base_model_name`: The base model name; typically the last component
+of the Hugging Face model ID (e.g. `"granite-3.3-8b-instruct"`).
+
+**Returns:**
+- Filesystem path to the downloaded adapter weights directory.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `download_and_get_path` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/backends/adapters/adapter.py#L276" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#download_and_get_path}
+
+```python
+download_and_get_path(self, base_model_name: str) -> str
+```
+
+Download the required adapter function files if necessary and return the path to them.
+
+**Args:**
+- `base_model_name`: the base model; typically the last part of the Hugging Face
+model id like "granite-3.3-8b-instruct"
+
+**Returns:**
+- a path to the files
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `AdapterMixin` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/backends/adapters/adapter.py#L516" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#class-adaptermixin}
+
+
+Mixin class for backends capable of utilizing adapters.
+
+Three verbs are universal across every adapter reality (LocalFile/PEFT,
+Embedded/Granite Switch, ServerMediated): `base_model_name`,
+`add_adapter`, and `list_adapters`. The remaining five verbs are
+reality-specific — a concrete backend overrides only the verb(s) matching
+its own reality; the others keep raising `NotImplementedError`.
+
+**Attributes:**
+- `base_model_name`: The short model name used to identify adapter
+variants (e.g. `"granite-3.3-8b-instruct"` for
+`"ibm-granite/granite-3.3-8b-instruct"`).
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `base_model_name` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/backends/adapters/adapter.py#L550" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#base_model_name}
+
+```python
+base_model_name(self) -> str
+```
+
+Return the short model name used for adapter variant lookup.
+
+**Returns:**
+- The base model name (e.g. `"granite-3.3-8b-instruct"`).
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `add_adapter` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/backends/adapters/adapter.py#L558" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#add_adapter}
+
+```python
+add_adapter(self, adapter: AdapterInput) -> None
+```
+
+Register an adapter with this backend so it can be loaded later.
+
+The adapter must not already have been added to a different backend.
+Concrete backends accept the full `AdapterInput` union but raise
+`TypeError` for adapter realities they do not implement (e.g. a PEFT
+backend rejects an embedded adapter), so a statically valid call may
+still be rejected at runtime.
+
+`config` is the raw io.yaml mapping for a composed `Adapter`/
+`_AdapterCore` whose `weights` is an `EmbeddedBinding` or
+`ServerMediatedBinding`. Those realities do not retain the raw
+configuration required by the legacy rewriter, so it must be supplied
+at registration rather than being fetched lazily like a
+`LocalFileBinding`'s io.yaml.
+
+**Args:**
+- `adapter`: The adapter to register with this backend.
+- `config`: Raw io.yaml config for a composed
+`EmbeddedBinding` or `ServerMediatedBinding` adapter. Ignored
+(and rejected) for every other adapter reality.
+
+**Raises:**
+- `TypeError`: If `adapter` belongs to a reality this backend does not
+support, or `config` is given for a reality other than a
+composed `EmbeddedBinding` or `ServerMediatedBinding` adapter.
+- `ValueError`: If `adapter.weights` is an `EmbeddedBinding` or
+`ServerMediatedBinding` and `config` is not given —
+registering it without a config would make it discoverable
+but permanently unable to generate.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `list_adapters` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/backends/adapters/adapter.py#L591" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#list_adapters}
+
+```python
+list_adapters(self) -> list[str]
+```
+
+Return the qualified names of all adapters registered with this backend.
+
+**Returns:**
+- list\[str]: Qualified adapter names for all adapters that have been
+registered via `add_adapter`.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `load_peft_adapter` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/backends/adapters/adapter.py#L602" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#load_peft_adapter}
+
+```python
+load_peft_adapter(self, adapter_qualified_name: str) -> None
+```
+
+Load a previously registered PEFT adapter into the underlying model.
+
+LocalFile/PEFT reality only (e.g. a locally hosted Hugging Face
+model). The adapter must have been registered via `add_adapter`
+before calling this method.
+
+**Args:**
+- `adapter_qualified_name`: The `adapter.qualified_name` of the
+adapter to load.
+
+**Raises:**
+- `NotImplementedError`: If this backend's adapter reality is not
+LocalFile/PEFT.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `unload_peft_adapter` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/backends/adapters/adapter.py#L621" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#unload_peft_adapter}
+
+```python
+unload_peft_adapter(self, adapter_qualified_name: str) -> None
+```
+
+Unload a previously loaded PEFT adapter from the underlying model.
+
+LocalFile/PEFT reality only (e.g. a locally hosted Hugging Face
+model).
+
+**Args:**
+- `adapter_qualified_name`: The `adapter.qualified_name` of the
+adapter to unload.
+
+**Raises:**
+- `NotImplementedError`: If this backend's adapter reality is not
+LocalFile/PEFT.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `remove_adapter` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/backends/adapters/adapter.py#L639" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#remove_adapter}
+
+```python
+remove_adapter(self, adapter_qualified_name: str) -> None
+```
+
+Deregister a previously added adapter, freeing its qualified name for reuse.
+
+The inverse of `add_adapter()`. LocalFile/PEFT reality only today
+(#1528) — `LocalFileBinding.release()` calls this after
+`unload_peft_adapter()` so a released `qualified_name` becomes
+claimable by a fresh binding rather than staying claimed for the
+backend's lifetime.
+
+**Args:**
+- `adapter_qualified_name`: The `adapter.qualified_name` of the
+adapter to deregister.
+
+**Raises:**
+- `NotImplementedError`: If this backend's adapter reality does not
+support deregistration.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `activate_peft_adapter` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/backends/adapters/adapter.py#L660" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#activate_peft_adapter}
+
+```python
+activate_peft_adapter(self, adapter_qualified_name: str) -> None
+```
+
+Switch a previously loaded PEFT adapter on for subsequent generation.
+
+LocalFile/PEFT reality only (e.g. a locally hosted Hugging Face
+model). The adapter must have been loaded via `load_peft_adapter`
+before calling this method.
+
+**Args:**
+- `adapter_qualified_name`: The `adapter.qualified_name` of the
+adapter to activate.
+
+**Raises:**
+- `NotImplementedError`: If this backend's adapter reality is not
+LocalFile/PEFT.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `deactivate_peft_adapter` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/backends/adapters/adapter.py#L679" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#deactivate_peft_adapter}
+
+```python
+deactivate_peft_adapter(self, adapter_qualified_name: str) -> None
+```
+
+Switch off any active PEFT adapter so generation uses the base model.
+
+LocalFile/PEFT reality only (e.g. a locally hosted Hugging Face
+model).
+
+**Args:**
+- `adapter_qualified_name`: The `adapter.qualified_name` of the
+adapter to deactivate. Accepted for symmetry with
+`activate_peft_adapter`; the underlying primitive clears all
+active PEFT adapters regardless of name.
+
+**Raises:**
+- `NotImplementedError`: If this backend's adapter reality is not
+LocalFile/PEFT.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `resolve_adapter` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/backends/adapters/adapter.py#L807" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#resolve_adapter}
+
+```python
+resolve_adapter(self, name: str) -> _AdapterCore
+```
+
+Find or lazily register an adapter by capability name.
+
+Default implementation preserves Phase 0 behaviour, using the internal
+`_added_adapters` dict that concrete backends maintain.  Override in
+Phase 2 (see epic #929) to implement proper lifecycle management.
+
+**Args:**
+- `name`: Capability name (e.g. `"answerability"`).
+
+**Returns:**
+- The registered adapter with the given capability.
+
+**Raises:**
+- `ValueError`: If the backend has no model ID.
+- `KeyError`: If the adapter cannot be found after registration.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `adapter_scope` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/backends/adapters/adapter.py#L969" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#adapter_scope}
+
+```python
+adapter_scope(self, adapter: '_AdapterCore | None')
+```
+
+Context manager wrapping adapter activation and deactivation.
+
+A no-op when `adapter` is `None`. Otherwise: activates
+`adapter.weights`, yields, then always deactivates — even if the `with`
+body raises. Each phase fires `ADAPTER_FUNCTION_PHASE_COMPLETE`, and
+`ADAPTER_FUNCTION_INVOCATION_COMPLETE` fires on the way out, carrying the
+overall outcome.
+
+This method fires hooks only; it does not open spans. Span production is a
+plugin's job (see #1464 for the rule and #1466 for the adapter-function
+spans), and the `ADAPTER_FUNCTION_*` family currently has no start hook for
+a plugin to open a span on. Hook dispatch goes through
+`_run_async_in_thread` (no timeout): the dispatching call blocks the
+calling thread, but the hook coroutine itself runs on the shared
+`_EventLoopHandler` event-loop thread. A subscriber that blocks on
+something the dispatching thread is holding deadlocks rather than
+merely stalls — e.g. on `LocalHFBackend`, an intrinsic caller holds
+`_generation_lock` across the whole scope, so a subscriber that
+re-enters any `_generation_lock` path blocks the event-loop thread
+while its owner waits on that same event loop, and reentrance cannot
+bridge the gap. Even without such re-entry, a slow or blocking-mode
+`ADAPTER_FUNCTION_*` subscriber delays whatever holds this scope open.
+
+`deactivate()` is guarded on `activate()`'s own side effect having
+completed, not on the activate phase's hook dispatch also succeeding.
+If a plugin subscribed to `ADAPTER_FUNCTION_PHASE_COMPLETE` raises after
+`activate()` already flipped the adapter on, `deactivate()` still runs —
+telemetry must not be able to strand the adapter active.
+
+Not atomic across the whole scope **by itself**: `_adapter_activation_lock()`
+is held only inside each of `activate()`/`deactivate()`'s own verb calls
+(see `LocalFileBinding.activate`), not for the `with` body in between.
+Two concurrent `adapter_scope()` calls on one backend can therefore
+interleave — one thread's body can run while a different adapter is
+active, activated by another thread's call — unless the caller closes
+that gap itself. Widening *this method's own* lock to span the whole
+scope was tried and reverted: it deadlocks the moment the body does
+real async generation from the thread that opened the scope, because
+that work runs on the shared event-loop thread while this thread holds
+the lock — a same-thread `RLock` doesn't help across threads.
+
+`LocalHFBackend._generate_intrinsic_with_adapter_scope` is the reference
+example of a caller that *does* close the gap for its own call site: it
+holds `_generation_lock` around the entire scope, which is safe there
+only because the scope *body* is fully synchronous end to end and
+does no async generation work on the event loop (its only loop
+traffic during the scope is the hook dispatches described above —
+one-way submissions, not re-entry into this backend) — concurrent
+invocations simply land on different threads and serialise on the
+lock, rather than one thread holding it while another does async work
+on the loop. A caller whose
+body awaits work that re-enters generation on another thread must not
+widen a lock this way — that reproduces the deadlock above.
+
+A caller composing `adapter_scope()` with `LocalHFBackend`'s *standard*
+(non-intrinsic) generation path still silently ignores it: that path
+(`_generate_with_adapter_lock`) always deactivates any adapter before
+generating, so wrapping `generate_from_context()` in `adapter_scope()`
+activates the adapter, generates against the base model anyway, then
+deactivates. Pre-existing, not specific to the intrinsic path this
+method now supports.
+
+`AdapterFunctionMetricsPlugin` in
+`mellea/telemetry/metrics_plugins.py` emits the adapter-function
+metrics; their instruments and attributes are defined in
+`mellea/telemetry/metrics.py`.
+
+**Args:**
+- `adapter`: The adapter to activate, or `None` (no-op).
+
+**Raises:**
+- `TypeError`: `adapter.weights` is not a `WeightsBinding` (e.g. an
+`EmbeddedBinding`, which has no activate()/deactivate() to
+scope — call its `apply_activation()` directly instead).
+- `BaseException`: An error raised by activation, the `with` body, or
+deactivation. If both the body and deactivation fail, the body
+error remains primary and the deactivation error is chained.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `EmbeddedIntrinsicAdapter` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/backends/adapters/adapter.py#L1206" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#class-embeddedintrinsicadapter}
+
+
+Deprecated shim for adapter functions embedded in a Granite Switch model.
+
+Unlike PEFT-based adapters that are loaded into the model at runtime,
+embedded adapters are already baked into the model weights and activated
+via control tokens injected by the model's chat template.  Only the I/O
+transformation config (`io.yaml`) is needed; no adapter weights are
+downloaded or loaded.
+
+**Args:**
+- `intrinsic_name`: Name of the adapter function (e.g. `"answerability"`).
+- `config`: Parsed I/O transformation configuration (from `io.yaml`).
+- `technology`: Adapter technology in the switch model — `"lora"` or
+`"alora"`.  Determines where the control token is placed in the
+chat template (beginning of sequence for LoRA, before generation
+prompt for aLoRA).
+
+**Attributes:**
+- `intrinsic_name`: Name of the adapter function this adapter implements.
+- `config`: Parsed I/O transformation configuration.
+- `technology`: `"lora"` or `"alora"`.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `from_model_directory` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/backends/adapters/adapter.py#L1299" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#from_model_directory}
+
+```python
+from_model_directory(model_path: str | pathlib.Path, intrinsic_name: str | None = None) -> list['EmbeddedIntrinsicAdapter']
+```
+
+Load embedded adapters from a Granite Switch model directory.
+
+Reads `adapter_index.json` and the corresponding `io_configs/*/io.yaml`
+files from the model directory.
+
+**Args:**
+- `model_path`: Path to a Granite Switch model
+directory that contains `adapter_index.json` and `io_configs/`.
+- `intrinsic_name`: If provided, only load the adapter
+matching this adapter function name. `None` loads all adapters.
+
+**Returns:**
+- list\[EmbeddedIntrinsicAdapter]: One adapter per entry in the index.
+
+**Raises:**
+- `FileNotFoundError`: If `adapter_index.json` is missing.
+- `ValueError`: If an `io.yaml` file listed in the index cannot be found
+or if no adapters are found.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `from_hub` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/backends/adapters/adapter.py#L1377" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#from_hub}
+
+```python
+from_hub(repo_id: str, revision: str = 'main', cache_dir: str | None = None, intrinsic_name: str | None = None) -> list['EmbeddedIntrinsicAdapter']
+```
+
+Load embedded adapters from a Granite Switch model on Hugging Face Hub.
+
+Downloads `adapter_index.json` and the `io_configs/` directory into a
+persistent self-contained local directory, then delegates to
+`from_model_directory`.
+
+`huggingface_hub.snapshot_download`'s default cache-backed snapshot
+directory populates `io_configs/` with symlinks that resolve into a
+sibling `blobs/` directory *outside* the snapshot root. That breaks the
+contract `from_model_directory` expects (a self-contained model
+directory) and trips its path-escape check. To satisfy that contract,
+the downloaded snapshot is materialised under the Hugging Face cache
+into a self-contained directory keyed by its immutable revision, so
+`io_configs/` contains real files rather than symlinks escaping the
+directory. This preserves standard Hugging Face Hub cache reuse and
+offline loading while preventing stale files from a mutable revision.
+
+**Args:**
+- `repo_id`: Hugging Face Hub repository ID
+(e.g. `"ibm-granite/granite-switch-micro"`).
+- `revision`: Git revision to download from.
+- `cache_dir`: Local cache directory; `None` for the default.
+- `intrinsic_name`: If provided, only load the adapter
+matching this adapter function name. `None` loads all adapters.
+
+**Returns:**
+- list\[EmbeddedIntrinsicAdapter]: One adapter per entry in the index.
+
+**Raises:**
+- `ImportError`: If `huggingface_hub` is not installed.
+- `PermissionError`: If the repository is private or gated and the
+current Hugging Face credentials do not grant access.
+- `FileNotFoundError`: If the downloaded snapshot has no
+`adapter_index.json` (wrong repo/revision, not a Granite Switch
+model, or a stale cache).
+- `ValueError`: If no adapters are found (delegated from
+`from_model_directory`).
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `from_source` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/backends/adapters/adapter.py#L1534" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#from_source}
+
+```python
+from_source(source: str, revision: str = 'main', cache_dir: str | None = None, intrinsic_name: str | None = None) -> list['EmbeddedIntrinsicAdapter']
+```
+
+Load embedded adapters from a local directory or Hugging Face Hub.
+
+Automatically detects whether `source` is a local filesystem path
+or a Hugging Face Hub repo ID, and delegates accordingly.
+
+**Args:**
+- `source`: Local path to a model directory, or a Hugging Face
+Hub repo ID (e.g. `"ibm-granite/granite-switch-micro"`).
+- `revision`: Git revision (only used for Hub downloads).
+- `cache_dir`: Cache directory (only used for Hub downloads).
+- `intrinsic_name`: If provided, only load the adapter
+matching this adapter function name. `None` loads all adapters.
+
+**Returns:**
+- list\[EmbeddedIntrinsicAdapter]: One adapter per entry in the index.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `CustomIntrinsicAdapter` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/backends/adapters/adapter.py#L1568" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#class-customintrinsicadapter}
+
+
+Deprecated shim for user-defined custom adapter functions.
+
+.. deprecated::
+    Use :class:`~mellea.backends.adapters.Adapter` directly.
+    `CustomIntrinsicAdapter` will be removed in a future release
+    (Epic #929, issue #1144).
+
+This class has the same functionality as `IntrinsicAdapter`, except that
+its constructor monkey-patches Mellea global variables to enable the backend
+to load the user's adapter.
+
+**Args:**
+- `model_id`: The Hugging Face model ID used for downloading model weights;
+expected format is `"<user-id>/<repo-name>"`.
+- `intrinsic_name`: Catalog name for the adapter function; defaults to the
+repository name portion of `model_id` if not provided.
+- `base_model_name`: The short name of the base model (NOT its repo ID).
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

@@ -1,0 +1,464 @@
+---
+title: "mellea.core.requirement"
+sidebar_label: "mellea.core.requirement"
+description: "`Requirement` interface for constrained and validated generation."
+---
+
+`Requirement` interface for constrained and validated generation.
+
+
+
+
+
+A `Requirement` pairs a human-readable description with a validation function that
+inspects a [`Context`](base#class-context) (and optionally a backend) to determine whether a model output
+meets a constraint. `ValidationResult` carries the pass/fail verdict along with an
+optional reason, score, and the [`ModelOutputThunk`](base#class-modeloutputthunk) produced during validation.
+`PartialValidationResult` provides a tri-state variant (`"pass"`, `"fail"`,
+`"unknown"`) for per-chunk streaming validation.
+Helper factories such as `default_output_to_bool` make it easy to build requirements
+without boilerplate.
+
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `default_output_to_bool` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/core/requirement.py#L263" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#default_output_to_bool}
+
+```python
+default_output_to_bool(x: CBlock | ModelOutputThunk | str) -> bool
+```
+
+
+Convert a model output string to a boolean by checking for a "yes" answer.
+
+Checks if the output is exactly equal to "yes" or "y" (case-insensitive). If not,
+also checks if any of the words in the output are "yes" (case-insensitive).
+
+**Args:**
+- `x`: The model output to evaluate, as a [`CBlock`](base#class-cblock), [`ModelOutputThunk`](base#class-modeloutputthunk), or plain string.
+
+**Returns:**
+- `True` if the output indicates a "yes" answer, `False` otherwise.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `ValidationResult` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/core/requirement.py#L34" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#class-validationresult}
+
+
+ValidationResults store the output of a Requirement's validation. They can be used to return additional info from validation functions, which is useful for sampling/repairing.
+
+**Args:**
+- `result`: Boolean indicating whether the requirement passed.
+- `reason`: Optional human-readable explanation for the verdict.
+- `score`: Optional numeric score returned by the validator.
+- `thunk`: The [`ModelOutputThunk`](base#class-modeloutputthunk) produced during LLM-as-a-Judge validation, if applicable.
+- `context`: The context associated with the validation backend call, if applicable.
+- `error`: Set when validation could not produce a verdict because the
+output could not be parsed — for example an `AdapterSchemaMismatchError` from a
+custom `output_to_bool`. When set, `bool(result)` fails closed to `False`
+regardless of `result`, so callers that ignore errors do not silently pass.
+Inspect `error` to distinguish "requirement not met" from "output unparsable".
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `reason` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/core/requirement.py#L70" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#reason}
+
+```python
+reason(self) -> str | None
+```
+
+Reason for the validation result.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `score` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/core/requirement.py#L75" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#score}
+
+```python
+score(self) -> float | None
+```
+
+An optional score for the validation result.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `thunk` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/core/requirement.py#L80" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#thunk}
+
+```python
+thunk(self) -> ModelOutputThunk | None
+```
+
+The ModelOutputThunk associated with the validation func if an llm was used to generate the final result.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `context` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/core/requirement.py#L85" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#context}
+
+```python
+context(self) -> Context | None
+```
+
+The context associated with validation if a backend was used to generate the final result.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `error` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/core/requirement.py#L90" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#error}
+
+```python
+error(self) -> Exception | None
+```
+
+The exception raised while parsing the validation output, if any.
+
+Set when `validate()` could not produce a verdict because the output was
+unparsable (e.g. an `AdapterSchemaMismatchError` from a custom
+`output_to_bool`). `None` for an ordinary pass or fail. When set,
+`as_bool()` returns `False` regardless of the underlying result.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `as_bool` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/core/requirement.py#L100" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#as_bool}
+
+```python
+as_bool(self) -> bool
+```
+
+Return a boolean value based on the validation result.
+
+Fails closed when an `error` is set: an unparsable output is never
+treated as a pass, so callers that only check the boolean fail safely
+rather than silently accepting a result that was never computed.
+
+**Returns:**
+- `True` if the requirement passed and no error is set, `False` otherwise.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `PartialValidationResult` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/core/requirement.py#L126" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#class-partialvalidationresult}
+
+
+Tri-state result from per-chunk streaming validation.
+
+Unlike :class:`ValidationResult`, which stores its verdict as a private
+`_result: bool`, this class exposes `success` as a public property.
+The asymmetry is intentional: the tri-state value cannot be recovered from
+a `bool`, so a public property is the only way to distinguish `"fail"`
+from `"unknown"` after construction.
+
+**Args:**
+- `success`: Validation state — `"pass"` (constraint satisfied so far),
+`"fail"` (constraint violated, stop streaming), or
+`"unknown"` (insufficient data yet, continue streaming).
+- `reason`: Optional human-readable explanation.
+- `score`: Optional numeric confidence score.
+- `thunk`: Optional ModelOutputThunk from the validation call.
+- `context`: Optional context associated with the validation call.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `success` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/core/requirement.py#L167" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#success}
+
+```python
+success(self) -> Literal['pass', 'fail', 'unknown']
+```
+
+The tri-state validation result.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `reason` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/core/requirement.py#L172" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#reason}
+
+```python
+reason(self) -> str | None
+```
+
+Reason for the validation result.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `score` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/core/requirement.py#L177" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#score}
+
+```python
+score(self) -> float | None
+```
+
+An optional score for the validation result.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `thunk` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/core/requirement.py#L182" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#thunk}
+
+```python
+thunk(self) -> ModelOutputThunk | None
+```
+
+The ModelOutputThunk associated with the validation call, if any.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `context` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/core/requirement.py#L187" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#context}
+
+```python
+context(self) -> Context | None
+```
+
+The context associated with the validation call, if any.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `as_bool` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/core/requirement.py#L191" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#as_bool}
+
+```python
+as_bool(self) -> bool
+```
+
+Return True for `"pass"`, False for `"fail"` or `"unknown"`.
+
+`"unknown"` maps to `False` intentionally. In streaming contexts,
+check `pvr.success == "unknown"` before treating `False` as a definitive
+failure — `"unknown"` means insufficient data so far, not a constraint
+violation.
+
+**Returns:**
+- `True` if the partial result is `"pass"`, `False` otherwise.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `PartialValidationSummary` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/core/requirement.py#L214" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#class-partialvalidationsummary}
+
+
+Aggregate of the per-chunk `PartialValidationResult`s a requirement produces for one validated input.
+
+A requirement re-chunks the text it is given and validates each chunk, so one input can
+yield several results (one when it does not re-chunk). Build one with `from_results`.
+
+**Args:**
+- `results`: The per-chunk results, in order.
+- `success`: Aggregate verdict — `"fail"` if any chunk
+failed, `"pass"` if every chunk passed, else `"unknown"` (some chunk undecided, or
+no results).
+- `failure`: The failing chunk's result (at most one,
+given `stream_validate` short-circuits at the first failure), or `None`.
+- `reason`: The failing chunk's `reason`, or `None` when no chunk failed.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `from_results` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/core/requirement.py#L236" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#from_results}
+
+```python
+from_results(cls, results: list[PartialValidationResult]) -> 'PartialValidationSummary'
+```
+
+Summarize per-chunk `results` into a single verdict.
+
+An empty `results` summarizes to `"unknown"` (no verdict) with no failure.
+
+**Args:**
+- `results`: The per-chunk results for one validated input.
+
+**Returns:**
+- `success` is `"fail"` if any result failed, `"pass"` if
+- every result passed, else `"unknown"`; `failure` (and its `reason`) come from the
+- failing result, or are `None`.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `Requirement` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/core/requirement.py#L287" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#class-requirement}
+
+
+Requirements are a special type of Component used as input to the Validate step in Instruct/Validate/Repair patterns.
+
+**Args:**
+- `description`: A natural-language description of the requirement. Sometimes included in
+[`Instruction`](../stdlib/components/instruction#class-instruction) prompts; use `check_only=True` to suppress this.
+- `validation_fn`: If provided, this function is executed
+instead of LLM-as-a-Judge. The `bool()` of its return value defines pass/fail.
+- `output_to_bool`: Translates LLM-as-a-Judge output to a boolean.
+Defaults to a "yes"-detection heuristic. May raise if the output does not match
+the expected format — see `validate` for details.
+- `check_only`: When `True`, the requirement description is excluded from [`Instruction`](../stdlib/components/instruction#class-instruction) prompts.
+- `chunking`: Chunking strategy for streaming validation.
+When set, the requirement re-chunks the stream into its own validation chunks (see
+`stream_validate`); an alias string is resolved. `None` (default) validates each
+stream chunk as-is.
+
+**Attributes:**
+- `description`: A natural-language description of the requirement.
+- `output_to_bool`: Function used to convert LLM-as-a-Judge
+output into a boolean pass/fail result.
+- `validation_fn`: Optional custom validation
+function that bypasses the LLM-as-a-Judge strategy entirely.
+- `check_only`: When `True`, the requirement description is excluded from [`Instruction`](../stdlib/components/instruction#class-instruction)
+prompts to avoid influencing model output.
+- `chunking`: The resolved chunking strategy, or `None`.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `validate` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/core/requirement.py#L369" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#validate}
+
+```python
+validate(self, backend: Backend, ctx: Context) -> ValidationResult
+```
+
+Chooses the appropriate validation strategy and applies it to the given context.
+
+Uses `validation_fn` if one was provided, otherwise falls back to LLM-as-a-Judge
+by generating a judgement response with the backend.
+
+**Args:**
+- `backend`: The inference backend used when the LLM-as-a-Judge strategy is selected.
+- `ctx`: The context to validate, which must contain a [`ModelOutputThunk`](base#class-modeloutputthunk) as its last output.
+- `format`: Optional structured output format for the judgement call.
+- `model_options`: Optional model options to pass to the backend during the judgement call.
+
+**Returns:**
+- The result of the validation, including a boolean pass/fail
+- and optional metadata. If `output_to_bool` raises while parsing the judgement
+- output (e.g. `AdapterSchemaMismatchError` on an unexpected adapter schema), the
+- exception is caught and stored on `result.error` rather than propagated: the
+- result fails closed (`bool(result)` is `False`), and callers can inspect
+- `result.error` to distinguish "requirement not met" from "output unparsable".
+
+**Raises:**
+- `AssertionError`: If the LLM-as-a-Judge strategy is selected but `output_to_bool`
+is `None`, or if the context has no [`ModelOutputThunk`](base#class-modeloutputthunk) as its last output.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `stream_validate` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/core/requirement.py#L463" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#stream_validate}
+
+```python
+stream_validate(self, delta: str) -> list[PartialValidationResult]
+```
+
+Validate one stream delta, re-chunked into this requirement's own chunks.
+
+Feeds `delta` to this requirement's chunker (built from `chunking`) and runs
+`_stream_validate` on each complete chunk until one fails, returning the results up to
+and including that failure — later chunks are skipped. With `chunking=None` the delta is
+validated as-is. When `delta` completes no chunk (the chunker is still accumulating),
+the result is a single `"unknown"`. For a `chunking=None` requirement, an empty `delta`
+returns a single `"unknown"` without invoking `_stream_validate`.
+
+To add streaming validation, override `_stream_validate`, returning `"pass"`
+(satisfied so far), `"fail"` (constraint violated), or `"unknown"` (no verdict yet)
+for each chunk.
+
+**Args:**
+- `delta`: The next piece of stream text to feed this requirement's chunker.
+- `backend`: The inference backend, for backend-assisted checks.
+- `ctx`: The current generation context.
+- `flush`: When `True` also validate the trailing residual withheld by this requirement's chunker.
+
+**Returns:**
+- list\[PartialValidationResult]: One result per validated chunk, ending at the first
+- failing chunk, or a single `"unknown"` when `delta` completes no chunk. Never empty.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `stream_flush` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/core/requirement.py#L554" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#stream_flush}
+
+```python
+stream_flush(self) -> list[PartialValidationResult]
+```
+
+Validate the trailing residual withheld by this requirement's chunker.
+
+The end-of-stream counterpart to `stream_validate`: with no new chunk, it releases the
+final chunk the chunker held back (the text after its last boundary) and runs it through
+`_stream_validate`. Returns one result per residual chunk (0 or 1 per the
+`ChunkingStrategy.flush` contract), or an empty list when there is no chunker or nothing
+was withheld.
+
+**Args:**
+- `backend`: The inference backend, available for backend-assisted checks.
+- `ctx`: The current generation context.
+
+**Returns:**
+- list\[PartialValidationResult]: The residual chunk's result(s), or empty if none.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `parts` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/core/requirement.py#L579" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#parts}
+
+```python
+parts(self) -> list[Span]
+```
+
+Returns all of the constituent parts of a Requirement.
+
+Once a validation target has been bound (inside a `validate` call), that target is
+the requirement's sole part. Exposing it here is what allows `generate_walk` to
+await it if it has not been computed yet.
+
+**Returns:**
+- List of constituent components. Empty unless a validation target is bound.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `format_for_llm` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/core/requirement.py#L591" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#format_for_llm}
+
+```python
+format_for_llm(self) -> TemplateRepresentation | str
+```
+
+Returns a [`TemplateRepresentation`](base#class-templaterepresentation) for LLM-as-a-Judge evaluation of this requirement.
+
+Populates the template with the requirement's `description` and the bound validation
+target. Must only be called from within a `validate` call for this same requirement,
+after the target has been bound by `_bind_validation_target`.
+
+When the target is a [`ModelOutputThunk`](base#class-modeloutputthunk) with a [`Component`](base#class-component) `parsed_repr`, the parsed
+representation is used so that the judge sees the structured output rather than the
+raw generated string.
+
+**Returns:**
+- TemplateRepresentation | str: A [`TemplateRepresentation`](base#class-templaterepresentation) containing the description
+- and the model output to be judged.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

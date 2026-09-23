@@ -1,0 +1,137 @@
+---
+title: "Hugging Face Transformers"
+description: "Run Mellea on local hardware with LocalHFBackend and Hugging Face Transformers."
+# diataxis: how-to
+---
+
+`LocalHFBackend` uses [Hugging Face Transformers](https://huggingface.co/docs/transformers)
+for local inference. It is designed for experimental Mellea features — aLoRA adapters,
+constrained decoding, and span-based context — that are not yet available on
+server-based backends.
+
+**Prerequisites:** `pip install 'mellea[hf]'`, Python 3.11+, local model weights.
+
+> **Tip:** For everyday local inference without experimental features, use
+> [Ollama](./ollama.md) — it is simpler to set up and well suited for development.
+
+## Install
+
+```bash
+pip install 'mellea[hf]'
+```
+
+## Basic usage
+
+```python
+# Requires: mellea[hf]
+# Returns: ModelOutputThunk
+from mellea import MelleaSession
+from mellea.backends import ModelOption, model_ids
+from mellea.backends.huggingface import LocalHFBackend
+
+m = MelleaSession(
+    LocalHFBackend(
+        model_ids.IBM_GRANITE_4_HYBRID_MICRO,
+        model_options={ModelOption.MAX_NEW_TOKENS: 256},
+    )
+)
+
+result = m.instruct("Summarize the key ideas in the theory of relativity.")
+print(str(result))
+# Output will vary — LLM responses depend on model and temperature.
+```
+
+On first run, `LocalHFBackend` downloads the model weights via the Transformers
+`Auto*` classes and loads them onto the best available device (cuda > mps > cpu).
+
+## Device selection
+
+The [`Backend`](../reference/glossary.md#backend) selects the device automatically: CUDA GPU
+if available, then Apple Silicon MPS, then CPU. To override device selection, use
+`custom_config`:
+
+```python
+# Requires: mellea[hf]
+# Returns: MelleaSession
+from mellea.backends.huggingface import LocalHFBackend, TransformersTorchConfig
+
+m_backend = LocalHFBackend(
+    "ibm-granite/granite-3.3-8b-instruct",
+    custom_config=TransformersTorchConfig(device="cpu"),
+)
+```
+
+## KV cache
+
+`LocalHFBackend` caches KV blocks across calls by default (`use_caches=True`). This
+speeds up repeated calls that share a common prefix. Pass a [`SimpleLRUCache`](../reference/glossary.md#simplelrucache)
+to control capacity, or disable caching entirely for debugging:
+
+```python
+# Requires: mellea[hf]
+# Returns: MelleaSession
+from mellea.backends.cache import SimpleLRUCache
+
+# Enable with explicit capacity
+m_backend = LocalHFBackend(model_ids.IBM_GRANITE_4_HYBRID_MICRO, cache=SimpleLRUCache(5))
+
+# Disable entirely
+m_backend = LocalHFBackend(model_ids.IBM_GRANITE_4_HYBRID_MICRO, use_caches=False)
+```
+
+See [Prefix Caching and KV Blocks](../advanced/prefix-caching-and-kv-blocks.md) for full details on marking blocks for caching and how [KV smashing](../reference/glossary.md#kv-smashing) works.
+
+## aLoRA adapters
+
+`LocalHFBackend` supports [aLoRA](../advanced/lora-and-alora-adapters.md)
+adapters — lightweight domain-specific requirement validators that run on local GPU
+hardware. See the aLoRA guide for training and usage.
+
+> **Tip:** For adapter functions without local GPU requirements, Granite Switch models
+> serve pre-embedded adapters via vLLM and the OpenAI backend. See
+> [Adapter functions](../advanced/intrinsics.md) for details.
+
+## Constrained decoding
+
+`LocalHFBackend` enforces `format=` schemas (see [Enforce Structured Output](../how-to/enforce-structured-output.md))
+via [llguidance](https://github.com/guidance-ai/llguidance). The grammar is built with
+a bounded `whitespace_pattern` (`r"[\x20\x0A\x0D\x09]{0,20}"`), which permits natural, spaced, and pretty-printed JSON (up to 4 levels of standard 4-space indentation) while setting a hard upper limit of 20 consecutive whitespace characters to prevent runaway token generation or infinite loops.
+
+In testing, spaced JSON used roughly 1.5x more tokens than compact JSON for the same content — size `ModelOption.MAX_NEW_TOKENS` accordingly if you set it explicitly. Generation that runs to EOS still completes, but consumes proportionally more tokens getting there.
+
+## Vision support
+
+Vision support for `LocalHFBackend` is model-dependent and experimental. Pass a PIL
+image or an [`ImageBlock`](../reference/glossary.md#imageblock) via `images=[...]` to
+`instruct()` or `chat()` when using a vision-capable model. Not all models loaded via
+`LocalHFBackend` support image input. See
+[Use Images and Vision Models](../how-to/use-images-and-vision.md).
+
+## Troubleshooting
+
+### `pip install "mellea[hf]"` fails on Intel macOS
+
+If you see torch/torchvision version errors on an Intel Mac, use Conda:
+
+```bash
+conda install 'torchvision>=0.22.0'
+pip install mellea
+```
+
+Then run examples with `python` inside the Conda environment rather than
+`uv run --with mellea`.
+
+### Python 3.13: `error: can't find Rust compiler`
+
+The `outlines` package (used by `mellea[hf]`) requires a Rust compiler on Python 3.13.
+Either downgrade to Python 3.12 or install the
+[Rust compiler](https://www.rust-lang.org/tools/install):
+
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
+
+---
+
+**See also:** [Backends and Configuration](../how-to/backends-and-configuration.md) |
+[LoRA and aLoRA Adapters](../advanced/lora-and-alora-adapters.md)

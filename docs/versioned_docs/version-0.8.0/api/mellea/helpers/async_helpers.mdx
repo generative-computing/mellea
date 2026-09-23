@@ -1,0 +1,273 @@
+---
+title: "mellea.helpers.async_helpers"
+sidebar_label: "mellea.helpers.async_helpers"
+description: "Async helper functions for managing concurrent model output thunks."
+---
+
+Async helper functions for managing concurrent model output thunks.
+
+
+
+
+
+Provides `send_to_queue`, which feeds a backend response coroutine or async iterator
+into an `asyncio.Queue` (including sentinel and error forwarding); `wait_for_all_mots`,
+which gathers multiple [`ModelOutputThunk`](../core/base#class-modeloutputthunk) computations in a single `asyncio.gather`
+call; `get_current_event_loop`, a safe wrapper that returns `None` instead of
+raising when no event loop is running; and `ClientCache`, a thread-safe LRU cache of
+loop-bound async clients that closes each entry on the loop that owns it when the entry
+is evicted or cleared. These utilities are used internally by backends that operate in
+async contexts.
+
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `send_to_queue` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/helpers/async_helpers.py#L46" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#send_to_queue}
+
+```python
+send_to_queue(co: Coroutine[Any, Any, AsyncIterator | Any] | AsyncIterator, mot: ModelOutputThunk) -> None
+```
+
+
+Processes the output of an async chat request by sending the output to the thunk's queue.
+
+**Args:**
+- `co`: A coroutine or async iterator producing the backend response.
+- `mot`: The [`ModelOutputThunk`](../core/base#class-modeloutputthunk) this stream feeds. Its `_gen.queue` receives the
+results — a sentinel `None` is appended on normal completion; an exception
+instance (including `TimeoutError`) is appended on error (a timeout does
+**not** append a trailing sentinel — the exception item is the stream
+terminator). Time-to-first-byte is stamped on the thunk at first-chunk
+receipt via its `_record_ttfb()`, and per-chunk receipt intervals are
+recorded on `_gen.chunk_intervals`.
+- `chunk_timeout`: Maximum seconds to wait for each chunk from the backend iterator,
+including the first (time-to-first-token). Only applies when the backend
+response is an `AsyncIterator`; non-streaming coroutines are unaffected.
+If no chunk arrives within this window a `TimeoutError` is forwarded to
+the queue and the stream is aborted. `None` disables the timeout.
+Defaults to `DEFAULT_CHUNK_TIMEOUT` (120 s). Note that `0` sets the
+deadline to "now" and aborts immediately — use `None` to disable.
+- `on_timeout`: Optional non-blocking callback invoked when this function's
+per-chunk guard expires. Backends may use it to cooperatively stop work
+running outside the event loop. Callback errors are logged and suppressed
+so the original stream timeout remains the consumer-visible error.
+
+**Raises:**
+- `TimeoutError`: Re-raised verbatim when the backend itself raises `TimeoutError`
+(i.e. the timeout did not originate from *this* function's per-chunk guard).
+Stream-guard timeouts are forwarded into the queue rather than raised.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `wait_for_all_mots` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/helpers/async_helpers.py#L152" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#wait_for_all_mots}
+
+```python
+wait_for_all_mots(mots: list[ModelOutputThunk]) -> None
+```
+
+
+Helper function to make waiting for multiple ModelOutputThunks to be computed easier.
+
+All ModelOutputThunks must be from the same event loop. This should always be the case in sampling
+functions, session functions, and top-level mellea functions.
+
+**Args:**
+- `mots`: List of [`ModelOutputThunk`](../core/base#class-modeloutputthunk) objects to await concurrently.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `get_current_event_loop` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/helpers/async_helpers.py#L168" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#get_current_event_loop}
+
+```python
+get_current_event_loop() -> asyncio.AbstractEventLoop | None
+```
+
+
+Get the current event loop without having to catch exceptions.
+
+**Returns:**
+- The running event loop, or `None` if no loop is running.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `ClientCache` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/helpers/async_helpers.py#L358" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#class-clientcache}
+
+
+A simple [LRU](https://en.wikipedia.org/wiki/Cache_replacement_policies#Least_Recently_Used_(LRU)) cache.
+
+Used to keep track of clients for backends where the client is tied to a specific
+event loop. Keys are the event loop each client is bound to (or `None` for a client
+created outside any loop), so an entry can be closed on the right loop when it is
+evicted or cleared. Holding the loop object rather than its `id()` also stops a
+recycled address from handing a fresh loop a client bound to a dead one.
+
+Every method is safe to call from multiple threads. Build clients through
+`get_or_create` rather than a `get`/`put` pair: only `get_or_create` holds the lock
+across the miss and the insert, which is what keeps two threads from each
+constructing a client under the same key.
+
+**Args:**
+- `capacity`: Maximum number of entries to hold before evicting the least recently used.
+- `aclose`: Optional callable
+returning the coroutine that closes a cached client, e.g.
+`lambda c\: c.aclose()`. When set, it is scheduled on eviction and awaited
+by `clear()`/`aclear()`; without it, evicted clients keep their
+connections open until garbage collection.
+
+**Attributes:**
+- `cache`: Ordered dictionary storing cached key-value pairs in LRU
+order; always initialised empty at construction.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `current_size` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/helpers/async_helpers.py#L397" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#current_size}
+
+```python
+current_size(self) -> int
+```
+
+Just return the size of the key set. This isn't necessarily safe.
+
+**Returns:**
+- Number of entries currently in the cache.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `get` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/helpers/async_helpers.py#L405" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#get}
+
+```python
+get(self, key: Hashable) -> Any | None
+```
+
+Gets a value from the cache.
+
+A hit here is only worth acting on if nothing else can insert under `key`
+meanwhile — use `get_or_create` to build a client on a miss.
+
+**Args:**
+- `key`: Cache key; the event loop the client is bound to, or `None`.
+
+**Returns:**
+- The cached value, or `None` if the key is not present.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `put` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/helpers/async_helpers.py#L420" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#put}
+
+```python
+put(self, key: Hashable, value: Any) -> None
+```
+
+Put a value into the cache, closing the least-recently-used entry if one is evicted.
+
+LRU eviction is the only case that closes anything. Replacing the value under a
+key that is *already* cached just drops the old reference: a same-key `put`
+means another caller built a client for that key between this caller's `get`
+miss and this `put`, so the value displaced here is the one that caller is
+about to use. Closing it would break their in-flight request; its connections
+come back when they drop it and it is garbage collected. `get_or_create` avoids
+that window altogether, and is the preferred way in.
+
+The evicted client's close is *scheduled* on the loop that owns it rather than
+awaited: entries are added during `generate`, so blocking here would stall the
+caller's event loop for as long as the close took.
+
+Closing on eviction assumes no more than `capacity` event loops drive a backend
+at once, which holds for Mellea's single-background-loop design. Past that, an
+evicted client's transport could be closed while a request is still in flight on
+its loop. The alternative — dropping the reference and leaving the close to
+garbage collection — is what leaked sockets for the life of the process, so the
+close is scheduled rather than skipped.
+
+**Args:**
+- `key`: Cache key; the event loop the client is bound to, or `None`.
+- `value`: Value to store.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `get_or_create` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/helpers/async_helpers.py#L451" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#get_or_create}
+
+```python
+get_or_create(self, key: Hashable, factory: Callable[[], Any]) -> Any
+```
+
+Get the value cached under `key`, building and caching one if there is none.
+
+Prefer this to a `get`/`put` pair. `get_current_event_loop()` returns `None`
+whenever no loop is running, so every synchronous call path shares the one `None`
+key: two threads calling a backend synchronously would otherwise both miss, both
+construct a client, and the second `put` would displace the first client without
+closing it — leaking its connections for the life of the process. Holding the
+lock across the miss, the construction and the insert makes the second thread
+find the client the first one built.
+
+`factory` runs with the lock held, so concurrent construction for the same cache
+is serialised and `factory` must not call back into this cache. If it raises, the
+exception propagates and nothing is cached.
+
+**Args:**
+- `key`: Cache key; the event loop the client is bound to, or `None`.
+- `factory`: Zero-argument callable returning a value to cache under `key`.
+Called only on a miss. A `None` it returns is cached but reads back as a
+miss, the same conflation `get` has.
+
+**Returns:**
+- The value already cached under `key`, or the newly built one.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `clear` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/helpers/async_helpers.py#L485" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#clear}
+
+```python
+clear(self) -> None
+```
+
+Close every cached client and empty the cache.
+
+Entries are dropped from the cache before being closed, so a failure to close
+one client cannot leave a stale entry behind.
+
+Called from inside a running event loop, an entry owned by *that* loop can only
+be scheduled for closing, not awaited — use `aclear()` there to be sure the
+client is closed before this returns.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `aclear` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/helpers/async_helpers.py#L501" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#aclear}
+
+```python
+aclear(self) -> None
+```
+
+Close every cached client and empty the cache, from async code.
+
+The async counterpart to `clear()`. Prefer this when the running event loop owns
+one of the cached clients: that client is awaited directly, which `clear()` can
+only schedule, since blocking on its own loop would deadlock.
+
+A client bound to a loop that is already closed cannot be closed here either —
+there is no loop left to await on. Those entries are dropped and logged at
+debug; their sockets come back on garbage collection.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
