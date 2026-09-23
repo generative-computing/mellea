@@ -61,6 +61,7 @@ def get_system_capabilities():
             "ram_gb": 0,
             "has_api_keys": {},
             "has_ollama": False,
+            "has_llamacpp": False,
         }
         return _capabilities_cache
 
@@ -270,6 +271,20 @@ def _should_skip_collection(markers, config=None):
     if "ollama" in markers and not ignore_ollama:
         if not capabilities["has_ollama"]:
             return True, "Ollama not available (port 11434 not listening)"
+
+    # Skip tests requiring a local llama.cpp server if it is not reachable. There is
+    # no dedicated --ignore-llamacpp-check: the server either answers /health or the
+    # example cannot run at all, so `--ignore-all-checks` is the only sensible bypass.
+    # `.get` rather than `[...]`: partially-populated capability dicts (the import
+    # fallback above, and monkeypatched dicts in test_example_collection.py) would
+    # otherwise raise KeyError instead of gating.
+    if "llamacpp" in markers:
+        if not capabilities.get("has_llamacpp", False):
+            return (
+                True,
+                "llama.cpp server not reachable (start scripts/start_llamacpp.sh, "
+                "or set LLAMACPP_BASE_URL)",
+            )
 
     # Skip tests requiring API keys
     if "watsonx" in markers and not ignore_api_key:

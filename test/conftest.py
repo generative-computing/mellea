@@ -84,6 +84,34 @@ def _check_ollama_available():
         return False
 
 
+# Default matches scripts/start_llamacpp.sh, which serves Granite 4.2 3b on 8080.
+LLAMACPP_DEFAULT_BASE_URL = "http://127.0.0.1:8080/v1"
+
+
+def _check_llamacpp_available():
+    """Check if a local llama.cpp server is reachable.
+
+    Reads `LLAMACPP_BASE_URL` (default `http://127.0.0.1:8080/v1`) and probes
+    `/health`, which llama-server answers 200 only once the weights are loaded.
+    A bound port is not enough: llama-server accepts connections while it is
+    still downloading and loading, so a socket check would report ready too early
+    and the test would fail against a server that cannot answer yet.
+
+    Note: this does not verify which model is loaded. Tests may still fail if the
+    server hosts a model other than the one they request.
+    """
+    import urllib.error
+    import urllib.request
+
+    base_url = os.environ.get("LLAMACPP_BASE_URL", LLAMACPP_DEFAULT_BASE_URL)
+    health_url = base_url.rstrip("/").removesuffix("/v1") + "/health"
+    try:
+        with urllib.request.urlopen(health_url, timeout=2) as resp:
+            return resp.status == 200
+    except Exception:
+        return False
+
+
 _capabilities_cache: dict | None = None
 
 
@@ -99,6 +127,7 @@ def get_system_capabilities():
         "ram_gb": 0,
         "has_api_keys": {},
         "has_ollama": False,
+        "has_llamacpp": False,
     }
 
     # Detect GPU (CUDA for NVIDIA, MPS for Apple Silicon)
@@ -161,6 +190,9 @@ def get_system_capabilities():
 
     # Detect Ollama availability
     capabilities["has_ollama"] = _check_ollama_available()
+
+    # Detect a local llama.cpp server (started by scripts/start_llamacpp.sh)
+    capabilities["has_llamacpp"] = _check_llamacpp_available()
 
     _capabilities_cache = capabilities
     return capabilities
@@ -496,6 +528,10 @@ def pytest_collection_modifyitems(config, items):
         reason="Ollama not available (port 11434 not listening)"
     )
     skip_vllm = pytest.mark.skip(reason="vLLM disabled by WITH_VLLM=0")
+    skip_llamacpp = pytest.mark.skip(
+        reason="llama.cpp server not reachable (start scripts/start_llamacpp.sh, "
+        "or set LLAMACPP_BASE_URL)"
+    )
 
     # Auto-apply 'unit' marker to tests without explicit granularity markers.
     # This enables `pytest -m unit` without per-file maintenance burden.
@@ -520,6 +556,9 @@ def pytest_collection_modifyitems(config, items):
 
         if os.environ.get("WITH_VLLM") == "0" and item.get_closest_marker("vllm"):
             item.add_marker(skip_vllm)
+
+        if item.get_closest_marker("llamacpp") and not capabilities["has_llamacpp"]:
+            item.add_marker(skip_llamacpp)
 
         # Auto-apply unit marker
         if not any(item.get_closest_marker(m) for m in _NON_UNIT):
