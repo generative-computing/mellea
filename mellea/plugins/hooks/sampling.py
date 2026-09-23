@@ -105,7 +105,11 @@ class SamplingLoopEndPayload(MelleaBasePayload):
     Attributes:
         sampling_id: UUID correlating with the matching `sampling_loop_start`.
         strategy_name: Class name of the sampling strategy (e.g. `"RejectionSamplingStrategy"`).
-        success: `True` if at least one attempt passed all requirements.
+        success: `True` if the selected attempt passed all requirements. For
+            fan-out strategies such as Majority voting, the winning branch is
+            chosen by inter-branch agreement, so a branch that passed validation
+            may be outweighed by branches that did not. `success` therefore
+            reflects the *selected* branch only, not whether any branch passed.
         iterations_used: Total number of sampling iterations that completed. With concurrency
             enabled, this may be less than `loop_budget * concurrency_budget` if the strategy
             exits early after a successful result. `0` on the exception path, regardless of
@@ -122,7 +126,9 @@ class SamplingLoopEndPayload(MelleaBasePayload):
             returned sampling result. For fan-out strategies such as Majority voting, these are
             from the selected branch.
         all_validations: Nested list — `all_validations[i]` is the list of
-            `(Requirement, ValidationResult)` tuples for iteration *i*.
+            `(Requirement, ValidationResult)` tuples for iteration *i*. For
+            fan-out strategies such as Majority voting, these are from the
+            selected branch.
     """
 
     sampling_id: str = ""
