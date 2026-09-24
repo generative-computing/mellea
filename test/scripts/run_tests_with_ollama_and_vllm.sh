@@ -357,9 +357,13 @@ fi
 
 # start_ollama: start (or adopt) the Ollama server, pull models, warm up.
 start_ollama() {
+    # OLLAMA_HOST is initially a hostname/IP, but after the first start this
+    # function exports it with the selected port. Strip any previous port so
+    # restarting for the notebook pass cannot produce host:port:port.
+    local ollama_host="${OLLAMA_HOST%%:*}"
     # --- Check if ollama is already running ---
-    if curl -sf "http://${OLLAMA_HOST}:${OLLAMA_PORT}/api/tags" >/dev/null 2>&1; then
-        log "Ollama already running on ${OLLAMA_HOST}:${OLLAMA_PORT} — using existing server"
+    if curl -sf "http://${ollama_host}:${OLLAMA_PORT}/api/tags" >/dev/null 2>&1; then
+        log "Ollama already running on ${ollama_host}:${OLLAMA_PORT} — using existing server"
         OLLAMA_PID=""
     else
         # Find a free port starting from OLLAMA_PORT
@@ -370,8 +374,8 @@ start_ollama() {
         done
 
         # --- Start ollama server ---
-        log "Starting ollama server on ${OLLAMA_HOST}:${OLLAMA_PORT}..."
-        export OLLAMA_HOST="${OLLAMA_HOST}:${OLLAMA_PORT}"
+        log "Starting ollama server on ${ollama_host}:${OLLAMA_PORT}..."
+        export OLLAMA_HOST="${ollama_host}:${OLLAMA_PORT}"
         export OLLAMA_MODELS="${OLLAMA_DIR}/models"
         export OLLAMA_CONTEXT_LENGTH
         mkdir -p "$OLLAMA_MODELS"

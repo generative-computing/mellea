@@ -17,3 +17,4 @@ def test_nightly_script_restarts_ollama_before_notebooks():
     assert 'if [[ "$WITH_NOTEBOOKS" == "1" ]]; then' in notebook_section
     assert 'log "Starting Ollama for notebook tests..."' in notebook_section
     assert "    start_ollama" in notebook_section
+    assert 'local ollama_host="${OLLAMA_HOST%%:*}"' in source
