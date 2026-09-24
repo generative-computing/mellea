@@ -73,8 +73,8 @@ class BaseMBRDSampling(RejectionSamplingStrategy):
 
     Attributes:
         symmetric (bool): Whether the similarity metric is symmetric, allowing
-            the upper-triangle score matrix to be mirrored; always `True` for
-            this base class.
+            the upper-triangle score matrix to be mirrored. Subclasses may
+            disable mirroring for directional metrics.
     """
 
     number_of_samples: int
@@ -218,7 +218,7 @@ class BaseMBRDSampling(RejectionSamplingStrategy):
                     continue
 
         # count votes
-        summed_scr: np.ndarray = scr.sum(axis=0)
+        summed_scr: np.ndarray = scr.sum(axis=1)
 
         # Apply weights
         weighed_scr = self.maybe_apply_weighted(summed_scr)
@@ -247,8 +247,8 @@ class MajorityVotingStrategyForMath(BaseMBRDSampling):
         match_types (list[str]): Extraction target types used for parsing math
             expressions; defaults to `["latex", "expr"]`. Changing it rebuilds the
             extraction targets on the next comparison.
-        symmetric (bool): Inherited from `BaseMBRDSampling`; always `True`
-            for this strategy (set explicitly at init).
+        symmetric (bool): `False` because math verification can depend on which
+            answer is the reference and which is the prediction.
     """
 
     number_of_samples: int
@@ -307,8 +307,9 @@ class MajorityVotingStrategyForMath(BaseMBRDSampling):
             self._extraction_targets_key
         )
 
-        # Note: symmetry is not implied for certain expressions, see: https://github.com/huggingface/Math-Verify/blob/5d148cfaaf99214c2e4ffb4bc497ab042c592a7a/README.md?plain=1#L183
-        self.symmetric = True
+        # math_verify.verify(gold, pred) is not always symmetric, e.g. an
+        # inequality used as gold and its solution interval used as prediction.
+        self.symmetric = False
 
     # https://github.com/huggingface/Math-Verify/blob/5d148cfaaf99214c2e4ffb4bc497ab042c592a7a/tests/test_all.py#L36
     def compare_strings(self, ref: str, pred: str) -> float:

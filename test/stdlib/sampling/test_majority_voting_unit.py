@@ -3,9 +3,12 @@
 
 """Unit tests for majority voting compare_strings methods — no backend required."""
 
+from types import SimpleNamespace
+
 import pytest
 
 from mellea.stdlib.sampling import majority_voting
+from mellea.stdlib.sampling.base import RejectionSamplingStrategy
 from mellea.stdlib.sampling.majority_voting import (
     MajorityVotingStrategyForMath,
     MBRDRougeLStrategy,
@@ -44,6 +47,25 @@ def test_math_compare_different_boxed(math_strategy):
 def test_math_compare_returns_float(math_strategy):
     result = math_strategy.compare_strings(r"\boxed{5}", r"\boxed{5}")
     assert isinstance(result, float)
+
+
+@pytest.mark.asyncio
+async def test_math_majority_vote_respects_asymmetric_verification(monkeypatch):
+    inequality = r"\boxed{1<x<2}"
+    interval = r"\boxed{(1,2)}"
+    responses = iter([inequality, interval])
+
+    async def fake_sample(self, *args, **kwargs):
+        return SimpleNamespace(result=next(responses))
+
+    monkeypatch.setattr(RejectionSamplingStrategy, "sample", fake_sample)
+    strategy = MajorityVotingStrategyForMath(number_of_samples=2)
+    assert strategy.compare_strings(inequality, interval) == 1.0
+    assert strategy.compare_strings(interval, inequality) == 0.0
+
+    selected = await strategy.sample(None, None, None, None, show_progress=False)
+
+    assert selected.result == interval
 
 
 # --- MajorityVotingStrategyForMath extraction-target cache ---
