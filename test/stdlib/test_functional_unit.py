@@ -197,6 +197,30 @@ def test_instruct_converts_pil_images_before_forwarding(mock_act):
     assert isinstance(instruction._images[0], ImageBlock)
 
 
+@patch("mellea.stdlib.functional.act")
+def test_instruct_builds_default_instruction_class(mock_act):
+    """instruct() constructs a plain Instruction by default."""
+    mock_act.return_value = (MagicMock(), SimpleContext())
+
+    instruct("do the thing", SimpleContext(), MagicMock())
+
+    assert type(mock_act.call_args[0][0]) is Instruction
+
+
+@patch("mellea.stdlib.functional.act")
+def test_instruct_honors_instruction_cls(mock_act):
+    """instruct() constructs the provided Instruction subclass (LLMON round-trip)."""
+    from mellea.stdlib.components.llmon_instruction import LLMONInstruction
+
+    mock_act.return_value = (MagicMock(), SimpleContext())
+
+    instruct(
+        "do the thing", SimpleContext(), MagicMock(), instruction_cls=LLMONInstruction
+    )
+
+    assert isinstance(mock_act.call_args[0][0], LLMONInstruction)
+
+
 # --- achat() and ainstruct() async forwarding ---
 
 
@@ -229,6 +253,21 @@ async def test_ainstruct_forwards_audio(mock_aact):
     instruction = mock_aact.call_args[0][0]
     assert isinstance(instruction, Instruction)
     assert instruction._audio == [audio]
+
+
+@pytest.mark.asyncio
+@patch("mellea.stdlib.functional.aact")
+async def test_ainstruct_honors_instruction_cls(mock_aact):
+    """ainstruct() constructs the provided Instruction subclass."""
+    from mellea.stdlib.components.llmon_instruction import LLMONInstruction
+
+    mock_aact.return_value = (MagicMock(), SimpleContext())
+
+    await ainstruct(
+        "do the thing", SimpleContext(), MagicMock(), instruction_cls=LLMONInstruction
+    )
+
+    assert isinstance(mock_aact.call_args[0][0], LLMONInstruction)
 
 
 # --- act/aact accept CBlock and ModelOutputThunk (issue #356) ---

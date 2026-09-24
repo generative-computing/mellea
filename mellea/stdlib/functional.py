@@ -337,6 +337,7 @@ def instruct(
     model_options: dict | None = None,
     tool_calls: bool = False,
     allow_context_type_change: bool = False,
+    instruction_cls: type[Instruction] = Instruction,
 ) -> tuple[ComputedModelOutputThunk[str], ContextT] | SamplingResult[str]:
     """Generates from an instruction.
 
@@ -361,6 +362,7 @@ def instruct(
         images: A list of images to be used in the instruction or None if none.
         audio: A list of audio blocks to be used in the instruction or None if none.
         allow_context_type_change: if True, permits the returned context to be a different `Context` subtype than `context`. By default (False), a differing type raises `ContextTypeMismatchError`.
+        instruction_cls: The `Instruction` subclass to construct for this call. Defaults to `Instruction`. Pass an LLMON-aware subclass (e.g. `LLMONInstruction`) to parse the reply back into a Component.
 
     Raises:
         ContextTypeMismatchError: if the returned context type differs from the input context type and `allow_context_type_change` is `False`.
@@ -376,7 +378,7 @@ def instruct(
     images = _parse_and_clean_image_args(images)
 
     # All instruction options are forwarded to create a new Instruction object.
-    i = Instruction(
+    i = instruction_cls(
         description=description,
         requirements=requirements,
         icl_examples=icl_examples,
@@ -1217,6 +1219,7 @@ async def ainstruct(
     tool_calls: bool = False,
     allow_context_type_change: Literal[False] = False,
     await_result: Literal[True],
+    instruction_cls: type[Instruction] = Instruction,
 ) -> tuple[ComputedModelOutputThunk[str], ContextT]: ...
 
 
@@ -1241,6 +1244,7 @@ async def ainstruct(
     tool_calls: bool = False,
     allow_context_type_change: Literal[True],
     await_result: Literal[True],
+    instruction_cls: type[Instruction] = Instruction,
 ) -> tuple[ComputedModelOutputThunk[str], Context]: ...
 
 
@@ -1265,6 +1269,7 @@ async def ainstruct(
     tool_calls: bool = False,
     allow_context_type_change: Literal[False] = False,
     await_result: bool = False,
+    instruction_cls: type[Instruction] = Instruction,
 ) -> tuple[ComputedModelOutputThunk[str], ContextT]: ...
 
 
@@ -1289,6 +1294,7 @@ async def ainstruct(
     tool_calls: bool = False,
     allow_context_type_change: Literal[True],
     await_result: bool = False,
+    instruction_cls: type[Instruction] = Instruction,
 ) -> tuple[ComputedModelOutputThunk[str], Context]: ...
 
 
@@ -1313,6 +1319,7 @@ async def ainstruct(
     tool_calls: bool = False,
     allow_context_type_change: Literal[False] = False,
     await_result: Literal[False] = False,
+    instruction_cls: type[Instruction] = Instruction,
 ) -> tuple[ModelOutputThunk[str], ContextT]: ...
 
 
@@ -1337,6 +1344,7 @@ async def ainstruct(
     tool_calls: bool = False,
     allow_context_type_change: Literal[True],
     await_result: Literal[False] = False,
+    instruction_cls: type[Instruction] = Instruction,
 ) -> tuple[ModelOutputThunk[str], Context]: ...
 
 
@@ -1361,6 +1369,7 @@ async def ainstruct(
     tool_calls: bool = False,
     allow_context_type_change: bool,
     await_result: Literal[True],
+    instruction_cls: type[Instruction] = Instruction,
 ) -> tuple[ComputedModelOutputThunk[str], Context]: ...
 
 
@@ -1385,6 +1394,7 @@ async def ainstruct(
     tool_calls: bool = False,
     allow_context_type_change: bool,
     await_result: Literal[False] = False,
+    instruction_cls: type[Instruction] = Instruction,
 ) -> tuple[ModelOutputThunk[str], Context]: ...
 
 
@@ -1409,6 +1419,7 @@ async def ainstruct(
     tool_calls: bool = False,
     allow_context_type_change: bool = False,
     await_result: bool = False,
+    instruction_cls: type[Instruction] = Instruction,
 ) -> SamplingResult[str]: ...
 
 
@@ -1432,6 +1443,7 @@ async def ainstruct(
     tool_calls: bool = False,
     allow_context_type_change: bool = False,
     await_result: bool = False,
+    instruction_cls: type[Instruction] = Instruction,
 ) -> tuple[ModelOutputThunk[str], ContextT] | SamplingResult:
     """Generates from an instruction.
 
@@ -1457,6 +1469,7 @@ async def ainstruct(
         audio: A list of audio blocks to be used in the instruction or None if none.
         allow_context_type_change: if True, permits the returned context to be a different `Context` subtype than `context`. By default (False), a differing type raises `ContextTypeMismatchError`.
         await_result: if False and strategy is None, returns uncomputed ModelOutputThunk for streaming. If True or strategy is not None, awaits and returns ComputedModelOutputThunk. Default is False.
+        instruction_cls: The `Instruction` subclass to construct for this call. Defaults to `Instruction`. Pass an LLMON-aware subclass (e.g. `LLMONInstruction`) to parse the reply back into a Component.
 
     Returns:
         A (ModelOutputThunk, Context) if `return_sampling_results` is `False`, else returns a `SamplingResult`.
@@ -1471,7 +1484,7 @@ async def ainstruct(
     images = _parse_and_clean_image_args(images)
 
     # All instruction options are forwarded to create a new Instruction object.
-    i = Instruction(
+    i = instruction_cls(
         description=description,
         requirements=requirements,
         icl_examples=icl_examples,

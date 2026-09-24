@@ -60,7 +60,7 @@ from ..telemetry.tracing import (
     start_session_span,
     start_session_startup_span,
 )
-from .components import Document, Message
+from .components import Document, Instruction, Message
 from .context import ChatContext, SimpleContext
 from .sampling import RejectionSamplingStrategy
 from .start_backend import (
@@ -915,6 +915,7 @@ class MelleaSession(Generic[ContextT]):
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
+        instruction_cls: type[Instruction] = Instruction,
     ) -> ModelOutputThunk[str] | SamplingResult:
         """Generates from an instruction.
 
@@ -936,6 +937,7 @@ class MelleaSession(Generic[ContextT]):
             tool_calls: If true, tool calling is enabled.
             images: A list of images to be used in the instruction or None if none.
             audio: A list of audio blocks to be used in the instruction or None if none.
+            instruction_cls: The `Instruction` subclass to construct for this call. Defaults to `Instruction`. Pass an LLMON-aware subclass (e.g. `LLMONInstruction`) to parse the reply back into a Component.
 
         Returns:
             A `ModelOutputThunk` if `return_sampling_results` is `False`,
@@ -959,6 +961,7 @@ class MelleaSession(Generic[ContextT]):
             model_options=model_options,
             tool_calls=tool_calls,
             allow_context_type_change=self.allow_context_type_change,
+            instruction_cls=instruction_cls,
         )
 
         if isinstance(r, SamplingResult):
@@ -1270,6 +1273,7 @@ class MelleaSession(Generic[ContextT]):
         model_options: dict | None = None,
         tool_calls: bool = False,
         await_result: Literal[True],
+        instruction_cls: type[Instruction] = Instruction,
     ) -> ComputedModelOutputThunk[str]: ...
 
     @overload
@@ -1291,6 +1295,7 @@ class MelleaSession(Generic[ContextT]):
         model_options: dict | None = None,
         tool_calls: bool = False,
         await_result: bool = False,
+        instruction_cls: type[Instruction] = Instruction,
     ) -> ComputedModelOutputThunk[str]: ...
 
     @overload
@@ -1312,6 +1317,7 @@ class MelleaSession(Generic[ContextT]):
         model_options: dict | None = None,
         tool_calls: bool = False,
         await_result: Literal[False] = False,
+        instruction_cls: type[Instruction] = Instruction,
     ) -> ModelOutputThunk[str]: ...
 
     @overload
@@ -1333,6 +1339,7 @@ class MelleaSession(Generic[ContextT]):
         model_options: dict | None = None,
         tool_calls: bool = False,
         await_result: bool = False,
+        instruction_cls: type[Instruction] = Instruction,
     ) -> SamplingResult[str]: ...
 
     async def ainstruct(
@@ -1353,6 +1360,7 @@ class MelleaSession(Generic[ContextT]):
         model_options: dict | None = None,
         tool_calls: bool = False,
         await_result: bool = False,
+        instruction_cls: type[Instruction] = Instruction,
     ) -> ModelOutputThunk[str] | SamplingResult[str]:
         """Generates from an instruction.
 
@@ -1375,6 +1383,7 @@ class MelleaSession(Generic[ContextT]):
             images: A list of images to be used in the instruction or None if none.
             audio: A list of audio blocks to be used in the instruction or None if none.
             await_result: if False and strategy is None, returns uncomputed ModelOutputThunk for streaming. Default is False.
+            instruction_cls: The `Instruction` subclass to construct for this call. Defaults to `Instruction`. Pass an LLMON-aware subclass (e.g. `LLMONInstruction`) to parse the reply back into a Component.
 
         Returns:
             A `ComputedModelOutputThunk` if `strategy` is `None` and `await_results` is `False`,
@@ -1400,6 +1409,7 @@ class MelleaSession(Generic[ContextT]):
             tool_calls=tool_calls,
             await_result=await_result,
             allow_context_type_change=self.allow_context_type_change,
+            instruction_cls=instruction_cls,
         )
 
         if isinstance(r, SamplingResult):
