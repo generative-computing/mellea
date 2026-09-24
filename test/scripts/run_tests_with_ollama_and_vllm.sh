@@ -772,6 +772,12 @@ log "Tests finished with exit code: $EXIT_CODE"
 # Failures are recorded rather than fatal so the log always covers every notebook.
 NOTEBOOK_EXIT_CODE=0
 if [[ "${WITH_EXAMPLES:-0}" == "1" ]]; then
+    # Phased execution stops Ollama after the Ollama phase to release GPU
+    # memory before vLLM/base phases. Notebooks run after those phases and
+    # many declare an Ollama requirement, so start/adopt the server again
+    # before the notebook pass. The EXIT trap cleans it up afterwards.
+    log "Starting Ollama for notebook tests..."
+    start_ollama
     log "Starting notebook tests..."
     if uv run --quiet --frozen --all-groups --all-extras $UV_PYTHON_ARG \
         pytest --nbmake docs/examples/notebooks -v -rs --no-cov \
