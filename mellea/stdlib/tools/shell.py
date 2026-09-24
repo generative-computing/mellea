@@ -627,7 +627,10 @@ def _check_working_dir_restriction(
                 is_relative = True
 
             # Check if path is allowed: in working_dir, /tmp, or /private/tmp (macOS)
-            is_in_tmp = resolved_path.startswith(("/tmp", "/private/tmp"))
+            is_in_tmp = any(
+                _is_path_within(resolved_path, root)
+                for root in ("/tmp", "/private/tmp")
+            )
             is_in_working_dir = (
                 resolved_path == allowed_path_str
                 or resolved_path.startswith(allowed_path_str_prefix)

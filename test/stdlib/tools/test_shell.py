@@ -1240,6 +1240,18 @@ class TestWorkingDirRestriction:
         assert result.skipped is True
         assert result.success is True
 
+    @pytest.mark.parametrize("path", ["/tmp-other/file", "/private/tmp-other/file"])
+    def test_working_dir_blocks_paths_with_only_a_tmp_prefix(self, path: str) -> None:
+        """A sibling of a temporary directory is outside the write exception."""
+        env = StaticBashEnvironment(working_dir="/home/user/project")
+
+        result = env.execute(f"touch {path}")
+
+        assert result.skipped is True
+        assert result.success is False
+        assert result.skip_message is not None
+        assert "outside" in result.skip_message.lower()
+
     def test_working_dir_relative_path_resolved_within_working_dir(self) -> None:
         """Relative paths should be resolved relative to working_dir, not caller's cwd."""
         import tempfile
