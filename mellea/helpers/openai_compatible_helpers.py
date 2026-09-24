@@ -307,6 +307,8 @@ def chat_completion_delta_merge(
 
                 # Get the info from the function chunk.
                 fx_info = tool_call["function"]
+                if fx_info is None:
+                    continue
                 if fx_info["name"] is not None:
                     current_tool["function"]["name"] += fx_info["name"]
 

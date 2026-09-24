@@ -311,6 +311,32 @@ class TestChatCompletionDeltaMerge:
         assert tc[0]["function"]["name"] == "get_weather"
         assert json.loads(tc[0]["function"]["arguments"]) == {"location": "Dallas"}
 
+    def test_tool_call_function_can_arrive_after_id(self):
+        """An SDK delta can contain a tool-call ID before its function."""
+        chunks = [
+            _delta_chunk(
+                tool_calls=[
+                    {"index": 0, "id": "call_abc", "type": "function", "function": None}
+                ]
+            ),
+            _delta_chunk(
+                tool_calls=[
+                    {"index": 0, "function": {"name": "get_weather", "arguments": "{}"}}
+                ],
+                finish_reason="tool_calls",
+            ),
+        ]
+
+        result = chat_completion_delta_merge(chunks)
+
+        assert result["message"]["tool_calls"] == [
+            {
+                "id": "call_abc",
+                "type": "function",
+                "function": {"name": "get_weather", "arguments": "{}"},
+            }
+        ]
+
     def test_multiple_tool_calls_by_index(self):
         chunks = [
             _delta_chunk(
