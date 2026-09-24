@@ -21,7 +21,7 @@ rules:
     ignore:
       - dispatch-to-contribs.yml:33
       - dispatch-to-contribs.yml:34
-      - dispatch-to-contribs.yml:59
+      - dispatch-to-contribs.yml:60
 
   # --- cache-poisoning --------------------------------------------------------
   # astral-sh/setup-uv and actions/setup-node use caching in the
@@ -48,4 +48,4 @@ rules:
   # Fix tracked in: https://github.com/generative-computing/mellea/issues/1534
   artipacked:
     ignore:
-      - publish-release.yml:168
+      - publish-release.yml:173
