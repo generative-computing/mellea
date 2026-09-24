@@ -87,29 +87,46 @@ def _check_ollama_available():
 # Default matches scripts/start_llamacpp.sh, which serves Granite 4.2 3b on 8080.
 LLAMACPP_DEFAULT_BASE_URL = "http://127.0.0.1:8080/v1"
 
+# Property keys llama-server returns from /props. Both predate its OpenAI-compatible
+# endpoints, so fingerprinting on them holds across llama.cpp versions. Pinned in
+# test/test_llamacpp_detection.py against a captured /props payload.
+LLAMACPP_PROPS_KEYS = ("default_generation_settings", "total_slots")
+
 
 def _check_llamacpp_available():
-    """Check if a local llama.cpp server is reachable.
+    """Check whether a local llama.cpp server is loaded and ready to serve.
 
     Reads `LLAMACPP_BASE_URL` (default `http://127.0.0.1:8080/v1`) and probes
-    `/health`, which llama-server answers 200 only once the weights are loaded.
-    A bound port is not enough: llama-server accepts connections while it is
-    still downloading and loading, so a socket check would report ready too early
-    and the test would fail against a server that cannot answer yet.
+    `/props`, requiring a 200 whose JSON body carries `LLAMACPP_PROPS_KEYS`. One
+    request settles both halves of the gate:
 
-    Note: this does not verify which model is loaded. Tests may still fail if the
-    server hosts a model other than the one they request.
+    - Ready, not merely bound. llama-server accepts connections while it is still
+      downloading and loading weights, answering every endpoint 503 "Loading model"
+      until the weights are in, so a socket check (what `_check_ollama_available`
+      does) reports ready long before anything can be served.
+    - llama.cpp, not just something on the port. Port 8080 is contended, and a 200
+      from `/health` is a weak signal there: vLLM, TGI, and plenty of unrelated
+      services answer it too, and the OpenAI-compatible ones would then hand the
+      tests an entirely different model. `/props` is llama.cpp's own endpoint, so a
+      foreign server on the port fails the gate instead.
+
+    Still not verified: which weights llama-server loaded. It ignores the `model`
+    field in a request and serves whatever it was launched with, so a test needing
+    a specific model can still fail against a server that passes this check.
     """
-    import urllib.error
+    import json
     import urllib.request
 
     base_url = os.environ.get("LLAMACPP_BASE_URL", LLAMACPP_DEFAULT_BASE_URL)
-    health_url = base_url.rstrip("/").removesuffix("/v1") + "/health"
+    props_url = base_url.rstrip("/").removesuffix("/v1") + "/props"
     try:
-        with urllib.request.urlopen(health_url, timeout=2) as resp:
-            return resp.status == 200
+        with urllib.request.urlopen(props_url, timeout=2) as resp:
+            props = json.loads(resp.read())
     except Exception:
+        # Refused connection, the 503 while loading (urlopen raises on non-2xx), a
+        # timeout, a non-JSON body from some other service: none of them are usable.
         return False
+    return isinstance(props, dict) and all(k in props for k in LLAMACPP_PROPS_KEYS)
 
 
 _capabilities_cache: dict | None = None

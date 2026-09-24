@@ -273,7 +273,7 @@ def _should_skip_collection(markers, config=None):
             return True, "Ollama not available (port 11434 not listening)"
 
     # Skip tests requiring a local llama.cpp server if it is not reachable. There is
-    # no dedicated --ignore-llamacpp-check: the server either answers /health or the
+    # no dedicated --ignore-llamacpp-check: the server either answers /props or the
     # example cannot run at all, so `--ignore-all-checks` is the only sensible bypass.
     # `.get` rather than `[...]`: partially-populated capability dicts (the import
     # fallback above, and monkeypatched dicts in test_example_collection.py) would
