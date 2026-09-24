@@ -788,7 +788,12 @@ if [[ "$WITH_NOTEBOOKS" == "1" ]]; then
     log "Starting Ollama for notebook tests..."
     start_ollama
     log "Starting notebook tests..."
-    if uv run --quiet --frozen --all-groups --all-extras $UV_PYTHON_ARG \
+    # Notebook code may start a second Ollama process or initialise Torch
+    # through document-processing dependencies. Keep those notebook-side
+    # processes on CPU while they use the harness-owned Ollama HTTP server.
+    NOTEBOOK_CUDA_VISIBLE_DEVICES="${NOTEBOOK_CUDA_VISIBLE_DEVICES:-}"
+    if CUDA_VISIBLE_DEVICES="$NOTEBOOK_CUDA_VISIBLE_DEVICES" \
+        uv run --quiet --frozen --all-groups --all-extras $UV_PYTHON_ARG \
         pytest --nbmake docs/examples/notebooks -v -rs --no-cov \
         -m e2e --nbmake-timeout=900 --timeout=5400 \
         2>&1 | tee "$LOGDIR/pytest_notebooks.log"; then
