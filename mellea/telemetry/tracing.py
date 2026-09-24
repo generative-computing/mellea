@@ -48,6 +48,9 @@ if TYPE_CHECKING:
 try:
     from opentelemetry import context as otel_context, trace
     from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+    from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
+        OTLPSpanExporter as HTTPOTLPSpanExporter,
+    )
     from opentelemetry.sdk.resources import Resource
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
@@ -58,6 +61,7 @@ except ImportError:
     trace = None  # type: ignore
     otel_context = None  # type: ignore
 
+from mellea.telemetry._otlp_config import otlp_protocol_endpoint
 from mellea.telemetry._tracing_helpers import (
     _env_true,
     content_capture_enabled,
@@ -98,12 +102,15 @@ def _setup_tracer_provider() -> Any:
 
     otlp_enabled = _env_true("MELLEA_TRACES_OTLP")
     if otlp_enabled:
-        endpoint = os.getenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT") or os.getenv(
-            "OTEL_EXPORTER_OTLP_ENDPOINT"
-        )
+        protocol, endpoint = otlp_protocol_endpoint("traces")
         if endpoint:
             try:
-                otlp_exporter = OTLPSpanExporter(endpoint=endpoint)
+                if protocol == "grpc":
+                    otlp_exporter = OTLPSpanExporter(endpoint=endpoint)
+                elif protocol == "http/protobuf":
+                    otlp_exporter = HTTPOTLPSpanExporter(endpoint=endpoint)
+                else:
+                    raise ValueError(f"Unsupported OTLP trace protocol: {protocol}")
                 provider.add_span_processor(BatchSpanProcessor(otlp_exporter))
             except Exception as e:
                 warnings.warn(

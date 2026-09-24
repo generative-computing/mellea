@@ -100,6 +100,9 @@ try:
     from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import (
         OTLPMetricExporter,
     )
+    from opentelemetry.exporter.otlp.proto.http.metric_exporter import (
+        OTLPMetricExporter as HTTPOTLPMetricExporter,
+    )
     from opentelemetry.sdk.metrics import MeterProvider
     from opentelemetry.sdk.metrics.export import (
         ConsoleMetricExporter,
@@ -113,6 +116,8 @@ except ImportError:
     _OTEL_AVAILABLE = False
     # Provide dummy types for type hints
     metrics = None  # type: ignore
+
+from mellea.telemetry._otlp_config import otlp_protocol_endpoint
 
 
 def _env_true(name: str) -> bool:
@@ -202,14 +207,15 @@ def _setup_meter_provider() -> Any:
 
     # Add OTLP exporter if explicitly enabled
     if _env_true("MELLEA_METRICS_OTLP"):
-        otlp_endpoint = os.getenv("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT") or os.getenv(
-            "OTEL_EXPORTER_OTLP_ENDPOINT"
-        )
+        protocol, otlp_endpoint = otlp_protocol_endpoint("metrics")
         if otlp_endpoint:
             try:
-                otlp_exporter = OTLPMetricExporter(  # type: ignore
-                    endpoint=otlp_endpoint
-                )
+                if protocol == "grpc":
+                    otlp_exporter = OTLPMetricExporter(endpoint=otlp_endpoint)
+                elif protocol == "http/protobuf":
+                    otlp_exporter = HTTPOTLPMetricExporter(endpoint=otlp_endpoint)
+                else:
+                    raise ValueError(f"Unsupported OTLP metric protocol: {protocol}")
                 readers.append(
                     PeriodicExportingMetricReader(  # type: ignore
                         otlp_exporter, export_interval_millis=export_interval_millis
