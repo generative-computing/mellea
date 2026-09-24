@@ -252,14 +252,20 @@ class SOFAISamplingStrategy(SamplingStrategy):
             True if response indicates success (contains 'yes'), False otherwise.
         """
         response_lower = llm_response.strip().lower()
-        # Check for explicit yes/no
-        if response_lower.startswith("yes"):
+        # Check for explicit yes/no answers, not words such as "yesterday".
+        if re.match(r"yes\b", response_lower):
             return True
-        if response_lower.startswith("no"):
+        if re.match(r"no\b", response_lower):
             return False
-        # Check for yes/no anywhere in first line
+        # Check for a standalone answer in the first line. A negated yes is
+        # failure, not an affirmative judgment.
         first_line = response_lower.split("\n")[0]
-        return "yes" in first_line
+        answer = re.search(r"\b(?:yes|no)\b", first_line)
+        return bool(
+            answer
+            and answer.group() == "yes"
+            and not re.search(r"\bnot\b", first_line[: answer.start()])
+        )
 
     @staticmethod
     def _extract_feedback(llm_response: str) -> str:

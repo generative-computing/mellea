@@ -52,6 +52,11 @@ def test_parse_judgment_case_insensitive():
     assert SOFAISamplingStrategy._parse_judgment("YES") is True
 
 
+def test_parse_judgment_does_not_accept_negated_or_embedded_yes():
+    assert SOFAISamplingStrategy._parse_judgment("The answer is not yes.") is False
+    assert SOFAISamplingStrategy._parse_judgment("Yesterday was different.") is False
+
+
 # --- _extract_feedback ---
 
 
