@@ -184,7 +184,7 @@ class BudgetForcingSamplingStrategy(RejectionSamplingStrategy):
                 result = await think_budget_forcing(
                     backend,
                     next_action,
-                    ctx=context,
+                    ctx=next_context,
                     format=format,
                     tool_calls=tool_calls,
                     think_max_tokens=self.think_max_tokens,
