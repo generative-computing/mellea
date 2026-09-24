@@ -179,6 +179,42 @@ class TemplateFormatter(ChatFormatter):
         """
         return self._stringify(c)
 
+    def prompt_template_for(
+        self, action: Span
+    ) -> tuple[str | None, dict[str, Any] | None]:
+        """Return the template source and rendered variables for an action.
+
+        Recovers the Jinja source and the post-substitution variables the formatter
+        would render `action` with, without producing the rendered string.
+        Best-effort and never raises: returns `(None, None)` when `action` has no
+        template (a `CBlock`, a `ModelOutputThunk`, or a component whose
+        `format_for_llm` returns a plain string) or when lookup or rendering fails.
+
+        Args:
+            action: The component or block a backend generates from.
+
+        Returns:
+            A `(template_source, variables)` tuple, where `variables` maps each
+            template argument to its stringified value, or `(None, None)` when no
+            template applies.
+        """
+        if not isinstance(action, Component):
+            return None, None
+        try:
+            representation = action.format_for_llm()
+            if not isinstance(representation, TemplateRepresentation):
+                return None, None
+            if representation.obj is None:
+                representation.obj = action
+            template = self._load_template(representation)
+            source = self._template_source(template, representation)
+            variables = {
+                key: self._stringify(val) for key, val in representation.args.items()
+            }
+        except Exception:
+            return None, None
+        return source, variables
+
     def _load_template(self, repr: TemplateRepresentation) -> jinja2.Template:
         """This method makes an attempt at auto-loading a Template for the Component.
 
@@ -283,18 +319,24 @@ class TemplateFormatter(ChatFormatter):
     ) -> set[str]:
         """Return the set of externally-expected variable names for a template."""
         try:
-            if representation.template:
-                source = representation.template
-            else:
-                loader = template.environment.loader
-                assert loader is not None
-                assert template.name is not None
-                source, _, _ = loader.get_source(template.environment, template.name)
+            source = self._template_source(template, representation)
             ast = template.environment.parse(source)
             return jinja2.meta.find_undeclared_variables(ast)
         except Exception:
             # Return an empty set if something goes wrong here.
             return set()
+
+    def _template_source(
+        self, template: jinja2.Template, representation: TemplateRepresentation
+    ) -> str:
+        """Return the Jinja source text for a loaded template."""
+        if representation.template:
+            return representation.template
+        loader = template.environment.loader
+        assert loader is not None
+        assert template.name is not None
+        source, _, _ = loader.get_source(template.environment, template.name)
+        return source
 
     def _get_template(self, root_path: str, template_name: str) -> str:
         """Attempts to walk the provided directory structure to find the best matching template.

@@ -1422,6 +1422,10 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         # Set model/provider early so they are available in the error path
         output.generation.model = self._model_id
         output.generation.provider = self._provider
+        (
+            output.generation.prompt_template,
+            output.generation.prompt_template_variables,
+        ) = self.formatter.prompt_template_for(action)
 
         try:
             # To support lazy computation, will need to remove this create_task and store just the unexecuted coroutine.
@@ -1720,6 +1724,10 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             # Set model/provider early so they are available in the error path
             output.generation.model = self._model_id
             output.generation.provider = self._provider
+            (
+                output.generation.prompt_template,
+                output.generation.prompt_template_variables,
+            ) = self.formatter.prompt_template_for(action)
 
             try:
                 # To support lazy computation, will need to remove this create_task and store just the unexecuted coroutine.
@@ -1912,6 +1920,10 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             # Set model/provider early so they are available in the error path
             output.generation.model = self._model_id
             output.generation.provider = self._provider
+            (
+                output.generation.prompt_template,
+                output.generation.prompt_template_variables,
+            ) = self.formatter.prompt_template_for(action)
 
             try:
                 # To support lazy computation, will need to remove this create_task and store just the unexecuted coroutine.

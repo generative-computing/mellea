@@ -223,6 +223,59 @@ def test_string_repre(tf: TemplateFormatter):
     )
 
 
+def test_prompt_template_for_inline_template(tf: TemplateFormatter):
+    """`prompt_template_for` returns the inline template source and its variables."""
+
+    class _TemplInstruction(Instruction):
+        def format_for_llm(self) -> TemplateRepresentation:
+            instr_args = super().format_for_llm().args
+            return TemplateRepresentation(
+                obj=self, args=instr_args, template="""{{description}}"""
+            )
+
+    c = _TemplInstruction("description text", ["req1"])
+    template, variables = tf.prompt_template_for(c)
+    assert template == "{{description}}"
+    assert variables is not None
+    assert variables["description"] == "description text"
+
+
+def test_prompt_template_for_file_template(tf: TemplateFormatter, instr: Instruction):
+    """`prompt_template_for` recovers a file-backed template source and its variables."""
+    template, variables = tf.prompt_template_for(instr)
+    assert isinstance(template, str) and template != ""
+    assert variables is not None
+    # The instruction's description is one of the rendered variables.
+    assert any("Write an essay about LLMs." in str(v) for v in variables.values()), (
+        "rendered variables should include the instruction description"
+    )
+
+
+def test_prompt_template_for_cblock_returns_none(tf: TemplateFormatter):
+    """A `CBlock` action has no template, so `prompt_template_for` returns `(None, None)`."""
+    assert tf.prompt_template_for(CBlock(value="raw")) == (None, None)
+
+
+def test_prompt_template_for_string_repr_returns_none(tf: TemplateFormatter):
+    """A component whose `format_for_llm` returns a plain string has no template."""
+
+    class _StringRepr(MObject):
+        def format_for_llm(self) -> str:
+            return "plain string"
+
+    assert tf.prompt_template_for(_StringRepr()) == (None, None)
+
+
+def test_prompt_template_for_swallows_errors(tf: TemplateFormatter):
+    """An internal failure yields `(None, None)`; the method never raises."""
+
+    class _RaisingRepr(MObject):
+        def format_for_llm(self) -> TemplateRepresentation:
+            raise RuntimeError("boom")
+
+    assert tf.prompt_template_for(_RaisingRepr()) == (None, None)
+
+
 def test_user_path(instr: Instruction):
     """Ensures that paths with no templates don't prevent default template lookups.
 
