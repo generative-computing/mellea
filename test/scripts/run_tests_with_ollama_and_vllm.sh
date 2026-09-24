@@ -88,7 +88,7 @@ else
     OLLAMA_DIR="$HOME/.ollama"
 fi
 OLLAMA_BIN="${OLLAMA_BIN:-$(command -v ollama 2>/dev/null || echo "$HOME/.local/bin/ollama")}"
-OLLAMA_CONTEXT_LENGTH="${OLLAMA_CONTEXT_LENGTH:-2048}"
+OLLAMA_CONTEXT_LENGTH="${OLLAMA_CONTEXT_LENGTH:-4096}"
 # Keep in sync with the models the test suite actually requests.
 # llama3.2:1b is used by the SOFAI tests (test/stdlib/sampling/test_sofai_*.py);
 # it is NOT the same tag as plain "llama3.2" (3B) and must be pulled explicitly,
