@@ -142,11 +142,11 @@ class SOFAISamplingStrategy(SamplingStrategy):
         # Build targeted feedback from validation reasons
         feedback_lines = []
         for req, val_result in failed_items:
-            if val_result.reason:
+            if val_result.reason and val_result.reason != "Requirement not satisfied.":
                 # Use detailed feedback from validator
                 feedback_lines.append(f"* {val_result.reason}")
             else:
-                # Fallback to requirement description
+                # The simple judge's generic reason hides the actual constraint.
                 feedback_lines.append(f"* {req.description}")
 
         repair_message = (

@@ -150,6 +150,18 @@ class TestSOFAIRepair:
         assert isinstance(next_action, Message)
         assert "Be formal" in next_action.content  # Falls back to description
 
+    def test_repair_uses_description_when_reason_is_generic(self):
+        """Simple judge feedback must not hide the failed requirement."""
+        ctx = MagicMock(spec=ChatContext)
+        requirement = Requirement(description="Use a greeting")
+        result = ValidationResult(False, reason="Requirement not satisfied.")
+
+        next_action, _ = SOFAISamplingStrategy.repair(
+            ctx, ctx, [], [], [[(requirement, result)]]
+        )
+
+        assert "Use a greeting" in next_action.content
+
 
 class TestSOFAISelectFromFailure:
     """Test SOFAISamplingStrategy select_from_failure method."""
