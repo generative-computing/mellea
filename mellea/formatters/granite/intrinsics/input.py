@@ -343,7 +343,9 @@ class IntrinsicsRewriter(ChatCompletionRewriter):
                 rewritten_texts, _ = mark_sentence_boundaries(
                     [last_message_as_sentences], last_message_tag
                 )
-                messages[-1].content = rewritten_texts[0]
+                messages[-1] = messages[-1].model_copy(
+                    update={"content": rewritten_texts[0]}
+                )
                 chat_completion = chat_completion.model_copy(
                     update={"messages": messages}
                 )
