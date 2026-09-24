@@ -17,7 +17,8 @@
 #   WITH_VLLM=1 ./run_tests_with_ollama_and_vllm.sh                  # force-enable vLLM
 #   WITH_VLLM=0 ./run_tests_with_ollama_and_vllm.sh                  # force-disable vLLM
 #   SKIP_WARMUP=1 ./run_tests_with_ollama_and_vllm.sh                 # skip ollama model warmup
-#   WITH_EXAMPLES=1 ./run_tests_with_ollama_and_vllm.sh               # include docs/examples/ + notebooks
+#   WITH_EXAMPLES=1 ./run_tests_with_ollama_and_vllm.sh               # include docs/examples/
+#   WITH_NOTEBOOKS=1 ./run_tests_with_ollama_and_vllm.sh              # include notebooks
 #   WITH_TOOLING_TESTS=1 ./run_tests_with_ollama_and_vllm.sh          # include test/tooling/
 #   WITH_VLLM=1 VLLM_MODEL=ibm-granite/granite-4.2-3b \
 #     ./run_tests_with_ollama_and_vllm.sh --group-by-backend -v -s
@@ -528,6 +529,10 @@ else
     PYTEST_DIR="test/"
     log "Examples disabled (WITH_EXAMPLES=0). Pass WITH_EXAMPLES=1 to include docs/examples/."
 fi
+# Standalone callers historically used WITH_EXAMPLES=1 to request both Python
+# examples and notebooks. Keep that behaviour unless an orchestrator needs to
+# run the notebook pass in only one of several phase invocations.
+WITH_NOTEBOOKS="${WITH_NOTEBOOKS:-${WITH_EXAMPLES:-0}}"
 
 # WITH_TOOLING_TESTS=1 includes test/tooling/ (ignored by default)
 PYTEST_ARGS=()
@@ -771,7 +776,7 @@ log "Tests finished with exit code: $EXIT_CODE"
 # per-cell timer first, since that names the offending cell.
 # Failures are recorded rather than fatal so the log always covers every notebook.
 NOTEBOOK_EXIT_CODE=0
-if [[ "${WITH_EXAMPLES:-0}" == "1" ]]; then
+if [[ "$WITH_NOTEBOOKS" == "1" ]]; then
     # Phased execution stops Ollama after the Ollama phase to release GPU
     # memory before vLLM/base phases. Notebooks run after those phases and
     # many declare an Ollama requirement, so start/adopt the server again
@@ -789,7 +794,7 @@ if [[ "${WITH_EXAMPLES:-0}" == "1" ]]; then
         log "Notebooks FAILED. See $LOGDIR/pytest_notebooks.log"
     fi
 else
-    log "Notebooks skipped (WITH_EXAMPLES=0). Pass WITH_EXAMPLES=1 to run them."
+    log "Notebooks skipped (WITH_NOTEBOOKS=0). Pass WITH_NOTEBOOKS=1 to run them."
 fi
 
 if [[ "$EXIT_CODE" -eq 0 ]]; then

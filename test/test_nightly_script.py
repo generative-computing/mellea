@@ -13,6 +13,7 @@ def test_nightly_script_restarts_ollama_before_notebooks():
     source = SCRIPT.read_text(encoding="utf-8")
     notebook_section = source.split("# --- Run notebooks (nbmake) ---", maxsplit=1)[1]
 
-    assert 'if [[ "${WITH_EXAMPLES:-0}" == "1" ]]; then' in notebook_section
+    assert 'WITH_NOTEBOOKS="${WITH_NOTEBOOKS:-${WITH_EXAMPLES:-0}}"' in source
+    assert 'if [[ "$WITH_NOTEBOOKS" == "1" ]]; then' in notebook_section
     assert 'log "Starting Ollama for notebook tests..."' in notebook_section
     assert "    start_ollama" in notebook_section
