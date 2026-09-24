@@ -1369,6 +1369,17 @@ def convert_function_to_ollama_tool(
     # This schema never consumes the return annotation, so an unresolvable one
     # is left as a string rather than being allowed to fail the conversion.
     sig = resolve_signature_annotations(func)
+    variadic = [
+        name
+        for name, param in sig.parameters.items()
+        if param.kind
+        in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
+    ]
+    if variadic:
+        raise ValueError(
+            f"Variadic parameters {variadic} are not supported in tool schemas; "
+            "use explicit named parameters."
+        )
     model_attrs: dict[str, Any] = {
         "__annotations__": {
             k: v.annotation if v.annotation != inspect._empty else str
