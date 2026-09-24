@@ -1397,35 +1397,18 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         extra_params: dict[str, Any] = {}
         if _format is not None:
-            if self._server_type == _ServerType.OPENAI:
-                # The OpenAI platform requires that additionalProperties=False on all response_format schemas.
-                # However, not all schemas generates by Mellea include additionalProperties.
-                # GenerativeStub, in particular, does not add this property.
-                # The easiest way to address this disparity between OpenAI and other inference providers is to
-                # monkey-patch the response format exactly when we are actually using the OpenAI server.
-                #
-                # This only addresses the additionalProperties=False constraint.
-                # Other constraints we should be checking/patching are described here:
-                # https://platform.openai.com/docs/guides/structured-outputs?api-mode=chat
-                monkey_patched_response_schema = _format.model_json_schema()  # type: ignore
-                monkey_patched_response_schema["additionalProperties"] = False
-                extra_params["response_format"] = {
-                    "type": "json_schema",
-                    "json_schema": {
-                        "name": _format.__name__,
-                        "schema": monkey_patched_response_schema,
-                        "strict": True,
-                    },
-                }
-            else:
-                extra_params["response_format"] = {
-                    "type": "json_schema",
-                    "json_schema": {
-                        "name": _format.__name__,
-                        "schema": _format.model_json_schema(),  # type: ignore
-                        "strict": True,
-                    },
-                }
+            # A compatible proxy can route this request to the OpenAI platform,
+            # which requires this constraint even when the base URL is not OpenAI's.
+            response_schema = _format.model_json_schema()  # type: ignore
+            response_schema["additionalProperties"] = False
+            extra_params["response_format"] = {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": _format.__name__,
+                    "schema": response_schema,
+                    "strict": True,
+                },
+            }
 
         # Append tool call information if applicable.
         tools: dict[str, AbstractMelleaTool] = dict()

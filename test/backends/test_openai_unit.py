@@ -624,6 +624,41 @@ async def test_format_assumption_not_relogged_per_generation():
     assert [m for m in msgs if _FORMAT_ASSUMPTION in m] == []
 
 
+async def test_proxy_structured_output_schema_disallows_extra_properties():
+    """OpenAI-compatible proxies can route strict schemas to OpenAI itself."""
+    import asyncio
+
+    from pydantic import BaseModel
+
+    from mellea.core.base import CBlock
+    from mellea.stdlib.context import ChatContext
+
+    class Answer(BaseModel):
+        value: int
+
+    with patch(
+        "mellea.backends.openai.is_vllm_server_with_structured_output",
+        return_value=False,
+    ):
+        backend = OpenAIBackend(
+            model_id="openai/gpt-4o-mini",
+            api_key="fake-key",
+            base_url="https://openrouter.ai/api/v1",
+        )
+
+    with patch.object(
+        backend._async_client.chat.completions, "create", new_callable=AsyncMock
+    ) as create:
+        mot, _ = await backend.generate_from_chat_context(
+            CBlock(value="hello"), ChatContext(), _format=Answer
+        )
+        schema = create.call_args.kwargs["response_format"]["json_schema"]["schema"]
+        await asyncio.sleep(0)
+        await mot.aclose()
+
+    assert schema["additionalProperties"] is False
+
+
 def test_default_extra_body_applied_when_no_per_call_override():
     """Construction-time default_extra_body is present in every merged result."""
     backend = OpenAIBackend(
