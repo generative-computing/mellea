@@ -108,6 +108,12 @@ switch = [
     "huggingface-hub>=0.33.4",
 ]
 
+# LLMON (LLM Object Notation, arXiv:2603.22519) reply parsing. The distribution
+# is named `llmon` but its import root is `converters` (see llmon_instruction.py).
+llmon = [
+    "llmon",
+]
+
 backends = ["mellea[watsonx,hf,litellm]"]
 
 hooks = [
@@ -116,7 +122,7 @@ hooks = [
     "grpcio>=1.78.0",
 ]
 
-all = ["mellea[backends,docling,tools,telemetry,server,sandbox,switch,granite_retriever,hooks,cli]"]
+all = ["mellea[backends,docling,tools,telemetry,server,sandbox,switch,granite_retriever,hooks,cli,llmon]"]
 
 [dependency-groups]
 # Development groups: uv sync --all-groups
@@ -346,6 +352,12 @@ disable_error_code = [
 module = "cpex.*"
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+# `converters` is the import root of the `llmon` library (the `llmon` extra), an
+# optional dependency absent from environments that install mellea without it.
+module = "converters.*"
+ignore_missing_imports = true
+
 
 # -----------------------------
 # Codespell - Spell Checking
@@ -452,3 +464,6 @@ override-dependencies = ["transformers>5.5.0,<6.0.0"]
 
 [tool.uv.sources]
 mellea = { workspace = true }
+# LLMON converter library. Pinned to a local sibling checkout for development;
+# replace with a published index or git URL before shipping beyond dev.
+llmon = { path = "../llmon", editable = true }

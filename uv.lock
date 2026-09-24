@@ -2914,6 +2914,39 @@ docker = [
 ]
 
 [[package]]
+name = "llmon"
+version = "0.0.1"
+source = { editable = "../llmon" }
+
+[package.metadata]
+requires-dist = [
+    { name = "huggingface-hub", marker = "extra == 'unstructured-text'", specifier = ">=0.23" },
+    { name = "mypy", marker = "extra == 'dev'" },
+    { name = "mypy-extensions", marker = "extra == 'dev'" },
+    { name = "pdm", marker = "extra == 'dev'", specifier = ">=2.24.0" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0" },
+    { name = "sphinx-autodoc-typehints", marker = "extra == 'sphinx'" },
+    { name = "sphinx-mdinclude", marker = "extra == 'sphinx'" },
+    { name = "sphinx-rtd-theme", marker = "extra == 'sphinx'" },
+    { name = "torch", marker = "extra == 'unstructured-text'", specifier = ">=2.1" },
+    { name = "transformers", marker = "extra == 'unstructured-text'", specifier = ">=4.48" },
+]
+provides-extras = ["unstructured-text", "dev", "sphinx"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "mypy" },
+    { name = "mypy-extensions" },
+    { name = "pdm", specifier = ">=2.24.0" },
+    { name = "pytest", specifier = ">=7.0" },
+]
+sphinx = [
+    { name = "sphinx-autodoc-typehints" },
+    { name = "sphinx-mdinclude" },
+    { name = "sphinx-rtd-theme" },
+]
+
+[[package]]
 name = "lomond"
 version = "0.3.3"
 source = { registry = "https://pypi.org/simple" }
@@ -3255,6 +3288,7 @@ all = [
     { name = "litellm" },
     { name = "llguidance" },
     { name = "llm-sandbox", extra = ["docker"] },
+    { name = "llmon" },
     { name = "mcp" },
     { name = "omegaconf" },
     { name = "opencv-python-headless" },
@@ -3317,6 +3351,9 @@ hooks = [
 litellm = [
     { name = "boto3" },
     { name = "litellm" },
+]
+llmon = [
+    { name = "llmon" },
 ]
 sandbox = [
     { name = "llm-sandbox", extra = ["docker"] },
@@ -3436,9 +3473,10 @@ requires-dist = [
     { name = "litellm", marker = "extra == 'litellm'", specifier = ">=1.95.0" },
     { name = "llguidance", marker = "extra == 'hf'" },
     { name = "llm-sandbox", extras = ["docker"], marker = "extra == 'sandbox'", specifier = ">=0.3.23" },
+    { name = "llmon", marker = "extra == 'llmon'", editable = "../llmon" },
     { name = "math-verify" },
     { name = "mcp", marker = "extra == 'tools'", specifier = ">=1.27.0" },
-    { name = "mellea", extras = ["backends", "docling", "tools", "telemetry", "server", "sandbox", "switch", "granite-retriever", "hooks", "cli"], marker = "extra == 'all'", editable = "." },
+    { name = "mellea", extras = ["backends", "docling", "tools", "telemetry", "server", "sandbox", "switch", "granite-retriever", "hooks", "cli", "llmon"], marker = "extra == 'all'", editable = "." },
     { name = "mellea", extras = ["cli"], marker = "extra == 'server'", editable = "." },
     { name = "mellea", extras = ["hooks"], marker = "extra == 'telemetry'", editable = "." },
     { name = "mellea", extras = ["watsonx", "hf", "litellm"], marker = "extra == 'backends'", editable = "." },
@@ -3468,7 +3506,7 @@ requires-dist = [
     { name = "typer", marker = "extra == 'cli'" },
     { name = "uvicorn", marker = "extra == 'server'" },
 ]
-provides-extras = ["hf", "litellm", "watsonx", "tools", "telemetry", "docling", "granite-retriever", "cli", "server", "sandbox", "switch", "backends", "hooks", "all"]
+provides-extras = ["hf", "litellm", "watsonx", "tools", "telemetry", "docling", "granite-retriever", "cli", "server", "sandbox", "switch", "llmon", "backends", "hooks", "all"]
 
 [package.metadata.requires-dev]
 build = [{ name = "pdm", specifier = ">=2.24.0" }]

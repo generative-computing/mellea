@@ -876,6 +876,7 @@ class MelleaSession(Generic[ContextT]):
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
+        instruction_cls: type[Instruction] = Instruction,
     ) -> ComputedModelOutputThunk[str]: ...
 
     @overload
@@ -896,6 +897,7 @@ class MelleaSession(Generic[ContextT]):
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
+        instruction_cls: type[Instruction] = Instruction,
     ) -> SamplingResult[str]: ...
 
     def instruct(
