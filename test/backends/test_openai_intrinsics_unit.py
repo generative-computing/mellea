@@ -384,6 +384,49 @@ async def test_no_adapter_raises_valueerror():
         await mfuncs.aact(Intrinsic("answerability"), ctx, backend, strategy=None)
 
 
+def test_remove_adapter_frees_name_for_reuse():
+    """Removing a shim adapter frees its name and clears its backend reference."""
+    backend = _make_backend_with_adapter(_SIMPLE_CONFIG)
+    qualified_name = "answerability_alora"
+    first = backend._added_adapters[qualified_name]
+
+    backend.remove_adapter(qualified_name)
+
+    assert qualified_name not in backend.list_adapters()
+    assert isinstance(first, EmbeddedIntrinsicAdapter)
+    assert first.backend is None
+
+    replacement = EmbeddedIntrinsicAdapter(
+        intrinsic_name="answerability",
+        config=deepcopy(_SIMPLE_CONFIG),
+        technology="alora",
+    )
+    backend.add_adapter(replacement)
+
+    assert backend._added_adapters[qualified_name] is replacement
+
+
+def test_remove_composed_adapter_clears_cached_config():
+    """Removing a composed adapter clears both OpenAI backend registries."""
+    backend = _make_backend_with_composed_adapter(_SIMPLE_CONFIG)
+    qualified_name = "answerability_alora"
+
+    backend.remove_adapter(qualified_name)
+
+    assert qualified_name not in backend._added_adapters
+    assert qualified_name not in backend._composed_adapter_configs
+
+
+def test_remove_unregistered_adapter_is_noop(caplog):
+    """Removing an unknown adapter logs the event and returns without error."""
+    backend = _make_backend_with_adapter(_SIMPLE_CONFIG)
+
+    with caplog.at_level(logging.INFO):
+        backend.remove_adapter("never_registered_lora")
+
+    assert "adapter was not registered" in caplog.text
+
+
 async def test_streaming_raises():
     """Intrinsics do not support streaming — should raise NotImplementedError."""
     backend = _make_backend_with_adapter(_SIMPLE_CONFIG)

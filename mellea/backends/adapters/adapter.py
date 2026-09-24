@@ -639,11 +639,11 @@ class AdapterMixin(Backend, abc.ABC):
     def remove_adapter(self, adapter_qualified_name: str) -> None:
         """Deregister a previously added adapter, freeing its qualified name for reuse.
 
-        The inverse of `add_adapter()`. LocalFile/PEFT reality only today
-        (#1528) — `LocalFileBinding.release()` calls this after
-        `unload_peft_adapter()` so a released `qualified_name` becomes
-        claimable by a fresh binding rather than staying claimed for the
-        backend's lifetime.
+        The inverse of `add_adapter()`. LocalFile/PEFT bindings call this from
+        `LocalFileBinding.release()` after unloading their weights. Embedded
+        backends use it to clear their registration and cached configuration;
+        their weights are already part of the served model, so there is no
+        unload step.
 
         Args:
             adapter_qualified_name (str): The `adapter.qualified_name` of the
