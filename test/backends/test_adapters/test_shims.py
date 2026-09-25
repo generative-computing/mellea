@@ -27,6 +27,7 @@ from mellea.backends.adapters import (
 from mellea.backends.adapters._core import Identity, LocalFileBinding
 from mellea.backends.adapters.adapter import AdapterMixin, _composed_adapter_key
 from mellea.backends.adapters.catalog import AdapterType, IntrinsicsCatalogEntry
+from mellea.formatters.granite.intrinsics import AdapterNotFoundError
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -38,6 +39,19 @@ _MOCK_CATALOG_ENTRY = IntrinsicsCatalogEntry(
     revision="abc123deadbeef",
     adapter_types=(AdapterType.ALORA, AdapterType.LORA),
 )
+
+
+def _lora_only_io_yaml(*args, **kwargs):
+    """Stub for `obtain_io_yaml`: only the LoRA slot exists, no network.
+
+    `resolve_adapter` is availability-aware and probes `obtain_io_yaml` before
+    registering. This makes the aLoRA probe miss and the LoRA probe hit, so the
+    walk registers a LoRA `LocalFileBinding` — the behaviour these resolve tests
+    assert — without touching Hugging Face Hub.
+    """
+    if kwargs.get("adapter_type") == "alora":
+        raise AdapterNotFoundError("no aLoRA adapter in this fixture")
+    return "/fake/answerability/granite-4.1-3b/lora/io.yaml"
 
 
 def _make_intrinsic_adapter(intrinsic_name: str = "answerability") -> IntrinsicAdapter:
@@ -613,9 +627,15 @@ def test_resolve_adapter_lazy_creates_and_returns():
         AdapterMixin._find_adapter(mock_backend, cap, types)
     )
 
-    with patch(
-        "mellea.backends.adapters.adapter.fetch_intrinsic_metadata",
-        return_value=mock_catalog_entry,
+    with (
+        patch(
+            "mellea.backends.adapters.adapter.fetch_intrinsic_metadata",
+            return_value=mock_catalog_entry,
+        ),
+        patch(
+            "mellea.backends.adapters.adapter.intrinsics.obtain_io_yaml",
+            side_effect=_lora_only_io_yaml,
+        ),
     ):
         result = AdapterMixin.resolve_adapter(mock_backend, "answerability")
 
@@ -657,9 +677,15 @@ def test_resolve_adapter_catalog_alias_returns_registered_adapter():
         AdapterMixin._find_adapter(mock_backend, cap, types)
     )
 
-    with patch(
-        "mellea.backends.adapters.adapter.fetch_intrinsic_metadata",
-        return_value=mock_catalog_entry,
+    with (
+        patch(
+            "mellea.backends.adapters.adapter.fetch_intrinsic_metadata",
+            return_value=mock_catalog_entry,
+        ),
+        patch(
+            "mellea.backends.adapters.adapter.intrinsics.obtain_io_yaml",
+            side_effect=_lora_only_io_yaml,
+        ),
     ):
         result = AdapterMixin.resolve_adapter(mock_backend, "guardian-core")
 
@@ -750,6 +776,10 @@ def test_resolve_adapter_survives_reentrant_activation_lock():
             "mellea.backends.adapters.adapter.fetch_intrinsic_metadata",
             return_value=mock_catalog_entry,
         ),
+        patch(
+            "mellea.backends.adapters.adapter.intrinsics.obtain_io_yaml",
+            side_effect=_lora_only_io_yaml,
+        ),
         real_lock,  # simulate an already-in-progress caller holding the lock
     ):
         result = AdapterMixin.resolve_adapter(mock_backend, "answerability")
@@ -797,9 +827,15 @@ def test_resolve_adapter_holds_resolve_lock_during_lora_registration():
         AdapterMixin._find_adapter(mock_backend, cap, types)
     )
 
-    with patch(
-        "mellea.backends.adapters.adapter.fetch_intrinsic_metadata",
-        return_value=mock_catalog_entry,
+    with (
+        patch(
+            "mellea.backends.adapters.adapter.fetch_intrinsic_metadata",
+            return_value=mock_catalog_entry,
+        ),
+        patch(
+            "mellea.backends.adapters.adapter.intrinsics.obtain_io_yaml",
+            side_effect=_lora_only_io_yaml,
+        ),
     ):
         AdapterMixin.resolve_adapter(mock_backend, "answerability")
 

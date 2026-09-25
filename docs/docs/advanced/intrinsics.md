@@ -15,6 +15,10 @@ LoRA/aLoRA weights are loaded locally, selected from an embedded checkpoint, or
 bundled into an Ollama model — faster and more reliable than prompting a
 general-purpose model for these specialised micro-tasks.
 
+When no trained adapter exists for a capability on the target model, resolution
+transparently falls back to a hand-authored prompt run against the base model, so the
+capability stays available — see [Prompt fallback](#prompt-fallback).
+
 > **Backend note:** Adapter functions work with three backends:
 >
 > - **LocalHFBackend** — loads LoRA/aLoRA adapters from the catalog at runtime.
@@ -341,18 +345,40 @@ For a fully custom, non-catalog adapter — your own trained LoRA/aLoRA weights,
 not one of the built-in adapter functions — see
 [Adding a custom adapter function in 20 lines](../tutorials/07-custom-adapter-function.md).
 
+## Prompt fallback
+
+Not every capability has a trained adapter for every model. When no aLoRA or LoRA
+adapter exists for a capability on the target model, resolution falls back to a
+**prompt**: a hand-authored instruction (packaged as an `io.yaml`) run against the
+plain base model. This keeps the capability available — including on models a LoRA
+cannot be loaded into — rather than failing.
+
+Resolution walks the chain in order and uses the first rung that exists:
+
+1. a model-specific aLoRA adapter,
+2. a model-specific LoRA adapter,
+3. a model-specific prompt,
+4. a model-agnostic `any` prompt (Mellea logs a warning, since an `any` prompt is
+   less accurate than a model-tuned one).
+
+The fallback is transparent: the same helper calls (`rag.check_answerability`,
+`core.requirement_check`, …) and `Intrinsic` components work unchanged — there is no
+adapter to register and nothing to activate. A prompt fallback carries no weights (it
+is a `PromptBinding`; see below) and runs the intrinsic's instruction against the base
+model, parsing the response through the same output contract a trained adapter uses.
+
 ## Composable adapter construction (advanced)
 
 `Adapter` composes an `Identity`, an output contract (`IOContract`), and a
 weights binding into a single, inspectable object. Both `LocalHFBackend` and
 `OpenAIBackend` accept a composed `Adapter` directly via `add_adapter` —
 dispatching on the weights binding's reality (`LocalFileBinding` for
-LocalFile/PEFT, `EmbeddedBinding` for Embedded/Granite Switch) — alongside
-the deprecated shim classes, which remain functional for now (Epic #929,
-issue #1144). An `EmbeddedBinding` adapter additionally requires `add_adapter`'s
-`config=` argument (the raw io.yaml mapping) — `add_adapter` raises `ValueError`
-without it, since that reality's config cannot be cheaply re-derived later; see
-below.
+LocalFile/PEFT, `EmbeddedBinding` for Embedded/Granite Switch, `PromptBinding`
+for a weightless prompt fallback) — alongside the deprecated shim classes,
+which remain functional for now (Epic #929, issue #1144). An `EmbeddedBinding`
+adapter additionally requires `add_adapter`'s `config=` argument (the raw
+io.yaml mapping) — `add_adapter` raises `ValueError` without it, since that
+reality's config cannot be cheaply re-derived later; see below.
 
 Each weights binding models how its deployment turns an adapter on.
 `LocalFileBinding` downloads and loads LoRA/aLoRA weights, so it exposes a
@@ -401,13 +427,19 @@ switch_backend.register_embedded_adapter_model(
 )
 ```
 
+`PromptBinding` has no weights to manage, so there is nothing to load or activate.
+Its lifecycle verbs are no-ops (`activate()` only logs that the fallback fired), and
+generation runs against the base model with the injected instruction. You never
+construct one directly; `resolve_adapter` registers it when the chain lands on a
+prompt.
+
 Weights-binding support by backend today:
 
-| Backend | `LocalFileBinding` (LocalFile/PEFT) | `EmbeddedBinding` (Embedded/Granite Switch) | `ServerMediatedBinding` |
-| --- | --- | --- | --- |
-| `LocalHFBackend` | ✅ shipping — `add_adapter` accepts a composed `Adapter` or a bare `LocalFileBinding` directly | ✅ shipping — `load_embedded_adapters=True`, or `add_adapter(adapter, config=...)`/`register_embedded_adapter_model` with a composed `Adapter` | — |
-| `OpenAIBackend` | — | ✅ shipping — `load_embedded_adapters=True`, or `add_adapter(adapter, config=...)`/`register_embedded_adapter_model` with a composed `Adapter` | — |
-| `OllamaModelBackend` | — | — | ✅ model selection through `adapter_models` for catalogued adapter functions; lifecycle telemetry is tracked separately |
+| Backend | `LocalFileBinding` (LocalFile/PEFT) | `EmbeddedBinding` (Embedded/Granite Switch) | `ServerMediatedBinding` | `PromptBinding` (prompt fallback) |
+| --- | --- | --- | --- | --- |
+| `LocalHFBackend` | ✅ shipping — `add_adapter` accepts a composed `Adapter` or a bare `LocalFileBinding` directly | ✅ shipping — `load_embedded_adapters=True`, or `add_adapter(adapter, config=...)`/`register_embedded_adapter_model` with a composed `Adapter` | — | ✅ shipping — registered by `resolve_adapter` when the fallback chain lands on a prompt |
+| `OpenAIBackend` | — | ✅ shipping — `load_embedded_adapters=True`, or `add_adapter(adapter, config=...)`/`register_embedded_adapter_model` with a composed `Adapter` | — | — |
+| `OllamaModelBackend` | — | — | ✅ model selection through `adapter_models` for catalogued adapter functions; lifecycle telemetry is tracked separately | — |
 
 `ServerMediatedBinding` currently supports Ollama's bundled-model path. A full
 server-mediated lifecycle and telemetry contract is tracked separately.
