@@ -436,7 +436,7 @@ exclude_lines = [
     "if __name__ == .__main__.:",
     "if TYPE_CHECKING:",
     "@abstractmethod",
-    "\\.\\.\\.",  # Ellipsis in function bodies
+    "^\\s*\\.\\.\\.$",  # Ellipsis stub bodies (not `...` inside e.g. Callable[..., T])
 ]
 
 [tool.coverage.html]
