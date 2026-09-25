@@ -9,7 +9,9 @@ from PIL import Image
 from mellea import start_session
 from mellea.stdlib.context import ChatContext
 
-m = start_session(model_id="granite3.2-vision", ctx=ChatContext())
+m = start_session(
+    model_id="hf.co/ibm-granite/granite-vision-4.1-4b-GGUF:Q4_K_M", ctx=ChatContext()
+)
 # m = start_session(model_id="llava", ctx=ChatContext())
 
 # load image

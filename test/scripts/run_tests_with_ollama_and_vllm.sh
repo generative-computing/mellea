@@ -17,7 +17,8 @@
 #   WITH_VLLM=1 ./run_tests_with_ollama_and_vllm.sh                  # force-enable vLLM
 #   WITH_VLLM=0 ./run_tests_with_ollama_and_vllm.sh                  # force-disable vLLM
 #   SKIP_WARMUP=1 ./run_tests_with_ollama_and_vllm.sh                 # skip ollama model warmup
-#   WITH_EXAMPLES=1 ./run_tests_with_ollama_and_vllm.sh               # include docs/examples/ + notebooks
+#   WITH_EXAMPLES=1 ./run_tests_with_ollama_and_vllm.sh               # include docs/examples/
+#   WITH_NOTEBOOKS=1 ./run_tests_with_ollama_and_vllm.sh              # include notebooks
 #   WITH_TOOLING_TESTS=1 ./run_tests_with_ollama_and_vllm.sh          # include test/tooling/
 #   WITH_VLLM=1 VLLM_MODEL=ibm-granite/granite-4.2-3b \
 #     ./run_tests_with_ollama_and_vllm.sh --group-by-backend -v -s
@@ -88,7 +89,7 @@ else
     OLLAMA_DIR="$HOME/.ollama"
 fi
 OLLAMA_BIN="${OLLAMA_BIN:-$(command -v ollama 2>/dev/null || echo "$HOME/.local/bin/ollama")}"
-OLLAMA_CONTEXT_LENGTH="${OLLAMA_CONTEXT_LENGTH:-2048}"
+OLLAMA_CONTEXT_LENGTH="${OLLAMA_CONTEXT_LENGTH:-4096}"
 # Keep in sync with the models the test suite actually requests.
 # llama3.2:1b is used by the SOFAI tests (test/stdlib/sampling/test_sofai_*.py);
 # it is NOT the same tag as plain "llama3.2" (3B) and must be pulled explicitly,
@@ -356,9 +357,13 @@ fi
 
 # start_ollama: start (or adopt) the Ollama server, pull models, warm up.
 start_ollama() {
+    # OLLAMA_HOST is initially a hostname/IP, but after the first start this
+    # function exports it with the selected port. Strip any previous port so
+    # restarting for the notebook pass cannot produce host:port:port.
+    local ollama_host="${OLLAMA_HOST%%:*}"
     # --- Check if ollama is already running ---
-    if curl -sf "http://${OLLAMA_HOST}:${OLLAMA_PORT}/api/tags" >/dev/null 2>&1; then
-        log "Ollama already running on ${OLLAMA_HOST}:${OLLAMA_PORT} — using existing server"
+    if curl -sf "http://${ollama_host}:${OLLAMA_PORT}/api/tags" >/dev/null 2>&1; then
+        log "Ollama already running on ${ollama_host}:${OLLAMA_PORT} — using existing server"
         OLLAMA_PID=""
     else
         # Find a free port starting from OLLAMA_PORT
@@ -369,8 +374,8 @@ start_ollama() {
         done
 
         # --- Start ollama server ---
-        log "Starting ollama server on ${OLLAMA_HOST}:${OLLAMA_PORT}..."
-        export OLLAMA_HOST="${OLLAMA_HOST}:${OLLAMA_PORT}"
+        log "Starting ollama server on ${ollama_host}:${OLLAMA_PORT}..."
+        export OLLAMA_HOST="${ollama_host}:${OLLAMA_PORT}"
         export OLLAMA_MODELS="${OLLAMA_DIR}/models"
         export OLLAMA_CONTEXT_LENGTH
         mkdir -p "$OLLAMA_MODELS"
@@ -528,6 +533,10 @@ else
     PYTEST_DIR="test/"
     log "Examples disabled (WITH_EXAMPLES=0). Pass WITH_EXAMPLES=1 to include docs/examples/."
 fi
+# Standalone callers historically used WITH_EXAMPLES=1 to request both Python
+# examples and notebooks. Keep that behaviour unless an orchestrator needs to
+# run the notebook pass in only one of several phase invocations.
+WITH_NOTEBOOKS="${WITH_NOTEBOOKS:-${WITH_EXAMPLES:-0}}"
 
 # WITH_TOOLING_TESTS=1 includes test/tooling/ (ignored by default)
 PYTEST_ARGS=()
@@ -771,9 +780,20 @@ log "Tests finished with exit code: $EXIT_CODE"
 # per-cell timer first, since that names the offending cell.
 # Failures are recorded rather than fatal so the log always covers every notebook.
 NOTEBOOK_EXIT_CODE=0
-if [[ "${WITH_EXAMPLES:-0}" == "1" ]]; then
+if [[ "$WITH_NOTEBOOKS" == "1" ]]; then
+    # Phased execution stops Ollama after the Ollama phase to release GPU
+    # memory before vLLM/base phases. Notebooks run after those phases and
+    # many declare an Ollama requirement, so start/adopt the server again
+    # before the notebook pass. The EXIT trap cleans it up afterwards.
+    log "Starting Ollama for notebook tests..."
+    start_ollama
     log "Starting notebook tests..."
-    if uv run --quiet --frozen --all-groups --all-extras $UV_PYTHON_ARG \
+    # Notebook code may start a second Ollama process or initialise Torch
+    # through document-processing dependencies. Keep those notebook-side
+    # processes on CPU while they use the harness-owned Ollama HTTP server.
+    NOTEBOOK_CUDA_VISIBLE_DEVICES="${NOTEBOOK_CUDA_VISIBLE_DEVICES:-}"
+    if CUDA_VISIBLE_DEVICES="$NOTEBOOK_CUDA_VISIBLE_DEVICES" \
+        uv run --quiet --frozen --all-groups --all-extras $UV_PYTHON_ARG \
         pytest --nbmake docs/examples/notebooks -v -rs --no-cov \
         -m e2e --nbmake-timeout=900 --timeout=5400 \
         2>&1 | tee "$LOGDIR/pytest_notebooks.log"; then
@@ -783,7 +803,7 @@ if [[ "${WITH_EXAMPLES:-0}" == "1" ]]; then
         log "Notebooks FAILED. See $LOGDIR/pytest_notebooks.log"
     fi
 else
-    log "Notebooks skipped (WITH_EXAMPLES=0). Pass WITH_EXAMPLES=1 to run them."
+    log "Notebooks skipped (WITH_NOTEBOOKS=0). Pass WITH_NOTEBOOKS=1 to run them."
 fi
 
 if [[ "$EXIT_CODE" -eq 0 ]]; then

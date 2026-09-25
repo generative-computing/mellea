@@ -111,7 +111,7 @@ def test_empty_table():
     assert table is None, "table should be empty when supplied string is empty"
 
 
-@pytest.mark.skip  # Test requires too much memory for smaller machines.
+@pytest.mark.skip(reason="Live HF RichDocument generation requires a high-memory GPU.")
 @pytest.mark.e2e
 @pytest.mark.huggingface
 @pytest.mark.qualitative

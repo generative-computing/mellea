@@ -17,7 +17,12 @@ from mellea.core import ImageBlock
 _ollama_host = os.environ.get("OLLAMA_HOST", "localhost:11434")
 if not _ollama_host.startswith("http"):
     _ollama_host = f"http://{_ollama_host}"
-m = MelleaSession(LiteLLMBackend("ollama/granite3.2-vision", base_url=_ollama_host))
+m = MelleaSession(
+    LiteLLMBackend(
+        "ollama/hf.co/ibm-granite/granite-vision-4.1-4b-GGUF:Q4_K_M",
+        base_url=_ollama_host,
+    )
+)
 # m = MelleaSession(LiteLLMBackend("ollama/llava"))
 # m = MelleaSession(LiteLLMBackend("anthropic/claude-3-haiku-20240307"))
 
