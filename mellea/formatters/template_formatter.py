@@ -15,7 +15,7 @@ import os
 import re
 import sys
 from collections.abc import Iterable, Mapping
-from dataclasses import fields
+from dataclasses import fields, replace
 from typing import Any
 
 import jinja2
@@ -205,7 +205,7 @@ class TemplateFormatter(ChatFormatter):
             if not isinstance(representation, TemplateRepresentation):
                 return None, None
             if representation.obj is None:
-                representation.obj = action
+                representation = replace(representation, obj=action)
             template = self._load_template(representation)
             source = self._template_source(template, representation)
             variables = {
