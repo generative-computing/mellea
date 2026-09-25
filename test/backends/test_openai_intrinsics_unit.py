@@ -389,6 +389,16 @@ def test_remove_adapter_frees_name_for_reuse():
     backend = _make_backend_with_adapter(_SIMPLE_CONFIG)
     qualified_name = "answerability_alora"
     first = backend._added_adapters[qualified_name]
+    replacement = EmbeddedIntrinsicAdapter(
+        intrinsic_name="answerability",
+        config=deepcopy(_SIMPLE_CONFIG),
+        technology="alora",
+    )
+
+    # While the name is occupied, the registration is refused.
+    backend.add_adapter(replacement)
+    assert backend._added_adapters[qualified_name] is first
+    assert replacement.backend is None
 
     backend.remove_adapter(qualified_name)
 
@@ -396,11 +406,6 @@ def test_remove_adapter_frees_name_for_reuse():
     assert isinstance(first, EmbeddedIntrinsicAdapter)
     assert first.backend is None
 
-    replacement = EmbeddedIntrinsicAdapter(
-        intrinsic_name="answerability",
-        config=deepcopy(_SIMPLE_CONFIG),
-        technology="alora",
-    )
     backend.add_adapter(replacement)
 
     assert backend._added_adapters[qualified_name] is replacement
