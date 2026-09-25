@@ -943,6 +943,8 @@ class GenerationMetadata:
         usage: Token usage dict with 'prompt_tokens', 'completion_tokens', 'total_tokens'.
         model: Requested model identifier.
         provider: Provider name (e.g. 'openai', 'ollama', 'huggingface', 'watsonx').
+        prompt_template: Source text of the template rendered for the action, if it has one.
+        prompt_template_variables: Post-substitution variables the template was rendered with.
         ttfb_ms: Time to first token in milliseconds; None for non-streaming.
         streaming: Whether this generation used streaming mode.
         response_model: Model identifier reported on the response; may differ from the requested model.
@@ -970,6 +972,21 @@ class GenerationMetadata:
 
     provider: str | None = None
     """Provider name (e.g. 'openai', 'ollama', 'huggingface', 'watsonx')."""
+
+    prompt_template: str | None = None
+    """Source text of the template rendered for the action.
+
+    Set at generation time by template-rendering backends. `None` when the action
+    has no template (e.g. a `CBlock`, or a component whose `format_for_llm`
+    returns a plain string).
+    """
+
+    prompt_template_variables: dict[str, Any] | None = None
+    """Post-substitution variables the template was rendered with.
+
+    The stringified template arguments used at generation time; may contain user
+    data. `None` when the action has no template.
+    """
 
     ttfb_ms: float | None = None
     """Time to first token in milliseconds.
