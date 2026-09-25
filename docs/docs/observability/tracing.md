@@ -174,8 +174,8 @@ produces a passing sample or exhausts its budget.
 | `mellea.sampling.strategy_type` | Sampling strategy class name (e.g., `RejectionSamplingStrategy`) |
 | `mellea.sampling.loop_budget` | Maximum iterations per subsample |
 | `mellea.sampling.requirement_count` | Number of requirements validated each iteration |
-| `mellea.sampling.success` | Whether at least one attempt passed all requirements |
-| `mellea.sampling.iterations_used` | Total iterations that completed across subsamples |
+| `mellea.sampling.success` | Whether the selected attempt passed all requirements. For fan-out strategies such as Majority voting, reflects the selected branch only. |
+| `mellea.sampling.iterations_used` | Number of iterations represented by the sampling result. For fan-out strategies such as Majority voting, this represents the selected branch. |
 | `mellea.sampling.failure_reason` | Human-readable reason when `mellea.sampling.success` is `false` |
 
 It also records an `iteration` span event per attempt and a `repair` span event

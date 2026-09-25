@@ -110,6 +110,11 @@ class SOFAISamplingStrategy(SamplingStrategy):
         self.feedback_strategy = feedback_strategy
 
     @staticmethod
+    def _get_repair_type() -> str:
+        """Return the repair-type label for telemetry hooks."""
+        return "sofai_s1_feedback"
+
+    @staticmethod
     def repair(
         old_ctx: Context,
         new_ctx: Context,
@@ -577,17 +582,20 @@ class SOFAISamplingStrategy(SamplingStrategy):
     # Main Sample Method
     # =========================================================================
 
-    async def sample(
+    async def _sample(
         self,
         action: Component[S] | CBlock | ModelOutputThunk,
         context: Context,
         backend: Backend,
-        requirements: list[Requirement] | None,
+        requirements: list[Requirement],
         *,
+        effective_loop_budget: int,
         validation_ctx: Context | None = None,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
+        sampling_id: str,
+        show_progress: bool = True,
     ) -> SamplingResult[S]:
         """Execute SOFAI two-solver sampling strategy.
 
@@ -612,12 +620,15 @@ class SOFAISamplingStrategy(SamplingStrategy):
             action: The component to sample (Instruction, Message, etc.).
             context: The session context (must be ChatContext).
             backend: Session backend (used for validation fallback).
-            requirements: Requirements to validate against.
+            requirements: Merged and deduplicated list of requirements.
+            effective_loop_budget: The loop budget after hook modification (always >= 1).
             validation_ctx: Optional context to validate over. If None, each sample is validated
                 over its own post-generation context.
             format: Output format for structured outputs.
             model_options: Model options to pass to backends.
             tool_calls: True if tool calls should be used.
+            sampling_id: UUID correlating iteration/repair/end hooks for this loop.
+            show_progress: If true, a tqdm progress bar is used. Otherwise, messages will still be sent to flog.
 
         Returns:
             SamplingResult with success status and all generation history.
@@ -631,8 +642,10 @@ class SOFAISamplingStrategy(SamplingStrategy):
 
         flog = MelleaLogger.get_logger()
 
-        with log_context(strategy=type(self).__name__, loop_budget=self.loop_budget):
-            reqs: list[Requirement] = list(requirements) if requirements else []
+        with log_context(
+            strategy=type(self).__name__, loop_budget=effective_loop_budget
+        ):
+            reqs: list[Requirement] = list(requirements)
 
             # State tracking for all attempts
             sampled_results: list[ComputedModelOutputThunk] = []
@@ -645,7 +658,7 @@ class SOFAISamplingStrategy(SamplingStrategy):
             # ---------------------------------------------------------------------
             flog.info(
                 f"SOFAI: Starting S1 Solver ({getattr(self.s1_solver_backend, 'model_id', 'unknown')}) "
-                f"loop (budget={self.loop_budget})"
+                f"loop (budget={effective_loop_budget})"
             )
 
             previous_failed_set: set[tuple[str | None, str | None, float | None]] = (
@@ -655,11 +668,13 @@ class SOFAISamplingStrategy(SamplingStrategy):
             next_action = deepcopy(action)
             next_context: Context = context
 
-            show_progress = flog.getEffectiveLevel() <= MelleaLogger.INFO
+            show_progress = (
+                show_progress and flog.getEffectiveLevel() <= MelleaLogger.INFO
+            )
             loop_iterator = (
-                tqdm.tqdm(range(self.loop_budget), desc="S1 Solver")
+                tqdm.tqdm(range(effective_loop_budget), desc="S1 Solver")
                 if show_progress
-                else range(self.loop_budget)
+                else range(effective_loop_budget)
             )
 
             # Exit conditions: success returns immediately; no-improvement breaks
@@ -668,7 +683,7 @@ class SOFAISamplingStrategy(SamplingStrategy):
                 loop_count += 1
                 if not show_progress:
                     flog.info(
-                        f"SOFAI S1: Running loop {loop_count} of {self.loop_budget}"
+                        f"SOFAI S1: Running loop {loop_count} of {effective_loop_budget}"
                     )
 
                 # Generate and validate
@@ -695,6 +710,14 @@ class SOFAISamplingStrategy(SamplingStrategy):
                 sampled_scores.append(constraint_scores)
                 sampled_actions.append(next_action)
                 sample_contexts.append(result_ctx)
+                await self._emit_sampling_iteration(
+                    sampling_id=sampling_id,
+                    iteration=loop_count,
+                    action=next_action,
+                    result=result,
+                    validation_results=constraint_scores,
+                    backend=backend,
+                )
 
                 # Check for success
                 if all(bool(score[1]) for score in constraint_scores):
@@ -735,13 +758,26 @@ class SOFAISamplingStrategy(SamplingStrategy):
                 previous_failed_set = current_failed_set
 
                 # Prepare repair for next iteration
-                if loop_count < self.loop_budget:
+                if loop_count < effective_loop_budget:
+                    failed_action = next_action
+                    failed_result = result
+                    failed_validations = constraint_scores
                     next_action, next_context = self.repair(
                         next_context,
                         result_ctx,
                         sampled_actions,
                         sampled_results,
                         sampled_scores,
+                    )
+                    await self._emit_sampling_repair(
+                        sampling_id=sampling_id,
+                        repair_iteration=loop_count,
+                        failed_action=failed_action,
+                        failed_result=failed_result,
+                        failed_validations=failed_validations,
+                        repair_action=next_action,
+                        repair_context=next_context,
+                        backend=backend,
                     )
             # Exit due to loop budget exhaustion or no improvement
 
@@ -784,6 +820,14 @@ class SOFAISamplingStrategy(SamplingStrategy):
             sampled_scores.append(constraint_scores)
             sampled_actions.append(s2_action)
             sample_contexts.append(result_ctx)
+            await self._emit_sampling_iteration(
+                sampling_id=sampling_id,
+                iteration=loop_count + 1,
+                action=s2_action,
+                result=result,
+                validation_results=constraint_scores,
+                backend=backend,
+            )
 
             # Check S2 success
             assert result._generate_log is not None
