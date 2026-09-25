@@ -109,9 +109,10 @@ from .adapters._core import (
 from .adapters.adapter import (
     AdapterInput,
     EmbeddedIntrinsicAdapter,
+    _alora_invocation_sequence_present,
     _composed_adapter_key,
     _discover_embedded_adapters,
-    alora_invocation_sequence_present,
+    _fire_invocation_complete,
 )
 from .adapters.catalog import AdapterType
 from .backend import FormatterBackend
@@ -568,7 +569,7 @@ def _check_alora_activation(
     else:
         token_ids = list(token_ids)
 
-    if alora_invocation_sequence_present(token_ids, invocation_tokens):
+    if _alora_invocation_sequence_present(token_ids, invocation_tokens):
         return
 
     warn_key = f"alora_no_activation_{qualified_name}"
@@ -1277,6 +1278,9 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 `EmbeddedIntrinsicAdapter`'s `weights` is not an
                 `EmbeddedBinding`; or if a composed `Adapter`'s `weights` is
                 an unsupported binding type.
+            AloraActivationError: If the resolved adapter is an aLoRA whose
+                declared activation sequence is absent from the assembled
+                prompt (issue #1678).
         """
         if not ctx.is_chat_context:
             raise Exception("Does not yet support non-chat contexts.")
@@ -1444,15 +1448,54 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 warned_about = getattr(self, "_warned_about", None)
                 if warned_about is None:
                     warned_about = set()
-                _check_alora_activation(
-                    model=self._model,
-                    tokenizer=self._tokenizer,
-                    base_model_name=getattr(self, "base_model_name", "<unknown>"),
-                    warned_about=warned_about,
-                    capability_name=adapter_name,
-                    qualified_name=alora_qualified_name,
-                    prompt_token_ids=generate_input["input_tokens"],
-                )
+                try:
+                    _check_alora_activation(
+                        model=self._model,
+                        tokenizer=self._tokenizer,
+                        base_model_name=getattr(self, "base_model_name", "<unknown>"),
+                        warned_about=warned_about,
+                        capability_name=adapter_name,
+                        qualified_name=alora_qualified_name,
+                        prompt_token_ids=generate_input["input_tokens"],
+                    )
+                except AloraActivationError as exc:
+                    # A guard-raised abort never enters `adapter_scope` (that
+                    # only wraps `generate_func` below), so without this the
+                    # invocation never fires `adapter_function_invocation_
+                    # complete` at all — an operator watching those metrics
+                    # would see the adapter simply stop being invoked, with no
+                    # error signal, for exactly the scenario this guard exists
+                    # to catch. Mirrors `adapter_scope`'s own
+                    # revision/binding_type derivation (`adapter.py`) so the
+                    # two emit consistent fields for the same adapter.
+                    revision: str | None
+                    if isinstance(adapter.weights, LocalFileBinding):
+                        try:
+                            revision = adapter.weights.resolved_revision()
+                        except Exception:
+                            revision = adapter.weights.revision
+                    else:
+                        revision = getattr(adapter.weights, "revision", None)
+                    # Matches `adapter_scope`'s own finally block: a
+                    # hook-dispatch failure here must not replace or mask the
+                    # real `AloraActivationError` about to propagate.
+                    try:
+                        _fire_invocation_complete(
+                            name=adapter_name,
+                            revision=revision,
+                            binding_type=adapter.weights.binding_type,
+                            adapter_type=adapter.identity.adapter_type,
+                            outcome="error",
+                            error=exc,
+                        )
+                    except Exception:
+                        MelleaLogger.get_logger().warning(
+                            "adapter_function_invocation_complete hook dispatch "
+                            f"failed for {adapter_name!r}; ignoring so it doesn't "
+                            "mask the real AloraActivationError.",
+                            exc_info=True,
+                        )
+                    raise
 
         # Apply remaining user model options directly to generate_input,
         # overwriting any values set by the util function or io.yaml defaults.

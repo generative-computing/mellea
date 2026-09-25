@@ -13,7 +13,7 @@ runs rather than being silently accepted.
 
 Two layers are exercised:
 
-* `alora_invocation_sequence_present` — the pure token-subsequence search,
+* `_alora_invocation_sequence_present` — the pure token-subsequence search,
   independent of any backend.
 * `mellea.backends.huggingface._check_alora_activation` — the
   generation-time guard wired into `LocalHFBackend._generate_from_intrinsic`,
@@ -42,7 +42,7 @@ from mellea.backends.adapters._core import (
 from mellea.backends.adapters.adapter import (
     EmbeddedIntrinsicAdapter,
     IntrinsicAdapter,
-    alora_invocation_sequence_present,
+    _alora_invocation_sequence_present,
 )
 from mellea.backends.adapters.catalog import AdapterType
 
@@ -56,39 +56,39 @@ class TestAloraInvocationSequencePresent:
 
     def test_present_in_middle_of_prompt(self):
         prompt = [1, 2, 27, 71226, 29, 3, 4]
-        assert alora_invocation_sequence_present(prompt, _INVOCATION_TOKENS)
+        assert _alora_invocation_sequence_present(prompt, _INVOCATION_TOKENS)
 
     def test_present_at_start(self):
         prompt = [27, 71226, 29, 3, 4]
-        assert alora_invocation_sequence_present(prompt, _INVOCATION_TOKENS)
+        assert _alora_invocation_sequence_present(prompt, _INVOCATION_TOKENS)
 
     def test_present_at_end(self):
         prompt = [1, 2, 27, 71226, 29]
-        assert alora_invocation_sequence_present(prompt, _INVOCATION_TOKENS)
+        assert _alora_invocation_sequence_present(prompt, _INVOCATION_TOKENS)
 
     def test_absent_tokeniser_merge_case(self):
         # The #1679 case: '<requirements>: X' merges '>' and ':' into one
         # token (27916), so the exact 3-token sequence never occurs even
         # though 27 and 71226 both appear.
         prompt = [1, 27, 71226, 27916, 1630]
-        assert not alora_invocation_sequence_present(prompt, _INVOCATION_TOKENS)
+        assert not _alora_invocation_sequence_present(prompt, _INVOCATION_TOKENS)
 
     def test_absent_when_tokens_not_contiguous(self):
         prompt = [27, 1, 71226, 1, 29]
-        assert not alora_invocation_sequence_present(prompt, _INVOCATION_TOKENS)
+        assert not _alora_invocation_sequence_present(prompt, _INVOCATION_TOKENS)
 
     def test_absent_from_short_prompt(self):
-        assert not alora_invocation_sequence_present([27, 71226], _INVOCATION_TOKENS)
+        assert not _alora_invocation_sequence_present([27, 71226], _INVOCATION_TOKENS)
 
     def test_empty_invocation_tokens_is_vacuously_present(self):
-        assert alora_invocation_sequence_present([1, 2, 3], [])
+        assert _alora_invocation_sequence_present([1, 2, 3], [])
 
     def test_empty_prompt_with_nonempty_invocation_is_absent(self):
-        assert not alora_invocation_sequence_present([], _INVOCATION_TOKENS)
+        assert not _alora_invocation_sequence_present([], _INVOCATION_TOKENS)
 
     def test_single_token_sequence(self):
-        assert alora_invocation_sequence_present([1, 2, 3], [2])
-        assert not alora_invocation_sequence_present([1, 2, 3], [9])
+        assert _alora_invocation_sequence_present([1, 2, 3], [2])
+        assert not _alora_invocation_sequence_present([1, 2, 3], [9])
 
 
 def _identity(adapter_type: str) -> Identity:

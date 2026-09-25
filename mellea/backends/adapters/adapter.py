@@ -407,7 +407,7 @@ def get_adapter_for_intrinsic(
     return adapter
 
 
-def alora_invocation_sequence_present(
+def _alora_invocation_sequence_present(
     prompt_token_ids: Sequence[int], invocation_tokens: Sequence[int]
 ) -> bool:
     """Return whether an aLoRA's declared invocation token sequence occurs in a prompt.
@@ -427,6 +427,15 @@ def alora_invocation_sequence_present(
     one token) can make a sequence that looks present in the source text
     absent from the actual token ids, and vice versa for sequences supplied by
     the chat template rather than the instruction (see #1679).
+
+    Matches anywhere the sequence occurs, not only at the offset PEFT would
+    actually activate from (PEFT itself uses the *last* match — see
+    `calculate_alora_offsets`). If the exact token sequence happens to occur
+    earlier in the prompt (e.g. literally present in older conversation
+    turns), this returns `True` even though the adapter would activate from
+    that earlier, unintended position rather than not at all. That is a
+    different failure mode (wrong span, not no activation) and is not
+    detected here.
 
     Args:
         prompt_token_ids: Token ids of the assembled prompt that will be sent

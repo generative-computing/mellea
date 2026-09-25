@@ -40,6 +40,8 @@ def check_certainty(
             JSON object.
         AdapterSchemaMismatchError: When the model output is missing the required
             `certainty` field.
+        AloraActivationError: When the resolved adapter is an aLoRA whose
+            declared activation sequence is absent from the assembled prompt.
     """
     result_json = call_intrinsic(
         "uncertainty", context, backend, model_options=model_options
@@ -81,6 +83,8 @@ def requirement_check(
         AdapterSchemaMismatchError: If the adapter output does not match the
             expected `{"requirement_check": {"score": <float>}}` contract, or
             if the score is not a finite number in the range 0.0-1.0.
+        AloraActivationError: When the resolved adapter is an aLoRA whose
+            declared activation sequence is absent from the assembled prompt.
     """
     result_json = call_intrinsic(
         "requirement-check",
@@ -141,6 +145,8 @@ def find_context_attributions(
             JSON array, or contains a non-object element.
         AdapterSchemaMismatchError: When any record in the output is missing a
             required field.
+        AloraActivationError: When the resolved adapter is an aLoRA whose
+            declared activation sequence is absent from the assembled prompt.
     """
     response, context = _resolve_response(response, context)
     result_json = call_intrinsic(

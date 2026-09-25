@@ -136,9 +136,20 @@ class AloraActivationError(ValueError):
         self.base_model_name = base_model_name
         self.qualified_name = qualified_name
         self.invocation_tokens = tuple(invocation_tokens)
+        # Preserve the four-item positional `args` shape, not a single
+        # formatted message: `BaseException.__reduce__` rebuilds the
+        # exception from `type(self), self.args` on pickle/deepcopy, so
+        # passing one string here makes both raise `TypeError` for the
+        # three now-missing required parameters. Mirrors the same fix on
+        # the sibling `AdapterSchemaMismatchError` above.
         super().__init__(
-            f"aLoRA {capability_name!r} (base model {base_model_name!r}, "
-            f"qualified name {qualified_name!r}) never activates for this "
+            capability_name, base_model_name, qualified_name, self.invocation_tokens
+        )
+
+    def __str__(self) -> str:
+        return (
+            f"aLoRA {self.capability_name!r} (base model {self.base_model_name!r}, "
+            f"qualified name {self.qualified_name!r}) never activates for this "
             f"call: its declared invocation sequence {self.invocation_tokens!r} "
             "is absent from the assembled prompt, so PEFT never switches the "
             "adapter on. Generation was skipped rather than running it against "

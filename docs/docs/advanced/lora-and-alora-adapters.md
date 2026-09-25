@@ -128,7 +128,12 @@ trained, non-catalog adapter does not need a dedicated shim class.
 
 ```python
 from mellea.backends.huggingface import LocalHFBackend
-from mellea.backends.adapters import Adapter, Identity, LocalFileBinding, get_io_contract
+from mellea.backends.adapters import (
+    Adapter,
+    Identity,
+    LocalFileBinding,
+    get_io_contract,
+)
 from mellea.backends.adapters.catalog import AdapterType
 from mellea.stdlib.context import ChatContext
 from mellea import MelleaSession
@@ -234,27 +239,39 @@ An aLoRA only takes effect from the point its declared invocation token sequence
 in the assembled prompt. If that sequence is absent, PEFT switches the adapter off
 silently: generation still runs, still returns a well-formed score, and
 `list_adapters()`/`active_adapters()` still show the adapter as loaded, but the base
-model produced the output, not the adapter. Mellea checks for this on every generation
-call for an aLoRA registered as a composed `Adapter` (the default `resolve_adapter()`
-path, and what every high-level adapter-function wrapper uses), before any model call
-runs, and raises `AloraActivationError` (logging a warning the first time, naming the
-capability, the base model, and the decoded invocation sequence) rather than letting a
-fabricated result reach a caller. What happens next depends on how the adapter was
-reached:
+model produced the output, not the adapter. Mellea checks for this, before any model
+call runs, for an aLoRA registered as a composed `Adapter` (`LocalFile/PEFT` reality,
+e.g. `LocalHFBackend`), and raises `AloraActivationError` (logging a warning the first
+time, naming the capability, the base model, and the decoded invocation sequence)
+rather than letting a fabricated result reach a caller.
 
+**This is not yet the path every adapter-function wrapper takes by default.**
+`resolve_adapter()`'s automatic registration still hardcodes `AdapterType.LORA`
+(Epic #929 Phase 2 tracks selecting from catalogue availability instead), so
+`core.check_certainty(...)`, `core.requirement_check(...)`, and the other high-level
+wrappers currently get a LoRA, not an aLoRA, and this check does not apply to LoRA at
+all. The check activates only where an aLoRA is actually the adapter in play today:
+
+- **A composed `Adapter` you registered yourself** with an aLoRA `LocalFileBinding`
+  (`add_adapter()` directly, bypassing `resolve_adapter()`'s default).
 - **Automatic `Requirement` routing** (a plain `Requirement`, or an explicit
-  `ALoraRequirement`) catches the error and falls back to LLM-as-a-judge, logging a
-  warning -- exactly the same treatment as "adapter not registered" already gets. Only
-  an `ALoraRequirement` over a context with nothing to judge still raises; this is not
-  that case.
-- **A direct adapter-function call** (e.g. `core.check_certainty`) has no fallback
-  mechanism below it and lets `AloraActivationError` propagate, so the caller sees a
-  clear error instead of a silently wrong score.
+  `ALoraRequirement`) *once* such an aLoRA is registered under the matching name --
+  routing itself does not register one. When the check fires here, it's caught and
+  falls back to LLM-as-a-judge, logging a warning -- exactly the same treatment as
+  "adapter not registered" already gets. Only an `ALoraRequirement` over a context
+  with nothing to judge still raises outright; that's a different, pre-existing case.
+- **The deprecated `IntrinsicAdapter` shim**, but not on its first call: the shim's
+  PEFT weights load lazily inside generation, so the check has nothing to compare
+  against yet the first time. From the second call onward the weights are already
+  loaded and the check applies normally (Epic #929, issue #1144 tracks removing the
+  shim entirely).
 
-This check only runs for the LocalFile/PEFT reality (e.g. `LocalHFBackend`);
-server-mediated and embedded adapter deployments activate outside Mellea and are not
-covered, and the deprecated `IntrinsicAdapter` shim's weights load too late in the call
-for the check to see them (Epic #929, issue #1144 tracks removing the shim entirely).
+A direct adapter-function call reaching this check has no fallback layer below it and
+lets `AloraActivationError` propagate, so the caller sees a clear error instead of a
+silently wrong score -- but today that only happens on one of the three paths above,
+not on an unmodified default installation calling `core.check_certainty(...)` or
+similar. Server-mediated and embedded adapter deployments activate outside Mellea and
+are not covered by this check at all.
 
 ## Disable adapter validation
 

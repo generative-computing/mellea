@@ -272,9 +272,9 @@ def _make_intrinsic_backend_stub(stub_backend):
     stub_backend._provider = "huggingface"
     stub_backend.base_model_name = "stub-model"
     # Real backends always have this (FormatterBackend.__init__); giving the
-    # stub a real set (not the `getattr(..., None) or set()` fallback the
-    # activation guard degrades to for a double lacking one) lets tests here
-    # actually observe warn-once dedup rather than silently masking it.
+    # stub a real set (not the getattr-default throwaway the activation
+    # guard's call site falls back to for a double lacking one) lets tests
+    # here actually observe warn-once dedup rather than silently masking it.
     stub_backend._warned_about = set()
     stub_backend._make_backend_specific_and_remove = lambda opts: (
         LocalHFBackend._make_backend_specific_and_remove(stub_backend, opts)
@@ -1055,6 +1055,156 @@ async def test_alora_activation_guard_raises_every_call_but_warns_once(
         f"expected exactly one warning across two calls, got {len(matching)}: {matching}"
     )
     assert backend._warned_about == {"alora_no_activation_answerability_alora"}
+
+
+def _fake_transformers_inputs_with_matching_prompt(
+    request, tokenizer, model, ll_tokenizer=None
+):
+    # The invocation sequence [27, 71226, 29] occurs at index 2.
+    return {"input_tokens": torch.tensor([[1, 2, 27, 71226, 29, 3]])}, {}
+
+
+@pytest.mark.asyncio
+async def test_alora_activation_guard_stays_silent_when_sequence_present(
+    stub_backend, caplog
+):
+    """The other AC2 arm through the real call site: a correctly-activating
+    aLoRA must generate normally, with no warning and no exception.
+
+    `test_alora_activation_guard_raises_every_call_but_warns_once` above only
+    pins the mismatched case at this call site; the extracted
+    `_check_alora_activation` helper's own unit tests
+    (`test_activation_guard.py`) cover the matching case in isolation, but
+    nothing previously drove `_generate_from_intrinsic` itself with a
+    *matching* `peft_config` to prove the guard is a true no-op on the
+    success path, not just silent by accident.
+    """
+    import logging
+
+    backend = _setup_mismatched_alora_stub(stub_backend)
+    # Overwrite with a config whose declared sequence *is* present in the
+    # prompt `_fake_transformers_inputs_with_matching_prompt` produces.
+    backend._model = SimpleNamespace(
+        peft_config={
+            "answerability_alora": SimpleNamespace(
+                alora_invocation_tokens=[27, 71226, 29]
+            )
+        }
+    )
+
+    def fake_generate_with_transformers(tokenizer, model, generate_input, other_input):
+        return _FakeChatCompletionResponseWithContent('{"result": "ok"}')
+
+    with (
+        patch(
+            "mellea.backends.huggingface.granite_formatters.IntrinsicsRewriter",
+            _FakeRewriter,
+        ),
+        patch(
+            "mellea.backends.huggingface.granite_formatters.IntrinsicsResultProcessor",
+            _PassthroughResultProcessor,
+        ),
+        patch(
+            "mellea.formatters.granite.base.util.chat_completion_request_to_transformers_inputs",
+            side_effect=_fake_transformers_inputs_with_matching_prompt,
+        ),
+        patch(
+            "mellea.formatters.granite.base.util.generate_with_transformers",
+            side_effect=fake_generate_with_transformers,
+        ),
+        patch(
+            "mellea.formatters.granite.intrinsics.obtain_io_yaml",
+            return_value="/fake/adapter.yaml",
+        ),
+        patch("builtins.open", mock_open(read_data="key: value")),
+        patch("yaml.safe_load", return_value={"parameters": {}}),
+        caplog.at_level(logging.WARNING),
+    ):
+        output = await LocalHFBackend._generate_from_intrinsic(
+            backend,
+            Intrinsic("answerability"),
+            ChatContext().add(Message("user", "Is the sky blue?")),
+            model_options={},
+        )
+        assert output._gen.generate is not None
+        await output._gen.generate
+
+    assert not any("never activates" in r.message for r in caplog.records)
+    assert backend._warned_about == set()
+
+
+@pytest.mark.asyncio
+async def test_alora_activation_guard_fires_invocation_complete_hook_on_abort():
+    """A guard-aborted call must still fire `adapter_function_invocation_complete`.
+
+    The guard raises before `adapter_scope` is ever entered, and `adapter_scope`
+    is the only other place that fires this hook (`AdapterMixin.adapter_scope`'s
+    `finally` block, `mellea/backends/adapters/adapter.py`) — so without an
+    explicit fire at the guard's own call site, an operator watching
+    `mellea.adapter_function.*` metrics would see the adapter simply stop being
+    invoked, with no error signal, for exactly the scenario this guard exists to
+    catch (reviewer finding, code-review round on PR #1684).
+    """
+    from mellea.backends.adapters._core import AloraActivationError
+    from test.backends.test_adapters._hook_capture import (
+        capture_adapter_hooks,
+        invocation_payloads,
+    )
+
+    stub_backend = SimpleNamespace(
+        from_mellea_model_opts_map={
+            ModelOption.MAX_NEW_TOKENS: "max_new_tokens",
+            ModelOption.STOP_SEQUENCES: "stop_strings",
+        }
+    )
+    backend = _setup_mismatched_alora_stub(stub_backend)
+
+    def fake_generate_with_transformers(tokenizer, model, generate_input, other_input):
+        return _FakeChatCompletionResponseWithContent('{"result": "ok"}')
+
+    with (
+        capture_adapter_hooks() as mock_invoke,
+        patch(
+            "mellea.backends.huggingface.granite_formatters.IntrinsicsRewriter",
+            _FakeRewriter,
+        ),
+        patch(
+            "mellea.backends.huggingface.granite_formatters.IntrinsicsResultProcessor",
+            _PassthroughResultProcessor,
+        ),
+        patch(
+            "mellea.formatters.granite.base.util.chat_completion_request_to_transformers_inputs",
+            side_effect=_fake_transformers_inputs_with_mismatched_prompt,
+        ),
+        patch(
+            "mellea.formatters.granite.base.util.generate_with_transformers",
+            side_effect=fake_generate_with_transformers,
+        ),
+        patch(
+            "mellea.formatters.granite.intrinsics.obtain_io_yaml",
+            return_value="/fake/adapter.yaml",
+        ),
+        patch("builtins.open", mock_open(read_data="key: value")),
+        patch("yaml.safe_load", return_value={"parameters": {}}),
+    ):
+        with pytest.raises(AloraActivationError) as exc_info:
+            await LocalHFBackend._generate_from_intrinsic(
+                backend,
+                Intrinsic("answerability"),
+                ChatContext().add(Message("user", "Is the sky blue?")),
+                model_options={},
+            )
+
+    payloads = invocation_payloads(mock_invoke)
+    assert len(payloads) == 1, (
+        f"expected exactly one invocation-complete payload, got {payloads}"
+    )
+    payload = payloads[0]
+    assert payload.name == "answerability"
+    assert payload.adapter_type == "alora"
+    assert payload.binding_type == "local_file"
+    assert payload.outcome == "error"
+    assert payload.error is exc_info.value
 
 
 @pytest.mark.asyncio

@@ -159,7 +159,7 @@ _GUARDIAN_REPO = "ibm-granite/granitelib-guardian-r1.0"
 # ALORA entry (or fixes one that was previously non-activating, e.g. #1679),
 # the PR must carry evidence that the aLoRA is no worse than the LoRA on
 # accuracy and false-pass rate for that capability -- a passing activation
-# guard (see `alora_invocation_sequence_present` in
+# guard (see `_alora_invocation_sequence_present` in
 # `mellea/backends/adapters/adapter.py`) only proves the adapter switched on,
 # not that its verdicts are trustworthy.
 _RAG_SHA = "2f0b2c79c6731068625aca8045c2eb2e8912b353"  # main @ 2026-05-26
