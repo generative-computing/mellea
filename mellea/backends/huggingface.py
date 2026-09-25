@@ -1063,6 +1063,53 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             )
         return loaded
 
+    def _repair_composed_alora_instruction(
+        self, io_yaml_config: dict, qualified_name: str
+    ) -> None:
+        """Repair an aLoRA io.yaml instruction that cannot activate its own adapter.
+
+        Some published adapters (issue #1679: `requirement-check`, all
+        granite-4.1 slots) ship an instruction whose text does not tokenise to
+        the `alora_invocation_tokens` declared in the adapter's own config,
+        so the adapter can never activate no matter what the loading path
+        does. This loads a locally repaired instruction instead, with a loud
+        warning, so the capability works end to end until the publisher
+        republishes a corrected file. The repair itself is
+        verification-driven and self-terminating (see
+        `_alora_invocation_repair`): a healthy file -- in either direction a
+        publisher might fix it -- is returned untouched.
+
+        Called at the composed-adapter commit point in `add_adapter`, once
+        `binding.prepare()` has loaded the PEFT config the declared sequence
+        is read from.
+
+        Args:
+            io_yaml_config: The freshly loaded `io.yaml` mapping for this
+                adapter; mutated in place only when a repair applies.
+            qualified_name: The PEFT adapter name under which `prepare()`
+                loaded the weights (`binding.qualified_name`).
+        """
+        peft_config = self._model.peft_config.get(qualified_name)
+        invocation_tokens = getattr(peft_config, "alora_invocation_tokens", None)
+        if not invocation_tokens:
+            return
+        instruction = io_yaml_config.get("instruction")
+        if not isinstance(instruction, str) or not instruction:
+            return
+        repaired = _alora_invocation_repair(
+            self._tokenizer, instruction, invocation_tokens
+        )
+        if repaired is None:
+            return
+        MelleaLogger.get_logger().warning(
+            f"Adapter {qualified_name!r}: the published io.yaml instruction does "
+            "not tokenise to the adapter's declared aLoRA invocation sequence, so "
+            "the adapter could never activate as published. Loaded a locally "
+            "repaired instruction instead (issue #1679). Ask the adapter "
+            "publisher to republish a corrected io.yaml."
+        )
+        io_yaml_config["instruction"] = repaired
+
     async def _generate_from_intrinsic(
         self,
         action: Intrinsic,
@@ -2954,6 +3001,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 # commit, releasing (terminal, weights unloaded) the exact
                 # binding this is about to publish as registered.
                 with binding.hold_prepared(self), self._adapter_activation_lock():
+                    self._repair_composed_alora_instruction(io_yaml_config, key)
                     self._composed_adapter_configs[key] = io_yaml_config
                     self._composed_adapters[key] = adapter
             return
@@ -3462,3 +3510,71 @@ class _IntrinsicPeftBinding(WeightsBinding):
 
     def release(self) -> None:
         return
+
+
+def _token_sequence_present(
+    tokenizer: PreTrainedTokenizerBase, text: str, token_ids: Sequence[int]
+) -> bool:
+    """Whether `token_ids` occurs as a contiguous run in `tokenizer.encode(text)`.
+
+    Args:
+        tokenizer: The tokenizer to encode with.
+        text: The text to search.
+        token_ids: The token run to look for.
+
+    Returns:
+        True if the run occurs at least once in the encoded text.
+    """
+    if not token_ids:
+        return False
+    tokens = tokenizer.encode(text, add_special_tokens=False)
+    seq = list(token_ids)
+    n = len(seq)
+    return any(tokens[i : i + n] == seq for i in range(len(tokens) - n + 1))
+
+
+def _alora_invocation_repair(
+    tokenizer: PreTrainedTokenizerBase,
+    instruction: str,
+    invocation_tokens: Sequence[int],
+) -> str | None:
+    """Repair an aLoRA io.yaml instruction that cannot activate its own adapter.
+
+    An aLoRA adapter activates only when its declared `alora_invocation_tokens`
+    occur, after tokenisation, in the assembled prompt. Some published
+    adapters (issue #1679: `requirement-check`, all granite-4.1 slots) ship an
+    instruction whose text does not tokenise to the declared sequence, because
+    the Granite tokeniser merges `>` with a following `:` into one token, so
+    the instruction's `<requirements>:` never yields the declared
+    `<requirements>` run.
+
+    The repair is deliberately verification-driven and self-terminating: it
+    returns a changed instruction only when the declared sequence is absent
+    from the tokenised instruction, the decoded invocation text followed by a
+    single colon is present in it, and dropping that colon makes the declared
+    sequence present. A correctly republished file passes the first check and
+    is left untouched, in either direction a publisher might fix it (the
+    instruction text changed, or the declared tokens changed to match the
+    existing text).
+
+    Args:
+        tokenizer: The base model's tokenizer.
+        instruction: The io.yaml `instruction` template text.
+        invocation_tokens: The adapter's declared `alora_invocation_tokens`.
+
+    Returns:
+        The repaired instruction, or `None` when the instruction is already
+        consistent with the declared sequence or no repair is possible.
+    """
+    if _token_sequence_present(tokenizer, instruction, invocation_tokens):
+        return None
+    invocation_text = cast(
+        str, tokenizer.decode(list(invocation_tokens), skip_special_tokens=False)
+    )
+    broken = invocation_text + ":"
+    if broken not in instruction:
+        return None
+    repaired = instruction.replace(broken, invocation_text, 1)
+    if _token_sequence_present(tokenizer, repaired, invocation_tokens):
+        return repaired
+    return None

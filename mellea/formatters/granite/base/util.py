@@ -6,6 +6,7 @@
 # Standard
 from __future__ import annotations
 
+import contextlib
 import itertools
 import json
 import os
@@ -378,6 +379,90 @@ def chat_completion_request_to_transformers_inputs(
     return generate_input, other_input
 
 
+@contextlib.contextmanager
+def _alora_activation_context(model: PreTrainedModel, input_tokens: Any) -> Any:
+    """Context manager that makes aLoRA weights actually apply during `generate()`.
+
+    PEFT computes the per-token aLoRA activation mask (`alora_offsets`) only
+    from inside its `PeftModel` wrapper's own `generate()`/`forward()`
+    overrides. A model that loads adapters via transformers' native
+    `PeftAdapterMixin.load_adapter()` (as `LocalHFBackend` does) is never
+    wrapped in `PeftModel`, so without this the aLoRA weights silently never
+    apply and generation degrades to base-model behaviour. This mirrors what
+    `PeftModel` does internally (`_enable_peft_forward_hooks` in
+    `peft/tuners/lora/model.py`): compute the offsets with PEFT's public
+    `calculate_alora_offsets`, then inject them into every LoRA layer's
+    forward via temporary pre-forward hooks. The hook is required because
+    transformers' model code does not generally propagate `**kwargs` down to
+    the projection `nn.Linear` calls, so passing `alora_offsets` to
+    `generate()` alone is not enough.
+
+    Yields immediately (no-op) unless exactly one adapter is active and its
+    PEFT config declares `alora_invocation_tokens`. Hooks are removed on
+    exit, including on error. Safe to call on any model; the PEFT imports
+    happen lazily so this module keeps working without the `hf` extra.
+
+    Args:
+        model: Hugging Face model object (or a proxy that forwards attribute
+            access to one).
+        input_tokens: Prompt token-id tensor on the model's device, as
+            passed to `generate(input_ids=...)`.
+
+    Yields:
+        None. Active for the duration of the `with` block.
+    """
+    peft_config = getattr(model, "peft_config", None)
+    if not peft_config:
+        yield
+        return
+    try:
+        active_adapters = model.active_adapters
+        # `active_adapters` is a method on transformers' native
+        # PeftAdapterMixin but a property on peft's PeftModel wrapper.
+        active = cast(
+            "list[str]",
+            active_adapters() if callable(active_adapters) else active_adapters,
+        )
+    except ValueError:
+        active = []
+    if len(active) != 1:
+        yield
+        return
+    adapter_name = active[0]
+    invocation = getattr(peft_config.get(adapter_name), "alora_invocation_tokens", None)
+    if invocation is None:
+        yield
+        return
+    if input_tokens is None or not hasattr(input_tokens, "device"):
+        yield
+        return
+
+    # Third Party (lazy: peft is an optional `hf`-extra dependency)
+    from peft.tuners.lora import (
+        layer as _peft_lora_layer,
+        variants as _peft_lora_variants,
+    )
+
+    offsets = _peft_lora_variants.calculate_alora_offsets(
+        peft_config, adapter_name, input_tokens
+    )
+
+    def _inject_offsets(module: Any, args: Any, kwargs: Any) -> Any:
+        kwargs["alora_offsets"] = offsets
+        return args, kwargs
+
+    handles = [
+        module.register_forward_pre_hook(_inject_offsets, with_kwargs=True)
+        for module in model.modules()
+        if isinstance(module, _peft_lora_layer.LoraLayer)
+    ]
+    try:
+        yield
+    finally:
+        for handle in handles:
+            handle.remove()
+
+
 def generate_with_transformers(
     tokenizer: PreTrainedTokenizerBase,
     model: PreTrainedModel,
@@ -412,7 +497,8 @@ def generate_with_transformers(
     generate_input = generate_input.copy()
     del generate_input["input_tokens"]
 
-    generate_result = model.generate(input_ids=input_tokens, **generate_input)  # type: ignore[operator]
+    with _alora_activation_context(model, input_tokens):
+        generate_result = model.generate(input_ids=input_tokens, **generate_input)  # type: ignore[operator]
 
     # Result is a a 2D tensor of shape (num responses, prompt + max generated tokens)
     # containing tokens, plus a tuple of <max generated tokens> tensors of shape
