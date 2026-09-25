@@ -378,6 +378,7 @@ markers = [
     "litellm: Tests requiring LiteLLM backend",
     "bedrock: Tests requiring AWS Bedrock backend (requires credentials)",
     "vllm: Tests requiring vLLM backend (local, GPU required)",
+    "llamacpp: Tests requiring a local llama.cpp server (start with scripts/start_llamacpp.sh)",
 
     # Capability markers
     "qualitative: Non-deterministic quality tests",
