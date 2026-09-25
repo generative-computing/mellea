@@ -38,7 +38,7 @@ import json
 import threading
 import time
 import warnings
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
@@ -96,6 +96,65 @@ class AdapterSchemaMismatchError(Exception):
         if self.reason is not None:
             message += f" Reason: {self.reason}."
         return message
+
+
+class AloraActivationError(ValueError):
+    """Raised when a loaded aLoRA's declared invocation sequence is absent from the prompt.
+
+    An aLoRA only applies from the point its declared `alora_invocation_tokens`
+    sequence appears in the assembled prompt; PEFT sets the activation offset
+    to `None` and generates against the base model with no error when it is
+    absent (`peft.tuners.lora.variants.calculate_alora_offsets`), so a caller
+    that only inspected the return value would see a well-formed but
+    worthless result (issue #1678). Raised before generation runs, so no
+    model call is wasted on it.
+
+    A direct adapter-function call (e.g. `core.check_certainty`) has no
+    fallback mechanism and lets this propagate. `Requirement.validate()`'s
+    automatic aLoRA routing catches it and falls back to LLM-as-a-judge,
+    exactly as it already does when the adapter is not registered at all
+    (see "How automatic routing works" in
+    `docs/docs/advanced/lora-and-alora-adapters.md`) — this is that same
+    "adapter unavailable" case, just detected one step later, once the
+    adapter is loaded but proven unable to switch on for this call.
+
+    Attributes:
+        capability_name (str): Adapter-function name that could not activate.
+        base_model_name (str): Base model the adapter was loaded against.
+        qualified_name (str): The adapter's PEFT-loaded qualified name.
+        invocation_tokens (tuple[int, ...]): The declared invocation token sequence.
+    """
+
+    def __init__(
+        self,
+        capability_name: str,
+        base_model_name: str,
+        qualified_name: str,
+        invocation_tokens: Sequence[int],
+    ) -> None:
+        self.capability_name = capability_name
+        self.base_model_name = base_model_name
+        self.qualified_name = qualified_name
+        self.invocation_tokens = tuple(invocation_tokens)
+        # Preserve the four-item positional `args` shape, not a single
+        # formatted message: `BaseException.__reduce__` rebuilds the
+        # exception from `type(self), self.args` on pickle/deepcopy, so
+        # passing one string here makes both raise `TypeError` for the
+        # three now-missing required parameters. Mirrors the same fix on
+        # the sibling `AdapterSchemaMismatchError` above.
+        super().__init__(
+            capability_name, base_model_name, qualified_name, self.invocation_tokens
+        )
+
+    def __str__(self) -> str:
+        return (
+            f"aLoRA {self.capability_name!r} (base model {self.base_model_name!r}, "
+            f"qualified name {self.qualified_name!r}) never activates for this "
+            f"call: its declared invocation sequence {self.invocation_tokens!r} "
+            "is absent from the assembled prompt, so PEFT never switches the "
+            "adapter on. Generation was skipped rather than running it against "
+            "the base model and returning a fabricated result."
+        )
 
 
 @dataclass(frozen=True)

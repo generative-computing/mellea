@@ -153,6 +153,15 @@ _RAG_REPO = "ibm-granite/granitelib-rag-r1.0"
 _CORE_R1_REPO = "ibm-granite/granitelib-core-r1.0"
 _GUARDIAN_REPO = "ibm-granite/granitelib-guardian-r1.0"
 
+# Bumping any of these SHAs is the moment an upstream fix reaches users, and
+# the moment a rung newly promotes an aLoRA to the default path for its
+# capability (issue #1678, AC3/AC4). If the bump adds or newly enables an
+# ALORA entry (or fixes one that was previously non-activating, e.g. #1679),
+# the PR must carry evidence that the aLoRA is no worse than the LoRA on
+# accuracy and false-pass rate for that capability -- a passing activation
+# guard (see `_alora_invocation_sequence_present` in
+# `mellea/backends/adapters/adapter.py`) only proves the adapter switched on,
+# not that its verdicts are trustworthy.
 _RAG_SHA = "2f0b2c79c6731068625aca8045c2eb2e8912b353"  # main @ 2026-05-26
 _CORE_R1_SHA = "d0a2a96a4cd07e96f0fe7ca29a42bfe088299d43"  # main @ 2026-05-26
 _GUARDIAN_SHA = "773b254e98f993a605ec4b6259634906e0e64e8e"  # main @ 2026-05-26

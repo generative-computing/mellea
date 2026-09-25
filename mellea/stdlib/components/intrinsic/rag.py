@@ -57,6 +57,8 @@ def check_answerability(
             JSON object.
         AdapterSchemaMismatchError: When the model output is missing the required
             `answerability` field.
+        AloraActivationError: When the resolved adapter is an aLoRA whose
+            declared activation sequence is absent from the assembled prompt.
     """
     question, context = _resolve_question(question, context, backend)
     result = call_intrinsic(
@@ -104,6 +106,8 @@ def rewrite_question(
             JSON object.
         AdapterSchemaMismatchError: When the model output is missing the required
             `rewritten_question` field.
+        AloraActivationError: When the resolved adapter is an aLoRA whose
+            declared activation sequence is absent from the assembled prompt.
     """
     question, context = _resolve_question(question, context, backend)
     result = call_intrinsic(
@@ -155,6 +159,8 @@ def clarify_query(
             JSON object.
         AdapterSchemaMismatchError: When the model output is missing the required
             `clarification` field.
+        AloraActivationError: When the resolved adapter is an aLoRA whose
+            declared activation sequence is absent from the assembled prompt.
     """
     question, context = _resolve_question(question, context, backend)
     result = call_intrinsic(
@@ -215,6 +221,8 @@ def find_citations(
             JSON array, or contains a non-object element.
         AdapterSchemaMismatchError: When any record in the output is missing a
             required field.
+        AloraActivationError: When the resolved adapter is an aLoRA whose
+            declared activation sequence is absent from the assembled prompt.
     """
     response, context = _resolve_response(response, context)
     result = call_intrinsic(
@@ -279,6 +287,8 @@ def flag_hallucinated_content(
             JSON array, or contains a non-object element.
         AdapterSchemaMismatchError: When any record in the output is missing a
             required field.
+        AloraActivationError: When the resolved adapter is an aLoRA whose
+            declared activation sequence is absent from the assembled prompt.
     """
     response, context = _resolve_response(response, context)
     result = call_intrinsic(
