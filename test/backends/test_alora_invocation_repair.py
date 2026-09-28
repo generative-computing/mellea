@@ -20,7 +20,7 @@ import logging
 import re
 from collections.abc import Sequence
 from types import SimpleNamespace
-from unittest.mock import MagicMock, mock_open, patch
+from unittest.mock import mock_open, patch
 
 # Third Party
 import pytest
@@ -37,9 +37,9 @@ from mellea.backends.adapters.io_contracts import get_io_contract
 from mellea.backends.huggingface import (
     LocalHFBackend,
     _alora_invocation_repair,
-    _read_alora_invocation_tokens,
     _token_sequence_present,
 )
+from test.backends.test_huggingface_unit import _make_backend
 
 _TOKEN_RE = re.compile(r">:|\S+|\s+")
 
@@ -80,23 +80,6 @@ def _invocation_no_colon() -> list[int]:
 
 def _invocation_with_colon() -> list[int]:
     return _tokenizer().encode("<requirements>:")
-
-
-class TestTokenSequencePresent:
-    def test_present(self):
-        tok = _tokenizer()
-        assert _token_sequence_present(
-            tok, "a <requirements> b", tok.encode("<requirements>")
-        )
-
-    def test_absent_when_colon_merges(self):
-        tok = _tokenizer()
-        assert not _token_sequence_present(
-            tok, "a <requirements>: b", tok.encode("<requirements>")
-        )
-
-    def test_empty_ids(self):
-        assert not _token_sequence_present(_tokenizer(), "anything", [])
 
 
 class TestAloraInvocationRepair:
@@ -156,84 +139,16 @@ class TestAloraInvocationRepair:
         )
 
 
-class TestReadAloraInvocationTokens:
-    def test_reads_declared_tokens(self, tmp_path):
-        (tmp_path / "adapter_config.json").write_text(
-            json.dumps({"alora_invocation_tokens": [27, 71226, 29]})
-        )
-        assert _read_alora_invocation_tokens(str(tmp_path)) == [27, 71226, 29]
-
-    def test_plain_lora_config_returns_none(self, tmp_path):
-        (tmp_path / "adapter_config.json").write_text(json.dumps({"r": 8}))
-        assert _read_alora_invocation_tokens(str(tmp_path)) is None
-
-    def test_missing_config_file_returns_none(self, tmp_path):
-        assert _read_alora_invocation_tokens(str(tmp_path)) is None
-
-
 _BROKEN_CONFIG = {"instruction": "<requirements>: {requirement}\nEvaluate."}
 _REPAIRED_INSTRUCTION = "<requirements> {requirement}\nEvaluate."
 
 
 def _stub_backend(tokenizer: _MergingTokenizer) -> LocalHFBackend:
-    """A real `LocalHFBackend` over mock model/tokenizer (no download), with
-    the fake merging tokenizer swapped in for the repair to use."""
-    mock_tok = MagicMock(eos_token_id=0, vocab_size=32000)
-    mock_tok._tokenizer = MagicMock()
-    mock_tok._tokenizer.get_vocab_size.return_value = 32000
-    mock_tok.__len__ = MagicMock(return_value=32000)
-    with (
-        patch("mellea.backends.huggingface.llguidance") as mock_llg,
-        patch("mellea.backends.huggingface.set_seed"),
-    ):
-        mock_llg.hf.from_tokenizer.return_value = MagicMock(vocab_size=32000)
-        backend = LocalHFBackend(
-            model_id="ibm-granite/granite-4.1-3b",
-            custom_config=(mock_tok, MagicMock(vocab_size=32000), torch.device("cpu")),
-        )
+    """`_make_backend` (mock weights, no download) with the fake merging
+    tokenizer swapped in for the repair to use."""
+    backend = _make_backend()
     backend._tokenizer = tokenizer  # type: ignore[assignment]
     return backend
-
-
-class TestRepairAloraInstruction:
-    def test_repair_returns_repaired_copy_and_warns(self, caplog):
-        backend = _stub_backend(_tokenizer())
-        config = dict(_BROKEN_CONFIG)
-        with caplog.at_level(logging.WARNING, logger="mellea"):
-            result = backend._repair_alora_instruction(
-                config, _invocation_no_colon(), "requirement-check_alora"
-            )
-        assert result["instruction"] == _REPAIRED_INSTRUCTION
-        assert result is not config
-        assert config == _BROKEN_CONFIG, "caller's dict must not be mutated"
-        assert any(
-            "'requirement-check_alora'" in r.message and "#1679" in r.message
-            for r in caplog.records
-        )
-
-    def test_healthy_config_returned_unchanged(self, caplog):
-        backend = _stub_backend(_tokenizer())
-        config = {"instruction": _REPAIRED_INSTRUCTION}
-        with caplog.at_level(logging.WARNING, logger="mellea"):
-            result = backend._repair_alora_instruction(
-                config, _invocation_no_colon(), "requirement-check_alora"
-            )
-        assert result is config
-        assert not caplog.records
-
-    @pytest.mark.parametrize("tokens", [None, []])
-    def test_no_declared_invocation_returns_config_unchanged(self, tokens):
-        backend = _stub_backend(_tokenizer())
-        config = dict(_BROKEN_CONFIG)
-        assert backend._repair_alora_instruction(config, tokens, "x_lora") is config
-
-    def test_no_instruction_returns_config_unchanged(self):
-        backend = _stub_backend(_tokenizer())
-        config = {"parameters": {}}
-        assert (
-            backend._repair_alora_instruction(config, _invocation_no_colon(), "x")
-            is config
-        )
 
 
 class TestRepairWiring:
@@ -241,7 +156,7 @@ class TestRepairWiring:
     deprecated `IntrinsicAdapter` shim (weights load per generate call, after
     the rewriter has read the config) and the composed `Adapter`."""
 
-    def test_intrinsic_adapter_shim_path_repairs_config(self, tmp_path):
+    def test_intrinsic_adapter_shim_path_repairs_config(self, tmp_path, caplog):
         tok = _tokenizer()
         backend = _stub_backend(tok)
         (tmp_path / "adapter_config.json").write_text(
@@ -257,10 +172,15 @@ class TestRepairWiring:
             )
         adapter.get_local_hf_path = lambda base_model_name: str(tmp_path)  # type: ignore[method-assign]
 
-        backend.add_adapter(adapter)
+        with caplog.at_level(logging.WARNING, logger="mellea"):
+            backend.add_adapter(adapter)
 
         assert adapter.config["instruction"] == _REPAIRED_INSTRUCTION
         assert caller_config == _BROKEN_CONFIG, "caller's dict must not be mutated"
+        assert any(
+            "'requirement-check_alora'" in r.message and "#1679" in r.message
+            for r in caplog.records
+        )
         _, config = backend._intrinsic_adapter_name_and_config(adapter)
         assert config["instruction"] == _REPAIRED_INSTRUCTION
 

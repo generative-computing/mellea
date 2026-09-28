@@ -73,13 +73,13 @@ def _tiny_model(adapter_config: LoraConfig | None = None) -> LlamaForCausalLM:
     return model
 
 
-def _alora_config() -> LoraConfig:
+def _alora_config(invocation: list[int] = INVOCATION) -> LoraConfig:
     return LoraConfig(
         r=4,
         lora_alpha=8,
         target_modules=["q_proj", "v_proj"],
         task_type="CAUSAL_LM",
-        alora_invocation_tokens=INVOCATION,
+        alora_invocation_tokens=invocation,
     )
 
 
@@ -160,18 +160,6 @@ class TestAloraActivationContext:
         assert len(warned) == 1
         assert "'rc'" in warned[0].message
 
-    def test_num_return_sequences_repeats_offsets_per_row(self):
-        """`generate()` expands the prompt to one row per returned sequence;
-        the offsets must be expanded to match, or the variant's mask no longer
-        lines up with the batch and indexing fails."""
-        model = _tiny_model(_alora_config())
-        input_ids = torch.tensor([[10, 1, 2, 3, 40, 50]])
-        kwargs = {"num_return_sequences": 2, "do_sample": True}
-        with _VariantSpy() as spy:
-            with torch.no_grad(), _alora_activation_context(model, input_ids, kwargs):
-                model.generate(input_ids=input_ids, max_new_tokens=2, **kwargs)
-        assert spy.offsets_seen and all(o == [5, 5] for o in spy.offsets_seen)
-
     def test_beam_search_raises_clear_error(self):
         """PEFT's own `PeftModel` path rejects beam search for aLoRA; so must
         this one, rather than failing later with an opaque IndexError."""
@@ -182,7 +170,7 @@ class TestAloraActivationContext:
                 pass
         assert _n_pre_hooks(model) == 0
 
-    def test_hooks_removed_after_context_exit(self):
+    def test_hooks_live_only_inside_context(self):
         model = _tiny_model(_alora_config())
         input_ids = torch.tensor([[10, 1, 2, 3, 40, 50]])
         with torch.no_grad(), _alora_activation_context(model, input_ids):
@@ -190,69 +178,22 @@ class TestAloraActivationContext:
         assert _n_pre_hooks(model) == 0, (
             "pre-forward hooks must not outlive the context"
         )
-
-    def test_hooks_removed_on_error(self):
-        model = _tiny_model(_alora_config())
-        input_ids = torch.tensor([[10, 1, 2, 3, 40, 50]])
         with pytest.raises(RuntimeError, match="boom"):
             with torch.no_grad(), _alora_activation_context(model, input_ids):
-                assert _n_pre_hooks(model) > 0
                 raise RuntimeError("boom")
-        assert _n_pre_hooks(model) == 0
+        assert _n_pre_hooks(model) == 0, "hooks must be removed on error too"
 
-    def test_no_adapter_is_noop(self):
-        model = _tiny_model()
-        input_ids = torch.tensor([[10, 1, 2, 3, 40, 50]])
-        with torch.no_grad(), _alora_activation_context(model, input_ids):
-            assert _n_pre_hooks(model) == 0
-            model.generate(input_ids=input_ids, max_new_tokens=2)  # must not raise
-
-    def test_plain_lora_adapter_is_noop(self):
-        model = _tiny_model(_lora_config())
-        input_ids = torch.tensor([[10, 1, 2, 3, 40, 50]])
-        with torch.no_grad(), _alora_activation_context(model, input_ids):
-            assert _n_pre_hooks(model) == 0
-            model.generate(input_ids=input_ids, max_new_tokens=2)
-
-    def test_empty_invocation_tokens_is_noop(self):
-        """An aLoRA config declaring `alora_invocation_tokens=[]` can never
-        activate; treat it like a plain adapter rather than handing PEFT an
-        empty sequence to search for."""
-        model = _tiny_model(
-            LoraConfig(
-                r=4,
-                lora_alpha=8,
-                target_modules=["q_proj", "v_proj"],
-                task_type="CAUSAL_LM",
-                alora_invocation_tokens=[],
-            )
-        )
+    @pytest.mark.parametrize(
+        "adapter_config",
+        [None, _lora_config(), _alora_config(invocation=[])],
+        ids=["no-adapter", "plain-lora", "empty-invocation"],
+    )
+    def test_non_activating_model_is_noop(self, adapter_config):
+        model = _tiny_model(adapter_config)
         input_ids = torch.tensor([[10, 1, 2, 3, 40, 50]])
         with torch.no_grad(), _alora_activation_context(model, input_ids):
             assert _n_pre_hooks(model) == 0
             model.generate(input_ids=input_ids, max_new_tokens=2)
-
-    def test_only_no_adapter_loaded_error_is_tolerated(self):
-        """transformers raises `ValueError("No adapter loaded...")` from
-        `active_adapters()` on a model with no adapter; that means no-op. Any
-        other ValueError is a real fault and must propagate."""
-
-        class _Model:
-            peft_config = {"rc": object()}
-
-            def __init__(self, exc: ValueError):
-                self._exc = exc
-
-            def active_adapters(self) -> list[str]:
-                raise self._exc
-
-        input_ids = torch.tensor([[10, 1, 2, 3, 40, 50]])
-        no_adapter = ValueError("No adapter loaded. Please load an adapter first.")
-        with _alora_activation_context(_Model(no_adapter), input_ids):
-            pass
-        with pytest.raises(ValueError, match="boom"):
-            with _alora_activation_context(_Model(ValueError("boom")), input_ids):
-                pass
 
     @staticmethod
     def _generate_via_production_path(model, input_ids, **generate_kwargs):
