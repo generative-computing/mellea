@@ -466,7 +466,7 @@ async def test_stream_validate_receives_individual_chunks() -> None:
     finally:
         ChunkRecordingReq.__copy__ = original_copy  # type: ignore[method-assign]
 
-    assert captured[0].seen_chunks == ["First one.", "Second two.", "Third three."]
+    assert captured[-1].seen_chunks == ["First one.", "Second two.", "Third three."]
 
 
 @pytest.mark.asyncio
@@ -500,7 +500,7 @@ async def test_trailing_fragment_is_flushed_to_consumer() -> None:
     # Both sentences reach the consumer, including the terminating one.
     assert yielded == ["First sentence.", "Second sentence."]
     # stream_validate was called on both — the flush path is not a shortcut.
-    assert captured[0].seen_chunks == ["First sentence.", "Second sentence."]
+    assert captured[-1].seen_chunks == ["First sentence.", "Second sentence."]
     assert streamer.failed_early is False
 
 
@@ -637,7 +637,7 @@ async def test_multiple_chunks_in_one_batch_with_mid_batch_fail() -> None:
     assert yielded == ["One.", "Two."]
     # The fourth chunk was neither validated nor emitted: validation stopped at
     # the failing third.
-    assert captured[0].seen_chunks == ["One.", "Two.", "Three."]
+    assert captured[-1].seen_chunks == ["One.", "Two.", "Three."]
 
 
 @pytest.mark.asyncio
@@ -1099,9 +1099,9 @@ async def test_validation_backend_routing() -> None:
     # The original requirement was never called — only its per-run clone.
     assert req.seen_backends == []
     # Every recorded backend was the validation backend, not the generation one.
-    assert len(captured) == 1
-    assert captured[0].seen_backends
-    assert all(b is val_backend for b in captured[0].seen_backends)
+    assert len(captured) == 2
+    assert captured[-1].seen_backends
+    assert all(b is val_backend for b in captured[-1].seen_backends)
 
 
 @pytest.mark.asyncio
@@ -1196,6 +1196,53 @@ async def test_exception_in_stream_validate_propagates_and_cancels() -> None:
     # The generation was cancelled during teardown, not merely finished.
     assert streamer._mot._cancelled is True
     assert streamer._mot.is_computed() is True
+
+
+@pytest.mark.asyncio
+async def test_exception_after_completion_reports_not_success() -> None:
+    """A final `validate()` that raises makes the run a failure, not a success.
+
+    The stream completes naturally (`completed_normally=True`) before the final
+    `validate()` runs, so terminal `success` is not derived from `completed_normally`:
+    a post-completion exception is still a failure.
+    """
+
+    class RaisingValidateReq(Requirement):
+        def format_for_llm(self) -> str:
+            return "validate raiser"
+
+        async def _stream_validate(
+            self, chunk: str, *, backend: Any, ctx: Any
+        ) -> PartialValidationResult:
+            return PartialValidationResult("unknown")
+
+        async def validate(
+            self,
+            backend: Any,
+            ctx: Any,
+            *,
+            format: Any = None,
+            model_options: Any = None,
+        ) -> ValidationResult:
+            raise RuntimeError("validate boom")
+
+    backend = StreamingMockBackend("Hello world. ", token_size=3)
+    events: list[StreamEvent] = []
+    with pytest.raises(RuntimeError, match="validate boom"):
+        async with await stream(
+            _action(),
+            backend,
+            _ctx(),
+            requirements=[RaisingValidateReq()],
+            as_events=True,
+        ) as s:
+            async for ev in s:
+                events.append(ev)
+
+    # Terminal events reach the consumer before the exception surfaces.
+    completed = [e for e in events if isinstance(e, CompletedEvent)]
+    assert s.completed_normally is True
+    assert completed[-1].success is False
 
 
 @pytest.mark.asyncio
@@ -1947,7 +1994,7 @@ async def test_per_requirement_chunking_independent_of_stream() -> None:
     # Consumer sees raw deltas reassembling to the whole text;
     # the requirement re-chunks them into its own sentences.
     assert "".join(yielded) == response
-    assert captured[0].seen == ["First one.", "Second two.", "Third three."]
+    assert captured[-1].seen == ["First one.", "Second two.", "Third three."]
 
 
 @pytest.mark.asyncio
@@ -2056,7 +2103,11 @@ async def test_both_levels_chunked_requirement_rechunks_stream_chunks() -> None:
     assert streamer.completed_normally is True
     assert len(yielded) == 2  # consumer sees the two paragraph chunks
     # Fused, not a typo: the requirement sees only the stream's paragraph chunks, not raw deltas.
-    assert captured[0].seen == ["First one.", "Second two.Third three.", "Fourth four."]
+    assert captured[-1].seen == [
+        "First one.",
+        "Second two.Third three.",
+        "Fourth four.",
+    ]
 
 
 @pytest.mark.asyncio
@@ -2165,7 +2216,7 @@ async def test_requirement_residual_flushed_when_stream_flush_is_empty() -> None
             pass
 
     assert streamer.completed_normally is True
-    assert captured[0].seen == ["Hello world"]
+    assert captured[-1].seen == ["Hello world"]
 
 
 @pytest.mark.asyncio
@@ -2220,7 +2271,7 @@ async def test_requirement_residual_flushed_via_stream_chunker_flush() -> None:
 
     assert streamer.completed_normally is True
     # "gamm" is the trailing residual, flushed once.
-    assert captured[0].seen == ["alpha", "beta", "gamm"]
+    assert captured[-1].seen == ["alpha", "beta", "gamm"]
 
 
 if __name__ == "__main__":

@@ -25,6 +25,7 @@ from mellea.core import (
     ValidationResult,
 )
 from mellea.core.base import ComputedModelOutputThunk
+from mellea.core.requirement import PartialValidationResult
 from mellea.stdlib.components import Instruction, Message
 from mellea.stdlib.context import ChatContext, SimpleContext
 from mellea.stdlib.sampling import BaseSamplingStrategy
@@ -202,8 +203,18 @@ async def test_generating_with_sampling(session):
             old_ctx: Context,
             new_ctx: Context,
             past_actions: Sequence[SampleActionType],
-            past_results: list[ComputedModelOutputThunk],
+            past_results: Sequence[ComputedModelOutputThunk | None],
             past_val: list[list[tuple[Requirement, ValidationResult]]],
+        ) -> tuple[SampleActionType, Context]:
+            return Instruction("print another number 100 greater"), old_ctx
+
+        @staticmethod
+        def stream_repair(
+            old_ctx: Context,
+            new_ctx: Context,
+            past_actions: Sequence[SampleActionType],
+            past_results: Sequence[ComputedModelOutputThunk | None],
+            past_stream_val: list[list[tuple[Requirement, PartialValidationResult]]],
         ) -> tuple[SampleActionType, Context]:
             return Instruction("print another number 100 greater"), old_ctx
 

@@ -35,6 +35,7 @@ from ...core import (
     Context,
     MelleaLogger,
     ModelOutputThunk,
+    PartialValidationResult,
     Requirement,
     S,
     SampleActionType,
@@ -161,7 +162,7 @@ class BaseSamplingStrategy(SamplingStrategy):
         old_ctx: Context,
         new_ctx: Context,
         past_actions: Sequence[SampleActionType],
-        past_results: list[ComputedModelOutputThunk],
+        past_results: Sequence[ComputedModelOutputThunk | None],
         past_val: list[list[tuple[Requirement, ValidationResult]]],
     ) -> tuple[SampleActionType, Context]:
         """Repair function that is being invoked if not all requirements are fulfilled. It should return a next action component.
@@ -198,6 +199,38 @@ class BaseSamplingStrategy(SamplingStrategy):
             The index of the result that should be selected as `.value`.
         """
         ...
+
+    @staticmethod
+    def stream_repair(
+        old_ctx: Context,
+        new_ctx: Context,
+        past_actions: Sequence[SampleActionType],
+        past_results: Sequence[ComputedModelOutputThunk | None],
+        past_stream_val: list[list[tuple[Requirement, PartialValidationResult]]],
+    ) -> tuple[SampleActionType, Context]:
+        """Repair after a mid-stream `"fail"`; the streaming counterpart of `repair`.
+
+        `stream()` calls this when an attempt breaks early on a mid-stream `"fail"`
+        (`repair` handles the completed-but-failed case). Override it to retry on
+        mid-stream failures under `stream()`.
+
+        Args:
+            old_ctx: The context WITHOUT the last action + output.
+            new_ctx: The context including the last action + output.
+            past_actions: Actions executed so far (without success).
+            past_results: Generation results per action, or `None` for an early-broken attempt.
+            past_stream_val: Mid-stream `PartialValidationResult` failures per action.
+
+        Returns:
+            The next action and context for the next generation attempt.
+
+        Raises:
+            NotImplementedError: If the strategy does not override this method.
+        """
+        raise NotImplementedError(
+            "This sampling strategy does not implement stream_repair(); override it "
+            "to retry on mid-stream failures when used with stream()."
+        )
 
     async def _sample(
         self,
@@ -566,7 +599,7 @@ class RejectionSamplingStrategy(BaseSamplingStrategy):
         old_ctx: Context,
         new_ctx: Context,
         past_actions: Sequence[SampleActionType],
-        past_results: list[ComputedModelOutputThunk],
+        past_results: Sequence[ComputedModelOutputThunk | None],
         past_val: list[list[tuple[Requirement, ValidationResult]]],
     ) -> tuple[SampleActionType, Context]:
         """Always returns the unedited, last action.
@@ -577,6 +610,28 @@ class RejectionSamplingStrategy(BaseSamplingStrategy):
             past_actions: List of actions that have been executed (without success).
             past_results: List of (unsuccessful) generation results for these actions.
             past_val: List of validation results for the results.
+
+        Returns:
+            The next action component and context to be used for the next generation attempt.
+        """
+        return past_actions[-1], old_ctx
+
+    @staticmethod
+    def stream_repair(
+        old_ctx: Context,
+        new_ctx: Context,
+        past_actions: Sequence[SampleActionType],
+        past_results: Sequence[ComputedModelOutputThunk | None],
+        past_stream_val: list[list[tuple[Requirement, PartialValidationResult]]],
+    ) -> tuple[SampleActionType, Context]:
+        """Always regenerates the unedited, last action (streaming counterpart of `repair`).
+
+        Args:
+            old_ctx: The context WITHOUT the last action + output.
+            new_ctx: The context including the last action + output.
+            past_actions: Actions executed so far (without success).
+            past_results: Generation results per action, or `None` for an early-broken attempt.
+            past_stream_val: Mid-stream `PartialValidationResult` failures per action.
 
         Returns:
             The next action component and context to be used for the next generation attempt.
@@ -610,7 +665,7 @@ class RepairTemplateStrategy(BaseSamplingStrategy):
         old_ctx: Context,
         new_ctx: Context,
         past_actions: Sequence[SampleActionType],
-        past_results: list[ComputedModelOutputThunk],
+        past_results: Sequence[ComputedModelOutputThunk | None],
         past_val: list[list[tuple[Requirement, ValidationResult]]],
     ) -> tuple[SampleActionType, Context]:
         """Adds a description of the requirements that failed to a copy of the original instruction.
@@ -648,6 +703,41 @@ class RepairTemplateStrategy(BaseSamplingStrategy):
             return pa.copy_and_repair(repair_string=repair_string), old_ctx
         return pa, old_ctx
 
+    @staticmethod
+    def stream_repair(
+        old_ctx: Context,
+        new_ctx: Context,
+        past_actions: Sequence[SampleActionType],
+        past_results: Sequence[ComputedModelOutputThunk | None],
+        past_stream_val: list[list[tuple[Requirement, PartialValidationResult]]],
+    ) -> tuple[SampleActionType, Context]:
+        """Adds the mid-stream failure reasons to a copy of the original instruction.
+
+        Streaming counterpart of `repair`, sourcing reasons from the failing
+        chunk's `PartialValidationResult`s.
+
+        Args:
+            old_ctx: The context WITHOUT the last action + output.
+            new_ctx: The context including the last action + output.
+            past_actions: Actions executed so far (without success).
+            past_results: Generation results per action, or `None` for an early-broken attempt.
+            past_stream_val: Mid-stream `PartialValidationResult` failures per action.
+
+        Returns:
+            The next action and context for the next generation attempt.
+        """
+        pa = past_actions[-1]
+        if isinstance(pa, Instruction):
+            repair_lines = [
+                f"* {pvr.reason}" if pvr.reason else f"* {req.description}"
+                for req, pvr in past_stream_val[-1]
+            ]
+            repair_string = "The following requirements failed before:\n" + "\n".join(
+                repair_lines
+            )
+            return pa.copy_and_repair(repair_string=repair_string), old_ctx
+        return pa, old_ctx
+
 
 class MultiTurnStrategy(BaseSamplingStrategy):
     """Rejection sampling strategy with (agentic) multi-turn repair."""
@@ -678,7 +768,7 @@ class MultiTurnStrategy(BaseSamplingStrategy):
         old_ctx: Context,
         new_ctx: Context,
         past_actions: Sequence[SampleActionType],
-        past_results: list[ComputedModelOutputThunk],
+        past_results: Sequence[ComputedModelOutputThunk | None],
         past_val: list[list[tuple[Requirement, ValidationResult]]],
     ) -> tuple[SampleActionType, Context]:
         """Returns a Message with a description (and validation reasons) of the failed requirements.
@@ -718,4 +808,44 @@ class MultiTurnStrategy(BaseSamplingStrategy):
             ),
         )
 
+        return next_action, new_ctx
+
+    @staticmethod
+    def stream_repair(
+        old_ctx: Context,
+        new_ctx: Context,
+        past_actions: Sequence[SampleActionType],
+        past_results: Sequence[ComputedModelOutputThunk | None],
+        past_stream_val: list[list[tuple[Requirement, PartialValidationResult]]],
+    ) -> tuple[SampleActionType, Context]:
+        """Returns a Message describing the mid-stream failures.
+
+        Streaming counterpart of `repair`, sourcing reasons from the failing
+        chunk's `PartialValidationResult`s.
+
+        Args:
+            old_ctx: The context WITHOUT the last action + output.
+            new_ctx: The context including the last action + output.
+            past_actions: Actions executed so far (without success).
+            past_results: Generation results per action, or `None` for an early-broken attempt.
+            past_stream_val: Mid-stream `PartialValidationResult` failures per action.
+
+        Returns:
+            The next action and context for the next generation attempt.
+        """
+        assert isinstance(new_ctx, ChatContext), (
+            " Need chat context to run agentic sampling."
+        )
+        repair_lines = [
+            f"* {pvr.reason}" if pvr.reason else f"* {req.description}"
+            for req, pvr in past_stream_val[-1]
+        ]
+        feedback = "\n".join(repair_lines)
+        next_action = Message(
+            role="user",
+            content=(
+                f"The following requirements have not been met:\n{feedback}\n"
+                f"Please try again to fulfill the requirements."
+            ),
+        )
         return next_action, new_ctx
