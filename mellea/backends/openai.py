@@ -442,6 +442,31 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         """
         return list(self._added_adapters.keys())
 
+    def remove_adapter(self, adapter_qualified_name: str) -> None:
+        """Deregister an adapter, freeing its qualified name for reuse.
+
+        Removes both the adapter and any cached configuration stored for a
+        composed adapter. If the name is not registered, a log message is
+        emitted and the method returns without error.
+
+        Args:
+            adapter_qualified_name (str): Qualified name of the adapter to
+                deregister.
+        """
+        with self._adapter_activation_lock():
+            adapter = self._added_adapters.pop(adapter_qualified_name, None)
+            self._composed_adapter_configs.pop(adapter_qualified_name, None)
+
+            if adapter is None:
+                MelleaLogger.get_logger().info(
+                    f"could not remove adapter {adapter_qualified_name} for backend "
+                    f"{self}: adapter was not registered"
+                )
+                return
+
+            if isinstance(adapter, EmbeddedIntrinsicAdapter):
+                adapter.backend = None
+
     def _adapter_activation_lock(
         self,
     ) -> contextlib.AbstractContextManager[bool | None]:
