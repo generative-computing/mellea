@@ -1063,9 +1063,12 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             )
         return loaded
 
-    def _repair_composed_alora_instruction(
-        self, io_yaml_config: dict, qualified_name: str
-    ) -> None:
+    def _repair_alora_instruction(
+        self,
+        io_yaml_config: dict,
+        invocation_tokens: Sequence[int] | None,
+        adapter_name: str,
+    ) -> dict:
         """Repair an aLoRA io.yaml instruction that cannot activate its own adapter.
 
         Some published adapters (issue #1679: `requirement-check`, all
@@ -1079,36 +1082,42 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         `_alora_invocation_repair`): a healthy file -- in either direction a
         publisher might fix it -- is returned untouched.
 
-        Called at the composed-adapter commit point in `add_adapter`, once
-        `binding.prepare()` has loaded the PEFT config the declared sequence
-        is read from.
+        Called from both `add_adapter` registration paths: the composed-adapter
+        commit point, with the declared sequence read from the PEFT config
+        `binding.prepare()` loaded, and the `IntrinsicAdapter` shim path, with
+        it read from the downloaded `adapter_config.json` (that shim loads its
+        weights per generate call, after its config has already been rendered
+        into the prompt).
 
         Args:
-            io_yaml_config: The freshly loaded `io.yaml` mapping for this
-                adapter; mutated in place only when a repair applies.
-            qualified_name: The PEFT adapter name under which `prepare()`
-                loaded the weights (`binding.qualified_name`).
+            io_yaml_config: The adapter's `io.yaml` mapping. Never mutated: a
+                shim's config can be the caller's own `config_dict`.
+            invocation_tokens: The adapter's declared
+                `alora_invocation_tokens`, or `None` for a non-aLoRA adapter.
+            adapter_name: The adapter's qualified name, for the warning.
+
+        Returns:
+            `io_yaml_config` itself when no repair applies, otherwise a shallow
+            copy carrying the repaired instruction.
         """
-        peft_config = self._model.peft_config.get(qualified_name)
-        invocation_tokens = getattr(peft_config, "alora_invocation_tokens", None)
         if not invocation_tokens:
-            return
+            return io_yaml_config
         instruction = io_yaml_config.get("instruction")
         if not isinstance(instruction, str) or not instruction:
-            return
+            return io_yaml_config
         repaired = _alora_invocation_repair(
             self._tokenizer, instruction, invocation_tokens
         )
         if repaired is None:
-            return
+            return io_yaml_config
         MelleaLogger.get_logger().warning(
-            f"Adapter {qualified_name!r}: the published io.yaml instruction does "
+            f"Adapter {adapter_name!r}: the published io.yaml instruction does "
             "not tokenise to the adapter's declared aLoRA invocation sequence, so "
             "the adapter could never activate as published. Loaded a locally "
             "repaired instruction instead (issue #1679). Ask the adapter "
             "publisher to republish a corrected io.yaml."
         )
-        io_yaml_config["instruction"] = repaired
+        return {**io_yaml_config, "instruction": repaired}
 
     async def _generate_from_intrinsic(
         self,
@@ -3001,7 +3010,12 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 # commit, releasing (terminal, weights unloaded) the exact
                 # binding this is about to publish as registered.
                 with binding.hold_prepared(self), self._adapter_activation_lock():
-                    self._repair_composed_alora_instruction(io_yaml_config, key)
+                    peft_config = self._model.peft_config.get(key)
+                    io_yaml_config = self._repair_alora_instruction(
+                        io_yaml_config,
+                        getattr(peft_config, "alora_invocation_tokens", None),
+                        key,
+                    )
                     self._composed_adapter_configs[key] = io_yaml_config
                     self._composed_adapters[key] = adapter
             return
@@ -3043,6 +3057,12 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             return
 
         adapter.path = adapter.get_local_hf_path(self.base_model_name)
+        if isinstance(adapter, IntrinsicAdapter):
+            adapter.config = self._repair_alora_instruction(
+                adapter.config,
+                _read_alora_invocation_tokens(adapter.path),
+                adapter.qualified_name,
+            )
         adapter.backend = self
         self._added_adapters[adapter.qualified_name] = adapter
 
@@ -3531,6 +3551,26 @@ def _token_sequence_present(
     seq = list(token_ids)
     n = len(seq)
     return any(tokens[i : i + n] == seq for i in range(len(tokens) - n + 1))
+
+
+def _read_alora_invocation_tokens(adapter_dir: str) -> list[int] | None:
+    """Read the declared `alora_invocation_tokens` from a downloaded adapter.
+
+    Args:
+        adapter_dir: Local directory holding the adapter's
+            `adapter_config.json`.
+
+    Returns:
+        The declared invocation token ids, or `None` when the directory has
+        no `adapter_config.json` or the config declares none (a plain LoRA).
+    """
+    config_path = pathlib.Path(adapter_dir) / "adapter_config.json"
+    if not config_path.is_file():
+        return None
+    tokens = json.loads(config_path.read_text(encoding="utf-8")).get(
+        "alora_invocation_tokens"
+    )
+    return list(tokens) if tokens else None
 
 
 def _alora_invocation_repair(

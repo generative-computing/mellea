@@ -18,6 +18,7 @@ on whether the aLoRA variant layer actually receives `alora_offsets` during
 """
 
 # Standard
+import logging
 from unittest.mock import MagicMock
 
 # Third Party
@@ -28,18 +29,31 @@ pytest.importorskip(
     "transformers", reason="transformers not installed — install mellea[hf]"
 )
 peft = pytest.importorskip("peft", reason="peft not installed — install mellea[hf]")
-# First Party
 import peft.tuners.lora.variants as peft_variants
 from peft import LoraConfig
 from transformers import LlamaConfig, LlamaForCausalLM
 
+# First Party
+import mellea.formatters.granite.base.util as granite_util
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.formatters.granite.base.util import (
     _alora_activation_context,
     generate_with_transformers,
 )
+from test.predicates import require_gpu
 
 INVOCATION = [1, 2, 3]
+
+
+def _n_pre_hooks(model: LlamaForCausalLM) -> int:
+    return sum(len(getattr(m, "_forward_pre_hooks", {})) for m in model.modules())
+
+
+@pytest.fixture(autouse=True)
+def _reset_missing_invocation_warnings(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The missing-invocation WARNING is once per adapter name per process;
+    # isolate each test from the others' warnings.
+    monkeypatch.setattr(granite_util, "_ALORA_MISSING_INVOCATION_WARNED", set())
 
 
 def _tiny_model(adapter_config: LoraConfig | None = None) -> LlamaForCausalLM:
@@ -102,9 +116,12 @@ class _VariantSpy:
 
 class TestAloraActivationContext:
     def test_no_offsets_reach_variant_without_context(self):
-        """The regression itself: bare model + aLoRA adapter, no context ->
-        the aLoRA variant is called but never receives alora_offsets, so it
-        masks to base-model behaviour."""
+        """Canary on upstream PEFT behaviour, not the regression guard: bare
+        model + aLoRA adapter, no context -> the aLoRA variant is called but
+        never receives alora_offsets, so it masks to base-model behaviour.
+        Passes with or without the fix; if it starts failing, PEFT has begun
+        supplying offsets on the bare-model path and the context may be
+        redundant. The guard is `test_generate_with_transformers_uses_context`."""
         model = _tiny_model(_alora_config())
         input_ids = torch.tensor([[10, 1, 2, 3, 40, 50]])
         with _VariantSpy() as spy:
@@ -125,82 +142,164 @@ class TestAloraActivationContext:
         assert spy.offsets_seen[0] == [5]
         assert all(o == [5] for o in spy.offsets_seen)
 
-    def test_context_with_missing_invocation_passes_none_offset(self):
-        """Invocation sequence absent -> offsets are [None] (peft semantics:
-        adapter inactive for that row), which the variant masks to base."""
+    def test_missing_invocation_warns_once_and_registers_no_hooks(self, caplog):
+        """Invocation sequence absent -> the adapter cannot activate. The
+        context registers no hooks (the variant sees `alora_offsets=None`,
+        PEFT's base-model mask) and logs one WARNING naming the adapter, not
+        one per call."""
         model = _tiny_model(_alora_config())
         input_ids = torch.tensor([[10, 11, 12, 40, 50]])
+        with caplog.at_level(logging.WARNING, logger="mellea"):
+            for _ in range(2):
+                with _VariantSpy() as spy:
+                    with torch.no_grad(), _alora_activation_context(model, input_ids):
+                        assert _n_pre_hooks(model) == 0
+                        model.generate(input_ids=input_ids, max_new_tokens=2)
+                assert spy.offsets_seen and all(o is None for o in spy.offsets_seen)
+        warned = [r for r in caplog.records if "invocation sequence" in r.message]
+        assert len(warned) == 1
+        assert "'rc'" in warned[0].message
+
+    def test_num_return_sequences_repeats_offsets_per_row(self):
+        """`generate()` expands the prompt to one row per returned sequence;
+        the offsets must be expanded to match, or the variant's mask no longer
+        lines up with the batch and indexing fails."""
+        model = _tiny_model(_alora_config())
+        input_ids = torch.tensor([[10, 1, 2, 3, 40, 50]])
+        kwargs = {"num_return_sequences": 2, "do_sample": True}
         with _VariantSpy() as spy:
-            with torch.no_grad(), _alora_activation_context(model, input_ids):
-                model.generate(input_ids=input_ids, max_new_tokens=2)
-        assert spy.offsets_seen and all(o == [None] for o in spy.offsets_seen)
+            with torch.no_grad(), _alora_activation_context(model, input_ids, kwargs):
+                model.generate(input_ids=input_ids, max_new_tokens=2, **kwargs)
+        assert spy.offsets_seen and all(o == [5, 5] for o in spy.offsets_seen)
+
+    def test_beam_search_raises_clear_error(self):
+        """PEFT's own `PeftModel` path rejects beam search for aLoRA; so must
+        this one, rather than failing later with an opaque IndexError."""
+        model = _tiny_model(_alora_config())
+        input_ids = torch.tensor([[10, 1, 2, 3, 40, 50]])
+        with pytest.raises(ValueError, match="Beam search"):
+            with _alora_activation_context(model, input_ids, {"num_beams": 2}):
+                pass
+        assert _n_pre_hooks(model) == 0
 
     def test_hooks_removed_after_context_exit(self):
         model = _tiny_model(_alora_config())
         input_ids = torch.tensor([[10, 1, 2, 3, 40, 50]])
         with torch.no_grad(), _alora_activation_context(model, input_ids):
-            pass
-        n_hooks = sum(
-            len(getattr(m, "_forward_pre_hooks", {})) for m in model.modules()
+            assert _n_pre_hooks(model) > 0
+        assert _n_pre_hooks(model) == 0, (
+            "pre-forward hooks must not outlive the context"
         )
-        assert n_hooks == 0, "pre-forward hooks must not outlive the context"
 
     def test_hooks_removed_on_error(self):
         model = _tiny_model(_alora_config())
         input_ids = torch.tensor([[10, 1, 2, 3, 40, 50]])
         with pytest.raises(RuntimeError, match="boom"):
             with torch.no_grad(), _alora_activation_context(model, input_ids):
+                assert _n_pre_hooks(model) > 0
                 raise RuntimeError("boom")
-        n_hooks = sum(
-            len(getattr(m, "_forward_pre_hooks", {})) for m in model.modules()
-        )
-        assert n_hooks == 0
+        assert _n_pre_hooks(model) == 0
 
     def test_no_adapter_is_noop(self):
         model = _tiny_model()
         input_ids = torch.tensor([[10, 1, 2, 3, 40, 50]])
         with torch.no_grad(), _alora_activation_context(model, input_ids):
+            assert _n_pre_hooks(model) == 0
             model.generate(input_ids=input_ids, max_new_tokens=2)  # must not raise
 
     def test_plain_lora_adapter_is_noop(self):
         model = _tiny_model(_lora_config())
         input_ids = torch.tensor([[10, 1, 2, 3, 40, 50]])
         with torch.no_grad(), _alora_activation_context(model, input_ids):
+            assert _n_pre_hooks(model) == 0
             model.generate(input_ids=input_ids, max_new_tokens=2)
-        n_hooks = sum(
-            len(getattr(m, "_forward_pre_hooks", {})) for m in model.modules()
-        )
-        assert n_hooks == 0
 
-    def test_generate_with_transformers_uses_context(self):
-        """Wiring check: the production call path must deliver offsets to the
-        variant, not just the standalone context manager."""
-        model = _tiny_model(_alora_config())
+    def test_empty_invocation_tokens_is_noop(self):
+        """An aLoRA config declaring `alora_invocation_tokens=[]` can never
+        activate; treat it like a plain adapter rather than handing PEFT an
+        empty sequence to search for."""
+        model = _tiny_model(
+            LoraConfig(
+                r=4,
+                lora_alpha=8,
+                target_modules=["q_proj", "v_proj"],
+                task_type="CAUSAL_LM",
+                alora_invocation_tokens=[],
+            )
+        )
         input_ids = torch.tensor([[10, 1, 2, 3, 40, 50]])
+        with torch.no_grad(), _alora_activation_context(model, input_ids):
+            assert _n_pre_hooks(model) == 0
+            model.generate(input_ids=input_ids, max_new_tokens=2)
+
+    def test_only_no_adapter_loaded_error_is_tolerated(self):
+        """transformers raises `ValueError("No adapter loaded...")` from
+        `active_adapters()` on a model with no adapter; that means no-op. Any
+        other ValueError is a real fault and must propagate."""
+
+        class _Model:
+            peft_config = {"rc": object()}
+
+            def __init__(self, exc: ValueError):
+                self._exc = exc
+
+            def active_adapters(self) -> list[str]:
+                raise self._exc
+
+        input_ids = torch.tensor([[10, 1, 2, 3, 40, 50]])
+        no_adapter = ValueError("No adapter loaded. Please load an adapter first.")
+        with _alora_activation_context(_Model(no_adapter), input_ids):
+            pass
+        with pytest.raises(ValueError, match="boom"):
+            with _alora_activation_context(_Model(ValueError("boom")), input_ids):
+                pass
+
+    @staticmethod
+    def _generate_via_production_path(model, input_ids, **generate_kwargs):
         tokenizer = MagicMock()
         tokenizer.eos_token_id = 9999  # outside vocab: never in generated tokens
         tokenizer.decode.side_effect = lambda *a, **k: "x"
         tokenizer.batch_decode.side_effect = lambda seqs: ["x"] * len(seqs)
+        generate_with_transformers(
+            tokenizer,
+            model,
+            generate_input={
+                "input_tokens": input_ids,
+                "max_new_tokens": 2,
+                "return_dict_in_generate": True,
+                **generate_kwargs,
+            },
+            other_input={},
+        )
+
+    def test_generate_with_transformers_uses_context(self):
+        """The regression guard: the production call path must deliver
+        offsets to the variant. Fails when the context wiring is removed."""
+        model = _tiny_model(_alora_config())
+        input_ids = torch.tensor([[10, 1, 2, 3, 40, 50]])
         with _VariantSpy() as spy:
-            generate_with_transformers(
-                tokenizer,
-                model,
-                generate_input={
-                    "input_tokens": input_ids,
-                    "max_new_tokens": 2,
-                    "do_sample": False,
-                    "return_dict_in_generate": True,
-                },
-                other_input={},
-            )
+            self._generate_via_production_path(model, input_ids, do_sample=False)
         assert spy.n_calls > 0
         assert spy.offsets_seen[0] == [5]
+
+    def test_generate_with_transformers_passes_generation_kwargs(self):
+        """Wiring check: the production path hands its generate kwargs to the
+        context, so a multi-sequence request expands the offsets instead of
+        crashing inside the variant."""
+        model = _tiny_model(_alora_config())
+        input_ids = torch.tensor([[10, 1, 2, 3, 40, 50]])
+        with _VariantSpy() as spy:
+            self._generate_via_production_path(
+                model, input_ids, do_sample=True, num_return_sequences=2
+            )
+        assert spy.offsets_seen[0] == [5, 5]
 
 
 @pytest.mark.huggingface
 @pytest.mark.e2e
 @pytest.mark.qualitative
 @pytest.mark.slow
+@require_gpu(min_vram_gb=20)
 class TestAloraDifferentialEndToEnd:
     """The aLoRA weights must measurably change the score versus no adapter.
 
@@ -213,12 +312,7 @@ class TestAloraDifferentialEndToEnd:
     scores measured 0.047 vs 0.999 in the #1679 diagnostic eval.
     """
 
-    def test_requirement_check_adapter_moves_score(self, gh_run):
-        # Skip the expensive model download + inference on CI, following the
-        # gh_run pattern used by the other huggingface e2e tests in this suite.
-        if gh_run == 1:
-            pytest.xfail("Model download + inference not run on CI")
-
+    def test_requirement_check_adapter_moves_score(self):
         from mellea.backends.adapters._core import Adapter, Identity, LocalFileBinding
         from mellea.backends.adapters.catalog import (
             AdapterType,
@@ -232,7 +326,7 @@ class TestAloraDifferentialEndToEnd:
         # NOTE: the published requirement-check io.yaml instruction does not
         # tokenise to the adapter's declared invocation sequence (issue
         # #1679). LocalHFBackend repairs it at load time with a warning
-        # (`_repair_composed_alora_instruction`) until the publisher
+        # (`_repair_alora_instruction`) until the publisher
         # republishes a corrected file, so this test runs on the as-published
         # adapter with no local workaround.
         md = fetch_intrinsic_metadata("requirement-check")
@@ -304,6 +398,7 @@ class TestAloraDifferentialEndToEnd:
 @pytest.mark.e2e
 @pytest.mark.qualitative
 @pytest.mark.slow
+@require_gpu(min_vram_gb=20)
 class TestUncertaintyAloraDifferentialEndToEnd:
     """Second aLoRA capability (uncertainty): confirms the activation fix is
     general, not requirement-check-specific.
@@ -316,10 +411,7 @@ class TestUncertaintyAloraDifferentialEndToEnd:
     (wrong) — a wide differential either way.
     """
 
-    def test_check_certainty_adapter_moves_score(self, gh_run):
-        if gh_run == 1:
-            pytest.xfail("Model download + inference not run on CI")
-
+    def test_check_certainty_adapter_moves_score(self):
         from mellea.backends.adapters._core import Adapter, Identity, LocalFileBinding
         from mellea.backends.adapters.catalog import (
             AdapterType,
