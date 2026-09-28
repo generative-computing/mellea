@@ -48,6 +48,7 @@ from mellea.stdlib.streaming import (
     ErrorEvent,
     FullValidationEvent,
     QuickCheckEvent,
+    RetryEvent,
     StreamingDoneEvent,
 )
 from mellea.telemetry import tracing
@@ -949,6 +950,8 @@ async def test_streaming_start_starts_span_and_stashes_by_streaming_id(
         has_requirements=True,
         requirement_count=2,
         chunking_strategy="SentenceChunking",
+        strategy_name="RejectionSamplingStrategy",
+        loop_budget=3,
     )
 
     with patch(
@@ -963,6 +966,8 @@ async def test_streaming_start_starts_span_and_stashes_by_streaming_id(
     assert attrs["mellea.streaming.has_requirements"] is True
     assert attrs["mellea.streaming.requirement_count"] == 2
     assert attrs["mellea.streaming.chunking_strategy"] == "SentenceChunking"
+    assert attrs["mellea.streaming.strategy_type"] == "RejectionSamplingStrategy"
+    assert attrs["mellea.streaming.loop_budget"] == 3
     # The correlation id is the in-flight key, not a span attribute.
     assert "mellea.streaming_id" not in attrs
 
@@ -980,6 +985,7 @@ async def test_streaming_end_success_closes_span(streaming_plugin, enabled_traci
         model="gpt-4o",
         provider="openai",
         full_text_length=11,
+        attempts_used=2,
     )
     await streaming_plugin.on_streaming_end(end, {})
 
@@ -987,6 +993,7 @@ async def test_streaming_end_success_closes_span(streaming_plugin, enabled_traci
 
     attrs = _attrs(fake_span)
     assert attrs["mellea.streaming.full_text_length"] == 11
+    assert attrs["mellea.streaming.iterations_used"] == 2
     assert attrs["gen_ai.request.model"] == "gpt-4o"
     assert attrs["gen_ai.provider.name"] == "openai"
     assert "sid-2" not in tracing._in_flight_spans
@@ -1075,11 +1082,16 @@ async def test_streaming_event_records_mid_stream_events(
         "completed",
     ]
     qc_attrs = events[0][1]
+    assert qc_attrs["mellea.streaming.iteration"] == 1
     assert qc_attrs["mellea.streaming.chunk_index"] == 0
     assert qc_attrs["mellea.validation.passed"] is True
     assert qc_attrs["mellea.validation.requirement_count"] == 1
     chunk_attrs = events[1][1]
+    assert chunk_attrs["mellea.streaming.iteration"] == 1
     assert chunk_attrs["mellea.streaming.chunk_text_length"] == 5
+    full_val_attrs = events[3][1]
+    assert full_val_attrs["mellea.streaming.iteration"] == 1
+    assert full_val_attrs["mellea.validation.valid_count"] == 1
     completed_attrs = events[4][1]
     assert completed_attrs["mellea.streaming.success"] is True
     assert completed_attrs["mellea.streaming.full_text_length"] == 11
@@ -1106,6 +1118,28 @@ async def test_streaming_event_records_error_event(streaming_plugin, enabled_tra
     error_attrs = next(attrs for name, attrs in events if name == "error")
     assert error_attrs["mellea.error.type"] == "ValueError"
     assert error_attrs["mellea.error.detail"] == "boom"
+    fake_span.end.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_streaming_event_records_retry_event(streaming_plugin, enabled_tracing):
+    """A RetryEvent is recorded as a `retry` span event with its attributes."""
+    fake_span = MagicMock()
+    fake_tracer = MagicMock()
+    fake_tracer.start_span.return_value = fake_span
+    await _open_streaming_span(streaming_plugin, fake_tracer, "sid-retry")
+
+    retry = RetryEvent(attempt=2, reason="too long", failed_early=True, failed_count=3)
+    await streaming_plugin.on_streaming_event(
+        StreamingEventPayload(streaming_id="sid-retry", event=retry), {}
+    )
+
+    events = _events(fake_span)
+    retry_attrs = next(attrs for name, attrs in events if name == "retry")
+    assert retry_attrs["mellea.streaming.iteration"] == 2
+    assert retry_attrs["mellea.streaming.failed_early"] is True
+    assert retry_attrs["mellea.validation.failed_count"] == 3
+    assert retry_attrs["mellea.streaming.failure_reason"] == "too long"
     fake_span.end.assert_not_called()
 
 

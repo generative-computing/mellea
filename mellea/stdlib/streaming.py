@@ -170,10 +170,16 @@ class RetryEvent(StreamEvent):
     Args:
         attempt: Attempt number being started (the first attempt is `1`).
         reason: Human-readable reason for the retry.
+        failed_early: `True` when the previous attempt broke on a mid-stream
+            `"fail"` (repaired via `stream_repair`); `False` when it completed and
+            its final `validate()` failed (repaired via `repair`).
+        failed_count: Number of failing validations that triggered the retry.
     """
 
     attempt: int
     reason: str
+    failed_early: bool
+    failed_count: int
 
 
 @dataclass
@@ -425,6 +431,10 @@ class Streamer:
                             model=self._mot.generation.model,
                             provider=self._mot.generation.provider,
                             full_text_length=full_text_length,
+                            attempts_used=attempts_used,
+                            strategy_name=type(self._strategy).__name__
+                            if self._strategy is not None
+                            else None,
                         ),
                     )
 
@@ -635,6 +645,7 @@ async def _emit_event(
     *,
     requirements: list[Requirement] | None = None,
     event_queue: asyncio.Queue[StreamEvent | None] | None = None,
+    strategy_name: str | None = None,
 ) -> None:
     """Fire the STREAMING_EVENT hook for `ev`, also pushing it onto `event_queue` if set.
 
@@ -648,6 +659,8 @@ async def _emit_event(
             order; `None` for other event types.
         event_queue: Optional queue; when set, `ev` is also pushed onto it.
             `None` for the plain chunk-iterating path.
+        strategy_name: For a `RetryEvent`, the sampling strategy's class name so a
+            subscriber can attribute the attempt; `None` for other event types.
     """
     if event_queue is not None:
         event_queue.put_nowait(ev)
@@ -657,7 +670,10 @@ async def _emit_event(
         await invoke_hook(
             HookType.STREAMING_EVENT,
             StreamingEventPayload(
-                streaming_id=streaming_id, event=ev, requirements=requirements or []
+                streaming_id=streaming_id,
+                event=ev,
+                requirements=requirements or [],
+                strategy_name=strategy_name,
             ),
         )
 
@@ -997,13 +1013,21 @@ async def _drive(
                         for a in streamer.attempts
                     ],
                 )
+            failed_count = (
+                len(streamer.streaming_failures)
+                if streamer.failed_early
+                else sum(1 for v in streamer.final_validations if not v.as_bool())
+            )
             await _emit_event(
                 streamer.streaming_id,
                 RetryEvent(
                     attempt=attempt + 1,
                     reason=streamer.failure_reason or "final validation failed",
+                    failed_early=streamer.failed_early,
+                    failed_count=failed_count,
                 ),
                 event_queue=streamer._event_queue,
+                strategy_name=type(strategy).__name__,
             )
             cur_mot, cur_new_ctx = await streamer._relaunch(cur_action, cur_old_ctx)
             streamer._mot = cur_mot
@@ -1095,6 +1119,8 @@ async def _stream(
                 chunking_strategy=type(chunking_strategy).__name__
                 if chunking_strategy
                 else "none",
+                strategy_name=type(strategy).__name__ if strategy is not None else None,
+                loop_budget=strategy.loop_budget if strategy is not None else None,
             ),
         )
 
@@ -1127,6 +1153,9 @@ async def _stream(
                     exception=exc if isinstance(exc, Exception) else None,
                     model=mot.generation.model if mot is not None else None,
                     provider=mot.generation.provider if mot is not None else None,
+                    strategy_name=type(strategy).__name__
+                    if strategy is not None
+                    else None,
                 ),
             )
         raise

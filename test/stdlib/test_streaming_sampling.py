@@ -212,6 +212,9 @@ async def test_mid_stream_fail_retries_then_succeeds() -> None:
     )
     retries = [e for e in events if isinstance(e, RetryEvent)]
     assert len(retries) == 1 and retries[0].attempt == 2
+    # The mid-stream break drives a stream_repair retry, surfaced on the event.
+    assert retries[0].failed_early is True
+    assert retries[0].failed_count == 1
     completed = [e for e in events if isinstance(e, CompletedEvent)]
     assert completed[-1].success is True
     assert completed[-1].attempts_used == 2
@@ -243,6 +246,11 @@ async def test_budget_exhausted_reports_failure() -> None:
         requirements=[RequireMarkerReq("GOOD")],
         strategy=RejectionSamplingStrategy(loop_budget=2),
     )
+    # Completed-but-failed attempts drive a `repair` retry, not `stream_repair`.
+    retries = [e for e in events if isinstance(e, RetryEvent)]
+    assert len(retries) == 1
+    assert retries[0].failed_early is False
+    assert retries[0].failed_count == 1
     completed = [e for e in events if isinstance(e, CompletedEvent)]
     # Both attempts completed (they just failed validation), so `success` reflects
     # completion; the failure verdict lives in the attempts.

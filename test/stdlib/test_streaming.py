@@ -1383,7 +1383,7 @@ def test_stream_event_types_have_auto_timestamp() -> None:
         FullValidationEvent(
             attempt=1, passed=True, results=[ValidationResult(result=True)]
         ),
-        RetryEvent(attempt=2, reason="too long"),
+        RetryEvent(attempt=2, reason="too long", failed_early=False, failed_count=1),
         CompletedEvent(success=True, full_text="hello", attempts_used=1),
         ErrorEvent(exception_type="ValueError", detail="boom"),
     ]
