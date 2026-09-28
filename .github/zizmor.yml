@@ -11,34 +11,6 @@
 
 rules:
 
-  # --- unpinned-uses ----------------------------------------------------------
-  # actions/create-github-app-token is referenced by tag (@v1) rather than a
-  # commit SHA across all release workflows. These workflows are
-  # workflow_dispatch-only and require maintainer write access to trigger, so
-  # the external attacker surface is low, but SHA-pinning is the right fix.
-  # Fix tracked in: https://github.com/generative-computing/mellea/issues/1531
-  unpinned-uses:
-    ignore:
-      - cut-release-branch.yml:35
-      - dispatch-to-contribs.yml:44
-      - publish-dev-from-main.yml:44
-      - publish-release.yml:111
-      - publish-release.yml:163
-
-  # --- github-app -------------------------------------------------------------
-  # GitHub App tokens are created without explicit permission scoping in the
-  # release workflows. The tokens are used for legitimate release automation
-  # (push commits/tags, open PRs, dispatch workflows), but the permission set
-  # should be narrowed to the minimum required.
-  # Fix tracked in: https://github.com/generative-computing/mellea/issues/1531
-  github-app:
-    ignore:
-      - cut-release-branch.yml:35
-      - dispatch-to-contribs.yml:44
-      - publish-dev-from-main.yml:44
-      - publish-release.yml:111
-      - publish-release.yml:163
-
   # --- template-injection -----------------------------------------------------
   # workflow_dispatch inputs used directly in run: blocks in
   # dispatch-to-contribs.yml. The workflow is dispatch-only (requires
@@ -49,7 +21,7 @@ rules:
     ignore:
       - dispatch-to-contribs.yml:33
       - dispatch-to-contribs.yml:34
-      - dispatch-to-contribs.yml:59
+      - dispatch-to-contribs.yml:60
 
   # --- cache-poisoning --------------------------------------------------------
   # astral-sh/setup-uv and actions/setup-node use caching in the
@@ -76,4 +48,4 @@ rules:
   # Fix tracked in: https://github.com/generative-computing/mellea/issues/1534
   artipacked:
     ignore:
-      - publish-release.yml:168
+      - publish-release.yml:173
