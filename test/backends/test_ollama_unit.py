@@ -6,7 +6,7 @@
 Covers _simplify_and_merge, _make_backend_specific_and_remove,
 chat_response_delta_merge, _strip_data_uri_prefix, timeout wiring,
 generate_from_raw empty-response handling (#599), and is_model_available
-casing.
+casing and exact-tag matching.
 """
 
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -577,6 +577,45 @@ def test_is_model_available_false_when_no_match(mock_ollama_backend):
     )
 
     assert backend.is_model_available("granite4.1:3b") is False
+
+
+# --- is_model_available exact-tag matching ---
+
+
+def test_is_model_available_false_for_partial_tag_match(mock_ollama_backend):
+    """A same-prefix, different-variant tag does not count as a match.
+
+    "granite4.1:3b" and "granite4.1:3b-instruct-q4" are different tags; the
+    installed variant is not the one that was asked for.
+    """
+    backend = mock_ollama_backend()
+    backend._client.list.return_value = ollama.ListResponse(
+        models=[ollama.ListResponse.Model(model="granite4.1:3b-instruct-q4")]
+    )
+
+    assert backend.is_model_available("granite4.1:3b") is False
+
+
+def test_is_model_available_defaults_untagged_query_to_latest(mock_ollama_backend):
+    """An untagged query resolves to ":latest", matching Ollama's own default."""
+    backend = mock_ollama_backend()
+    backend._client.list.return_value = ollama.ListResponse(
+        models=[ollama.ListResponse.Model(model="granite4.1:latest")]
+    )
+
+    assert backend.is_model_available("granite4.1") is True
+
+
+def test_is_model_available_untagged_query_does_not_match_other_tags(
+    mock_ollama_backend,
+):
+    """An untagged query only resolves to ":latest", not any other installed tag."""
+    backend = mock_ollama_backend()
+    backend._client.list.return_value = ollama.ListResponse(
+        models=[ollama.ListResponse.Model(model="granite4.1:3b")]
+    )
+
+    assert backend.is_model_available("granite4.1") is False
 
 
 if __name__ == "__main__":

@@ -506,8 +506,10 @@ class OllamaModelBackend(FormatterBackend, AdapterMixin):
     def is_model_available(self, model_name):
         """Checks if a specific Ollama model is available locally.
 
-        Matching is case-insensitive and prefix-based, e.g. "llama" matches
-        an installed "llama3:8b".
+        Matching is case-insensitive and compares the full tag, defaulting to
+        "latest" when `model_name` doesn't specify one — the same resolution
+        Ollama itself applies. So "llama3" matches an installed "llama3:latest"
+        but not "llama3:8b-instruct-q4".
 
         Args:
           model_name: The name of the model to check for (e.g., "llama2").
@@ -521,11 +523,13 @@ class OllamaModelBackend(FormatterBackend, AdapterMixin):
         # Guarded because the `except` below would otherwise turn "this backend is
         # closed" into a plain `False`, which reads as "the model isn't there".
         self._raise_if_closed()
+        target = model_name if ":" in model_name else f"{model_name}:latest"
+        target = target.lower()
         try:
             models = self._client.list()
             for model in models["models"]:
                 # Ollama tags are case-insensitive; match accordingly.
-                if model.model.lower().startswith(model_name.lower()):
+                if model.model.lower() == target:
                     return True
             return False
         except Exception as e:
