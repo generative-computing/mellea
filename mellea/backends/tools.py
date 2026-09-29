@@ -714,45 +714,46 @@ def validate_tool_arguments(
         # Simple type mapping
         return JSON_TYPE_TO_PYTHON.get(json_type, Any)
 
-    # Build Pydantic model from JSON schema
-    field_definitions: dict[str, Any] = {}
-
-    for param_name, param_schema in properties.items():
-        param_type = _build_pydantic_type_from_schema(param_schema)
-
-        # Determine if parameter is required
-        if param_name in required_fields:
-            # Required parameter
-            field_definitions[param_name] = (param_type, ...)
-        else:
-            # Optional parameter (default to None). The schema drops `null`
-            # from simple Optional types, so a field with no non-null default
-            # is taken as nullable; `page_size: int = 10` still rejects None.
-            if param_schema.get("default") is None:
-                param_type = param_type | None
-            field_definitions[param_name] = (param_type, None)
-
-    # Configure model for type coercion if requested
-    if coerce_types:
-        model_config = ConfigDict(
-            str_strip_whitespace=True,
-            strict=False,  # Allow type coercion
-            extra="forbid" if strict else "allow",  # Handle extra fields
-            # Enable coercion modes for common LLM output issues
-            coerce_numbers_to_str=True,  # Allow int/float -> str
-        )
-    else:
-        model_config = ConfigDict(
-            strict=True,  # No coercion
-            extra="forbid" if strict else "allow",
-        )
-
-    # Create dynamic Pydantic model for validation
-    ValidatorModel = create_model(
-        f"{tool_name}_Validator", __config__=model_config, **field_definitions
-    )
-
+    # Build inside the try so an unbuildable schema takes the lenient fallback.
     try:
+        # Build Pydantic model from JSON schema
+        field_definitions: dict[str, Any] = {}
+
+        for param_name, param_schema in properties.items():
+            param_type = _build_pydantic_type_from_schema(param_schema)
+
+            # Determine if parameter is required
+            if param_name in required_fields:
+                # Required parameter
+                field_definitions[param_name] = (param_type, ...)
+            else:
+                # Optional parameter (default to None). The schema drops `null`
+                # from simple Optional types, so a field with no non-null default
+                # is taken as nullable; `page_size: int = 10` still rejects None.
+                if param_schema.get("default") is None:
+                    param_type = param_type | None
+                field_definitions[param_name] = (param_type, None)
+
+        # Configure model for type coercion if requested
+        if coerce_types:
+            model_config = ConfigDict(
+                str_strip_whitespace=True,
+                strict=False,  # Allow type coercion
+                extra="forbid" if strict else "allow",  # Handle extra fields
+                # Enable coercion modes for common LLM output issues
+                coerce_numbers_to_str=True,  # Allow int/float -> str
+            )
+        else:
+            model_config = ConfigDict(
+                strict=True,  # No coercion
+                extra="forbid" if strict else "allow",
+            )
+
+        # Create dynamic Pydantic model for validation
+        ValidatorModel = create_model(
+            f"{tool_name}_Validator", __config__=model_config, **field_definitions
+        )
+
         # Validate using Pydantic
         validated_model = ValidatorModel(**args)
         # Only emit fields the model actually sent. A bare model_dump() would

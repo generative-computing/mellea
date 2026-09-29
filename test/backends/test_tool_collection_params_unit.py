@@ -304,11 +304,7 @@ class TestElementTypesInSchema:
 
 
 class TestDiscriminatedUnionsInCollections:
-    """Discriminated unions exposed by carried keywords must be flattened.
-
-    Tool APIs reject `oneOf` and `discriminator`, and the rest of the
-    schema pipeline strips them (see `_flatten_discriminated_union`).
-    """
+    """Discriminated unions in carried keywords are flattened for tool APIs."""
 
     @pytest.mark.parametrize(
         ("func", "param"),
@@ -420,11 +416,7 @@ class TestListValidation:
         ids=["list_bool", "list_list_int", "list_model", "optional_list_model"],
     )
     def test_previously_rejected_types_validate(self, func, args):
-        """These failed validation and were passed through unchecked.
-
-        `strict=True` raises on a validation failure instead of falling back
-        to the original arguments, so passing here proves they validated.
-        """
+        """These used to skip validation; `strict=True` proves they now pass it."""
         tool = MelleaTool.from_callable(func)
         assert validate_tool_arguments(tool, args, strict=True) == args
 
@@ -480,11 +472,7 @@ class TestListValidation:
         ids=["no_items", "items_true", "annotation_only_items"],
     )
     def test_external_unconstrained_array_elements_untouched(self, array_schema):
-        """A schema from outside `from_callable` may leave `items` unconstrained.
-
-        No `items`, `items: true`, and an items schema naming no type all place
-        no constraint on the elements, so they must not be coerced to strings.
-        """
+        """Unconstrained external `items` must not coerce elements to strings."""
         as_json_tool = {
             "type": "function",
             "function": {

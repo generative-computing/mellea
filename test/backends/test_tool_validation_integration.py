@@ -272,12 +272,7 @@ class TestOptionalParameters:
         assert "optional" not in validated
 
     def test_optional_param_none(self):
-        """Test validation when optional parameter is explicitly None.
-
-        `strict=True` raises instead of falling back to the original
-        arguments, so this proves the None validated rather than slipped
-        through the lenient fallback.
-        """
+        """Explicit None for `str | None` validates (strict, so no fallback)."""
         args = {"required": "value1", "optional": None}
         tool = MelleaTool.from_callable(optional_tool)
         validated = validate_tool_arguments(tool, args, strict=True)
@@ -285,11 +280,7 @@ class TestOptionalParameters:
         assert validated == {"required": "value1", "optional": None}
 
     def test_optional_int_none_strict(self):
-        """An explicit None for `int | None` validates.
-
-        The schema drops `null` from a simple Optional type, so the validator
-        must still accept it for a non-required field.
-        """
+        """An explicit None for `int | None` validates."""
         args = {"count": 3, "limit": None}
         tool = MelleaTool.from_callable(limit_tool)
         validated = validate_tool_arguments(tool, args, strict=True)
@@ -297,22 +288,14 @@ class TestOptionalParameters:
         assert validated == {"count": 3, "limit": None}
 
     def test_null_for_non_nullable_default_rejected_strict(self):
-        """Only nullable parameters accept None.
-
-        `page_size: int = 10` has a real default, so None is not a valid value
-        for it and strict mode must still raise.
-        """
+        """A real default (`page_size: int = 10`) still rejects None."""
         args = {"query": "q", "page_size": None}
         tool = MelleaTool.from_callable(paged_tool)
         with pytest.raises(ValidationError, match="page_size"):
             validate_tool_arguments(tool, args, strict=True)
 
     def test_optional_none_keeps_other_coercions(self):
-        """An explicit None must not make lenient mode drop the whole call.
-
-        A failed validation returns the original arguments, which would leave
-        `count` as the string "3".
-        """
+        """A None must not make lenient mode drop the other coercions."""
         args = {"count": "3", "limit": None}
         tool = MelleaTool.from_callable(limit_tool)
         validated = validate_tool_arguments(tool, args)
@@ -435,8 +418,47 @@ class TestUnionTypes:
         assert validated["value"] in ["42", 42]
 
 
+def _external_tool(value_schema: Any) -> MelleaTool:
+    """Build a tool whose single `value` parameter uses a raw JSON schema."""
+    as_json_tool = {
+        "type": "function",
+        "function": {
+            "name": "external",
+            "description": "An externally defined tool.",
+            "parameters": {
+                "type": "object",
+                "properties": {"value": value_schema},
+                "required": ["value"],
+            },
+        },
+    }
+    return MelleaTool("external", lambda value: value, as_json_tool)
+
+
+# Boolean sub-schemas are valid JSON Schema (e.g. from MCP) but broke the validator.
+BOOLEAN_SUBSCHEMAS = [
+    pytest.param(True, 1, id="property_true"),
+    pytest.param({"type": "object", "properties": {"a": True}}, {"a": 1}, id="nested"),
+    pytest.param({"anyOf": [True, {"type": "null"}]}, 1, id="anyof"),
+]
+
+
 class TestEdgeCases:
     """Test edge cases."""
+
+    @pytest.mark.parametrize(("value_schema", "value"), BOOLEAN_SUBSCHEMAS)
+    def test_unsupported_schema_lenient_returns_original_args(
+        self, value_schema, value
+    ):
+        """An unbuildable schema falls back to the original args, not a raise."""
+        tool = _external_tool(value_schema)
+        assert validate_tool_arguments(tool, {"value": value}) == {"value": value}
+
+    @pytest.mark.parametrize(("value_schema", "value"), BOOLEAN_SUBSCHEMAS)
+    def test_unsupported_schema_strict_raises(self, value_schema, value):
+        tool = _external_tool(value_schema)
+        with pytest.raises((TypeError, AttributeError)):
+            validate_tool_arguments(tool, {"value": value}, strict=True)
 
     def test_no_parameters_tool(self):
         """Test validation with no-parameter tool."""
