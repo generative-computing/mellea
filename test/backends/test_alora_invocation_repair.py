@@ -32,13 +32,13 @@ torch = pytest.importorskip("torch", reason="torch not installed — install mel
 
 # First Party
 from mellea.backends.adapters import AdapterType, IntrinsicAdapter
-from mellea.backends.adapters._core import Adapter, Identity, LocalFileBinding
-from mellea.backends.adapters.io_contracts import get_io_contract
-from mellea.backends.huggingface import (
-    LocalHFBackend,
+from mellea.backends.adapters._alora_repair import (
     _alora_invocation_repair,
     _token_sequence_present,
 )
+from mellea.backends.adapters._core import Adapter, Identity, LocalFileBinding
+from mellea.backends.adapters.io_contracts import get_io_contract
+from mellea.backends.huggingface import LocalHFBackend
 from test.backends.test_huggingface_unit import _make_backend
 
 _TOKEN_RE = re.compile(r">:|\S+|\s+")
