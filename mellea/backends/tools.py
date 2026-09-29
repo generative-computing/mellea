@@ -723,8 +723,11 @@ def validate_tool_arguments(
             # Required parameter
             field_definitions[param_name] = (param_type, ...)
         else:
-            # Optional parameter (default to None)
-            field_definitions[param_name] = (param_type, None)
+            # Optional parameter (default to None). Accept an explicit null
+            # too: the schema drops `null` from a simple Optional type, so
+            # `limit: int | None = None` would otherwise reject None and a
+            # lenient call would fall back to the unvalidated arguments.
+            field_definitions[param_name] = (param_type | None, None)
 
     # Configure model for type coercion if requested
     if coerce_types:

@@ -297,7 +297,8 @@ class TestListValidation:
 
     def test_optional_list_int_none(self):
         tool = MelleaTool.from_callable(optional_ints_tool)
-        assert validate_tool_arguments(tool, {"nums": None}) == {"nums": None}
+        validated = validate_tool_arguments(tool, {"nums": None}, strict=True)
+        assert validated == {"nums": None}
 
     @pytest.mark.parametrize(
         ("func", "args"),

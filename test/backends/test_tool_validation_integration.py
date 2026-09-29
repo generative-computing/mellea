@@ -51,6 +51,16 @@ def optional_tool(required: str, optional: str | None = None) -> str:
     return f"{required}:{optional or 'none'}"
 
 
+def limit_tool(count: int, limit: int | None = None) -> int:
+    """Tool with a required int and an optional int.
+
+    Args:
+        count: How many items to return
+        limit: An optional upper bound
+    """
+    return count if limit is None else min(count, limit)
+
+
 def union_tool(value: str | int) -> str:
     """Tool with union type parameter.
 
@@ -252,13 +262,42 @@ class TestOptionalParameters:
         assert "optional" not in validated
 
     def test_optional_param_none(self):
-        """Test validation when optional parameter is explicitly None."""
+        """Test validation when optional parameter is explicitly None.
+
+        `strict=True` raises instead of falling back to the original
+        arguments, so this proves the None validated rather than slipped
+        through the lenient fallback.
+        """
         args = {"required": "value1", "optional": None}
         tool = MelleaTool.from_callable(optional_tool)
+        validated = validate_tool_arguments(tool, args, strict=True)
+
+        assert validated == {"required": "value1", "optional": None}
+
+    def test_optional_int_none_strict(self):
+        """An explicit None for `int | None` validates.
+
+        The schema drops `null` from a simple Optional type, so the validator
+        must still accept it for a non-required field.
+        """
+        args = {"count": 3, "limit": None}
+        tool = MelleaTool.from_callable(limit_tool)
+        validated = validate_tool_arguments(tool, args, strict=True)
+
+        assert validated == {"count": 3, "limit": None}
+
+    def test_optional_none_keeps_other_coercions(self):
+        """An explicit None must not make lenient mode drop the whole call.
+
+        A failed validation returns the original arguments, which would leave
+        `count` as the string "3".
+        """
+        args = {"count": "3", "limit": None}
+        tool = MelleaTool.from_callable(limit_tool)
         validated = validate_tool_arguments(tool, args)
 
-        assert validated["required"] == "value1"
-        assert validated["optional"] is None
+        assert validated == {"count": 3, "limit": None}
+        assert type(validated["count"]) is int
 
 
 class TestDefaultedParameters:
