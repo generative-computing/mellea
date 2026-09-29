@@ -632,9 +632,13 @@ def validate_tool_arguments(
                 **nested_fields,
             )
 
-        # Handle arrays
+        # Handle arrays. A missing or empty `items` schema leaves the elements
+        # unconstrained; falling through to the `string` default would coerce
+        # every numeric element to a string under `coerce_numbers_to_str`.
         if json_type == "array":
-            item_schema = schema.get("items", {})
+            item_schema = schema.get("items")
+            if not item_schema:
+                return list[Any]
             item_type = _build_pydantic_type_from_schema(item_schema)
             return list[item_type]  # type: ignore
 
@@ -1346,6 +1350,30 @@ def _flatten_discriminated_union(v: dict, defs: dict) -> dict:
     return out
 
 
+# JSON Schema keywords copied from Pydantic's schema onto a rebuilt simple
+# property. Without them the model is never told a list's or dict's element
+# type or a field's constraints, and `validate_tool_arguments`, which builds
+# its validator from the same schema, loses the element types too.
+_CARRIED_SCHEMA_KEYWORDS = (
+    "items",
+    "additionalProperties",
+    "minItems",
+    "maxItems",
+    "uniqueItems",
+    "minProperties",
+    "maxProperties",
+    "minLength",
+    "maxLength",
+    "pattern",
+    "format",
+    "minimum",
+    "maximum",
+    "exclusiveMinimum",
+    "exclusiveMaximum",
+    "multipleOf",
+)
+
+
 # https://github.com/ollama/ollama-python/blob/60e7b2f9ce710eeb57ef2986c46ea612ae7516af/ollama/_utils.py#L56-L90
 def convert_function_to_ollama_tool(
     func: Callable, name: str | None = None
@@ -1493,6 +1521,18 @@ def convert_function_to_ollama_tool(
             # from scratch would otherwise drop it.
             if "default" in v:
                 simple_prop["default"] = v["default"]
+            # Carry element types and constraints across too. For an Optional
+            # parameter Pydantic puts them on the non-null anyOf branch; with
+            # several non-null branches they belong to one branch each, so
+            # none are merged onto the flattened property.
+            if "anyOf" in v:
+                non_null = [s for s in v["anyOf"] if s.get("type") != "null"]
+                keyword_source = non_null[0] if len(non_null) == 1 else {}
+            else:
+                keyword_source = v
+            for keyword in _CARRIED_SCHEMA_KEYWORDS:
+                if keyword in keyword_source:
+                    simple_prop[keyword] = keyword_source[keyword]
             schema["properties"][k] = simple_prop
 
     # Final pass: recursively inline all remaining $refs at any depth.
