@@ -471,18 +471,50 @@ def find_func(d: object) -> tuple[str | None, Mapping | None]:
     return None, None
 
 
+# The XML function format Granite 4.2 chat templates instruct the model to use:
+# <tool_call>\n<function=NAME>\n<parameter=KEY>\nVALUE\n</parameter>\n</function>\n</tool_call>
+_XML_FUNCTION_RE = re.compile(r"<function=([^>\n]+)>(.*?)</function>", re.DOTALL)
+_XML_PARAMETER_RE = re.compile(r"<parameter=([^>\n]+)>(.*?)</parameter>", re.DOTALL)
+
+
+def _parse_xml_tool_calls(llm_response: str) -> list[tuple[str, Mapping]]:
+    """Extract tool calls written in the XML function format.
+
+    Values are returned as raw strings, minus the single newline the template
+    wraps each one in; `to_tool_calls` coerces them against the tool schema.
+    """
+    calls: list[tuple[str, Mapping]] = []
+    for function in _XML_FUNCTION_RE.finditer(llm_response):
+        args = {
+            name.strip(): value.removeprefix("\n").removesuffix("\n")
+            for name, value in _XML_PARAMETER_RE.findall(function.group(2))
+        }
+        calls.append((function.group(1).strip(), args))
+    return calls
+
+
 def parse_tools(llm_response: str) -> list[tuple[str, Mapping]]:
-    """A simple parser that will scan a string for tools and attempt to extract them; only works for json based outputs.
+    """A simple parser that will scan a string for tools and attempt to extract them.
+
+    Two formats are recognized: JSON objects of the form
+    `{"name": ..., "arguments": {...}}` (bare, or inside `<tool_call>` tags), and
+    the XML function format that Granite 4.2 chat templates prescribe,
+    `<function=NAME><parameter=KEY>VALUE</parameter></function>` inside
+    `<tool_call>` tags. XML parameter values are returned as strings.
 
     Args:
         llm_response: Raw string output from a language model.
 
     Returns:
-        List of `(tool_name, arguments)` tuples for each tool call found.
+        List of `(tool_name, arguments)` tuples for each tool call found, XML
+        calls first.
     """
-    processed = " ".join(llm_response.split())
+    tools = _parse_xml_tool_calls(llm_response)
 
-    tools = []
+    # Blank out the XML calls so a JSON-looking parameter value is not parsed
+    # a second time as a call of its own.
+    processed = " ".join(_XML_FUNCTION_RE.sub(" ", llm_response).split())
+
     for possible_tool in json_extraction(processed):
         tool_name, tool_arguments = find_func(possible_tool)
         if tool_name is not None and tool_arguments is not None:

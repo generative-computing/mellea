@@ -13,7 +13,8 @@ the list of role/content dicts expected by `apply_chat_template`; and
 from __future__ import annotations
 
 import inspect
-from collections.abc import Callable
+import json
+from collections.abc import Callable, Mapping
 from typing import Any
 
 from ..core import Context, MelleaLogger, ModelToolCall, Span
@@ -144,6 +145,33 @@ def to_chat(
     return ctx_as_conversation
 
 
+def _decode_json_container_args(
+    args: Mapping[str, Any], properties: Mapping[str, Any]
+) -> dict[str, Any]:
+    """Decode string values of object/array parameters as JSON.
+
+    Formats that carry every value as text (Granite's XML tool calls) render
+    list and dict arguments with `tojson`. Scalars are left for
+    `validate_tool_arguments` to coerce.
+    """
+    decoded = dict(args)
+    for name, value in args.items():
+        schema = properties.get(name) or {}
+        declared = schema.get("type")
+        types = set(declared) if isinstance(declared, list) else {declared}
+        types.update(s.get("type") for s in schema.get("anyOf", []))
+        if not isinstance(value, str) or not types & {"object", "array"}:
+            continue
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError:
+            # Leave it as-is; validate_tool_arguments reports the mismatch.
+            continue
+        if isinstance(parsed, dict | list):
+            decoded[name] = parsed
+    return decoded
+
+
 def to_tool_calls(
     tools: dict[str, AbstractMelleaTool], decoded_result: str
 ) -> list[ModelToolCall] | None:
@@ -157,7 +185,12 @@ def to_tool_calls(
         List of validated `ModelToolCall` (order preserved), or `None` if no tool calls were found.
     """
     model_tool_calls: list[ModelToolCall] = []
-    for tool_name, tool_args in parse_tools(decoded_result):
+    parsed = parse_tools(decoded_result)
+    if not parsed and "<tool_call>" in decoded_result:
+        MelleaLogger.get_logger().warning(
+            "model output contains <tool_call> markup but no tool call could be parsed from it"
+        )
+    for tool_name, tool_args in parsed:
         func = tools.get(tool_name)
         if func is None:
             MelleaLogger.get_logger().warning(
@@ -170,6 +203,8 @@ def to_tool_calls(
         param_map = func.as_json_tool["function"]["parameters"]["properties"]
         if len(param_map) == 0:
             tool_args = {}
+        else:
+            tool_args = _decode_json_container_args(tool_args, param_map)
 
         # Validate and coerce argument types
         validated_args = validate_tool_arguments(func, tool_args, strict=False)

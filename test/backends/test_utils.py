@@ -3,6 +3,7 @@
 
 """Unit tests for backends/utils.py — get_value accessor and to_tool_calls parser."""
 
+import logging
 from dataclasses import dataclass
 
 import pytest
@@ -126,6 +127,161 @@ def test_to_tool_calls_string_arg_coerced_to_int():
     assert result is not None
     assert result[0].args["x"] == 5
     assert result[0].args["y"] == 10
+
+
+# --- to_tool_calls: Granite XML function format (#1689) ---
+
+
+def _tool_call_xml(name: str, args: dict[str, str]) -> str:
+    params = "".join(f"<parameter={k}>\n{v}\n</parameter>\n" for k, v in args.items())
+    return f"<tool_call>\n<function={name}>\n{params}</function>\n</tool_call>"
+
+
+def test_to_tool_calls_granite_xml_call_coerced_to_schema():
+    registry = _make_tool_registry()
+    result = to_tool_calls(registry, _tool_call_xml("add", {"x": "3", "y": "4"}))
+    assert result is not None
+    assert len(result) == 1
+    assert result[0].name == "add"
+    assert result[0].args == {"x": 3, "y": 4}
+
+
+def test_to_tool_calls_granite_xml_array_param_decoded_from_json():
+    """The template renders list/dict arguments with `tojson`, so they arrive as JSON text."""
+
+    def tag(labels: list[str]) -> str:
+        """Tag an item.
+
+        Args:
+            labels: the labels to apply
+        """
+        return ",".join(labels)
+
+    registry = {"tag": MelleaTool.from_callable(tag)}
+    result = to_tool_calls(registry, _tool_call_xml("tag", {"labels": '["a", "b"]'}))
+    assert result is not None
+    assert result[0].args == {"labels": ["a", "b"]}
+
+
+def test_to_tool_calls_json_text_for_string_param_stays_a_string():
+    """Only object/array parameters are JSON-decoded."""
+
+    def note(text: str) -> str:
+        """Store a note.
+
+        Args:
+            text: the note text
+        """
+        return text
+
+    registry = {"note": MelleaTool.from_callable(note)}
+    result = to_tool_calls(registry, _tool_call_xml("note", {"text": '{"a": 1}'}))
+    assert result is not None
+    assert result[0].args == {"text": '{"a": 1}'}
+
+
+def test_to_tool_calls_granite_xml_optional_model_param_decoded():
+    """`Optional[Model]` renders as `anyOf: [{type: object}, {type: null}]`."""
+    from pydantic import BaseModel
+
+    class Point(BaseModel):
+        x: int
+        y: int
+
+    def plot(point: Point | None = None) -> str:
+        """Plot a point.
+
+        Args:
+            point: the point to plot
+        """
+        return str(point)
+
+    registry = {"plot": MelleaTool.from_callable(plot)}
+    raw = _tool_call_xml("plot", {"point": '{"x": 1, "y": 2}'})
+    result = to_tool_calls(registry, raw)
+    assert result is not None
+    assert result[0].args == {"point": {"x": 1, "y": 2}}
+
+
+def test_to_tool_calls_undecodable_array_value_left_for_validation():
+    """Text that is not JSON is passed through; validation reports the mismatch."""
+
+    def tag(labels: list[str]) -> str:
+        """Tag an item.
+
+        Args:
+            labels: the labels to apply
+        """
+        return ",".join(labels)
+
+    registry = {"tag": MelleaTool.from_callable(tag)}
+    result = to_tool_calls(registry, _tool_call_xml("tag", {"labels": "a, b"}))
+    assert result is not None
+    assert result[0].args == {"labels": "a, b"}
+
+
+def test_to_tool_calls_warns_on_unparsable_tool_call_markup(
+    caplog: pytest.LogCaptureFixture,
+):
+    registry = _make_tool_registry()
+    with caplog.at_level(logging.WARNING, logger="mellea"):
+        result = to_tool_calls(
+            registry, "<tool_call>\nadd three and four\n</tool_call>"
+        )
+    assert result is None
+    assert any("<tool_call>" in r.getMessage() for r in caplog.records)
+
+
+@pytest.mark.integration
+def test_to_tool_calls_round_trips_real_granite_template() -> None:
+    """Parse the tool-call markup the real granite-4.2-3b chat template renders.
+
+    Loads the template only (no GPU, no model weights); skips if not locally cached.
+    """
+    from test.backends.test_huggingface_filter_options import (
+        _GRANITE_THINKING_MODEL_ID,
+        _try_load_granite_tokenizer,
+    )
+
+    tok = _try_load_granite_tokenizer(_GRANITE_THINKING_MODEL_ID)
+    if tok is None:
+        pytest.skip(f"{_GRANITE_THINKING_MODEL_ID} not in local HF cache")
+
+    def tag(labels: list[str], note: str) -> str:
+        """Tag an item.
+
+        Args:
+            labels: the labels to apply
+            note: a free-text note
+        """
+        return note
+
+    registry = {**_make_tool_registry(), "tag": MelleaTool.from_callable(tag)}
+    calls = [
+        {"name": "add", "arguments": {"x": 3, "y": 4}},
+        {"name": "tag", "arguments": {"labels": ["a", "b"], "note": "first\nsecond"}},
+    ]
+    rendered = tok.apply_chat_template(
+        [
+            {"role": "user", "content": "Add 3 and 4, then tag it."},
+            {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                    {"id": str(i), "type": "function", "function": c}
+                    for i, c in enumerate(calls)
+                ],
+            },
+        ],
+        tokenize=False,
+    )
+    assert "<function=add>" in rendered  # the template really uses the XML format
+
+    result = to_tool_calls(registry, rendered)
+    assert result is not None
+    assert [(r.name, r.args) for r in result] == [
+        (c["name"], c["arguments"]) for c in calls
+    ]
 
 
 # --- to_chat ---
