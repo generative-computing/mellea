@@ -31,7 +31,7 @@ pytest.importorskip(
 peft = pytest.importorskip("peft", reason="peft not installed — install mellea[hf]")
 import peft.tuners.lora.variants as peft_variants
 from peft import LoraConfig
-from transformers import LlamaConfig, LlamaForCausalLM
+from transformers import GenerationConfig, LlamaConfig, LlamaForCausalLM
 
 # First Party
 import mellea.formatters.granite.base.util as granite_util
@@ -160,13 +160,19 @@ class TestAloraActivationContext:
         assert len(warned) == 1
         assert "'rc'" in warned[0].message
 
-    def test_beam_search_raises_clear_error(self):
+    @pytest.mark.parametrize(
+        "generate_kwargs",
+        [{"num_beams": 2}, {"generation_config": GenerationConfig(num_beams=2)}],
+        ids=["kwarg", "generation-config"],
+    )
+    def test_beam_search_raises_clear_error(self, generate_kwargs):
         """PEFT's own `PeftModel` path rejects beam search for aLoRA; so must
-        this one, rather than failing later with an opaque IndexError."""
+        this one, however the setting is passed, rather than failing later
+        with an opaque IndexError."""
         model = _tiny_model(_alora_config())
         input_ids = torch.tensor([[10, 1, 2, 3, 40, 50]])
         with pytest.raises(ValueError, match="Beam search"):
-            with _alora_activation_context(model, input_ids, {"num_beams": 2}):
+            with _alora_activation_context(model, input_ids, generate_kwargs):
                 pass
         assert _n_pre_hooks(model) == 0
 
@@ -223,16 +229,26 @@ class TestAloraActivationContext:
         assert spy.n_calls > 0
         assert spy.offsets_seen[0] == [5]
 
-    def test_generate_with_transformers_passes_generation_kwargs(self):
+    @pytest.mark.parametrize(
+        "generate_kwargs",
+        [
+            {"do_sample": True, "num_return_sequences": 2},
+            {
+                "generation_config": GenerationConfig(
+                    do_sample=True, num_return_sequences=2
+                )
+            },
+        ],
+        ids=["kwarg", "generation-config"],
+    )
+    def test_generate_with_transformers_passes_generation_kwargs(self, generate_kwargs):
         """Wiring check: the production path hands its generate kwargs to the
-        context, so a multi-sequence request expands the offsets instead of
-        crashing inside the variant."""
+        context, so a multi-sequence request (flat kwarg or `generation_config`
+        object) expands the offsets instead of crashing inside the variant."""
         model = _tiny_model(_alora_config())
         input_ids = torch.tensor([[10, 1, 2, 3, 40, 50]])
         with _VariantSpy() as spy:
-            self._generate_via_production_path(
-                model, input_ids, do_sample=True, num_return_sequences=2
-            )
+            self._generate_via_production_path(model, input_ids, **generate_kwargs)
         assert spy.offsets_seen[0] == [5, 5]
 
 

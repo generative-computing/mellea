@@ -388,8 +388,15 @@ _ALORA_MISSING_INVOCATION_WARNED: set[str] = set()
 def _generation_setting(
     model: PreTrainedModel, generate_kwargs: Mapping[str, Any], name: str
 ) -> int:
-    """Effective integer `generate()` setting: call kwarg, else model default, else 1."""
+    """Effective integer `generate()` setting, resolved in `generate()`'s order.
+
+    A flat kwarg wins, then a `generation_config=` kwarg, then the model's own
+    `generation_config`; 1 if none sets it. Unset `GenerationConfig` fields
+    are `None`, so each level falls through to the next.
+    """
     value = generate_kwargs.get(name)
+    if value is None:
+        value = getattr(generate_kwargs.get("generation_config"), name, None)
     if value is None:
         value = getattr(getattr(model, "generation_config", None), name, None)
     return value if isinstance(value, int) else 1
