@@ -1086,12 +1086,12 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         `_alora_invocation_repair`): a healthy file -- in either direction a
         publisher might fix it -- is returned untouched.
 
-        Called from both `add_adapter` registration paths: the composed-adapter
-        commit point, with the declared sequence read from the PEFT config
-        `binding.prepare()` loaded, and the `IntrinsicAdapter` shim path, with
-        it read from the downloaded `adapter_config.json` (that shim loads its
-        weights per generate call, after its config has already been rendered
-        into the prompt).
+        Called from both `add_adapter` registration paths, with the declared
+        sequence read from the downloaded `adapter_config.json`: the
+        composed-adapter path before `binding.prepare()`, so a failure leaves
+        nothing registered, and the `IntrinsicAdapter` shim path at
+        registration, because that shim loads its weights per generate call,
+        after its config has already been rendered into the prompt.
 
         Args:
             io_yaml_config: The adapter's `io.yaml` mapping. Never mutated: a
@@ -1343,7 +1343,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
             # Two load-bearing assumptions: (1) __getattr__ falls through for attributes
             # accessed by generate_with_transformers (model.device, model.vocab_size,
-            # model.generation_config). (2) chat_completion_request_to_transformers_inputs
+            # model.generation_config, and for aLoRA activation model.peft_config,
+            # model.active_adapters, model.modules()). (2) chat_completion_request_to_transformers_inputs
             # always sets return_dict_in_generate=True, so .generate() always returns a
             # GenerateDecoderOnlyOutput — if that ever changes, the cell stays None and
             # logits silently won't be populated.
@@ -2984,6 +2985,16 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 # this ordering only has to cover the fetch this method adds
                 # ahead of it.
                 io_yaml_config = self._obtain_local_file_io_yaml_config(binding)
+                # Before prepare() for the same reason: the declared invocation
+                # sequence is read from the downloaded adapter_config.json, so a
+                # failure here also leaves nothing registered.
+                io_yaml_config = self._repair_alora_instruction(
+                    io_yaml_config,
+                    _read_alora_invocation_tokens(
+                        binding.get_local_hf_path(self.base_model_name)
+                    ),
+                    key,
+                )
                 # bind_backend() itself raises if binding.backend is already
                 # a *different* backend, and no-ops if it's already self —
                 # calling it unconditionally (rather than guarding on
@@ -3014,12 +3025,6 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 # commit, releasing (terminal, weights unloaded) the exact
                 # binding this is about to publish as registered.
                 with binding.hold_prepared(self), self._adapter_activation_lock():
-                    peft_config = self._model.peft_config.get(key)
-                    io_yaml_config = self._repair_alora_instruction(
-                        io_yaml_config,
-                        getattr(peft_config, "alora_invocation_tokens", None),
-                        key,
-                    )
                     self._composed_adapter_configs[key] = io_yaml_config
                     self._composed_adapters[key] = adapter
             return

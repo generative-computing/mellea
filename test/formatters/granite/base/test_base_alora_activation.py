@@ -40,6 +40,7 @@ from mellea.formatters.granite.base.util import (
     _alora_activation_context,
     generate_with_transformers,
 )
+from test.conftest import cleanup_gpu_backend, hf_skip
 from test.predicates import require_gpu
 
 INVOCATION = [1, 2, 3]
@@ -252,6 +253,43 @@ class TestAloraActivationContext:
         assert spy.offsets_seen[0] == [5, 5]
 
 
+@pytest.fixture
+def alora_backend():
+    """Factory for a granite-4.1-3b `LocalHFBackend` with one catalogue aLoRA
+    registered as a composed `Adapter`. Hub errors skip the test, and every
+    backend built is freed afterwards."""
+    from mellea.backends.adapters._core import Adapter, Identity, LocalFileBinding
+    from mellea.backends.adapters.catalog import AdapterType, fetch_intrinsic_metadata
+    from mellea.backends.adapters.io_contracts import get_io_contract
+
+    backends: list[LocalHFBackend] = []
+
+    def _make(name: str, capability: str) -> LocalHFBackend:
+        md = fetch_intrinsic_metadata(name)
+        with hf_skip():
+            backend = LocalHFBackend(model_id="ibm-granite/granite-4.1-3b")
+            backends.append(backend)
+            backend.add_adapter(
+                Adapter(
+                    identity=Identity(
+                        name=name, adapter_type="alora", capability=capability
+                    ),
+                    io_contract=get_io_contract(name),
+                    weights=LocalFileBinding(
+                        name=name,
+                        adapter_type=AdapterType.ALORA,
+                        repo_id=md.repo_id,
+                        revision=md.revision,
+                    ),
+                )
+            )
+        return backend
+
+    yield _make
+    for backend in backends:
+        cleanup_gpu_backend(backend, "test_base_alora_activation")
+
+
 @pytest.mark.huggingface
 @pytest.mark.e2e
 @pytest.mark.qualitative
@@ -269,13 +307,7 @@ class TestAloraDifferentialEndToEnd:
     scores measured 0.047 vs 0.999 in the #1679 diagnostic eval.
     """
 
-    def test_requirement_check_adapter_moves_score(self):
-        from mellea.backends.adapters._core import Adapter, Identity, LocalFileBinding
-        from mellea.backends.adapters.catalog import (
-            AdapterType,
-            fetch_intrinsic_metadata,
-        )
-        from mellea.backends.adapters.io_contracts import get_io_contract
+    def test_requirement_check_adapter_moves_score(self, alora_backend):
         from mellea.stdlib.components import Message
         from mellea.stdlib.components.intrinsic import core
         from mellea.stdlib.context import ChatContext
@@ -286,24 +318,7 @@ class TestAloraDifferentialEndToEnd:
         # (`_repair_alora_instruction`) until the publisher
         # republishes a corrected file, so this test runs on the as-published
         # adapter with no local workaround.
-        md = fetch_intrinsic_metadata("requirement-check")
-        backend = LocalHFBackend(model_id="ibm-granite/granite-4.1-3b")
-        backend.add_adapter(
-            Adapter(
-                identity=Identity(
-                    name="requirement-check",
-                    adapter_type="alora",
-                    capability="requirement_check",
-                ),
-                io_contract=get_io_contract("requirement-check"),
-                weights=LocalFileBinding(
-                    name="requirement-check",
-                    adapter_type=AdapterType.ALORA,
-                    repo_id=md.repo_id,
-                    revision=md.revision,
-                ),
-            )
-        )
+        backend = alora_backend("requirement-check", "requirement_check")
         ctx = (
             ChatContext()
             .add(Message("user", "Write one sentence about Cardiff."))
@@ -368,33 +383,12 @@ class TestUncertaintyAloraDifferentialEndToEnd:
     (wrong) — a wide differential either way.
     """
 
-    def test_check_certainty_adapter_moves_score(self):
-        from mellea.backends.adapters._core import Adapter, Identity, LocalFileBinding
-        from mellea.backends.adapters.catalog import (
-            AdapterType,
-            fetch_intrinsic_metadata,
-        )
-        from mellea.backends.adapters.io_contracts import get_io_contract
+    def test_check_certainty_adapter_moves_score(self, alora_backend):
         from mellea.stdlib.components import Message
         from mellea.stdlib.components.intrinsic import core
         from mellea.stdlib.context import ChatContext
 
-        md = fetch_intrinsic_metadata("uncertainty")
-        backend = LocalHFBackend(model_id="ibm-granite/granite-4.1-3b")
-        backend.add_adapter(
-            Adapter(
-                identity=Identity(
-                    name="uncertainty", adapter_type="alora", capability="uncertainty"
-                ),
-                io_contract=get_io_contract("uncertainty"),
-                weights=LocalFileBinding(
-                    name="uncertainty",
-                    adapter_type=AdapterType.ALORA,
-                    repo_id=md.repo_id,
-                    revision=md.revision,
-                ),
-            )
-        )
+        backend = alora_backend("uncertainty", "uncertainty")
         qualified = next(iter(backend._model.peft_config))
 
         def score_with_adapter_off(user: str, assistant: str) -> float:

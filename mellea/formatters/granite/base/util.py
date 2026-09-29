@@ -559,6 +559,11 @@ def generate_with_transformers(
 
     Returns:
         A chat completion response in OpenAI format.
+
+    Raises:
+        ValueError: Beam search (`num_beams > 1`) was requested while an aLoRA
+            adapter is active and its invocation sequence is in the prompt;
+            PEFT does not support that combination.
     """
     with import_optional("torch"):
         # Third Party

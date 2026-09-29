@@ -10,8 +10,10 @@ aLoRA, where the instruction starts `<requirements>:` but the declared
 sequence is `<requirements>` (no colon) and the Granite tokeniser merges `>:`
 into a single token, so the sequence can never appear.
 
-The fake tokenizer below mimics exactly that BPE quirk at word granularity:
-`>:` is one token, a standalone `>` is a different one.
+The fake tokenizer below reproduces the real token shape: `<`, `requirements`
+and `>` are separate tokens (the declared `[27, 71226, 29]` run), and `>`
+merges with a following `:` (or `=`) into one token, so the broken text
+shares the first two tokens of the run and differs only at the last.
 """
 
 # Standard
@@ -19,7 +21,6 @@ import json
 import logging
 import re
 from collections.abc import Sequence
-from types import SimpleNamespace
 from unittest.mock import mock_open, patch
 
 # Third Party
@@ -41,11 +42,11 @@ from mellea.backends.adapters.io_contracts import get_io_contract
 from mellea.backends.huggingface import LocalHFBackend
 from test.backends.test_huggingface_unit import _make_backend
 
-_TOKEN_RE = re.compile(r">:|\S+|\s+")
+_TOKEN_RE = re.compile(r"<|>:|>=|>|[^\s<>]+|\s+")
 
 
 class _MergingTokenizer:
-    """Word-level tokenizer where `>:` merges into one token, like the Granite BPE quirk."""
+    """Tokenizer that splits `<`, `>` and words, merging `>:` and `>=` like Granite's BPE."""
 
     def __init__(self, seed_text: str):
         self._ids: dict[str, int] = {}
@@ -130,10 +131,11 @@ class TestAloraInvocationRepair:
 
     def test_colon_present_but_removal_does_not_restore_returns_none(self):
         """The colon form occurs, but dropping it still does not yield the
-        declared run (here `<requirements>:x` -> `<requirements>x`, a different
-        token): the third check refuses rather than rewrite blindly."""
+        declared run (here `<requirements>:=` -> `<requirements>=`, where `>=`
+        merges into one token): the third check refuses rather than rewrite
+        blindly."""
         tok = _tokenizer()
-        instruction = "<requirements>:x {requirement}\nEvaluate."
+        instruction = "<requirements>:= {requirement}\nEvaluate."
         assert (
             _alora_invocation_repair(tok, instruction, _invocation_no_colon()) is None
         )
@@ -200,19 +202,19 @@ class TestRepairWiring:
 
         assert adapter.config == _BROKEN_CONFIG
 
-    def test_composed_adapter_path_repairs_config(self):
+    def test_composed_adapter_path_repairs_config(self, tmp_path):
         tok = _tokenizer()
         backend = _stub_backend(tok)
         key = "requirement-check_alora"
-        backend._model.peft_config = {
-            key: SimpleNamespace(alora_invocation_tokens=_invocation_no_colon())
-        }
+        (tmp_path / "adapter_config.json").write_text(
+            json.dumps({"alora_invocation_tokens": _invocation_no_colon()})
+        )
         binding = LocalFileBinding(
             name="requirement-check",
             adapter_type=AdapterType.ALORA,
             repo_id="fake/repo",
         )
-        binding.get_local_hf_path = lambda base_model_name: "/fake/path"  # type: ignore[method-assign]
+        binding.get_local_hf_path = lambda base_model_name: str(tmp_path)  # type: ignore[method-assign]
         composed = Adapter(
             identity=Identity(
                 name="requirement-check",
