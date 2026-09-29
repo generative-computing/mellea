@@ -483,20 +483,25 @@ class SamplingMetricsPlugin(Plugin, name="sampling_metrics", priority=1054):
     async def record_streaming_outcome(
         self, payload: StreamingEndPayload, context: dict[str, Any]
     ) -> None:
-        """Record the sampling outcome when a strategy-driven stream finishes.
+        """Record a strategy-driven stream's sampling outcome, unless it raised.
 
         Only streams that ran a sampling strategy are recorded — a plain stream is
-        not a sampling loop — and the outcome is attributed to the real strategy.
+        not a sampling loop — and the outcome is attributed to the real strategy. A
+        raised stream is skipped: a crash is not a sampling verdict.
 
         Args:
-            payload: Contains the stream's success flag and strategy name.
+            payload: Contains the sampling success flag and strategy name.
             context: Plugin context (unused).
         """
         from mellea.telemetry.metrics import record_sampling_outcome
 
-        if payload.strategy_name is None:
+        if (
+            payload.exception is not None
+            or payload.strategy_name is None
+            or payload.sampling_success is None
+        ):
             return
-        record_sampling_outcome(payload.strategy_name, payload.success)
+        record_sampling_outcome(payload.strategy_name, payload.sampling_success)
 
 
 class RequirementMetricsPlugin(Plugin, name="requirement_metrics", priority=1055):

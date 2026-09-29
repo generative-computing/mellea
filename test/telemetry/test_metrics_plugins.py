@@ -966,16 +966,24 @@ async def test_sampling_plugin_skips_outcome_on_exception(sampling_plugin):
 
 
 @pytest.mark.asyncio
-async def test_sampling_plugin_records_streaming_outcome_by_strategy(sampling_plugin):
-    """A strategy-driven streaming_end records the outcome under the real strategy."""
+@pytest.mark.parametrize("sampling_success", [True, False])
+async def test_sampling_plugin_records_streaming_outcome_by_strategy(
+    sampling_plugin, sampling_success
+):
+    """A strategy-driven streaming_end records `sampling_success`, not completion."""
     payload = StreamingEndPayload(
-        streaming_id="sid", success=True, strategy_name="RejectionSamplingStrategy"
+        streaming_id="sid",
+        success=True,
+        strategy_name="RejectionSamplingStrategy",
+        sampling_success=sampling_success,
     )
 
     with patch("mellea.telemetry.metrics.record_sampling_outcome") as mock_record:
         await sampling_plugin.record_streaming_outcome(payload, {})
 
-        mock_record.assert_called_once_with("RejectionSamplingStrategy", True)
+        mock_record.assert_called_once_with(
+            "RejectionSamplingStrategy", sampling_success
+        )
 
 
 @pytest.mark.asyncio
@@ -984,6 +992,23 @@ async def test_sampling_plugin_skips_streaming_outcome_without_strategy(
 ):
     """A plain stream (no strategy) is not a sampling loop and is not recorded."""
     payload = StreamingEndPayload(streaming_id="sid", success=True, strategy_name=None)
+
+    with patch("mellea.telemetry.metrics.record_sampling_outcome") as mock_record:
+        await sampling_plugin.record_streaming_outcome(payload, {})
+
+        mock_record.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_sampling_plugin_skips_streaming_outcome_on_exception(sampling_plugin):
+    """A raised strategy-driven stream records no outcome — a crash is not a verdict."""
+    payload = StreamingEndPayload(
+        streaming_id="sid",
+        success=False,
+        strategy_name="RejectionSamplingStrategy",
+        sampling_success=False,
+        exception=RuntimeError("boom"),
+    )
 
     with patch("mellea.telemetry.metrics.record_sampling_outcome") as mock_record:
         await sampling_plugin.record_streaming_outcome(payload, {})

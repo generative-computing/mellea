@@ -74,6 +74,9 @@ class StreamingEndPayload(MelleaBasePayload):
         attempts_used: Number of attempts the run made (`1` without a strategy).
         strategy_name: Class name of the sampling `strategy` driving retry/repair,
             or `None` when the run has no strategy.
+        sampling_success: `True` when a sampling strategy drove the run and the
+            selected attempt passed all requirements; `None` when the run has no
+            strategy.
     """
 
     streaming_id: str = ""
@@ -85,3 +88,4 @@ class StreamingEndPayload(MelleaBasePayload):
     full_text_length: int = 0
     attempts_used: int = 1
     strategy_name: str | None = None
+    sampling_success: bool | None = None

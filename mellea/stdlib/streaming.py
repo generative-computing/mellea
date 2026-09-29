@@ -311,12 +311,11 @@ class Streamer:
         full_text: Validated-and-emitted output. On natural completion, the full
             accumulated text; on early exit, the accumulated text through the last
             emitted chunk.
-        mot: The computed thunk, set on natural completion; `None` otherwise.
+        mot: The selected attempt's computed thunk; `None` if that attempt broke early.
         final_validations: `ValidationResult` objects from the stream-end
             `validate()` calls; empty on early exit.
-        attempts: Per-attempt `StreamAttempt` records on the sampling path
-            (`strategy` set); empty otherwise. When sampling, the attributes above
-            describe the selected attempt.
+        attempts: One `StreamAttempt` record per attempt; a single entry when no
+            `strategy` is set. The attributes above describe the selected attempt.
         streaming_id: UUID correlating this stream's START/EVENT/END hooks.
     """
 
@@ -421,6 +420,11 @@ class Streamer:
                 if has_plugins(HookType.STREAMING_END):
                     from ..plugins.hooks.streaming import StreamingEndPayload
 
+                    sampling_success = (
+                        any(a.selected and a.success for a in self.attempts)
+                        if self._strategy is not None
+                        else None
+                    )
                     await invoke_hook(
                         HookType.STREAMING_END,
                         StreamingEndPayload(
@@ -435,6 +439,7 @@ class Streamer:
                             strategy_name=type(self._strategy).__name__
                             if self._strategy is not None
                             else None,
+                            sampling_success=sampling_success,
                         ),
                     )
 
@@ -1101,9 +1106,11 @@ async def _stream(
     """
     chunking_strategy = resolve_chunking_strategy(chunking)
 
-    # Copy so a raising __copy__ surfaces before generation starts, and the
-    # caller's requirement instances are never mutated by streaming state.
-    cloned_reqs = [copy(req) for req in (requirements or [])]
+    strategy_reqs = strategy.requirements if strategy is not None else None
+    # Union strategy and per-call requirements (deduped); copy each so streaming
+    # never mutates the caller's instances.
+    merged_reqs = list(dict.fromkeys([*(requirements or []), *(strategy_reqs or [])]))
+    cloned_reqs = [copy(req) for req in merged_reqs]
     resolved_backend = validation_backend if validation_backend is not None else backend
 
     streaming_id = str(uuid.uuid4())
@@ -1260,13 +1267,14 @@ async def stream(
         ctx: The generation context.
         chunking: A `ChunkingStrategy`, a recognized alias string, or `None`
             (default) to yield raw deltas unchunked.
-        requirements: Requirements validated against each chunk during
-            streaming and against the full output at stream end. `None` yields
-            chunks without validation.
+        requirements: Requirements validated against each chunk during streaming
+            and against the full output at stream end, merged with any set on
+            `strategy`; with neither, chunks stream without validation.
         validation_backend: Backend for validation calls; defaults to `backend`.
         strategy: Optional `BaseSamplingStrategy` enabling retry/repair. When set, a
-            failed attempt is repaired and retried up to the strategy's `loop_budget`;
-            `None` (default) runs a single attempt with no retry.
+            failed attempt is repaired and retried up to the strategy's `loop_budget`
+            (`concurrency_budget` is not used); `None` (default) runs a single
+            attempt with no retry.
         as_events: When `True`, return an `EventStreamer` that iterates typed
             `StreamEvent` objects; when `False` (default), return a `Streamer`
             that iterates validated `str` chunks.

@@ -266,6 +266,23 @@ async def test_budget_exhausted_reports_failure() -> None:
     assert s.mot is s.attempts[0].mot
 
 
+async def test_strategy_requirements_merge_with_call_requirements() -> None:
+    # Output satisfies the call requirement ("CALL") but not the strategy's
+    # ("STRAT"); merge enforces both, so the strategy requirement fails the attempt.
+    backend = MultiResponseStreamingMockBackend(["has CALL only."])
+    _chunks, s = await _run(
+        action=Instruction("write"),
+        backend=backend,
+        ctx=SimpleContext(),
+        requirements=[RequireMarkerReq("CALL")],
+        strategy=RejectionSamplingStrategy(
+            requirements=[RequireMarkerReq("STRAT")], loop_budget=1
+        ),
+    )
+    assert len(s.attempts[0].final_validations) == 2  # both requirements validated
+    assert s.attempts[0].success is False  # strategy requirement enforced via merge
+
+
 async def test_no_strategy_is_single_attempt() -> None:
     backend = MultiResponseStreamingMockBackend(["only one response."])
     chunks, s = await _run(
