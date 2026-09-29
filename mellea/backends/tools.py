@@ -473,24 +473,75 @@ def find_func(d: object) -> tuple[str | None, Mapping | None]:
 
 # The XML function format Granite 4.2 chat templates instruct the model to use:
 # <tool_call>\n<function=NAME>\n<parameter=KEY>\nVALUE\n</parameter>\n</function>\n</tool_call>
-_XML_FUNCTION_RE = re.compile(r"<function=([^>\n]+)>(.*?)</function>", re.DOTALL)
+# A call must open with `<tool_call>`, and its body may not run into another call, so a
+# call missing `</function>` (or a `<function=` mentioned in prose) cannot absorb the
+# next call's parameters. The closing `</tool_call>` is optional, for truncated output.
+# The format has no escaping, so a value that itself contains `</parameter>` or
+# `</function>` is cut short there, and one containing `<function=` or a `<tool_call>`
+# tag is not parsed at all (`to_tool_calls` logs the dropped call).
+_XML_TOOL_CALL_RE = re.compile(
+    r"<tool_call>\s*<function=([^>\n]+)>"
+    r"((?:(?!<function=|</?tool_call>).)*?)"
+    r"</function>\s*(?:</tool_call>)?",
+    re.DOTALL,
+)
 _XML_PARAMETER_RE = re.compile(r"<parameter=([^>\n]+)>(.*?)</parameter>", re.DOTALL)
 
 
-def _parse_xml_tool_calls(llm_response: str) -> list[tuple[str, Mapping]]:
+def _json_tool_call_spans(text: str) -> list[tuple[int, int]]:
+    """Return the `(start, end)` offsets of the JSON tool calls in `text`.
+
+    Accepts what `json_extraction` and `find_func` accept, but on the raw text,
+    so the offsets line up with it.
+    """
+    spans: list[tuple[int, int]] = []
+    decoder = json.JSONDecoder(strict=False)
+    index = text.find("{")
+    while index != -1:
+        try:
+            obj, end = decoder.raw_decode(text, index)
+        except json.JSONDecodeError:
+            index = text.find("{", index + 1)
+            continue
+        name, args = find_func(obj)
+        if name is not None and args is not None:
+            spans.append((index, end))
+        index = text.find("{", end)
+    return spans
+
+
+def _parse_xml_tool_calls(llm_response: str) -> tuple[list[tuple[str, Mapping]], str]:
     """Extract tool calls written in the XML function format.
 
     Values are returned as raw strings, minus the single newline the template
     wraps each one in; `to_tool_calls` coerces them against the tool schema.
+    Markup inside the arguments of a JSON tool call is data and is skipped.
+
+    Returns:
+        The calls, and `llm_response` with those calls blanked out.
     """
+    matches = list(_XML_TOOL_CALL_RE.finditer(llm_response))
+    if not matches:
+        return [], llm_response
+    json_spans = _json_tool_call_spans(llm_response)
+    matches = [
+        m
+        for m in matches
+        if not any(start <= m.start() < end for start, end in json_spans)
+    ]
+
     calls: list[tuple[str, Mapping]] = []
-    for function in _XML_FUNCTION_RE.finditer(llm_response):
+    for match in matches:
         args = {
             name.strip(): value.removeprefix("\n").removesuffix("\n")
-            for name, value in _XML_PARAMETER_RE.findall(function.group(2))
+            for name, value in _XML_PARAMETER_RE.findall(match.group(2))
         }
-        calls.append((function.group(1).strip(), args))
-    return calls
+        calls.append((match.group(1).strip(), args))
+
+    remainder = llm_response
+    for match in reversed(matches):  # back to front, so earlier offsets stay valid
+        remainder = f"{remainder[: match.start()]} {remainder[match.end() :]}"
+    return calls, remainder
 
 
 def parse_tools(llm_response: str) -> list[tuple[str, Mapping]]:
@@ -500,7 +551,8 @@ def parse_tools(llm_response: str) -> list[tuple[str, Mapping]]:
     `{"name": ..., "arguments": {...}}` (bare, or inside `<tool_call>` tags), and
     the XML function format that Granite 4.2 chat templates prescribe,
     `<function=NAME><parameter=KEY>VALUE</parameter></function>` inside
-    `<tool_call>` tags. XML parameter values are returned as strings.
+    `<tool_call>` tags. XML parameter values are returned as strings. XML
+    markup that appears inside a JSON call's arguments is treated as data.
 
     Args:
         llm_response: Raw string output from a language model.
@@ -509,11 +561,10 @@ def parse_tools(llm_response: str) -> list[tuple[str, Mapping]]:
         List of `(tool_name, arguments)` tuples for each tool call found, XML
         calls first.
     """
-    tools = _parse_xml_tool_calls(llm_response)
-
-    # Blank out the XML calls so a JSON-looking parameter value is not parsed
-    # a second time as a call of its own.
-    processed = " ".join(_XML_FUNCTION_RE.sub(" ", llm_response).split())
+    # The XML calls come back blanked out of `remainder`, so a JSON-looking
+    # parameter value is not parsed a second time as a call of its own.
+    tools, remainder = _parse_xml_tool_calls(llm_response)
+    processed = " ".join(remainder.split())
 
     for possible_tool in json_extraction(processed):
         tool_name, tool_arguments = find_func(possible_tool)

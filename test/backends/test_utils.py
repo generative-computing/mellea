@@ -240,6 +240,22 @@ def test_to_tool_calls_warns_on_unparsable_tool_call_markup(
     assert any("<tool_call>" in r.getMessage() for r in caplog.records)
 
 
+def test_to_tool_calls_warns_when_some_tool_calls_are_dropped(
+    caplog: pytest.LogCaptureFixture,
+):
+    """A malformed call next to a good one is dropped, and the drop is logged."""
+    registry = _make_tool_registry()
+    raw = (
+        "<tool_call><function=add><parameter=x>1</parameter></tool_call>"
+        + _tool_call_xml("greet", {"name": "Ada"})
+    )
+    with caplog.at_level(logging.WARNING, logger="mellea"):
+        result = to_tool_calls(registry, raw)
+    assert result is not None
+    assert [(r.name, r.args) for r in result] == [("greet", {"name": "Ada"})]
+    assert any("<tool_call>" in r.getMessage() for r in caplog.records)
+
+
 @pytest.mark.integration
 def test_to_tool_calls_round_trips_real_granite_template() -> None:
     """Parse the tool-call markup the real granite-4.2-3b chat template renders.

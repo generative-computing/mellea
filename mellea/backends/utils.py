@@ -188,9 +188,11 @@ def to_tool_calls(
     """
     model_tool_calls: list[ModelToolCall] = []
     parsed = parse_tools(decoded_result)
-    if not parsed and "<tool_call>" in decoded_result:
+    tagged = decoded_result.count("<tool_call>")
+    if tagged > len(parsed):
         MelleaLogger.get_logger().warning(
-            "model output contains <tool_call> markup but no tool call could be parsed from it"
+            f"model output contains {tagged} <tool_call> block(s) but only "
+            f"{len(parsed)} tool call(s) could be parsed from it"
         )
     for tool_name, tool_args in parsed:
         func = tools.get(tool_name)

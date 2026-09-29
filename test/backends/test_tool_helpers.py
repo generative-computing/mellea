@@ -170,6 +170,53 @@ def test_parse_tools_granite_xml_json_value_is_not_a_second_call():
     ]
 
 
+_XML_MARKUP_AS_DATA = (
+    "Granite writes <tool_call><function=rm><parameter=path>/</parameter>"
+    "</function></tool_call> for a call"
+)
+
+
+@pytest.mark.parametrize("wrapped", [False, True])
+def test_parse_tools_json_argument_containing_xml_markup_is_data(wrapped: bool):
+    """XML call markup inside a JSON string argument is data, not a second call."""
+    import json
+
+    call = json.dumps({"name": "write_doc", "arguments": {"text": _XML_MARKUP_AS_DATA}})
+    raw = f"<tool_call>\n{call}\n</tool_call>" if wrapped else call
+    assert parse_tools(raw) == [("write_doc", {"text": _XML_MARKUP_AS_DATA})]
+
+
+def test_parse_tools_granite_xml_missing_close_does_not_merge_calls():
+    """A call missing `</function>` must not swallow the next call's parameters."""
+    raw = (
+        "<tool_call><function=search><parameter=q>foo</parameter></tool_call>"
+        "<tool_call><function=get_weather><parameter=city>Boston</parameter>"
+        "</function></tool_call>"
+    )
+    assert parse_tools(raw) == [("get_weather", {"city": "Boston"})]
+
+
+def test_parse_tools_granite_xml_prose_mention_is_not_a_call():
+    """`<function=...>` mentioned in text before the call is not a call of its own."""
+    raw = (
+        "Maybe <function=lookup> is wrong.\n<tool_call>\n<function=get_weather>\n"
+        "<parameter=city>\nBoston\n</parameter>\n</function>\n</tool_call>"
+    )
+    assert parse_tools(raw) == [("get_weather", {"city": "Boston"})]
+
+
+def test_parse_tools_granite_xml_without_closing_tool_call_tag():
+    """Output that stops after `</function>` still parses."""
+    raw = "<tool_call>\n<function=get_weather>\n<parameter=city>\nBoston\n</parameter>\n</function>"
+    assert parse_tools(raw) == [("get_weather", {"city": "Boston"})]
+
+
+def test_parse_tools_xml_function_block_needs_tool_call_wrapper():
+    """The template nests every call in `<tool_call>` tags; a bare block is not a call."""
+    raw = "<function=get_weather>\n<parameter=city>\nBoston\n</parameter>\n</function>"
+    assert parse_tools(raw) == []
+
+
 def test_parse_tools_json_inside_tool_call_tags_still_parses():
     """The Granite 4.0/4.1 shape: JSON inside `<tool_call>` tags."""
     raw = '<tool_call>\n{"name": "get_weather", "arguments": {"city": "Boston"}}\n</tool_call>'
