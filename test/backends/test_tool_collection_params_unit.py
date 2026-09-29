@@ -14,7 +14,8 @@ reached the tool as strings. The schema is shared by every backend via
 See: https://github.com/generative-computing/mellea/issues/1693
 """
 
-from typing import Annotated, Any
+import json
+from typing import Annotated, Any, Literal
 
 import pytest
 from pydantic import BaseModel, Field, ValidationError
@@ -25,6 +26,69 @@ from mellea.backends.tools import MelleaTool, validate_tool_arguments
 class Point(BaseModel):
     x: int
     y: int
+
+
+class Cat(BaseModel):
+    kind: Literal["cat"]
+    meow: int
+
+
+class Dog(BaseModel):
+    kind: Literal["dog"]
+    bark: int
+
+
+Pet = Annotated[Cat | Dog, Field(discriminator="kind")]
+
+
+class Owner(BaseModel):
+    name: str
+    pet: Pet
+
+
+def pets_tool(pets: list[Pet]) -> int:
+    """Count pets.
+
+    Args:
+        pets: the pets
+    """
+    return len(pets)
+
+
+def optional_pets_tool(pets: list[Pet] | None = None) -> int:
+    """Count pets, if given.
+
+    Args:
+        pets: the pets
+    """
+    return len(pets or [])
+
+
+def named_pets_tool(pets: dict[str, Pet]) -> int:
+    """Count named pets.
+
+    Args:
+        pets: pets by name
+    """
+    return len(pets)
+
+
+def owners_tool(owners: list[Owner]) -> int:
+    """Count owners.
+
+    Args:
+        owners: the owners
+    """
+    return len(owners)
+
+
+def owner_tool(owner: Owner) -> str:
+    """Name an owner.
+
+    Args:
+        owner: the owner
+    """
+    return owner.name
 
 
 def ints_tool(nums: list[int]) -> int:
@@ -146,6 +210,17 @@ def any_list_tool(values: list[Any]) -> int:
     return len(values)
 
 
+def described_any_list_tool(
+    values: list[Annotated[Any, Field(description="a value")]],
+) -> int:
+    """Count values.
+
+    Args:
+        values: the values
+    """
+    return len(values)
+
+
 def strings_tool(words: list[str]) -> int:
     """Count words.
 
@@ -228,6 +303,40 @@ class TestElementTypesInSchema:
         assert _prop(any_list_tool, "values")["items"] == {}
 
 
+class TestDiscriminatedUnionsInCollections:
+    """Discriminated unions exposed by carried keywords must be flattened.
+
+    Tool APIs reject `oneOf` and `discriminator`, and the rest of the
+    schema pipeline strips them (see `_flatten_discriminated_union`).
+    """
+
+    @pytest.mark.parametrize(
+        ("func", "param"),
+        [
+            (pets_tool, "pets"),
+            (optional_pets_tool, "pets"),
+            (named_pets_tool, "pets"),
+            (owners_tool, "owners"),
+            (owner_tool, "owner"),
+        ],
+        ids=["list", "optional_list", "dict", "list_of_models", "model_field"],
+    )
+    def test_no_oneof_or_discriminator(self, func, param):
+        rendered = json.dumps(_prop(func, param))
+        assert "oneOf" not in rendered
+        assert "discriminator" not in rendered
+        assert "$ref" not in rendered
+
+    def test_list_items_become_inlined_anyof(self):
+        items = _prop(pets_tool, "pets")["items"]
+        kinds = {b["properties"]["kind"]["const"] for b in items["anyOf"]}
+        assert kinds == {"cat", "dog"}
+
+    def test_dict_values_become_inlined_anyof(self):
+        values = _prop(named_pets_tool, "pets")["additionalProperties"]
+        assert len(values["anyOf"]) == 2
+
+
 class TestConstraintsInSchema:
     """`Field` constraints must reach the model."""
 
@@ -268,14 +377,14 @@ class TestListValidation:
 
     def test_list_int_not_coerced_to_str(self):
         tool = MelleaTool.from_callable(ints_tool)
-        validated = validate_tool_arguments(tool, {"nums": [1, 2]})
+        validated = validate_tool_arguments(tool, {"nums": [1, 2]}, strict=True)
         assert validated == {"nums": [1, 2]}
         assert all(type(n) is int for n in validated["nums"])
 
     def test_list_int_tool_runs(self):
         """The reproducer from the issue: the tool must not raise TypeError."""
         tool = MelleaTool.from_callable(ints_tool)
-        validated = validate_tool_arguments(tool, {"nums": [1, 2]})
+        validated = validate_tool_arguments(tool, {"nums": [1, 2]}, strict=True)
         assert tool.run(**validated) == 3
 
     def test_list_int_elements_coerced_from_str(self):
@@ -285,13 +394,13 @@ class TestListValidation:
 
     def test_list_float(self):
         tool = MelleaTool.from_callable(floats_tool)
-        validated = validate_tool_arguments(tool, {"nums": [1.5]})
+        validated = validate_tool_arguments(tool, {"nums": [1.5]}, strict=True)
         assert validated == {"nums": [1.5]}
         assert type(validated["nums"][0]) is float
 
     def test_optional_list_int(self):
         tool = MelleaTool.from_callable(optional_ints_tool)
-        validated = validate_tool_arguments(tool, {"nums": [1, 2]})
+        validated = validate_tool_arguments(tool, {"nums": [1, 2]}, strict=True)
         assert validated == {"nums": [1, 2]}
         assert all(type(n) is int for n in validated["nums"])
 
@@ -339,11 +448,42 @@ class TestListValidation:
         assert validated == {"values": [1, "a", True]}
         assert type(validated["values"][0]) is int
 
-    def test_array_without_items_elements_untouched(self):
-        """A schema from outside `from_callable` may omit `items` entirely.
+    def test_list_of_discriminated_union_validates(self):
+        """Elements are validated against the branch the tag selects."""
+        tool = MelleaTool.from_callable(pets_tool)
+        validated = validate_tool_arguments(
+            tool, {"pets": [{"kind": "cat", "meow": "1"}]}, strict=True
+        )
+        assert validated == {"pets": [{"kind": "cat", "meow": 1}]}
 
-        An array with no `items` places no constraint on its elements, so they
-        must not be coerced to strings.
+    def test_list_of_discriminated_union_rejects_wrong_branch_fields(self):
+        tool = MelleaTool.from_callable(pets_tool)
+        with pytest.raises(ValidationError, match=r"pets\.0\.cat\.meow"):
+            validate_tool_arguments(
+                tool, {"pets": [{"kind": "cat", "bark": 1}]}, strict=True
+            )
+
+    def test_described_any_list_elements_untouched(self):
+        """An annotation-only items schema constrains nothing either."""
+        tool = MelleaTool.from_callable(described_any_list_tool)
+        validated = validate_tool_arguments(tool, {"values": [1, 2]}, strict=True)
+        assert validated == {"values": [1, 2]}
+        assert type(validated["values"][0]) is int
+
+    @pytest.mark.parametrize(
+        "array_schema",
+        [
+            {"type": "array"},
+            {"type": "array", "items": True},
+            {"type": "array", "items": {"description": "a value"}},
+        ],
+        ids=["no_items", "items_true", "annotation_only_items"],
+    )
+    def test_external_unconstrained_array_elements_untouched(self, array_schema):
+        """A schema from outside `from_callable` may leave `items` unconstrained.
+
+        No `items`, `items: true`, and an items schema naming no type all place
+        no constraint on the elements, so they must not be coerced to strings.
         """
         as_json_tool = {
             "type": "function",
@@ -352,12 +492,12 @@ class TestListValidation:
                 "description": "An externally defined tool.",
                 "parameters": {
                     "type": "object",
-                    "properties": {"values": {"type": "array"}},
+                    "properties": {"values": array_schema},
                     "required": ["values"],
                 },
             },
         }
         tool = MelleaTool("external", lambda values: values, as_json_tool)
-        validated = validate_tool_arguments(tool, {"values": [1, 2.5]})
+        validated = validate_tool_arguments(tool, {"values": [1, 2.5]}, strict=True)
         assert validated == {"values": [1, 2.5]}
         assert type(validated["values"][0]) is int

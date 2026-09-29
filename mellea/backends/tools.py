@@ -632,12 +632,16 @@ def validate_tool_arguments(
                 **nested_fields,
             )
 
-        # Handle arrays. A missing or empty `items` schema leaves the elements
-        # unconstrained; falling through to the `string` default would coerce
-        # every numeric element to a string under `coerce_numbers_to_str`.
+        # Handle arrays. An `items` schema that names no type (missing, `{}`,
+        # annotation-only such as `{"description": ...}`, or a non-object
+        # form such as `true`) leaves the elements unconstrained; falling
+        # through to the `string` default would coerce every numeric element
+        # to a string under `coerce_numbers_to_str`.
         if json_type == "array":
             item_schema = schema.get("items")
-            if not item_schema:
+            if not isinstance(item_schema, dict) or not any(
+                key in item_schema for key in ("type", "anyOf", "enum", "const")
+            ):
                 return list[Any]
             item_type = _build_pydantic_type_from_schema(item_schema)
             return list[item_type]  # type: ignore
@@ -723,11 +727,15 @@ def validate_tool_arguments(
             # Required parameter
             field_definitions[param_name] = (param_type, ...)
         else:
-            # Optional parameter (default to None). Accept an explicit null
-            # too: the schema drops `null` from a simple Optional type, so
-            # `limit: int | None = None` would otherwise reject None and a
-            # lenient call would fall back to the unvalidated arguments.
-            field_definitions[param_name] = (param_type | None, None)
+            # Optional parameter (default to None). The schema drops `null`
+            # from a simple Optional type, so treat a field with no non-null
+            # default as nullable: `limit: int | None = None` then accepts an
+            # explicit None instead of failing and sending a lenient call back
+            # to the unvalidated arguments. A field with a real default
+            # (`page_size: int = 10`) still rejects None.
+            if param_schema.get("default") is None:
+                param_type = param_type | None
+            field_definitions[param_name] = (param_type, None)
 
     # Configure model for type coercion if requested
     if coerce_types:
@@ -1542,6 +1550,10 @@ def convert_function_to_ollama_tool(
     # This catches dangling references in nested model properties that weren't
     # caught by the earlier single-level ref-inlining passes.
     _recursively_inline_refs(schema, defs)
+    # Inlining exposes discriminated unions the pre-pass never saw: inside a
+    # carried `items` or `additionalProperties` (`list[Pet]`,
+    # `dict[str, Pet]`) or a nested model's field. Flatten those too.
+    _recursively_flatten_in_properties(schema, defs)
 
     tool = OllamaTool(
         type="function",

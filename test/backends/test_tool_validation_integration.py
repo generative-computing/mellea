@@ -61,6 +61,16 @@ def limit_tool(count: int, limit: int | None = None) -> int:
     return count if limit is None else min(count, limit)
 
 
+def paged_tool(query: str, page_size: int = 10) -> str:
+    """Tool with a non-nullable defaulted parameter.
+
+    Args:
+        query: The search query
+        page_size: Results per page
+    """
+    return f"{query}:{page_size}"
+
+
 def union_tool(value: str | int) -> str:
     """Tool with union type parameter.
 
@@ -285,6 +295,17 @@ class TestOptionalParameters:
         validated = validate_tool_arguments(tool, args, strict=True)
 
         assert validated == {"count": 3, "limit": None}
+
+    def test_null_for_non_nullable_default_rejected_strict(self):
+        """Only nullable parameters accept None.
+
+        `page_size: int = 10` has a real default, so None is not a valid value
+        for it and strict mode must still raise.
+        """
+        args = {"query": "q", "page_size": None}
+        tool = MelleaTool.from_callable(paged_tool)
+        with pytest.raises(ValidationError, match="page_size"):
+            validate_tool_arguments(tool, args, strict=True)
 
     def test_optional_none_keeps_other_coercions(self):
         """An explicit None must not make lenient mode drop the whole call.
