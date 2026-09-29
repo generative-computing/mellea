@@ -471,14 +471,11 @@ def find_func(d: object) -> tuple[str | None, Mapping | None]:
     return None, None
 
 
-# The XML function format Granite 4.2 chat templates instruct the model to use:
+# Granite 4.2's XML tool-call format:
 # <tool_call>\n<function=NAME>\n<parameter=KEY>\nVALUE\n</parameter>\n</function>\n</tool_call>
-# A call must open with `<tool_call>`, and its body must be parameter blocks separated
-# only by whitespace. So a value can hold any text, markup included, except
-# `</parameter>`; a call missing `</function>` can't run into the next call; and a
-# `<function=` mentioned in prose isn't a call. The closing `</tool_call>` is optional,
-# for truncated output. The format has no escaping, so a value that contains
-# `</parameter>` leaves its call unparsed (`to_tool_calls` logs the dropped call).
+# The body may hold only parameter blocks, so a value can contain any text except
+# `</parameter>` (unescapable) and a broken call can't run into the next one.
+# `</tool_call>` is optional, for truncated output.
 _XML_TOOL_CALL_RE = re.compile(
     r"<tool_call>\s*<function=([^>\n]+)>\s*"
     r"((?:<parameter=[^>\n]+>(?:(?!</parameter>).)*</parameter>\s*)*)"
@@ -489,14 +486,9 @@ _XML_PARAMETER_RE = re.compile(r"<parameter=([^>\n]+)>(.*?)</parameter>", re.DOT
 
 
 def _json_tool_call_spans(text: str) -> list[tuple[int, int]]:
-    """Return the `(start, end)` offsets of the JSON tool calls in `text`.
-
-    Accepts what `json_extraction` and `find_func` accept, but on the raw text,
-    so the offsets line up with it.
-    """
+    """Return the `(start, end)` offsets in `text` of the calls `json_extraction` would find."""
     spans: list[tuple[int, int]] = []
-    # `json_extraction` runs after whitespace is collapsed; this runs on the raw
-    # text, so it has to accept literal newlines inside strings.
+    # Raw text, unlike `json_extraction`'s, so strings may hold literal newlines.
     decoder = json.JSONDecoder(strict=False)
     index = text.find("{")
     while index != -1:
@@ -513,14 +505,12 @@ def _json_tool_call_spans(text: str) -> list[tuple[int, int]]:
 
 
 def _parse_xml_tool_calls(llm_response: str) -> tuple[list[tuple[str, Mapping]], str]:
-    """Extract tool calls written in the XML function format.
+    """Extract XML-format tool calls, skipping any quoted in a JSON call's arguments.
 
-    Values are returned as raw strings, minus the single newline the template
-    wraps each one in; `to_tool_calls` coerces them against the tool schema.
-    Markup inside the arguments of a JSON tool call is data and is skipped.
+    Values are raw strings, minus the newline the template wraps each one in.
 
     Returns:
-        The calls, and `llm_response` with those calls blanked out.
+        The calls, and `llm_response` with them blanked out.
     """
     matches = list(_XML_TOOL_CALL_RE.finditer(llm_response))
     if not matches:
@@ -549,12 +539,11 @@ def _parse_xml_tool_calls(llm_response: str) -> tuple[list[tuple[str, Mapping]],
 def parse_tools(llm_response: str) -> list[tuple[str, Mapping]]:
     """A simple parser that will scan a string for tools and attempt to extract them.
 
-    Two formats are recognized: JSON objects of the form
-    `{"name": ..., "arguments": {...}}` (bare, or inside `<tool_call>` tags), and
-    the XML function format that Granite 4.2 chat templates prescribe,
-    `<function=NAME><parameter=KEY>VALUE</parameter></function>` inside
-    `<tool_call>` tags. XML parameter values are returned as strings. XML
-    markup that appears inside a JSON call's arguments is treated as data.
+    Recognizes JSON calls (`{"name": ..., "arguments": {...}}`, bare or in
+    `<tool_call>` tags) and Granite 4.2's XML format
+    (`<tool_call><function=NAME><parameter=KEY>VALUE</parameter></function></tool_call>`),
+    whose values are returned as strings. Markup quoted inside a call's
+    arguments is not parsed as a call.
 
     Args:
         llm_response: Raw string output from a language model.
@@ -568,14 +557,13 @@ def parse_tools(llm_response: str) -> list[tuple[str, Mapping]]:
 
 
 def _parse_tool_calls(llm_response: str) -> tuple[list[tuple[str, Mapping, bool]], int]:
-    """Parse tool calls as `parse_tools` does, also saying which came from XML.
+    """Like `parse_tools`, but also flags XML calls and counts unparsed `<tool_call>` tags.
 
     Returns:
-        The calls as `(tool_name, arguments, from_xml)`, XML calls first, and
-        the number of `<tool_call>` tags that open none of them.
+        `(tool_name, arguments, from_xml)` per call, XML first, and the number
+        of `<tool_call>` tags that produced no call.
     """
-    # The XML calls come back blanked out of `remainder`, so a JSON-looking
-    # parameter value is not parsed a second time as a call of its own.
+    # XML calls are blanked out of `remainder`, so their values aren't re-parsed as JSON.
     xml_calls, remainder = _parse_xml_tool_calls(llm_response)
     tools = [(name, args, True) for name, args in xml_calls]
     processed = " ".join(remainder.split())
@@ -588,11 +576,9 @@ def _parse_tool_calls(llm_response: str) -> tuple[list[tuple[str, Mapping, bool]
 
 
 def _count_unparsed_tool_call_tags(text: str) -> int:
-    """Count the `<tool_call>` tags in `text` that don't open a JSON tool call.
+    """Count `<tool_call>` tags that open no JSON call, in text with XML calls blanked out.
 
-    Run on the output with the parsed XML calls blanked out. A tag quoted inside
-    a JSON call's arguments is data, and one directly followed by a JSON call
-    (or a JSON list of calls) is that call's wrapper; neither is counted.
+    Tags quoted in a JSON call's arguments, or wrapping a JSON call or list, don't count.
     """
     if "<tool_call>" not in text:
         return 0

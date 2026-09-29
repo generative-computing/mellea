@@ -1,12 +1,7 @@
 # Copyright IBM Corp. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Load a cached Granite tokenizer, for tests that render the real chat template.
-
-Kept apart from the HF backend tests so that a light test file can use the
-template without importing torch or `mellea.backends.huggingface`. Only the
-tokenizer files are loaded; no model weights and no GPU.
-"""
+"""Load a cached Granite tokenizer, so tests can render the real chat template without torch or model weights."""
 
 import pytest
 

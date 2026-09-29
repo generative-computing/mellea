@@ -148,13 +148,11 @@ def to_chat(
 def _decode_text_args(
     args: Mapping[str, Any], properties: Mapping[str, Any], required: Sequence[str]
 ) -> dict[str, Any]:
-    """Decode argument values that arrive as text but stand for something else.
+    """Decode XML-call values that stand for a list, dict or None.
 
-    Formats that carry every value as text (Granite's XML tool calls) render
-    list and dict arguments with `tojson` and a Python `None` as `None`. So a
-    string value for an object/array parameter is decoded as JSON, and `None`
-    or `null` becomes `None` for an optional parameter that can take it. Other
-    scalars are left for `validate_tool_arguments` to coerce.
+    The template writes lists and dicts as JSON and `None` as `None`. `None` or
+    `null` becomes None only for an optional parameter that can take it; other
+    scalars are left to `validate_tool_arguments`.
 
     Args:
         args: The call's arguments, as parsed from the model output.
@@ -169,15 +167,13 @@ def _decode_text_args(
         if not isinstance(value, str):
             continue
         schema = properties.get(name) or {}
-        # `type` may be a list (`["array", "null"]`), at the top level or in an `anyOf` branch.
+        # `type` may be a list, at the top level or in an `anyOf` branch.
         types: set[Any] = set()
         for branch in [schema, *schema.get("anyOf", [])]:
             declared = branch.get("type")
             types.update(declared if isinstance(declared, list) else [declared])
         if value.strip() in ("None", "null"):
-            # Only where None is a valid value: the schema allows null, or the
-            # parameter is optional with no default other than None (the emitted
-            # schema leaves a None default out).
+            # Nullable, or optional with no non-None default (a None default isn't emitted).
             if name not in required and ("null" in types or "default" not in schema):
                 decoded[name] = None
             continue
@@ -186,7 +182,7 @@ def _decode_text_args(
         try:
             parsed = json.loads(value)
         except json.JSONDecodeError:
-            # Leave it as-is; validate_tool_arguments reports the mismatch.
+            # Left for validate_tool_arguments to report.
             continue
         if isinstance(parsed, dict | list):
             decoded[name] = parsed
@@ -227,7 +223,7 @@ def to_tool_calls(
         param_map = parameters["properties"]
         if len(param_map) == 0:
             tool_args = {}
-        elif from_xml:  # XML calls carry every value as text; JSON calls are typed
+        elif from_xml:  # only XML values arrive as text
             tool_args = _decode_text_args(
                 tool_args, param_map, parameters.get("required") or []
             )
