@@ -4,8 +4,9 @@
 """Unit tests for Ollama backend pure-logic helpers — no Ollama server required.
 
 Covers _simplify_and_merge, _make_backend_specific_and_remove,
-chat_response_delta_merge, timeout wiring, and generate_from_raw
-empty-response handling (#599).
+chat_response_delta_merge, _strip_data_uri_prefix, timeout wiring,
+generate_from_raw empty-response handling (#599), and is_model_available
+casing.
 """
 
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -543,6 +544,39 @@ async def test_generate_from_raw_preserves_sibling_results_on_empty(
     assert results[1].error is not None
     assert results[2].value == "2"
     assert results[2].error is None
+
+
+# --- is_model_available casing (#1690) ---
+
+
+def test_is_model_available_matches_differently_cased_local_tag(mock_ollama_backend):
+    """A caller-supplied name matches a locally-registered tag regardless of casing."""
+    backend = mock_ollama_backend()
+    backend._client.list.return_value = ollama.ListResponse(
+        models=[ollama.ListResponse.Model(model="granite4.1:3B")]
+    )
+
+    assert backend.is_model_available("granite4.1:3b") is True
+
+
+def test_is_model_available_matches_when_query_is_uppercase(mock_ollama_backend):
+    """The comparison is symmetric: an uppercase query matches a lowercase local tag."""
+    backend = mock_ollama_backend()
+    backend._client.list.return_value = ollama.ListResponse(
+        models=[ollama.ListResponse.Model(model="granite4.1:3b")]
+    )
+
+    assert backend.is_model_available("granite4.1:3B") is True
+
+
+def test_is_model_available_false_when_no_match(mock_ollama_backend):
+    """An unrelated local tag still returns False."""
+    backend = mock_ollama_backend()
+    backend._client.list.return_value = ollama.ListResponse(
+        models=[ollama.ListResponse.Model(model="llama3:8b")]
+    )
+
+    assert backend.is_model_available("granite4.1:3b") is False
 
 
 if __name__ == "__main__":
