@@ -632,11 +632,9 @@ def validate_tool_arguments(
                 **nested_fields,
             )
 
-        # Handle arrays. An `items` schema that names no type (missing, `{}`,
-        # annotation-only such as `{"description": ...}`, or a non-object
-        # form such as `true`) leaves the elements unconstrained; falling
-        # through to the `string` default would coerce every numeric element
-        # to a string under `coerce_numbers_to_str`.
+        # Handle arrays. An `items` schema naming no type (missing, `{}`,
+        # description-only, or `true`) leaves elements unconstrained; the
+        # `string` default would coerce numbers to strings.
         if json_type == "array":
             item_schema = schema.get("items")
             if not isinstance(item_schema, dict) or not any(
@@ -728,11 +726,8 @@ def validate_tool_arguments(
             field_definitions[param_name] = (param_type, ...)
         else:
             # Optional parameter (default to None). The schema drops `null`
-            # from a simple Optional type, so treat a field with no non-null
-            # default as nullable: `limit: int | None = None` then accepts an
-            # explicit None instead of failing and sending a lenient call back
-            # to the unvalidated arguments. A field with a real default
-            # (`page_size: int = 10`) still rejects None.
+            # from simple Optional types, so a field with no non-null default
+            # is taken as nullable; `page_size: int = 10` still rejects None.
             if param_schema.get("default") is None:
                 param_type = param_type | None
             field_definitions[param_name] = (param_type, None)
@@ -1361,10 +1356,8 @@ def _flatten_discriminated_union(v: dict, defs: dict) -> dict:
     return out
 
 
-# JSON Schema keywords copied from Pydantic's schema onto a rebuilt simple
-# property. Without them the model is never told a list's or dict's element
-# type or a field's constraints, and `validate_tool_arguments`, which builds
-# its validator from the same schema, loses the element types too.
+# JSON Schema keywords copied onto a rebuilt simple property, so the model and
+# `validate_tool_arguments` both see element types and constraints.
 _CARRIED_SCHEMA_KEYWORDS = (
     "items",
     "additionalProperties",
@@ -1532,10 +1525,9 @@ def convert_function_to_ollama_tool(
             # from scratch would otherwise drop it.
             if "default" in v:
                 simple_prop["default"] = v["default"]
-            # Carry element types and constraints across too. For an Optional
-            # parameter Pydantic puts them on the non-null anyOf branch; with
-            # several non-null branches they belong to one branch each, so
-            # none are merged onto the flattened property.
+            # Carry element types and constraints. For Optional, Pydantic puts
+            # them on the single non-null anyOf branch; with several branches
+            # they can't be merged onto one property.
             if "anyOf" in v:
                 non_null = [s for s in v["anyOf"] if s.get("type") != "null"]
                 keyword_source = non_null[0] if len(non_null) == 1 else {}
@@ -1550,9 +1542,8 @@ def convert_function_to_ollama_tool(
     # This catches dangling references in nested model properties that weren't
     # caught by the earlier single-level ref-inlining passes.
     _recursively_inline_refs(schema, defs)
-    # Inlining exposes discriminated unions the pre-pass never saw: inside a
-    # carried `items` or `additionalProperties` (`list[Pet]`,
-    # `dict[str, Pet]`) or a nested model's field. Flatten those too.
+    # Inlining can expose discriminated unions the pre-pass missed
+    # (`list[Pet]`, a nested model's field); flatten those too.
     _recursively_flatten_in_properties(schema, defs)
 
     tool = OllamaTool(
