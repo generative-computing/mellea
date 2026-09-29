@@ -157,9 +157,11 @@ def _decode_json_container_args(
     decoded = dict(args)
     for name, value in args.items():
         schema = properties.get(name) or {}
-        declared = schema.get("type")
-        types = set(declared) if isinstance(declared, list) else {declared}
-        types.update(s.get("type") for s in schema.get("anyOf", []))
+        # `type` may be a list (`["array", "null"]`), at the top level or in an `anyOf` branch.
+        types: set[Any] = set()
+        for branch in [schema, *schema.get("anyOf", [])]:
+            declared = branch.get("type")
+            types.update(declared if isinstance(declared, list) else [declared])
         if not isinstance(value, str) or not types & {"object", "array"}:
             continue
         try:

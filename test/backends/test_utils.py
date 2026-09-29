@@ -203,6 +203,14 @@ def test_to_tool_calls_granite_xml_optional_model_param_decoded():
     assert result[0].args == {"point": {"x": 1, "y": 2}}
 
 
+def test_decode_json_container_args_list_type_inside_any_of():
+    """External schemas (LangChain, smolagents) can put a list-valued `type` in an `anyOf` branch."""
+    from mellea.backends.utils import _decode_json_container_args
+
+    properties = {"x": {"anyOf": [{"type": ["array", "null"]}]}}
+    assert _decode_json_container_args({"x": "[1, 2]"}, properties) == {"x": [1, 2]}
+
+
 def test_to_tool_calls_undecodable_array_value_left_for_validation():
     """Text that is not JSON is passed through; validation reports the mismatch."""
 
