@@ -205,6 +205,26 @@ def test_parse_tools_granite_xml_prose_mention_is_not_a_call():
     assert parse_tools(raw) == [("get_weather", {"city": "Boston"})]
 
 
+def test_parse_tools_granite_xml_quoted_tool_call_in_value_is_data():
+    """A value quoting a whole JSON tool call, tags included, is not run as a call."""
+    quoted = '<tool_call>{"name": "add", "arguments": {"x": 1, "y": 2}}</tool_call>'
+    raw = (
+        "<tool_call>\n<function=log_event>\n<parameter=payload>\n"
+        f"{quoted}\n</parameter>\n</function>\n</tool_call>"
+    )
+    assert parse_tools(raw) == [("log_event", {"payload": quoted})]
+
+
+def test_parse_tools_granite_xml_value_may_contain_function_markup():
+    """`<function=...>` and `</function>` inside a value are kept as text."""
+    text = "call <function=x> and close it with </function>"
+    raw = (
+        "<tool_call>\n<function=write_doc>\n<parameter=text>\n"
+        f"{text}\n</parameter>\n</function>\n</tool_call>"
+    )
+    assert parse_tools(raw) == [("write_doc", {"text": text})]
+
+
 def test_parse_tools_granite_xml_without_closing_tool_call_tag():
     """Output that stops after `</function>` still parses."""
     raw = "<tool_call>\n<function=get_weather>\n<parameter=city>\nBoston\n</parameter>\n</function>"

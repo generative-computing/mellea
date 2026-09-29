@@ -22,7 +22,7 @@ from ..core.base import AbstractMelleaTool, ModelOutputThunk
 from ..formatters import ChatFormatter
 from ..helpers import merge_provider_fields
 from ..stdlib.components import Message
-from .tools import parse_tools, validate_tool_arguments
+from .tools import _parse_tool_calls, validate_tool_arguments
 
 # Chat = dict[Literal["role", "content"], str] # external apply_chat_template type hint is weaker
 # Chat = dict[str, str | list[dict[str, Any]] ] # for multi-modal models
@@ -153,17 +153,20 @@ def _decode_text_args(
     Formats that carry every value as text (Granite's XML tool calls) render
     list and dict arguments with `tojson` and a Python `None` as `None`. So a
     string value for an object/array parameter is decoded as JSON, and `None`
-    or `null` for an optional parameter becomes `None`. Other scalars are left
-    for `validate_tool_arguments` to coerce.
+    or `null` becomes `None` for an optional parameter that can take it. Other
+    scalars are left for `validate_tool_arguments` to coerce.
+
+    Args:
+        args: The call's arguments, as parsed from the model output.
+        properties: The tool schema's `properties`.
+        required: The tool schema's `required` parameter names.
+
+    Returns:
+        A new dict with the decoded values; `args` is not modified.
     """
     decoded = dict(args)
     for name, value in args.items():
-        if (
-            name not in required
-            and isinstance(value, str)
-            and value.strip() in ("None", "null")
-        ):
-            decoded[name] = None
+        if not isinstance(value, str):
             continue
         schema = properties.get(name) or {}
         # `type` may be a list (`["array", "null"]`), at the top level or in an `anyOf` branch.
@@ -171,7 +174,14 @@ def _decode_text_args(
         for branch in [schema, *schema.get("anyOf", [])]:
             declared = branch.get("type")
             types.update(declared if isinstance(declared, list) else [declared])
-        if not isinstance(value, str) or not types & {"object", "array"}:
+        if value.strip() in ("None", "null"):
+            # Only where None is a valid value: the schema allows null, or the
+            # parameter is optional with no default other than None (the emitted
+            # schema leaves a None default out).
+            if name not in required and ("null" in types or "default" not in schema):
+                decoded[name] = None
+            continue
+        if not types & {"object", "array"}:
             continue
         try:
             parsed = json.loads(value)
@@ -193,17 +203,17 @@ def to_tool_calls(
         decoded_result: Raw model output string that may contain tool call markup.
 
     Returns:
-        List of validated `ModelToolCall` (order preserved), or `None` if no tool calls were found.
+        List of validated `ModelToolCall` in the order parsed (XML-format calls
+        first, then JSON), or `None` if no tool calls were found.
     """
     model_tool_calls: list[ModelToolCall] = []
-    parsed = parse_tools(decoded_result)
-    tagged = decoded_result.count("<tool_call>")
-    if tagged > len(parsed):
+    parsed, unparsed = _parse_tool_calls(decoded_result)
+    if unparsed:
         MelleaLogger.get_logger().warning(
-            f"model output contains {tagged} <tool_call> block(s) but only "
-            f"{len(parsed)} tool call(s) could be parsed from it"
+            f"model output contains {unparsed} <tool_call> block(s) that could "
+            "not be parsed as a tool call"
         )
-    for tool_name, tool_args in parsed:
+    for tool_name, tool_args, from_xml in parsed:
         func = tools.get(tool_name)
         if func is None:
             MelleaLogger.get_logger().warning(
@@ -217,7 +227,7 @@ def to_tool_calls(
         param_map = parameters["properties"]
         if len(param_map) == 0:
             tool_args = {}
-        else:
+        elif from_xml:  # XML calls carry every value as text; JSON calls are typed
             tool_args = _decode_text_args(
                 tool_args, param_map, parameters.get("required") or []
             )

@@ -248,6 +248,23 @@ def test_to_tool_calls_none_text_for_required_param_is_kept():
     assert result[0].args == {"name": "None"}
 
 
+def test_to_tool_calls_none_text_kept_when_param_has_a_real_default():
+    """`title: str = "Untitled"` can't be None, so "None" stays text rather than overriding the default."""
+
+    def make(title: str = "Untitled") -> str:
+        """Make something.
+
+        Args:
+            title: its title
+        """
+        return title
+
+    registry = {"make": MelleaTool.from_callable(make)}
+    result = to_tool_calls(registry, _tool_call_xml("make", {"title": "None"}))
+    assert result is not None
+    assert result[0].args == {"title": "None"}
+
+
 def test_to_tool_calls_undecodable_array_value_left_for_validation():
     """Text that is not JSON is passed through; validation reports the mismatch."""
 
@@ -274,6 +291,70 @@ def test_to_tool_calls_warns_on_unparsable_tool_call_markup(
             registry, "<tool_call>\nadd three and four\n</tool_call>"
         )
     assert result is None
+    assert any("<tool_call>" in r.getMessage() for r in caplog.records)
+
+
+def test_to_tool_calls_no_warning_for_tool_call_text_inside_a_json_argument(
+    caplog: pytest.LogCaptureFixture,
+):
+    """`<tool_call>` quoted inside a parsed call's argument is data, not a dropped call."""
+    import json
+
+    def write_doc(text: str) -> str:
+        """Write a document.
+
+        Args:
+            text: the document text
+        """
+        return text
+
+    from mellea.core.base import AbstractMelleaTool
+
+    registry: dict[str, AbstractMelleaTool] = {
+        "write_doc": MelleaTool.from_callable(write_doc)
+    }
+    text = "wrap each call in <tool_call><function=x></function></tool_call> tags"
+    call = json.dumps({"name": "write_doc", "arguments": {"text": text}})
+    with caplog.at_level(logging.WARNING, logger="mellea"):
+        result = to_tool_calls(registry, f"<tool_call>\n{call}\n</tool_call>")
+    assert result is not None
+    assert [(r.name, r.args) for r in result] == [("write_doc", {"text": text})]
+    assert not caplog.records
+
+
+def test_to_tool_calls_json_call_arguments_are_not_text_decoded():
+    """Only XML calls carry values as text; a JSON call's "None" string stays a string."""
+    import json
+
+    def search(query: str, note: str | None = None) -> str:
+        """Search.
+
+        Args:
+            query: what to search for
+            note: an optional note
+        """
+        return query
+
+    registry = {"search": MelleaTool.from_callable(search)}
+    raw = json.dumps({"name": "search", "arguments": {"query": "cats", "note": "None"}})
+    result = to_tool_calls(registry, raw)
+    assert result is not None
+    assert result[0].args == {"query": "cats", "note": "None"}
+
+
+def test_to_tool_calls_warns_when_a_bare_json_call_hides_a_dropped_one(
+    caplog: pytest.LogCaptureFixture,
+):
+    """A dropped tagged call is logged even when another call keeps the counts level."""
+    import json
+
+    registry = _make_tool_registry()
+    good = json.dumps({"name": "greet", "arguments": {"name": "Ada"}})
+    raw = f"<tool_call>\ngreet Ada\n</tool_call>\n{good}"
+    with caplog.at_level(logging.WARNING, logger="mellea"):
+        result = to_tool_calls(registry, raw)
+    assert result is not None
+    assert [(r.name, r.args) for r in result] == [("greet", {"name": "Ada"})]
     assert any("<tool_call>" in r.getMessage() for r in caplog.records)
 
 

@@ -473,15 +473,15 @@ def find_func(d: object) -> tuple[str | None, Mapping | None]:
 
 # The XML function format Granite 4.2 chat templates instruct the model to use:
 # <tool_call>\n<function=NAME>\n<parameter=KEY>\nVALUE\n</parameter>\n</function>\n</tool_call>
-# A call must open with `<tool_call>`, and its body may not run into another call, so a
-# call missing `</function>` (or a `<function=` mentioned in prose) cannot absorb the
-# next call's parameters. The closing `</tool_call>` is optional, for truncated output.
-# The format has no escaping, so a value that itself contains `</parameter>` or
-# `</function>` is cut short there, and one containing `<function=` or a `<tool_call>`
-# tag is not parsed at all (`to_tool_calls` logs the dropped call).
+# A call must open with `<tool_call>`, and its body must be parameter blocks separated
+# only by whitespace. So a value can hold any text, markup included, except
+# `</parameter>`; a call missing `</function>` can't run into the next call; and a
+# `<function=` mentioned in prose isn't a call. The closing `</tool_call>` is optional,
+# for truncated output. The format has no escaping, so a value that contains
+# `</parameter>` leaves its call unparsed (`to_tool_calls` logs the dropped call).
 _XML_TOOL_CALL_RE = re.compile(
-    r"<tool_call>\s*<function=([^>\n]+)>"
-    r"((?:(?!<function=|</?tool_call>).)*?)"
+    r"<tool_call>\s*<function=([^>\n]+)>\s*"
+    r"((?:<parameter=[^>\n]+>(?:(?!</parameter>).)*</parameter>\s*)*)"
     r"</function>\s*(?:</tool_call>)?",
     re.DOTALL,
 )
@@ -495,6 +495,8 @@ def _json_tool_call_spans(text: str) -> list[tuple[int, int]]:
     so the offsets line up with it.
     """
     spans: list[tuple[int, int]] = []
+    # `json_extraction` runs after whitespace is collapsed; this runs on the raw
+    # text, so it has to accept literal newlines inside strings.
     decoder = json.JSONDecoder(strict=False)
     index = text.find("{")
     while index != -1:
@@ -561,16 +563,50 @@ def parse_tools(llm_response: str) -> list[tuple[str, Mapping]]:
         List of `(tool_name, arguments)` tuples for each tool call found, XML
         calls first.
     """
+    calls, _ = _parse_tool_calls(llm_response)
+    return [(name, args) for name, args, _ in calls]
+
+
+def _parse_tool_calls(llm_response: str) -> tuple[list[tuple[str, Mapping, bool]], int]:
+    """Parse tool calls as `parse_tools` does, also saying which came from XML.
+
+    Returns:
+        The calls as `(tool_name, arguments, from_xml)`, XML calls first, and
+        the number of `<tool_call>` tags that open none of them.
+    """
     # The XML calls come back blanked out of `remainder`, so a JSON-looking
     # parameter value is not parsed a second time as a call of its own.
-    tools, remainder = _parse_xml_tool_calls(llm_response)
+    xml_calls, remainder = _parse_xml_tool_calls(llm_response)
+    tools = [(name, args, True) for name, args in xml_calls]
     processed = " ".join(remainder.split())
 
     for possible_tool in json_extraction(processed):
         tool_name, tool_arguments = find_func(possible_tool)
         if tool_name is not None and tool_arguments is not None:
-            tools.append((tool_name, tool_arguments))
-    return tools
+            tools.append((tool_name, tool_arguments, False))
+    return tools, _count_unparsed_tool_call_tags(remainder)
+
+
+def _count_unparsed_tool_call_tags(text: str) -> int:
+    """Count the `<tool_call>` tags in `text` that don't open a JSON tool call.
+
+    Run on the output with the parsed XML calls blanked out. A tag quoted inside
+    a JSON call's arguments is data, and one directly followed by a JSON call
+    (or a JSON list of calls) is that call's wrapper; neither is counted.
+    """
+    if "<tool_call>" not in text:
+        return 0
+    json_spans = _json_tool_call_spans(text)
+    json_starts = {start for start, _ in json_spans}
+    unparsed = 0
+    for tag in re.finditer("<tool_call>", text):
+        if any(start <= tag.start() < end for start, end in json_spans):
+            continue
+        body = len(text) - len(text[tag.end() :].lstrip())
+        if body in json_starts or text.startswith("[", body):
+            continue
+        unparsed += 1
+    return unparsed
 
 
 def validate_tool_arguments(
