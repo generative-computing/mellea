@@ -16,6 +16,10 @@ from mellea.backends.utils import (
 )
 from mellea.core import ModelToolCall
 from mellea.core.base import GenerationMetadata, ModelOutputThunk
+from test.backends._granite_tokenizer import (
+    _GRANITE_THINKING_MODEL_ID,
+    _try_load_granite_tokenizer,
+)
 
 # --- get_value ---
 
@@ -295,11 +299,6 @@ def test_to_tool_calls_round_trips_real_granite_template() -> None:
 
     Loads the template only (no GPU, no model weights); skips if not locally cached.
     """
-    from test.backends.test_huggingface_filter_options import (
-        _GRANITE_THINKING_MODEL_ID,
-        _try_load_granite_tokenizer,
-    )
-
     tok = _try_load_granite_tokenizer(_GRANITE_THINKING_MODEL_ID)
     if tok is None:
         pytest.skip(f"{_GRANITE_THINKING_MODEL_ID} not in local HF cache")

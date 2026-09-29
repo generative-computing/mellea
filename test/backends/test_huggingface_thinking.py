@@ -17,7 +17,7 @@ import mellea.backends.huggingface as hf_backend
 from mellea.backends import ModelOption
 from mellea.backends.huggingface import LocalHFBackend, _split_think_tags
 from mellea.core.base import CBlock, ModelOutputThunk
-from test.backends.test_huggingface_filter_options import (
+from test.backends._granite_tokenizer import (
     _GRANITE_THINKING_MODEL_ID,
     _try_load_granite_tokenizer,
 )
