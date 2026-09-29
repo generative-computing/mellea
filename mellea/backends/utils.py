@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import inspect
 import json
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
 from ..core import Context, MelleaLogger, ModelToolCall, Span
@@ -145,17 +145,26 @@ def to_chat(
     return ctx_as_conversation
 
 
-def _decode_json_container_args(
-    args: Mapping[str, Any], properties: Mapping[str, Any]
+def _decode_text_args(
+    args: Mapping[str, Any], properties: Mapping[str, Any], required: Sequence[str]
 ) -> dict[str, Any]:
-    """Decode string values of object/array parameters as JSON.
+    """Decode argument values that arrive as text but stand for something else.
 
     Formats that carry every value as text (Granite's XML tool calls) render
-    list and dict arguments with `tojson`. Scalars are left for
-    `validate_tool_arguments` to coerce.
+    list and dict arguments with `tojson` and a Python `None` as `None`. So a
+    string value for an object/array parameter is decoded as JSON, and `None`
+    or `null` for an optional parameter becomes `None`. Other scalars are left
+    for `validate_tool_arguments` to coerce.
     """
     decoded = dict(args)
     for name, value in args.items():
+        if (
+            name not in required
+            and isinstance(value, str)
+            and value.strip() in ("None", "null")
+        ):
+            decoded[name] = None
+            continue
         schema = properties.get(name) or {}
         # `type` may be a list (`["array", "null"]`), at the top level or in an `anyOf` branch.
         types: set[Any] = set()
@@ -204,11 +213,14 @@ def to_tool_calls(
 
         # Clean up the function args slightly. Some models seem to
         # hallucinate parameters when none are required.
-        param_map = func.as_json_tool["function"]["parameters"]["properties"]
+        parameters = func.as_json_tool["function"]["parameters"]
+        param_map = parameters["properties"]
         if len(param_map) == 0:
             tool_args = {}
         else:
-            tool_args = _decode_json_container_args(tool_args, param_map)
+            tool_args = _decode_text_args(
+                tool_args, param_map, parameters.get("required") or []
+            )
 
         # Validate and coerce argument types
         validated_args = validate_tool_arguments(func, tool_args, strict=False)

@@ -203,12 +203,45 @@ def test_to_tool_calls_granite_xml_optional_model_param_decoded():
     assert result[0].args == {"point": {"x": 1, "y": 2}}
 
 
-def test_decode_json_container_args_list_type_inside_any_of():
+def test_decode_text_args_list_type_inside_any_of():
     """External schemas (LangChain, smolagents) can put a list-valued `type` in an `anyOf` branch."""
-    from mellea.backends.utils import _decode_json_container_args
+    from mellea.backends.utils import _decode_text_args
 
     properties = {"x": {"anyOf": [{"type": ["array", "null"]}]}}
-    assert _decode_json_container_args({"x": "[1, 2]"}, properties) == {"x": [1, 2]}
+    assert _decode_text_args({"x": "[1, 2]"}, properties, required=[]) == {"x": [1, 2]}
+
+
+@pytest.mark.parametrize("text", ["None", "null", " None "])
+def test_to_tool_calls_granite_xml_none_text_for_optional_param_is_null(text: str):
+    """The template renders a Python `None` as `None`; for an optional parameter that is a null."""
+
+    def search(query: str, limit: int | None = None) -> str:
+        """Search.
+
+        Args:
+            query: what to search for
+            limit: optional result limit
+        """
+        return query
+
+    from mellea.core.base import AbstractMelleaTool
+
+    registry: dict[str, AbstractMelleaTool] = {
+        "search": MelleaTool.from_callable(search)
+    }
+    raw = _tool_call_xml("search", {"query": "cats", "limit": text})
+    result = to_tool_calls(registry, raw)
+    assert result is not None
+    assert result[0].args["query"] == "cats"
+    assert result[0].args["limit"] is None
+
+
+def test_to_tool_calls_none_text_for_required_param_is_kept():
+    """A required parameter has no null to map to, so the text stays as sent."""
+    registry = _make_tool_registry()
+    result = to_tool_calls(registry, _tool_call_xml("greet", {"name": "None"}))
+    assert result is not None
+    assert result[0].args == {"name": "None"}
 
 
 def test_to_tool_calls_undecodable_array_value_left_for_validation():
