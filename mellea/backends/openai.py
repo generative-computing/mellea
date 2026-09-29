@@ -244,7 +244,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         # `extra_body` (#1617).
         construction_extra_body = self.model_options.get("extra_body")
         if isinstance(construction_extra_body, dict):
-            self._default_extra_body = ModelOption._merge_extra_body(
+            self._default_extra_body = ModelOption.merge_extra_body(
                 construction_extra_body, self._default_extra_body
             )
 
@@ -845,37 +845,13 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             a new dict; `base`, `user`, and `self._default_extra_body` are
             left unmodified.
         """
-        # Start from construction-time defaults, then overlay Mellea-built values.
-        # Work on copies throughout so no caller dict is mutated.
-        merged = dict(self._default_extra_body)
-        default_ctk = merged.pop("chat_template_kwargs", None)
-
-        base = dict(base) if base else {}
-        base_ctk = base.pop("chat_template_kwargs", None)
-        merged.update(base)
-
-        # Merge chat_template_kwargs from default and base layers.
-        merged_ctk: dict = {}
-        if default_ctk is not None:
-            merged_ctk.update(default_ctk)
-        if base_ctk is not None:
-            merged_ctk.update(base_ctk)
-        if merged_ctk:
-            merged["chat_template_kwargs"] = merged_ctk
-
+        # Delegate to the canonical helper — work on copies throughout so no
+        # caller dict is mutated.  Two chained calls encode the three-tier order:
+        #   1. construction defaults (lowest)  →  2. Mellea-assembled  →  3. caller (highest)
+        merged = ModelOption.merge_extra_body(self._default_extra_body, base or {})
         if user is None:
             return merged
-
-        # Overlay caller-supplied values last (highest priority).
-        user = dict(user)
-        user_ctk = user.pop("chat_template_kwargs", None)
-        merged.update(user)
-        if user_ctk is not None:
-            merged["chat_template_kwargs"] = {
-                **merged.get("chat_template_kwargs", {}),
-                **user_ctk,
-            }
-        return merged
+        return ModelOption.merge_extra_body(merged, user)
 
     async def _generate_from_context(
         self,

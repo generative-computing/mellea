@@ -180,36 +180,34 @@ def test_model_option_merge_extra_body_does_not_mutate_inputs():
     base = {"chat_template_kwargs": {"enable_thinking": False}}
     overwrite = {"chat_template_kwargs": {"adapter_name": "answerability"}}
 
-    ModelOption._merge_extra_body(base, overwrite)
+    ModelOption.merge_extra_body(base, overwrite)
 
     assert base == {"chat_template_kwargs": {"enable_thinking": False}}
     assert overwrite == {"chat_template_kwargs": {"adapter_name": "answerability"}}
 
 
-def test_model_option_merge_extra_body_non_dict_chat_template_kwargs_falls_back():
-    """A malformed non-dict `chat_template_kwargs` on the base side must not raise."""
-    default_model_opts = {"extra_body": {"chat_template_kwargs": "not-a-dict"}}
-    overwrite_opts = {"extra_body": {"chat_template_kwargs": {"enable_thinking": True}}}
-
-    processed_model_opts = ModelOption.merge_model_options(
-        default_model_opts, overwrite_opts
+def test_merge_extra_body_empty_both_sides_drops_key():
+    """When both sides supply an empty chat_template_kwargs, the key is absent from the output."""
+    result = ModelOption.merge_extra_body(
+        {"chat_template_kwargs": {}}, {"chat_template_kwargs": {}}
     )
-    assert processed_model_opts["extra_body"] == {
-        "chat_template_kwargs": {"enable_thinking": True}
-    }
+    assert "chat_template_kwargs" not in result
 
 
-def test_model_option_merge_extra_body_overwrite_non_dict_chat_template_kwargs_wins():
-    """A malformed non-dict `chat_template_kwargs` on the overwrite side must not raise."""
-    default_model_opts = {
-        "extra_body": {"chat_template_kwargs": {"enable_thinking": False}}
-    }
-    overwrite_opts = {"extra_body": {"chat_template_kwargs": "not-a-dict"}}
+def test_merge_extra_body_malformed_base_raises():
+    """A non-dict `chat_template_kwargs` on the base side raises TypeError naming the side."""
+    with pytest.raises(TypeError, match="base"):
+        ModelOption.merge_extra_body({"chat_template_kwargs": "not-a-dict"}, {})
+    with pytest.raises(TypeError, match="base"):
+        ModelOption.merge_extra_body({"chat_template_kwargs": 123}, {})
 
-    processed_model_opts = ModelOption.merge_model_options(
-        default_model_opts, overwrite_opts
-    )
-    assert processed_model_opts["extra_body"] == {"chat_template_kwargs": "not-a-dict"}
+
+def test_merge_extra_body_malformed_overwrite_raises():
+    """A non-dict `chat_template_kwargs` on the overwrite side raises TypeError naming the side."""
+    with pytest.raises(TypeError, match="overwrite"):
+        ModelOption.merge_extra_body({}, {"chat_template_kwargs": "not-a-dict"})
+    with pytest.raises(TypeError, match="overwrite"):
+        ModelOption.merge_extra_body({}, {"chat_template_kwargs": 123})
 
 
 if __name__ == "__main__":
