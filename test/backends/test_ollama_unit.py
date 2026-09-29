@@ -6,7 +6,7 @@
 Covers _simplify_and_merge, _make_backend_specific_and_remove,
 chat_response_delta_merge, _strip_data_uri_prefix, timeout wiring,
 generate_from_raw empty-response handling (#599), and is_model_available
-casing and exact-tag matching.
+casing, exact-tag matching, and malformed-entry handling.
 """
 
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -546,7 +546,7 @@ async def test_generate_from_raw_preserves_sibling_results_on_empty(
     assert results[2].error is None
 
 
-# --- is_model_available casing (#1690) ---
+# --- is_model_available casing ---
 
 
 def test_is_model_available_matches_differently_cased_local_tag(mock_ollama_backend):
@@ -616,6 +616,21 @@ def test_is_model_available_untagged_query_does_not_match_other_tags(
     )
 
     assert backend.is_model_available("granite4.1") is False
+
+
+def test_is_model_available_skips_malformed_entry_instead_of_aborting(
+    mock_ollama_backend,
+):
+    """An entry with no model name doesn't stop the scan of the remaining entries."""
+    backend = mock_ollama_backend()
+    backend._client.list.return_value = ollama.ListResponse(
+        models=[
+            ollama.ListResponse.Model(model=None),
+            ollama.ListResponse.Model(model="granite4.1:3b"),
+        ]
+    )
+
+    assert backend.is_model_available("granite4.1:3b") is True
 
 
 if __name__ == "__main__":
