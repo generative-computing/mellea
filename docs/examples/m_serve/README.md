@@ -378,10 +378,14 @@ for chunk in stream:
 
 ## Multi-Turn Sessions (Responses API)
 
-The Responses API stores completed responses in memory and lets clients continue
-a conversation without resending history.  Each response carries an `id`
-(e.g. `resp_abc123`); pass it as `previous_response_id` in the next request and
-the server reconstructs the full history automatically.
+The Responses API stores completed responses **in memory** and lets clients
+continue a conversation without resending history.  Each response carries an
+`id` (e.g. `resp_abc123`); pass it as `previous_response_id` in the next
+request and the server reconstructs the full history automatically.
+
+> **Note:** the store is in-process only.  Sessions are lost when the server
+> restarts.  For durable persistence across restarts, store the response `id`
+> externally and resend the full history when reconnecting.
 
 ```python
 import openai
@@ -390,7 +394,8 @@ client = openai.OpenAI(api_key="na", base_url="http://0.0.0.0:8080/v1")
 
 # Turn 1
 r1 = client.responses.create(model="granite4.1:3b", input="My name is Alice.")
-print(r1.output_text)   # "Nice to meet you, Alice!"
+print(r1.output_text)    # "Nice to meet you, Alice!"
+print(r1.expires_at)     # Unix timestamp when the session will be evicted
 
 # Turn 2 — only send the new message, not the history
 r2 = client.responses.create(
@@ -401,14 +406,22 @@ r2 = client.responses.create(
 print(r2.output_text)   # "Your name is Alice."
 ```
 
+Pass `store=False` if you don't need history chaining and want to skip storing
+the response altogether (e.g. for sensitive inputs):
+
+```python
+r = client.responses.create(model="granite4.1:3b", input="...", store=False)
+# r.expires_at is None — response is never persisted
+```
+
 Stored responses can also be retrieved by ID:
 
 ```bash
 curl http://0.0.0.0:8080/v1/responses/resp_abc123
 ```
 
-Sessions expire after 30 minutes by default.  Pass `--response-ttl <seconds>` to
-`m serve` to change the TTL:
+Sessions expire after 30 minutes by default.  Pass `--response-ttl <seconds>`
+to `m serve` to change the TTL:
 
 ```bash
 m serve my_app.py --response-ttl 3600   # 1-hour sessions
