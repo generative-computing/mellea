@@ -93,7 +93,6 @@ from .adapters import (
     AdapterMixin,
     EmbeddedActivationRequest,
     EmbeddedBinding,
-    Identity,
     IntrinsicAdapter,
     LocalHFAdapter,
 )
@@ -101,9 +100,10 @@ from .adapters._core import (
     Adapter as _AdapterCore,
     IOContract,
     LocalFileBinding,
+    PromptBinding,
     WeightsBinding,
-    _await_embedded_generation,
-    _fire_embedded_invocation_complete,
+    _afire_invocation_complete,
+    _await_generation_reporting_error,
 )
 from .adapters.adapter import (
     AdapterInput,
@@ -111,7 +111,6 @@ from .adapters.adapter import (
     _composed_adapter_key,
     _discover_embedded_adapters,
 )
-from .adapters.catalog import AdapterType
 from .backend import FormatterBackend
 from .cache import Cache, SimpleLRUCache
 from .model_ids import ModelIdentifier
@@ -977,6 +976,49 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 _assert_correct_adapters(binding.qualified_name, self._model)
                 return out
 
+    def _generate_composed_prompt(
+        self,
+        adapter: _AdapterCore,
+        generate_func: Callable[..., _T],
+        *args: Any,
+        **kwargs: Any,
+    ) -> _T:
+        """Runs `generate_func` for a composed `Adapter`'s weightless `PromptBinding`.
+
+        A prompt fallback has no weights: `IntrinsicsRewriter` already injected the
+        instruction, so generation runs against the plain base model with no
+        `adapter_scope`. It fires the binding's `activate()` (which just logs), then
+        serialises on `_generation_lock` and ensures no PEFT adapter is active first.
+
+        Args:
+            adapter: The composed `Adapter` to run; its `weights` must be a
+                `PromptBinding`.
+            generate_func: The synchronous generation callable to invoke.
+            *args: Positional arguments forwarded to `generate_func`.
+            **kwargs: Keyword arguments forwarded to `generate_func`.
+
+        Returns:
+            Whatever `generate_func` returns.
+
+        Raises:
+            TypeError: `adapter.weights` is not a `PromptBinding`.
+        """
+        binding = adapter.weights
+        if not isinstance(binding, PromptBinding):
+            raise TypeError(
+                "LocalHFBackend's composed prompt generation path requires "
+                f"a PromptBinding; got {type(binding).__name__}."
+            )
+        with self._generation_lock:
+            # No PEFT adapter is active on this path; deactivate defensively and
+            # assert the base model is clean, matching the embedded path.
+            self.deactivate_peft_adapter("")
+            _assert_correct_adapters("", self._model)
+            binding.activate()
+            out = generate_func(*args, **kwargs)
+            _assert_correct_adapters("", self._model)
+            return out
+
     def _intrinsic_adapter_name_and_config(
         self, adapter: IntrinsicAdapter | EmbeddedIntrinsicAdapter | _AdapterCore
     ) -> tuple[str, dict]:
@@ -991,8 +1033,10 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         branch (via `_obtain_local_file_io_yaml_config`), alongside the
         weights download `binding.prepare()` already does there; the
         Embedded/Granite Switch reality is cached at registration time (see
-        `add_adapter`/`register_embedded_adapter_model`). Deliberately not
-        fetched here: this method runs inline inside the async
+        `add_adapter`/`register_embedded_adapter_model`); the weightless Prompt
+        reality is cached by `add_adapter`'s prompt branch (config supplied by
+        `resolve_adapter`, or fetched via `_obtain_prompt_io_yaml_config`).
+        Deliberately not fetched here: this method runs inline inside the async
         `_generate_from_intrinsic`, and `obtain_io_yaml`'s Hugging Face Hub
         round trip must not block the event loop.
 
@@ -1004,15 +1048,17 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             io.yaml config.
 
         Raises:
-            ValueError: A composed LocalFile or Embedded adapter has no
+            ValueError: A composed LocalFile, Embedded, or Prompt adapter has no
                 cached config (never registered via
                 `add_adapter`/`register_embedded_adapter_model`).
-            TypeError: A composed Adapter's `weights` is neither a
-                `LocalFileBinding` nor an `EmbeddedBinding`.
+            TypeError: A composed Adapter's `weights` is not a
+                `LocalFileBinding`, `EmbeddedBinding`, or `PromptBinding`.
         """
         if isinstance(adapter, (IntrinsicAdapter, EmbeddedIntrinsicAdapter)):
             return adapter.name, adapter.config
-        if isinstance(adapter.weights, (LocalFileBinding, EmbeddedBinding)):
+        if isinstance(
+            adapter.weights, (LocalFileBinding, EmbeddedBinding, PromptBinding)
+        ):
             key = _composed_adapter_key(adapter)
             config = self._composed_adapter_configs.get(key)
             if config is None:
@@ -1052,13 +1098,48 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             self.base_model_name,
             binding.repo_id,
             revision=binding.resolved_revision(),
-            alora=binding.adapter_type is AdapterType.ALORA,
+            adapter_type=binding.adapter_type.value,
         )
         with open(io_yaml_path, encoding="utf-8") as f:
             loaded = yaml.safe_load(f)
         if not isinstance(loaded, dict):
             raise ValueError(
                 f"io.yaml for adapter {binding.name!r} at {io_yaml_path} "
+                f"did not parse to a mapping (got {type(loaded).__name__})."
+            )
+        return loaded
+
+    def _obtain_prompt_io_yaml_config(self, binding: PromptBinding) -> dict:
+        """Download and parse a prompt `binding`'s io.yaml.
+
+        The weightless counterpart to `_obtain_local_file_io_yaml_config`: a prompt
+        binding has no weights, so this fetch is the only I/O its registration does.
+        It reads from the binding's resolved model slot (`binding.target_model_name`,
+        a base model name or the literal `"any"`) under the `prompt` subdir. Only
+        used for a bare `add_adapter(PromptBinding)` call; `resolve_adapter` passes
+        the already-parsed config via `config=` and this is never reached.
+
+        Args:
+            binding: The `PromptBinding` to load `io.yaml` for.
+
+        Returns:
+            dict: The parsed `io.yaml` mapping.
+
+        Raises:
+            ValueError: `io.yaml` did not parse to a mapping.
+        """
+        io_yaml_path = intrinsics.obtain_io_yaml(
+            binding.name,
+            binding.target_model_name,
+            binding.repo_id,
+            revision=binding.resolved_revision(),
+            adapter_type="prompt",
+        )
+        with open(io_yaml_path, encoding="utf-8") as f:
+            loaded = yaml.safe_load(f)
+        if not isinstance(loaded, dict):
+            raise ValueError(
+                f"io.yaml for prompt adapter {binding.name!r} at {io_yaml_path} "
                 f"did not parse to a mapping (got {type(loaded).__name__})."
             )
         return loaded
@@ -1157,8 +1238,10 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
         docs = messages_to_docs(ctx_as_message_list)
 
-        allowed_types = tuple(at.value for at in action.adapter_types)
-        adapter = self._find_adapter(action.intrinsic_name, allowed_types)
+        # resolve_adapter registers exactly one winner per capability, so match by
+        # name only: pass None (not action.adapter_types, which is never None) so a
+        # weightless PromptBinding winner isn't filtered out by adapter type.
+        adapter = self._find_adapter(action.intrinsic_name, None)
         if adapter is None:
             raise ValueError(
                 f"backend ({self}) has no adapter for processing intrinsic: {action.intrinsic_name}"
@@ -1234,10 +1317,6 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 ),
                 adapter.identity,
             )
-        # Reused below (generation-path dispatch, embedded_identity for
-        # post-processing) — computed once here rather than re-checked, since
-        # unlike the `if` above this isn't gating a narrowing-sensitive block.
-        adapter_is_embedded = isinstance(adapter_weights, EmbeddedBinding)
 
         generate_input, other_input = (
             granite_formatters.base.util.chat_completion_request_to_transformers_inputs(  # type: ignore
@@ -1301,8 +1380,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
             model_arg = _CapturingModelProxy()  # type: ignore[assignment]
 
-        if adapter_is_embedded:
-            chat_response = _await_embedded_generation(
+        if isinstance(adapter.weights, EmbeddedBinding):
+            chat_response = _await_generation_reporting_error(
                 asyncio.to_thread(
                     self._generate_embedded_with_generation_lock,
                     granite_formatters.base.util.generate_with_transformers,  # type: ignore
@@ -1313,6 +1392,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                     other_input,
                 ),
                 adapter.identity,
+                adapter.weights.binding_type,
             )
         elif isinstance(adapter, IntrinsicAdapter):
             chat_response = asyncio.to_thread(
@@ -1324,6 +1404,22 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 model_arg,
                 generate_input,
                 other_input,
+            )
+        elif isinstance(adapter.weights, PromptBinding):
+            chat_response = _await_generation_reporting_error(
+                asyncio.to_thread(
+                    self._generate_composed_prompt,
+                    adapter,
+                    granite_formatters.base.util.generate_with_transformers,  # type: ignore
+                    # Passed as args/kwargs to generate.
+                    self._tokenizer,
+                    model_arg,
+                    generate_input,
+                    other_input,
+                ),
+                adapter.identity,
+                adapter.weights.binding_type,
+                adapter.weights.revision,
             )
         else:
             chat_response = asyncio.to_thread(
@@ -1350,13 +1446,10 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             rewritten: granite_formatters.ChatCompletion,
             result_processor: granite_formatters.IntrinsicsResultProcessor,
             input_ids,
-            embedded_identity: Identity | None,
         ):
-            # embedded_identity is set only for EmbeddedIntrinsicAdapter calls
-            # (the legacy PEFT path already gets this signal via adapter_scope).
-            # Kept in one try so any failure below — not just from transform
-            # itself — fires outcome="error" instead of reporting success and
-            # then raising, the exact bug #1559 reverted.
+            # One try/finally: a failure anywhere in processing (not just in
+            # transform) must be reported as an error, never success-then-raise.
+            error: BaseException | None = None
             try:
                 res = result_processor.transform(chunk, rewritten)  # type: ignore
 
@@ -1378,34 +1471,40 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                             )
 
                 # processing expects a str or a GenerateDecoderOnlyOutput. Extract the str.
-                result = await self.processing(
+                return await self.processing(
                     mot, res.choices[0].message.content, input_ids=input_ids
                 )
             except json.JSONDecodeError as e:
-                if embedded_identity is not None:
-                    await _fire_embedded_invocation_complete(
-                        identity=embedded_identity, outcome="schema_error", error=e
-                    )
+                error = e
                 raise Exception(f"Intrinsic did not return a JSON: {chunk}") from e
-            except Exception as e:
-                if embedded_identity is not None:
-                    await _fire_embedded_invocation_complete(
-                        identity=embedded_identity, outcome="error", error=e
-                    )
+            except BaseException as e:
+                error = e
                 raise
-            else:
-                if embedded_identity is not None:
-                    await _fire_embedded_invocation_complete(
-                        identity=embedded_identity, outcome="success", error=None
+            finally:
+                if isinstance(adapter.weights, (EmbeddedBinding, PromptBinding)):
+                    await _afire_invocation_complete(
+                        identity=adapter.identity,
+                        binding_type=adapter.weights.binding_type,
+                        revision=(
+                            adapter.weights.revision
+                            if isinstance(adapter.weights, PromptBinding)
+                            else None
+                        ),
+                        outcome=(
+                            "success"
+                            if error is None
+                            else "schema_error"
+                            if isinstance(error, json.JSONDecodeError)
+                            else "error"
+                        ),
+                        error=error,
                     )
-                return result
 
         output._gen.process = functools.partial(
             granite_formatters_processing,
             rewritten=rewritten,
             result_processor=result_processor,
             input_ids=generate_input["input_tokens"],
-            embedded_identity=(adapter.identity if adapter_is_embedded else None),
         )
 
         # TODO: Post-processing should release the lock for this generation.
@@ -2834,10 +2933,14 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                         "Pass config=, or register it via "
                         "register_embedded_adapter_model() or resolve_adapter()."
                     )
+            elif isinstance(adapter.weights, PromptBinding):
+                # config= is optional: resolve_adapter passes the fetched io.yaml;
+                # a bare add_adapter(PromptBinding) self-fetches it below.
+                pass
             elif config is not None:
                 raise TypeError(
                     "config= is only accepted for a composed Adapter whose "
-                    f"weights is an EmbeddedBinding; got "
+                    f"weights is an EmbeddedBinding or PromptBinding; got "
                     f"{type(adapter.weights).__name__}, which derives its "
                     "config lazily from io.yaml on first use."
                 )
@@ -2886,7 +2989,9 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                         self._composed_adapters[key] = adapter
                         self._composed_adapter_configs[key] = config
                         return  # atomic: no lifecycle verb, no I/O
-                    if not isinstance(adapter.weights, LocalFileBinding):
+                    if not isinstance(
+                        adapter.weights, (LocalFileBinding, PromptBinding)
+                    ):
                         raise TypeError(
                             "LocalHFBackend does not support the "
                             f"{type(adapter.weights).__name__} weights reality "
@@ -2905,6 +3010,20 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                             "must agree on both, or registration and lookup key on "
                             "different strings for the same adapter (NOTE(#1516))."
                         )
+
+                # A PromptBinding is weightless — no bind_backend()/prepare(): just
+                # register it and cache its io.yaml (from resolve_adapter, or
+                # self-fetched here). Any fetch stays outside the activation lock.
+                if isinstance(binding, PromptBinding):
+                    prompt_config = (
+                        config
+                        if config is not None
+                        else self._obtain_prompt_io_yaml_config(binding)
+                    )
+                    with self._adapter_activation_lock():
+                        self._composed_adapter_configs[key] = prompt_config
+                        self._composed_adapters[key] = adapter
+                    return
 
                 # Slow work, still under the resolve lock but not the
                 # activation lock: released above, so bind_backend()/

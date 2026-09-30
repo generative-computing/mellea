@@ -30,6 +30,7 @@ import yaml
 
 from ...core import Backend, MelleaLogger
 from ...formatters.granite import intrinsics as intrinsics
+from ...formatters.granite.intrinsics import AdapterNotFoundError
 from ...helpers.event_loop_helper import _run_async_in_thread
 from ...plugins.manager import has_plugins, invoke_hook
 from ...plugins.types import HookType
@@ -39,9 +40,15 @@ from ._core import (
     EmbeddedBinding,
     Identity,
     LocalFileBinding,
+    PromptBinding,
     WeightsBinding,
 )
-from .catalog import AdapterType, fetch_intrinsic_metadata, known_intrinsic_names
+from .catalog import (
+    AdapterType,
+    IntrinsicsCatalogEntry,
+    fetch_intrinsic_metadata,
+    known_intrinsic_names,
+)
 from .io_contracts import get_io_contract
 
 
@@ -219,17 +226,15 @@ class IntrinsicAdapter(LocalHFAdapter, _AdapterCore):
             assert self.base_model_name is not None, (
                 "must provide `base_model_name` if not providing a `config_file` or `config_dict`"
             )
-            # We're converting the adapter type to a boolean flag here.
             assert adapter_type in (AdapterType.ALORA, AdapterType.LORA), (
                 f"{adapter_type} not supported"
             )
-            is_alora = self.adapter_type == AdapterType.ALORA
             config_file = intrinsics.obtain_io_yaml(
                 self.intrinsic_name,
                 self.base_model_name,
                 self.intrinsic_metadata.repo_id,
                 revision=self.intrinsic_metadata.revision,
-                alora=is_alora,
+                adapter_type=self.adapter_type.value,
             )
         if config_file:
             with open(config_file, encoding="utf-8") as f:
@@ -283,14 +288,13 @@ class IntrinsicAdapter(LocalHFAdapter, _AdapterCore):
         Returns:
             a path to the files
         """
-        is_alora = self.adapter_type == AdapterType.ALORA
         return str(
             intrinsics.obtain_lora(
                 self.intrinsic_name,
                 base_model_name,
                 self.intrinsic_metadata.repo_id,
                 revision=self.intrinsic_metadata.revision,
-                alora=is_alora,
+                adapter_type=self.adapter_type.value,
             )
         )
 
@@ -511,6 +515,99 @@ def _fire_invocation_complete(
 # contract the reality-specific verbs use. See the module note on the mixin-vs-
 # generic trade-off for why this is a runtime, not a type-parameter, guarantee.
 AdapterInput: TypeAlias = Adapter | _AdapterCore | LocalFileBinding
+
+
+def _register_available_composed_adapter(
+    backend: "AdapterMixin", name: str, base: str, metadata: IntrinsicsCatalogEntry
+) -> None:
+    """Register the first adapter in the fallback chain that exists for `base`.
+
+    Probes aLoRA, LoRA, a model-specific prompt, then the `"any"` prompt via a tiny
+    `io.yaml` fetch — advancing only on the not-found `AdapterNotFoundError`, letting
+    other errors propagate — and registers a `LocalFileBinding` (trained) or a
+    `PromptBinding` (prompt, warning on `"any"`) for the first hit. Trial-fetch is
+    the only per-model presence signal; the catalogue's `adapter_types` is
+    per-capability.
+
+    Module-level, not a method, so a spec'd mock backend in tests drives the real
+    walk.
+
+    Raises:
+        AdapterNotFoundError: No adapter or prompt fallback exists for `name` on
+            `base`.
+    """
+    for adapter_type in (AdapterType.ALORA, AdapterType.LORA):
+        try:
+            intrinsics.obtain_io_yaml(
+                name,
+                base,
+                metadata.repo_id,
+                revision=metadata.revision,
+                adapter_type=adapter_type.value,
+            )
+        except AdapterNotFoundError:
+            continue
+        backend.add_adapter(
+            _AdapterCore(
+                identity=Identity(
+                    name=name,
+                    adapter_type=adapter_type.value,  # type: ignore[arg-type]
+                    capability=metadata.effective_capability,
+                ),
+                io_contract=get_io_contract(name),
+                weights=LocalFileBinding(
+                    name=name,
+                    adapter_type=adapter_type,
+                    repo_id=metadata.repo_id,
+                    revision=metadata.revision,
+                ),
+            )
+        )
+        return
+
+    try:
+        io_yaml_path, used_any = intrinsics.resolve_prompt_io_yaml(
+            name, base, metadata.repo_id, revision=metadata.revision
+        )
+    except AdapterNotFoundError as e:
+        raise AdapterNotFoundError(
+            f"No adapter (aLoRA/LoRA) or prompt fallback found for adapter "
+            f"function {name!r} on base model {base!r} in {metadata.repo_id}."
+        ) from e
+
+    target_model = "any" if used_any else base
+    if used_any:
+        MelleaLogger.get_logger().warning(
+            f"No adapter or model-specific prompt found for adapter function "
+            f"{name!r} on base model {base!r}; falling back to the "
+            "model-agnostic 'any' prompt, which is sub-par relative to a "
+            "model-specific one."
+        )
+    with open(io_yaml_path, encoding="utf-8") as f:
+        prompt_config = yaml.safe_load(f)
+    if not isinstance(prompt_config, dict):
+        raise ValueError(
+            f"Prompt io.yaml for {name!r} at {io_yaml_path} did not parse "
+            f"to a mapping (got {type(prompt_config).__name__})."
+        )
+    backend.add_adapter(
+        _AdapterCore(
+            identity=Identity(
+                name=name,
+                adapter_type="prompt",
+                capability=metadata.effective_capability,
+            ),
+            io_contract=get_io_contract(name),
+            weights=PromptBinding(
+                name=name,
+                adapter_type=AdapterType.PROMPT,
+                repo_id=metadata.repo_id,
+                revision=metadata.revision,
+                target_model_name=target_model,
+            ),
+        ),
+        config=prompt_config,
+    )
 
 
 class AdapterMixin(Backend, abc.ABC):
@@ -818,7 +915,9 @@ class AdapterMixin(Backend, abc.ABC):
             _AdapterCore: The registered adapter with the given capability.
 
         Raises:
-            ValueError: If the backend has no model ID.
+            ValueError: If the backend has no model ID, or (for a backend that
+                supports composed adapters) if no trained adapter and no prompt
+                fallback exists for `name` on the backend's base model.
             KeyError: If the adapter cannot be found after registration.
 
         Note:
@@ -893,29 +992,11 @@ class AdapterMixin(Backend, abc.ABC):
                 ):
                     self._add_embedded_adapter_compat(a, config)
             else:
-                # AdapterType.LORA is the pre-Phase-1 default (mirrors old _util.py).
-                # Every current catalog entry supports LORA.  Phase 2 (see epic #929)
-                # will select the type from catalog availability instead of hardcoding.
                 metadata = fetch_intrinsic_metadata(name)
                 if self._supports_composed_adapters:
-                    # Composed Adapter, not the deprecated IntrinsicAdapter shim
-                    # (Epic #929, issue #1144).
-                    self.add_adapter(
-                        _AdapterCore(
-                            identity=Identity(
-                                name=name,
-                                adapter_type="lora",
-                                capability=metadata.effective_capability,
-                            ),
-                            io_contract=get_io_contract(name),
-                            weights=LocalFileBinding(
-                                name=name,
-                                adapter_type=AdapterType.LORA,
-                                repo_id=metadata.repo_id,
-                                revision=metadata.revision,
-                            ),
-                        )
-                    )
+                    # Register whichever adapter (or prompt) actually exists for
+                    # this base model.
+                    _register_available_composed_adapter(self, name, base, metadata)
                 else:
                     # Legacy subclass predating the composed-Adapter contract
                     # (same reasoning as _add_embedded_adapter_compat): its

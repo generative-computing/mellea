@@ -245,6 +245,7 @@ post-activation shape each produces:
 | `LocalFileBinding` | LocalFile/PEFT | `prepare` / `activate` / `deactivate` / `release` | `activate()` / `deactivate()`, via `adapter_scope` | Backend-internal PEFT adapter state toggled; the outgoing request is untouched |
 | `EmbeddedBinding` | Embedded/Granite Switch | none — weights are already in the served model | `apply_activation(request, identity)` | `request.extra_body["chat_template_kwargs"]["adapter_name"]` set; `request.api_params["model"]` removed if present |
 | `ServerMediatedBinding` | Ollama bundled adapter model | none for the current Ollama path | select the configured model tag during intrinsic generation | Ollama request's `model` is the bundled adapter tag; full lifecycle telemetry remains follow-up work |
+| `PromptBinding` | Prompt fallback (weightless) | `prepare` / `activate` / `deactivate` / `release` — all no-ops except `activate()`, which logs | `activate()`, via the backend's weightless generate path (no `adapter_scope`) | None — generation runs against the base model with the rewriter-injected instruction |
 
 ### Project Resources
 

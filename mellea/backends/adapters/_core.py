@@ -104,22 +104,23 @@ class Identity:
 
     Attributes:
         name (str): Human-readable adapter name.
-        adapter_type (Literal["lora", "alora"]): The LoRA variant.
+        adapter_type (Literal["lora", "alora", "prompt"]): The adapter variant. `"prompt"` is the
+            weightless prompt fallback.
         capability (str | None): Advisory capability string; emits
             :class:`UserWarning` when not in
             :data:`~mellea.backends.adapters.capabilities.KNOWN_CAPABILITIES`.
     """
 
     name: str
-    adapter_type: Literal["lora", "alora"]
+    adapter_type: Literal["lora", "alora", "prompt"]
     capability: str | None = None
 
     def __post_init__(self) -> None:
         # Literal[...] is a static-only constraint; mypy enforces it but Python
         # does not, so validate at runtime too.
-        if self.adapter_type not in ("lora", "alora"):
+        if self.adapter_type not in ("lora", "alora", "prompt"):
             raise ValueError(
-                f"adapter_type must be 'lora' or 'alora', got {self.adapter_type!r}"
+                f"adapter_type must be 'lora', 'alora', or 'prompt', got {self.adapter_type!r}"
             )
         if self.capability is not None and self.capability not in KNOWN_CAPABILITIES:
             warnings.warn(
@@ -415,7 +416,7 @@ class LocalFileBinding(WeightsBinding):
                 base_model_name,
                 self.repo_id,
                 revision=self.resolved_revision(),
-                alora=self.adapter_type is AdapterType.ALORA,
+                adapter_type=self.adapter_type.value,
             )
         )
 
@@ -770,6 +771,83 @@ class LocalFileBinding(WeightsBinding):
             )
 
 
+class PromptBinding(WeightsBinding):
+    """Weights binding for the weightless Prompt reality.
+
+    A soft adapter with no weights: the capability's `io.yaml` carries a
+    hand-authored `instruction` that the rewriter injects, and generation runs
+    against the plain base model. Implemented as a real `WeightsBinding` with no-op
+    lifecycle verbs (not an optional `Adapter.weights`) so `adapter_scope` and
+    generation dispatch need no special-casing.
+
+    Args:
+        name (str): Adapter function name (e.g. `"answerability"`).
+        adapter_type (AdapterType): Always `AdapterType.PROMPT`.
+        repo_id (str): Hugging Face Hub repository holding the prompt `io.yaml`.
+        revision (str | None): Git revision, or `None` to resolve the catalogue's
+            pinned revision lazily.
+        target_model_name (str): Slot the prompt resolved under — a base model
+            name, or `"any"`. With `repo_id`/`revision`, used only when a bare
+            `add_adapter(PromptBinding)` self-fetches its `io.yaml`; resolution
+            passes the parsed config instead.
+
+    Attributes:
+        binding_type (ClassVar[str]): `"prompt"`.
+    """
+
+    binding_type: ClassVar[str] = "prompt"
+
+    def __init__(
+        self,
+        name: str = "",
+        adapter_type: AdapterType = AdapterType.PROMPT,
+        repo_id: str = "",
+        revision: str | None = None,
+        target_model_name: str = "any",
+    ) -> None:
+        """Constructs a PromptBinding."""
+        self.name = name
+        self.adapter_type = adapter_type
+        self.repo_id = repo_id
+        self.revision = revision
+        self.target_model_name = target_model_name
+
+    @property
+    def qualified_name(self) -> str:
+        """Backend-facing adapter identifier, e.g. `"answerability_prompt"`."""
+        return f"{self.name}_{self.adapter_type.value}"
+
+    def resolved_revision(self) -> str:
+        """Returns the revision to download, resolving `None` via the catalogue.
+
+        Returns:
+            The git revision (branch, tag, or commit SHA) to download.
+
+        Raises:
+            ValueError: `revision` is `None` and `name` is not a registered
+                adapter function.
+        """
+        if self.revision is not None:
+            return self.revision
+        return fetch_intrinsic_metadata(self.name).revision
+
+    def prepare(self) -> None:
+        """No-op: a prompt fallback has no weights to stage."""
+
+    def activate(self) -> None:
+        """Logs that the soft (prompt) adapter fired, at real-adapter severity."""
+        MelleaLogger.get_logger().info(
+            f"Prompt fallback activated for {self.name!r} "
+            f"(model slot {self.target_model_name!r})."
+        )
+
+    def deactivate(self) -> None:
+        """No-op: nothing was loaded, so nothing to unload."""
+
+    def release(self) -> None:
+        """No-op: a prompt fallback holds no resources to release."""
+
+
 @dataclass
 class EmbeddedActivationRequest:
     """Mutable outgoing-request state that `EmbeddedBinding.apply_activation` edits.
@@ -866,7 +944,7 @@ class EmbeddedBinding:
         invocation-complete event here would have to guess an `outcome` that
         this method cannot know, which is worse than not firing it: it would
         report `outcome="success"` for calls that go on to fail. Instead, the
-        caller fires `_fire_embedded_invocation_complete` once generation and
+        caller fires `_afire_invocation_complete` once generation and
         parsing resolve — see its use in `OpenAIBackend`'s and
         `LocalHFBackend`'s `granite_formatters_processing` closures (issue
         #1560).
@@ -927,19 +1005,22 @@ class EmbeddedBinding:
             )
 
 
-async def _fire_embedded_invocation_complete(
+async def _afire_invocation_complete(
     *,
     identity: Identity,
+    binding_type: str,
+    revision: str | None = None,
     outcome: Literal["success", "schema_error", "error"],
     error: BaseException | None,
 ) -> None:
-    """Fires `adapter_function_invocation_complete` for an Embedded adapter call.
+    """Fires `adapter_function_invocation_complete` from an async generation path.
 
-    Called from one of two mutually-exclusive points, since
-    `EmbeddedBinding.apply_activation` can't know the outcome yet at
-    request-mutation time (see its docstring): `_await_embedded_generation`
-    below, on a generation failure, or `granite_formatters_processing` in
-    `openai.py`/`huggingface.py`, once a response exists.
+    Used by adapters whose outcome is only known inside a running coroutine —
+    Embedded and Prompt — where the dispatch/request-mutation site can't know it
+    yet. Fired from one of two mutually-exclusive points:
+    `_await_generation_reporting_error` below, on a generation failure, or
+    `granite_formatters_processing` in `openai.py`/`huggingface.py`, once a
+    response exists.
 
     Doesn't classify contract-level `IOContract` mismatches on already-valid
     JSON — that check runs later, in `call_intrinsic`, after this already
@@ -951,6 +1032,10 @@ async def _fire_embedded_invocation_complete(
 
     Args:
         identity: Identifies the adapter that was invoked.
+        binding_type: The weights-binding reality that ran (e.g. `"embedded"`,
+            `"prompt"`).
+        revision: Git revision the adapter resolved to, or `None` if unpinned or
+            not applicable.
         outcome: The resolved invocation outcome.
         error: The exception raised during generation/parsing, or `None` on
             success.
@@ -965,8 +1050,8 @@ async def _fire_embedded_invocation_complete(
     try:
         payload = AdapterFunctionInvocationCompletePayload(
             name=identity.name,
-            revision=None,
-            binding_type=EmbeddedBinding.binding_type,
+            revision=revision,
+            binding_type=binding_type,
             adapter_type=identity.adapter_type,
             outcome=outcome,
             error=error,
@@ -981,7 +1066,9 @@ async def _fire_embedded_invocation_complete(
         )
 
 
-async def _await_embedded_generation(coro: Any, identity: Identity) -> Any:
+async def _await_generation_reporting_error(
+    coro: Any, identity: Identity, binding_type: str, revision: str | None = None
+) -> Any:
     """Awaits `coro`, firing `outcome="error"` if generation itself fails.
 
     `granite_formatters_processing` only runs once a response object exists,
@@ -1003,6 +1090,10 @@ async def _await_embedded_generation(coro: Any, identity: Identity) -> Any:
         coro: The backend's generation call (e.g. the OpenAI SDK coroutine, or
             an `asyncio.to_thread` call wrapping local generation).
         identity: Identifies the adapter being invoked.
+        binding_type: The weights-binding reality that ran (e.g. `"embedded"`,
+            `"prompt"`).
+        revision: Git revision the adapter resolved to, or `None` if unpinned or
+            not applicable.
 
     Returns:
         `coro`'s result, unchanged.
@@ -1010,8 +1101,12 @@ async def _await_embedded_generation(coro: Any, identity: Identity) -> Any:
     try:
         return await coro
     except BaseException as e:
-        await _fire_embedded_invocation_complete(
-            identity=identity, outcome="error", error=e
+        await _afire_invocation_complete(
+            identity=identity,
+            binding_type=binding_type,
+            revision=revision,
+            outcome="error",
+            error=e,
         )
         raise
 

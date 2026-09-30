@@ -187,11 +187,12 @@ adapter is preferred whenever one is loaded, with three exceptions:
 2. The requirement uses the `LLMaJRequirement` subtype explicitly — the caller is
    asking for LLM-as-a-judge regardless of what adapters are loaded.
 3. The adapter is unavailable (e.g. cannot be loaded) — Mellea falls back to
-   LLM-as-a-judge automatically. This is the *only* fallback case: if the
-   adapter runs but its output fails schema validation, `validate()` does not
-   fall back. Instead it surfaces the schema error on `ValidationResult.error`
-   and fails the check closed (`bool(result)` is `False`), so callers can tell
-   an unparsable adapter response apart from an ordinary "requirement not met".
+   LLM-as-a-judge automatically. This is the *only* case where the adapter path
+   falls back to LLM-as-a-judge: if the adapter runs but its output fails schema
+   validation, `validate()` does not fall back. Instead it surfaces the schema
+   error on `ValidationResult.error` and fails the check closed (`bool(result)`
+   is `False`), so callers can tell an unparsable adapter response apart from an
+   ordinary "requirement not met".
 
 If you want to force the adapter path even when using `generate_from_context`
 directly (bypassing the normal `validate()` call), use `ALoraRequirement` from

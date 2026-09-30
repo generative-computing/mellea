@@ -626,10 +626,10 @@ def test_resolve_adapter_falls_back_to_lora_when_alora_unavailable(
     config_path = tmp_path / "io.yaml"
     config_path.write_text(json.dumps(_SIMPLE_CONFIG), encoding="utf-8")
     backend = _make_backend(adapter_models={"citations": _ADAPTER_TAG})
-    recorded_alora: list[bool] = []
+    recorded_adapter_types: list[str] = []
 
-    def _fake_obtain_io_yaml(*_args, alora: bool, **_kwargs) -> Path:
-        recorded_alora.append(alora)
+    def _fake_obtain_io_yaml(*_args, adapter_type: str, **_kwargs) -> Path:
+        recorded_adapter_types.append(adapter_type)
         return config_path
 
     monkeypatch.setattr(
@@ -639,7 +639,7 @@ def test_resolve_adapter_falls_back_to_lora_when_alora_unavailable(
 
     adapter = backend.resolve_adapter("citations")
 
-    assert recorded_alora == [False]
+    assert recorded_adapter_types == ["lora"]
     assert adapter.identity.adapter_type == "lora"
 
 

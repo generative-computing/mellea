@@ -230,7 +230,7 @@ async def test_invocation_complete_fires_error_on_unrelated_exception():
 
 async def test_invocation_complete_fires_error_on_generation_failure():
     # A failure in the SDK call itself never reaches granite_formatters_processing —
-    # avalue() raises it straight off the queue — so _await_embedded_generation
+    # avalue() raises it straight off the queue — so _await_generation_reporting_error
     # must fire outcome="error" instead.
     pytest.importorskip("cpex", reason="cpex not installed — install mellea[hooks]")
     backend = _backend_with_adapter("alora")

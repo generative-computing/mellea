@@ -461,7 +461,7 @@ class OllamaModelBackend(FormatterBackend, AdapterMixin):
                 self.base_model_name,
                 metadata.repo_id,
                 revision=metadata.revision,
-                alora=use_alora,
+                adapter_type=adapter_type.value,
             )
         except ModuleNotFoundError as e:
             if e.name != "huggingface_hub":
