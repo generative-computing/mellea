@@ -395,9 +395,9 @@ class LiteLLMBackend(FormatterBackend):
         if self._default_extra_body:
             # Seed from the construction-time tier (below the per-call
             # THINKING resolution below, and below caller-supplied extra_body
-            # further down); `_merge_extra_body` gives back a fresh dict (and
+            # further down); `merge_extra_body` gives back a fresh dict (and
             # a fresh `chat_template_kwargs` sub-dict) safe to mutate below.
-            extra_params["extra_body"] = ModelOption._merge_extra_body(
+            extra_params["extra_body"] = ModelOption.merge_extra_body(
                 {}, self._default_extra_body
             )
         if _format is not None:
@@ -458,17 +458,10 @@ class LiteLLMBackend(FormatterBackend):
         # caller's dict; popping from the originals would silently corrupt reused
         # model_options on the next call.
         user_extra_body = model_specific_options.pop("extra_body", None)
-        if user_extra_body:
-            user_extra_body = dict(user_extra_body)
-            eb = dict(extra_params.get("extra_body") or {})
-            user_ctk = user_extra_body.pop("chat_template_kwargs", None)
-            eb.update(user_extra_body)
-            if user_ctk is not None:
-                eb["chat_template_kwargs"] = {
-                    **eb.get("chat_template_kwargs", {}),
-                    **user_ctk,
-                }
-            extra_params["extra_body"] = eb
+        if user_extra_body is not None:
+            extra_params["extra_body"] = ModelOption.merge_extra_body(
+                extra_params.get("extra_body") or {}, user_extra_body
+            )
 
         # Pop api_base from model_specific_options before the call so an explicit
         # user-supplied value doesn't collide with the positional api_base kwarg;
