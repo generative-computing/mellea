@@ -1208,6 +1208,71 @@ async def test_alora_activation_guard_fires_invocation_complete_hook_on_abort():
 
 
 @pytest.mark.asyncio
+async def test_alora_activation_guard_abort_hook_reports_shim_as_pinned_local_file():
+    """A guard abort on the legacy `IntrinsicAdapter` shim reports what a success would.
+
+    The shim's own `weights` is an inert `_ShimWeightsBinding` (`binding_type`
+    `"unknown"`, no `revision`); a successful call reports through the per-call
+    `_IntrinsicPeftBinding` instead (`"local_file"` plus the catalogue SHA). The
+    abort payload must match that, not the placeholder (PR #1684 review).
+    """
+    from mellea.backends.adapters._core import AloraActivationError
+    from test.backends.test_adapters._hook_capture import (
+        capture_adapter_hooks,
+        invocation_payloads,
+    )
+
+    stub_backend = SimpleNamespace(
+        from_mellea_model_opts_map={
+            ModelOption.MAX_NEW_TOKENS: "max_new_tokens",
+            ModelOption.STOP_SEQUENCES: "stop_strings",
+        }
+    )
+    backend = _setup_mismatched_alora_stub(stub_backend)
+    shim = _make_intrinsic_adapter_stub()
+    shim.intrinsic_metadata = SimpleNamespace(revision="def456")
+    shim.config = {"parameters": {}}
+    backend._composed_adapters = {}
+    backend._composed_adapter_configs = {}
+    backend._added_adapters = {shim.qualified_name: shim}
+
+    with (
+        capture_adapter_hooks() as mock_invoke,
+        patch(
+            "mellea.backends.huggingface.granite_formatters.IntrinsicsRewriter",
+            _FakeRewriter,
+        ),
+        patch(
+            "mellea.backends.huggingface.granite_formatters.IntrinsicsResultProcessor",
+            _PassthroughResultProcessor,
+        ),
+        patch(
+            "mellea.formatters.granite.base.util.chat_completion_request_to_transformers_inputs",
+            side_effect=_fake_transformers_inputs_with_mismatched_prompt,
+        ),
+        patch(
+            "mellea.formatters.granite.intrinsics.obtain_io_yaml",
+            return_value="/fake/adapter.yaml",
+        ),
+        patch("builtins.open", mock_open(read_data="key: value")),
+        patch("yaml.safe_load", return_value={"parameters": {}}),
+    ):
+        with pytest.raises(AloraActivationError):
+            await LocalHFBackend._generate_from_intrinsic(
+                backend,
+                Intrinsic("answerability"),
+                ChatContext().add(Message("user", "Is the sky blue?")),
+                model_options={},
+            )
+
+    payloads = invocation_payloads(mock_invoke)
+    assert len(payloads) == 1, payloads
+    assert payloads[0].binding_type == "local_file"
+    assert payloads[0].revision == "def456"
+    assert payloads[0].outcome == "error"
+
+
+@pytest.mark.asyncio
 async def test_requirement_reroute_falls_back_to_llm_as_a_judge_on_activation_failure(
     caplog,
 ):

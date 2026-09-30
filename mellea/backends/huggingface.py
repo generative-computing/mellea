@@ -1467,9 +1467,15 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                     # error signal, for exactly the scenario this guard exists
                     # to catch. Mirrors `adapter_scope`'s own
                     # revision/binding_type derivation (`adapter.py`) so the
-                    # two emit consistent fields for the same adapter.
+                    # two emit consistent fields for the same adapter. The
+                    # legacy shim's own `weights` is an inert placeholder, so
+                    # report what its per-call `_IntrinsicPeftBinding` would.
                     revision: str | None
-                    if isinstance(adapter.weights, LocalFileBinding):
+                    binding_type = adapter.weights.binding_type
+                    if isinstance(adapter, IntrinsicAdapter):
+                        revision = adapter.intrinsic_metadata.revision
+                        binding_type = _IntrinsicPeftBinding.binding_type
+                    elif isinstance(adapter.weights, LocalFileBinding):
                         try:
                             revision = adapter.weights.resolved_revision()
                         except Exception:
@@ -1483,7 +1489,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                         _fire_invocation_complete(
                             name=adapter_name,
                             revision=revision,
-                            binding_type=adapter.weights.binding_type,
+                            binding_type=binding_type,
                             adapter_type=adapter.identity.adapter_type,
                             outcome="error",
                             error=exc,
