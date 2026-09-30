@@ -428,6 +428,7 @@ def make_responses_endpoint(module):
                         model=request.model,
                         created=created_timestamp,
                         conversation=request.conversation,
+                        include=request.include,
                     ),
                     media_type="text/event-stream",
                 )
