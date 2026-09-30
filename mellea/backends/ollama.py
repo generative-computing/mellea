@@ -503,8 +503,13 @@ class OllamaModelBackend(FormatterBackend, AdapterMixin):
             return False
         return True
 
-    def is_model_available(self, model_name):
+    def is_model_available(self, model_name: str) -> bool:
         """Checks if a specific Ollama model is available locally.
+
+        Matching is case-insensitive and compares the full tag, defaulting to
+        "latest" when `model_name` doesn't specify one — the same resolution
+        Ollama itself applies. So "llama3" matches an installed "llama3:latest"
+        but not "llama3:8b-instruct-q4".
 
         Args:
           model_name: The name of the model to check for (e.g., "llama2").
@@ -518,15 +523,20 @@ class OllamaModelBackend(FormatterBackend, AdapterMixin):
         # Guarded because the `except` below would otherwise turn "this backend is
         # closed" into a plain `False`, which reads as "the model isn't there".
         self._raise_if_closed()
+        target = model_name if ":" in model_name else f"{model_name}:latest"
+        target = target.lower()
         try:
             models = self._client.list()
-            for model in models["models"]:
-                if model.model.startswith(model_name):
-                    return True
-            return False
         except Exception as e:
-            print(f"An error occurred: {e}")
+            MelleaLogger.get_logger().warning(
+                f"Failed to list local Ollama models: {e}"
+            )
             return False
+        for model in models["models"]:
+            # Skip entries with no name rather than aborting the whole scan.
+            if model.model is not None and model.model.lower() == target:
+                return True
+        return False
 
     def _pull_ollama_model(self) -> bool:
         """Either gets the cached ollama model or else attempts to pull the provided model from Ollama. Raises an exception of the model cannot be pulled.
