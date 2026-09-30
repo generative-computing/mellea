@@ -11,6 +11,7 @@ import pytest
 from cli.serve.app import (
     _build_model_options_from_response_request,
     _convert_response_input_to_messages,
+    _response_store,
     make_responses_endpoint,
 )
 from cli.serve.models import Response, ResponseInputItem, ResponseRequest
@@ -199,6 +200,12 @@ class TestConvertResponseInputToMessages:
 class TestResponsesEndpointNonStreaming:
     """Tests for the /v1/responses endpoint (non-streaming path)."""
 
+    def setup_method(self):
+        _response_store.clear()
+
+    def teardown_method(self):
+        _response_store.clear()
+
     @pytest.mark.asyncio
     async def test_basic_response_structure(self, mock_module, simple_request):
         mock_output = ModelOutputThunk("The answer is 42.")
@@ -274,11 +281,21 @@ class TestResponsesEndpointNonStreaming:
 
     @pytest.mark.asyncio
     async def test_previous_response_id_echoed(self, mock_module):
-        req = ResponseRequest(model="m", input="hi", previous_response_id="resp-xyz")
         mock_module.serve.return_value = ModelOutputThunk("ok")
         endpoint = make_responses_endpoint(mock_module)
+
+        # First request — store a response so it can be referenced.
+        first_response = await endpoint(ResponseRequest(model="m", input="first"))
+        prior_id = first_response.id
+        assert prior_id in _response_store
+
+        # Second request — chain via previous_response_id.
+        req = ResponseRequest(
+            model="m", input="follow-up", previous_response_id=prior_id
+        )
+        mock_module.serve.return_value = ModelOutputThunk("ok2")
         response = await endpoint(req)
-        assert response.previous_response_id == "resp-xyz"
+        assert response.previous_response_id == prior_id
 
     @pytest.mark.asyncio
     async def test_background_true_returns_400(self, mock_module):

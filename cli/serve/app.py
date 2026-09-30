@@ -7,9 +7,10 @@ import asyncio
 import importlib.util
 import inspect
 import os
+import secrets
+import string
 import sys
 import time
-import uuid
 from dataclasses import dataclass, field
 from typing import Any, Literal, cast
 
@@ -56,6 +57,8 @@ from .streaming import stream_chat_completion_chunks, stream_response_chunks
 from .utils import extract_finish_reason
 
 logger = MelleaLogger.get_logger()
+
+_BASE62 = string.ascii_letters + string.digits
 
 
 @asynccontextmanager
@@ -351,7 +354,7 @@ def make_responses_endpoint(module):
                     param="background",
                 )
 
-            response_id = f"resp_{uuid.uuid4().hex[:24]}"
+            response_id = "resp_" + "".join(secrets.choice(_BASE62) for _ in range(24))
             created_timestamp = int(time.time())
 
             messages = _convert_response_input_to_messages(
@@ -472,7 +475,9 @@ def make_chat_endpoint(module):
                     param="n",
                 )
 
-            completion_id = f"chatcmpl-{uuid.uuid4().hex[:29]}"
+            completion_id = "chatcmpl-" + "".join(
+                secrets.choice(_BASE62) for _ in range(29)
+            )
             created_timestamp = int(time.time())
 
             model_options = _build_model_options(request)
