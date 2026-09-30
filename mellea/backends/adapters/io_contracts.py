@@ -13,14 +13,14 @@ wrong constant was a silent mismatch.
 :data:`_INTRINSIC_IO_CONTRACTS` is the single source of truth instead: it is keyed by the
 adapter function's catalog name (:attr:`~mellea.backends.adapters.catalog.IntrinsicsCatalogEntry.name`,
 e.g. `"guardian-core"` — the same string passed to `call_intrinsic` and
-`resolve_adapter`). The shim adapters in `adapter.py` read from it at construction
-(via :func:`get_io_contract`); the high-level helpers reach it indirectly, through
-the adapter `resolve_adapter` returns. Declaring a capability's contract anywhere
+`resolve_adapter`). The composed adapters `resolve_adapter` builds read from it at
+construction (via :func:`get_io_contract`); the high-level helpers reach it indirectly,
+through the adapter `resolve_adapter` returns. Declaring a capability's contract anywhere
 else reintroduces the parallel-argument problem this module exists to close.
 
 An adapter a user registers with a backend takes precedence over the registry for its
 own contract: `call_intrinsic` parses with whatever contract the resolved adapter
-carries, and only adapters Mellea constructs itself (the lazy shims) get theirs from here.
+carries, and only adapters Mellea constructs itself get theirs from here.
 """
 
 import json
@@ -244,7 +244,7 @@ _INTRINSIC_IO_CONTRACTS: dict[str, IOContract] = {
 }
 # Canonical output contract for every built-in adapter function, keyed by its
 # catalog `name` (see module docstring). Capture the built-in names before
-# `CustomIntrinsicAdapter` can extend the global catalogue at runtime, then keep
+# runtime catalogue registration can extend the global catalogue, then keep
 # the registry exhaustive over that fixed set at import time — mirroring the
 # duplicate-`effective_capability` check in catalog.py.
 _BUILTIN_INTRINSIC_NAMES = frozenset(known_intrinsic_names())
@@ -271,7 +271,7 @@ def get_io_contract(name: str) -> IOContract:
     Returns:
         IOContract: The contract declared in :data:`_INTRINSIC_IO_CONTRACTS` for
             `name`. Adapter functions outside the catalog (e.g. one registered
-            through the deprecated `CustomIntrinsicAdapter`) fall back to a dict
+            at runtime) fall back to a dict
             contract with no required keys — permissive about *which* keys are
             present, but still requires the parsed JSON to be an object; a
             top-level array or scalar still raises `ValueError`, since Mellea has
