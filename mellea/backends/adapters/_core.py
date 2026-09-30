@@ -106,7 +106,7 @@ class AloraActivationError(ValueError):
     to `None` and generates against the base model with no error when it is
     absent (`peft.tuners.lora.variants.calculate_alora_offsets`), so a caller
     that only inspected the return value would see a well-formed but
-    worthless result (issue #1678). Raised before generation runs, so no
+    worthless result. Raised before generation runs, so no
     model call is wasted on it.
 
     A direct adapter-function call (e.g. `core.check_certainty`) has no

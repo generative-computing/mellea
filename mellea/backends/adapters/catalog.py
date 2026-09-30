@@ -155,7 +155,7 @@ _GUARDIAN_REPO = "ibm-granite/granitelib-guardian-r1.0"
 
 # Bumping any of these SHAs is the moment an upstream fix reaches users, and
 # the moment a rung newly promotes an aLoRA to the default path for its
-# capability (issue #1678, AC3/AC4). If the bump adds or newly enables an
+# capability. If the bump adds or newly enables an
 # ALORA entry (or fixes one that was previously non-activating, e.g. #1679),
 # the PR must carry evidence that the aLoRA is no worse than the LoRA on
 # accuracy and false-pass rate for that capability -- a passing activation

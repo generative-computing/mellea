@@ -416,7 +416,7 @@ def _alora_invocation_sequence_present(
     contiguous token-id subsequence in the assembled prompt
     (`peft.tuners.lora.variants.calculate_alora_offsets`). When it is absent,
     PEFT sets the activation offset to `None` and generation silently runs
-    against the base model with no error and no warning (issue #1678). This
+    against the base model with no error and no warning. This
     function is the check Mellea runs itself, since PEFT does not surface the
     mismatch: it holds both the loaded adapter's declared sequence and the
     prompt it just assembled.
@@ -426,7 +426,7 @@ def _alora_invocation_sequence_present(
     merges across a text boundary (e.g. `>` and the following `:` fusing into
     one token) can make a sequence that looks present in the source text
     absent from the actual token ids, and vice versa for sequences supplied by
-    the chat template rather than the instruction (see #1679).
+    the chat template rather than the instruction.
 
     Matches anywhere the sequence occurs, not only at the offset PEFT would
     actually activate from (PEFT itself uses the *last* match — see

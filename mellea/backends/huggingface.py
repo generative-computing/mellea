@@ -453,8 +453,8 @@ def _alora_qualified_name_for_activation_check(
 
     `None` for anything the activation guard does not apply to: an
     `EmbeddedIntrinsicAdapter` (activated by the chat template, not PEFT
-    `set_adapter`, so `peft_config` never carries it — see #1678's "needs
-    answering separately" note on that reality), or a LoRA adapter (no
+    `set_adapter`, so `peft_config` never carries it; whether that reality
+    needs its own check is still open), or a LoRA adapter (no
     invocation sequence to check).
 
     Returning a qualified name here is necessary but not sufficient for the
@@ -466,7 +466,7 @@ def _alora_qualified_name_for_activation_check(
     the deprecated `IntrinsicAdapter` shim only loads inside
     `_generate_intrinsic_with_adapter_scope`, which runs *after* this check
     — so the guard silently no-ops on a shim adapter's first call. Not fixed
-    here: the shim is scheduled for removal (Epic #929, issue #1144), and
+    here: the shim is scheduled for removal (#1621), and
     forcing an early load would mean triggering a Hub round trip from this
     check rather than from generation.
 
@@ -488,7 +488,7 @@ def _alora_qualified_name_for_activation_check(
         return None
     if isinstance(adapter, IntrinsicAdapter):
         return adapter.qualified_name
-    # Composed Adapter (Epic #929, issue #1144): LocalFile/PEFT reality only
+    # Composed Adapter: LocalFile/PEFT reality only
     # — an EmbeddedBinding has no qualified_name in this sense (see the
     # docstring).
     weights = adapter.weights
@@ -512,8 +512,8 @@ def _check_alora_activation(
     An aLoRA only applies from the point its declared `alora_invocation_tokens`
     sequence appears in the assembled prompt; PEFT gives up silently when it
     is absent (`peft.tuners.lora.variants.calculate_alora_offsets`), so a
-    call can report success while the adapter contributed nothing (issue
-    #1678). This is the generation-time guard: it runs against the prompt
+    call can report success while the adapter contributed nothing.
+    This is the generation-time guard: it runs against the prompt
     Mellea actually assembled, right before dispatch — before any model call
     is made — and raises `AloraActivationError` on a mismatch every time it
     is called, since each call's own output would otherwise be silently
@@ -938,17 +938,16 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                             tool_calls=tool_calls,
                         )
                     except AloraActivationError as exc:
-                        # #1678, AC1's "treated as unavailable" arm: the adapter
-                        # was loaded and selected, but its own generation-time
-                        # guard has just proven it cannot activate for this
-                        # prompt (before any model call ran) — treat that
-                        # exactly like the adapter never having been
+                        # The adapter was loaded and selected, but its own
+                        # generation-time guard has just proven it cannot
+                        # activate for this prompt (before any model call ran) —
+                        # treat that exactly like the adapter never having been
                         # registered at all (the `alora_req_adapter is None`
                         # branch above), not like a caller-input error. This
-                        # applies to an explicit `ALoraRequirement` too, same
-                        # as that branch: the empty-context case a few lines up
-                        # is the only one where an explicit opt-in raises
-                        # instead of falling back.
+                        # applies to an explicit `ALoraRequirement` too, same as
+                        # that branch: the empty-context case a few lines up is
+                        # the only one where an explicit opt-in raises instead
+                        # of falling back.
                         warn_key = f"alora_activation_failed_{exc.qualified_name}"
                         if warn_key not in self._warned_about:
                             self._warned_about.add(warn_key)
@@ -1280,7 +1279,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 an unsupported binding type.
             AloraActivationError: If the resolved adapter is an aLoRA whose
                 declared activation sequence is absent from the assembled
-                prompt (issue #1678).
+                prompt.
         """
         if not ctx.is_chat_context:
             raise Exception("Does not yet support non-chat contexts.")
@@ -1424,7 +1423,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             )
         )
 
-        # Generation-time activation guard (#1678): raises AloraActivationError
+        # Generation-time activation guard: raises AloraActivationError
         # before any model call if `adapter` (already committed to by the
         # resolve-time rung / reroute decision) cannot activate for this
         # prompt — see `_check_alora_activation`'s docstring for who catches

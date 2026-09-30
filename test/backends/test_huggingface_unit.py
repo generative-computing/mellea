@@ -1143,7 +1143,7 @@ async def test_alora_activation_guard_fires_invocation_complete_hook_on_abort():
     explicit fire at the guard's own call site, an operator watching
     `mellea.adapter_function.*` metrics would see the adapter simply stop being
     invoked, with no error signal, for exactly the scenario this guard exists to
-    catch (reviewer finding, code-review round on PR #1684).
+    catch.
     """
     from mellea.backends.adapters._core import AloraActivationError
     from test.backends.test_adapters._hook_capture import (
@@ -1214,7 +1214,7 @@ async def test_alora_activation_guard_abort_hook_reports_shim_as_pinned_local_fi
     The shim's own `weights` is an inert `_ShimWeightsBinding` (`binding_type`
     `"unknown"`, no `revision`); a successful call reports through the per-call
     `_IntrinsicPeftBinding` instead (`"local_file"` plus the catalogue SHA). The
-    abort payload must match that, not the placeholder (PR #1684 review).
+    abort payload must match that, not the placeholder.
     """
     from mellea.backends.adapters._core import AloraActivationError
     from test.backends.test_adapters._hook_capture import (
