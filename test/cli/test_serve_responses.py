@@ -116,6 +116,26 @@ class TestBuildModelOptionsFromResponseRequest:
         opts = _build_model_options_from_response_request(req)
         assert opts[ModelOption.TOOL_CHOICE] == "auto"
 
+    @pytest.mark.parametrize(
+        "tool_type", ["web_search", "file_search", "mcp", "code_interpreter"]
+    )
+    def test_unsupported_native_tool_types_raise(self, tool_type):
+        req = ResponseRequest(model="m", input="hi", tools=[{"type": tool_type}])
+        with pytest.raises(ValueError, match=tool_type):
+            _build_model_options_from_response_request(req)
+
+    def test_mixed_function_and_unsupported_tool_raises(self):
+        req = ResponseRequest(
+            model="m",
+            input="hi",
+            tools=[
+                {"type": "function", "function": {"name": "f", "parameters": {}}},
+                {"type": "web_search"},
+            ],
+        )
+        with pytest.raises(ValueError, match="web_search"):
+            _build_model_options_from_response_request(req)
+
     def test_empty_request_produces_minimal_options(self):
         req = ResponseRequest(model="m", input="hi")
         opts = _build_model_options_from_response_request(req)
