@@ -97,10 +97,6 @@ from .adapters import (
     IntrinsicAdapter,
     LocalHFAdapter,
 )
-from .adapters._alora_repair import (
-    _alora_invocation_repair,
-    _read_alora_invocation_tokens,
-)
 from .adapters._core import (
     Adapter as _AdapterCore,
     IOContract,
@@ -1066,62 +1062,6 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 f"did not parse to a mapping (got {type(loaded).__name__})."
             )
         return loaded
-
-    def _repair_alora_instruction(
-        self,
-        io_yaml_config: dict,
-        invocation_tokens: Sequence[int] | None,
-        adapter_name: str,
-    ) -> dict:
-        """Repair an aLoRA io.yaml instruction that cannot activate its own adapter.
-
-        Some published adapters (issue #1679: `requirement-check`, all
-        granite-4.1 slots) ship an instruction whose text does not tokenise to
-        the `alora_invocation_tokens` declared in the adapter's own config,
-        so the adapter can never activate no matter what the loading path
-        does. This loads a locally repaired instruction instead, with a loud
-        warning, so the capability works end to end until the publisher
-        republishes a corrected file. The repair itself is
-        verification-driven and self-terminating (see
-        `_alora_invocation_repair`): a healthy file -- in either direction a
-        publisher might fix it -- is returned untouched.
-
-        Called from both `add_adapter` registration paths, with the declared
-        sequence read from the downloaded `adapter_config.json`: the
-        composed-adapter path before `binding.prepare()`, so a failure leaves
-        nothing registered, and the `IntrinsicAdapter` shim path at
-        registration, because that shim loads its weights per generate call,
-        after its config has already been rendered into the prompt.
-
-        Args:
-            io_yaml_config: The adapter's `io.yaml` mapping. Never mutated: a
-                shim's config can be the caller's own `config_dict`.
-            invocation_tokens: The adapter's declared
-                `alora_invocation_tokens`, or `None` for a non-aLoRA adapter.
-            adapter_name: The adapter's qualified name, for the warning.
-
-        Returns:
-            `io_yaml_config` itself when no repair applies, otherwise a shallow
-            copy carrying the repaired instruction.
-        """
-        if not invocation_tokens:
-            return io_yaml_config
-        instruction = io_yaml_config.get("instruction")
-        if not isinstance(instruction, str) or not instruction:
-            return io_yaml_config
-        repaired = _alora_invocation_repair(
-            self._tokenizer, instruction, invocation_tokens
-        )
-        if repaired is None:
-            return io_yaml_config
-        MelleaLogger.get_logger().warning(
-            f"Adapter {adapter_name!r}: the published io.yaml instruction does "
-            "not tokenise to the adapter's declared aLoRA invocation sequence, so "
-            "the adapter could never activate as published. Loaded a locally "
-            "repaired instruction instead (issue #1679). Ask the adapter "
-            "publisher to republish a corrected io.yaml."
-        )
-        return {**io_yaml_config, "instruction": repaired}
 
     async def _generate_from_intrinsic(
         self,
@@ -2985,16 +2925,6 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 # this ordering only has to cover the fetch this method adds
                 # ahead of it.
                 io_yaml_config = self._obtain_local_file_io_yaml_config(binding)
-                # Before prepare() for the same reason: the declared invocation
-                # sequence is read from the downloaded adapter_config.json, so a
-                # failure here also leaves nothing registered.
-                io_yaml_config = self._repair_alora_instruction(
-                    io_yaml_config,
-                    _read_alora_invocation_tokens(
-                        binding.get_local_hf_path(self.base_model_name)
-                    ),
-                    key,
-                )
                 # bind_backend() itself raises if binding.backend is already
                 # a *different* backend, and no-ops if it's already self —
                 # calling it unconditionally (rather than guarding on
@@ -3066,12 +2996,6 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             return
 
         adapter.path = adapter.get_local_hf_path(self.base_model_name)
-        if isinstance(adapter, IntrinsicAdapter):
-            adapter.config = self._repair_alora_instruction(
-                adapter.config,
-                _read_alora_invocation_tokens(adapter.path),
-                adapter.qualified_name,
-            )
         adapter.backend = self
         self._added_adapters[adapter.qualified_name] = adapter
 

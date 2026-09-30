@@ -307,17 +307,18 @@ class TestAloraDifferentialEndToEnd:
     scores measured 0.047 vs 0.999 in the #1679 diagnostic eval.
     """
 
+    @pytest.mark.xfail(
+        strict=True,
+        raises=AssertionError,
+        reason="the published requirement-check aLoRA io.yaml instruction does "
+        "not tokenise to its declared invocation sequence, so the adapter "
+        "cannot activate until the adapter is republished",
+    )
     def test_requirement_check_adapter_moves_score(self, alora_backend):
         from mellea.stdlib.components import Message
         from mellea.stdlib.components.intrinsic import core
         from mellea.stdlib.context import ChatContext
 
-        # NOTE: the published requirement-check io.yaml instruction does not
-        # tokenise to the adapter's declared invocation sequence (issue
-        # #1679). LocalHFBackend repairs it at load time with a warning
-        # (`_repair_alora_instruction`) until the publisher
-        # republishes a corrected file, so this test runs on the as-published
-        # adapter with no local workaround.
         backend = alora_backend("requirement-check", "requirement_check")
         ctx = (
             ChatContext()
@@ -376,8 +377,7 @@ class TestUncertaintyAloraDifferentialEndToEnd:
     general, not requirement-check-specific.
 
     The published uncertainty aLoRA io.yaml has no tokenisation mismatch, so
-    this test needs no instruction patching — it exercises the fix on the
-    as-published adapter files. Measured on granite-4.1-3b in the #1679
+    this test exercises the fix on the as-published adapter files. Measured on granite-4.1-3b in the #1679
     diagnostic: base model is underconfident (~0.06) on both a right and a
     wrong last response, while the adapter gives ~0.95 (right) and ~0.73
     (wrong) — a wide differential either way.
