@@ -566,6 +566,87 @@ class TestStreamResponseChunks:
         assert len(failed) == 1
         assert failed[0]["data"]["status"] == "failed"
 
+    @pytest.mark.asyncio
+    async def test_usage_omitted_without_include(self):
+        """Usage is absent from response.completed when include is not set."""
+        output = ModelOutputThunk("hello")
+        output.generation.usage = {
+            "prompt_tokens": 5,
+            "completion_tokens": 3,
+            "total_tokens": 8,
+        }
+        events = await self._collect(
+            output, response_id="resp_1", model="m", created=1234
+        )
+        completed = next(e for e in events if e["event"] == "response.completed")
+        assert completed["data"]["usage"] is None
+
+    @pytest.mark.asyncio
+    async def test_usage_omitted_when_include_does_not_contain_usage(self):
+        """Usage is absent from response.completed when include excludes 'usage'."""
+        output = ModelOutputThunk("hello")
+        output.generation.usage = {
+            "prompt_tokens": 5,
+            "completion_tokens": 3,
+            "total_tokens": 8,
+        }
+        events = await self._collect(
+            output, response_id="resp_1", model="m", created=1234, include=["reasoning"]
+        )
+        completed = next(e for e in events if e["event"] == "response.completed")
+        assert completed["data"]["usage"] is None
+
+    @pytest.mark.asyncio
+    async def test_usage_included_when_include_contains_usage(self):
+        """Usage is present in response.completed when include=['usage']."""
+        output = ModelOutputThunk("hello")
+        output.generation.usage = {
+            "prompt_tokens": 5,
+            "completion_tokens": 3,
+            "total_tokens": 8,
+        }
+        events = await self._collect(
+            output, response_id="resp_1", model="m", created=1234, include=["usage"]
+        )
+        completed = next(e for e in events if e["event"] == "response.completed")
+        assert completed["data"]["usage"] is not None
+        assert completed["data"]["usage"]["input_tokens"] == 5
+        assert completed["data"]["usage"]["output_tokens"] == 3
+        assert completed["data"]["usage"]["total_tokens"] == 8
+
+    @pytest.mark.asyncio
+    async def test_endpoint_passes_include_to_streaming(self, mock_module):
+        """The endpoint forwards request.include to stream_response_chunks."""
+        from fastapi.responses import StreamingResponse
+
+        req = ResponseRequest(model="m", input="hi", stream=True, include=["usage"])
+        output = ModelOutputThunk("streamed")
+        output.generation.usage = {
+            "prompt_tokens": 2,
+            "completion_tokens": 1,
+            "total_tokens": 3,
+        }
+        mock_module.serve.return_value = output
+        endpoint = make_responses_endpoint(mock_module)
+        response = await endpoint(req)
+        assert isinstance(response, StreamingResponse)
+
+        events = []
+        async for chunk in response.body_iterator:
+            event_name = None
+            for line in chunk.split("\n"):
+                line = line.strip()
+                if line.startswith("event:"):
+                    event_name = line.split(":", 1)[1].strip()
+                elif line.startswith("data:") and event_name is not None:
+                    data = json.loads(line.split(":", 1)[1].strip())
+                    events.append({"event": event_name, "data": data})
+                    event_name = None
+
+        completed = next(e for e in events if e["event"] == "response.completed")
+        assert completed["data"]["usage"] is not None
+        assert completed["data"]["usage"]["input_tokens"] == 2
+
 
 # ---------------------------------------------------------------------------
 # build_response_usage

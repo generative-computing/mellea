@@ -174,7 +174,12 @@ async def stream_chat_completion_chunks(
 
 
 async def stream_response_chunks(
-    output, response_id: str, model: str, created: int, conversation: str | None = None
+    output,
+    response_id: str,
+    model: str,
+    created: int,
+    conversation: str | None = None,
+    include: list[str] | None = None,
 ) -> AsyncGenerator[str, None]:
     """Generate Responses API SSE events with semantic event names.
 
@@ -185,7 +190,8 @@ async def stream_response_chunks(
     - ``response.output_text.delta`` — one per streamed token (or one for pre-computed)
     - ``response.output_text.done`` — full accumulated text
     - ``response.function_call_arguments.done`` — one per tool call (if any)
-    - ``response.completed`` — final envelope with status and usage
+    - ``response.completed`` — final envelope with status; usage only when
+      ``"usage"`` appears in ``include``
 
     On error, emits ``response.failed`` instead of the completion event.
 
@@ -195,6 +201,9 @@ async def stream_response_chunks(
         model: Model name to include in event payloads.
         created: Unix timestamp of when the response was created.
         conversation: Optional conversation ID to echo back in events.
+        include: List of optional fields to include in the response. Pass
+            ``["usage"]`` to have token usage emitted in the
+            ``response.completed`` event. Defaults to ``None`` (no usage).
     """
     try:
         yield (
@@ -238,7 +247,8 @@ async def stream_response_chunks(
                     f"data: {json.dumps({'id': response_id, 'output_index': idx + 1, 'call_id': tool_call['id'], 'name': tool_call['function']['name'], 'arguments': tool_call['function']['arguments']})}\n\n"
                 )
 
-        usage_obj = build_response_usage(output)
+        include_usage = include is not None and "usage" in include
+        usage_obj = build_response_usage(output) if include_usage else None
         yield (
             f"event: response.completed\n"
             f"data: {json.dumps({'id': response_id, 'status': 'completed', 'usage': usage_obj.model_dump() if usage_obj else None})}\n\n"
