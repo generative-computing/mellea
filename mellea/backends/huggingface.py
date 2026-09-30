@@ -1283,7 +1283,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
             # Two load-bearing assumptions: (1) __getattr__ falls through for attributes
             # accessed by generate_with_transformers (model.device, model.vocab_size,
-            # model.generation_config). (2) chat_completion_request_to_transformers_inputs
+            # model.generation_config, and for aLoRA activation model.peft_config,
+            # model.active_adapters, model.modules()). (2) chat_completion_request_to_transformers_inputs
             # always sets return_dict_in_generate=True, so .generate() always returns a
             # GenerateDecoderOnlyOutput — if that ever changes, the cell stays None and
             # logits silently won't be populated.
