@@ -38,15 +38,16 @@ from mellea.backends.adapters import (
     AdapterMixin,
     AdapterType,
     EmbeddedBinding,
-    IntrinsicAdapter,
+    LocalFileBinding,
     ServerMediatedBinding,
 )
-from mellea.backends.adapters._core import Identity
+from mellea.backends.adapters._core import Adapter as _AdapterCore, Identity
 from mellea.backends.adapters.adapter import (
-    EmbeddedIntrinsicAdapter,
-    _ShimWeightsBinding,
+    _composed_adapter_key,
+    _embedded_adapter_from_entry,
 )
 from mellea.backends.adapters.catalog import IntrinsicsCatalogEntry
+from mellea.backends.adapters.io_contracts import get_io_contract
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.core import ModelOutputThunk
 from mellea.formatters.granite.base.util import (
@@ -222,40 +223,69 @@ def _call(stub, opts):
     return LocalHFBackend._make_backend_specific_and_remove(stub, opts)
 
 
-def _make_intrinsic_adapter_stub():
-    adapter = IntrinsicAdapter.__new__(IntrinsicAdapter)
-    adapter.name = "answerability"
-    adapter.qualified_name = "answerability_alora"
-    adapter.config = {}
-    # Required for the capability-based lookup introduced in Epic #929 Phase 1.
-    # __new__ bypasses __init__; use object.__setattr__ to set frozen-dataclass fields.
-    object.__setattr__(
-        adapter,
-        "identity",
-        Identity(
+def _make_intrinsic_adapter_stub() -> _AdapterCore:
+    """A composed LocalFile/PEFT `Adapter` for the legacy (non-embedded) path."""
+    return _AdapterCore(
+        identity=Identity(
             name="answerability", adapter_type="alora", capability="answerability"
         ),
+        io_contract=get_io_contract("answerability"),
+        weights=LocalFileBinding(
+            name="answerability",
+            adapter_type=AdapterType.ALORA,
+            repo_id="fake/repo",
+            revision="fake0000000000000000000000000000000000000",
+        ),
     )
-    object.__setattr__(adapter, "weights", _ShimWeightsBinding())
-    return adapter
 
 
-def _make_embedded_adapter_stub() -> EmbeddedIntrinsicAdapter:
-    """Build an embedded adapter without exposing its deprecation warning in tests."""
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", DeprecationWarning)
-        return EmbeddedIntrinsicAdapter(
-            intrinsic_name="answerability",
-            config={
-                "model": None,
-                "response_format": None,
-                "transformations": None,
-                "instruction": None,
-                "parameters": {"max_completion_tokens": 8},
-                "sentence_boundaries": None,
-            },
-            technology="alora",
-        )
+def _make_local_file_binding_stub() -> LocalFileBinding:
+    """A bare `LocalFileBinding` for PEFT-lifecycle tests.
+
+    The composed `Adapter` (see `_make_intrinsic_adapter_stub`) is frozen, so
+    tests that exercise the register/load/remove lifecycle — mutating `.backend`,
+    `.path`, `._loaded`, and stubbing `.get_local_hf_path` to skip the Hub
+    download — drive the binding directly. `add_adapter` accepts a bare binding
+    and drives its lifecycle just as it does a composed LocalFile adapter's.
+    """
+    binding = LocalFileBinding(
+        name="answerability", adapter_type=AdapterType.ALORA, repo_id="fake/repo"
+    )
+    binding.get_local_hf_path = lambda base_model_name: "/fake/path"  # type: ignore[method-assign]
+    return binding
+
+
+_EMBEDDED_STUB_CONFIG = {
+    "model": None,
+    "response_format": None,
+    "transformations": None,
+    "instruction": None,
+    "parameters": {"max_completion_tokens": 8},
+    "sentence_boundaries": None,
+}
+
+
+def _make_embedded_adapter_stub() -> _AdapterCore:
+    """A composed embedded `Adapter` (EmbeddedBinding) for the Granite Switch path."""
+    return _embedded_adapter_from_entry(
+        intrinsic_name="answerability", config=_EMBEDDED_STUB_CONFIG, technology="alora"
+    )
+
+
+def _register_adapter_stub(backend, adapter: _AdapterCore) -> str:
+    """Register a composed adapter stub into a backend the way `add_adapter` would.
+
+    A composed `Adapter` carries no `.qualified_name` and its config lives in the
+    backend's `_composed_adapter_configs`, not on the adapter — so tests that used
+    to do `backend._added_adapters = {adapter.qualified_name: adapter}` must both
+    key by `_composed_adapter_key(adapter)` and seed the config cache. Returns the
+    composed key so callers can assert against it.
+    """
+    key = _composed_adapter_key(adapter)
+    backend._added_adapters = {key: adapter}
+    backend._composed_adapters[key] = adapter
+    backend._composed_adapter_configs[key] = _EMBEDDED_STUB_CONFIG
+    return key
 
 
 def _make_intrinsic_backend_stub(stub_backend):
@@ -274,12 +304,6 @@ def _make_intrinsic_backend_stub(stub_backend):
         LocalHFBackend._make_backend_specific_and_remove(stub_backend, opts)
     )
     stub_backend.post_processing = lambda *args, **kwargs: None
-    # Bypasses locking/adapter_scope entirely — these tests exercise option-merging
-    # and logits capture, not activation semantics (see
-    # test_generate_intrinsic_with_adapter_scope_* below for that).
-    stub_backend._generate_intrinsic_with_adapter_scope = (
-        lambda adapter, generate_func, *args, **kwargs: generate_func(*args, **kwargs)
-    )
     stub_backend._generate_embedded_with_generation_lock = (
         lambda generate_func, *args, **kwargs: generate_func(*args, **kwargs)
     )
@@ -289,9 +313,9 @@ def _make_intrinsic_backend_stub(stub_backend):
     stub_backend._intrinsic_adapter_name_and_config = lambda adapter: (
         LocalHFBackend._intrinsic_adapter_name_and_config(stub_backend, adapter)
     )
-    # Composed-Adapter counterpart of _generate_intrinsic_with_adapter_scope
-    # above — same bypass, for the same reason (these tests exercise
-    # option-merging/logits capture, not activation semantics).
+    # Bypasses locking/adapter_scope entirely — these tests exercise
+    # option-merging and logits capture, not activation semantics (see the
+    # test_generate_composed_local_file_with_adapter_scope_* tests for that).
     stub_backend._generate_composed_local_file_with_adapter_scope = (
         lambda adapter, generate_func, *args, **kwargs: generate_func(*args, **kwargs)
     )
@@ -325,9 +349,10 @@ def test_load_embedded_adapters_registers_checkpoint_adapters():
 
     with (
         patch("mellea.backends.huggingface.llguidance") as mock_llg,
-        patch.object(
-            EmbeddedIntrinsicAdapter, "from_source", return_value=[adapter]
-        ) as mock_from_source,
+        patch(
+            "mellea.backends.huggingface._discover_embedded_adapters",
+            return_value=[(adapter, _EMBEDDED_STUB_CONFIG)],
+        ) as mock_discover,
     ):
         mock_llg.hf.from_tokenizer.return_value = MagicMock(vocab_size=32000)
         backend = LocalHFBackend(
@@ -337,21 +362,19 @@ def test_load_embedded_adapters_registers_checkpoint_adapters():
             adapter_source="/tmp/switch-checkpoint",
         )
 
-    mock_from_source.assert_called_once_with(
+    mock_discover.assert_called_once_with(
         "/tmp/switch-checkpoint", revision="main", cache_dir=None, intrinsic_name=None
     )
     assert backend.list_adapters() == ["answerability_alora"]
-    # register_embedded_adapter_model discovers via the non-shim
-    # _discover_embedded_adapters factory (Epic #929, issue #1144), which
-    # lifts the shim's identity/io_contract/weights into a composed Adapter
-    # stored in _composed_adapters, not the shim instance itself.
+    # register_embedded_adapter_model discovers via the _discover_embedded_adapters
+    # factory (Epic #929, issue #1144) and registers the composed Adapter it
+    # returns into _composed_adapters.
     registered = backend._composed_adapters["answerability_alora"]
     assert registered.identity == adapter.identity
     assert registered.weights is adapter.weights
     assert isinstance(adapter.weights, EmbeddedBinding)
-    # The composed Adapter is registered, not the shim instance, so the
-    # shim's own `.backend` is never touched; the binding it shares with the
-    # composed Adapter (asserted above) is what actually gets stamped.
+    # add_adapter stamps the registration-time base-model name onto the shared
+    # EmbeddedBinding.
     assert adapter.weights.source == backend.base_model_name
     backend._model.load_adapter.assert_not_called()
 
@@ -503,9 +526,9 @@ async def test_embedded_intrinsic_activates_template_without_peft(stub_backend):
     """Embedded calls select the template control token without PEFT lifecycle work."""
     backend = _make_intrinsic_backend_stub(stub_backend)
     adapter = _make_embedded_adapter_stub()
-    backend._added_adapters = {adapter.qualified_name: adapter}
+    _register_adapter_stub(backend, adapter)
     peft_scope = MagicMock()
-    backend._generate_intrinsic_with_adapter_scope = peft_scope
+    backend._generate_composed_local_file_with_adapter_scope = peft_scope
     captured: dict[str, object] = {}
 
     def fake_transformers_inputs(request, tokenizer, model, ll_tokenizer=None):
@@ -570,7 +593,7 @@ async def _run_embedded_intrinsic_and_collect_invocation_payloads(
     backend = _make_intrinsic_backend_stub(stub_backend)
     backend.processing = AsyncMock(return_value=None)
     adapter = _make_embedded_adapter_stub()
-    backend._added_adapters = {adapter.qualified_name: adapter}
+    _register_adapter_stub(backend, adapter)
 
     def fake_transformers_inputs(request, tokenizer, model, ll_tokenizer=None):
         return {"input_tokens": object()}, {}
@@ -711,7 +734,7 @@ async def test_embedded_intrinsic_invocation_complete_fires_error_on_generation_
     backend = _make_intrinsic_backend_stub(stub_backend)
     backend.processing = AsyncMock(return_value=None)
     adapter = _make_embedded_adapter_stub()
-    backend._added_adapters = {adapter.qualified_name: adapter}
+    _register_adapter_stub(backend, adapter)
 
     def fake_transformers_inputs(request, tokenizer, model, ll_tokenizer=None):
         return {"input_tokens": object()}, {}
@@ -774,7 +797,7 @@ async def test_legacy_peft_intrinsic_never_fires_embedded_invocation_complete(
     backend = _make_intrinsic_backend_stub(stub_backend)
     backend.processing = AsyncMock(return_value=None)
     adapter = _make_intrinsic_adapter_stub()
-    backend._added_adapters = {adapter.qualified_name: adapter}
+    _register_adapter_stub(backend, adapter)
 
     def fake_transformers_inputs(request, tokenizer, model, ll_tokenizer=None):
         return {"input_tokens": object()}, {}
@@ -832,8 +855,8 @@ async def test_legacy_peft_intrinsic_never_fires_embedded_invocation_complete(
 
 @pytest.mark.asyncio
 async def test_composed_adapter_drives_generate_from_intrinsic(stub_backend):
-    """A composed `Adapter` (not the `IntrinsicAdapter` shim) drives the full
-    `_generate_from_intrinsic` path — name/config resolution, the composed
+    """A composed `Adapter` drives the full `_generate_from_intrinsic` path —
+    name/config resolution, the composed
     `_generate_composed_local_file_with_adapter_scope` dispatch, and normal
     post-processing — end to end (Epic #929, issue #1144).
     """
@@ -927,10 +950,10 @@ def test_composed_local_file_config_is_derived_once_at_registration_not_on_the_l
 
     Regression: an earlier version derived io.yaml lazily, inline inside the
     async `_generate_from_intrinsic` (via `_intrinsic_adapter_name_and_config`),
-    unlike the shim it replaces (`IntrinsicAdapter.__init__`, which loads once
-    at sync construction time). That put a blocking Hugging Face Hub round
-    trip on the asyncio event loop on first use of every composed-LocalFile
-    intrinsic — including the default path via `resolve_adapter`.
+    rather than once synchronously at registration. That put a blocking Hugging
+    Face Hub round trip on the asyncio event loop on first use of every
+    composed-LocalFile intrinsic — including the default path via
+    `resolve_adapter`.
     """
     from mellea.backends.adapters._core import (
         Adapter as _AdapterCore,
@@ -995,27 +1018,44 @@ def test_generate_embedded_with_generation_lock_deactivates_peft_state():
     mock_deactivate.assert_called_once_with("")
 
 
-def test_add_embedded_adapter_rejects_mutated_weights_without_binding_backend():
-    """A malformed shim must not retain this backend after registration fails."""
-    backend = _make_backend()
-    adapter = _make_embedded_adapter_stub()
-    adapter.weights = ServerMediatedBinding()
+def test_add_adapter_rejects_unsupported_weights_reality():
+    """A composed Adapter whose weights the backend cannot stage must be
+    refused, and must leave no registration behind.
 
-    with pytest.raises(TypeError, match="must be an EmbeddedBinding"):
+    `LocalHFBackend` supports only `LocalFileBinding` (PEFT) and
+    `EmbeddedBinding` (Granite Switch) weights realities. A composed Adapter
+    carrying a `ServerMediatedBinding` reaches `add_adapter` intact — the
+    frozen dataclass admits it at construction — so the backend rejects it at
+    registration rather than partially wiring it up.
+    """
+    from mellea.backends.adapters._core import Adapter as _AdapterCore, Identity
+    from mellea.backends.adapters.io_contracts import get_io_contract
+
+    backend = _make_backend()
+    adapter = _AdapterCore(
+        identity=Identity(
+            name="answerability", adapter_type="alora", capability="answerability"
+        ),
+        io_contract=get_io_contract("answerability"),
+        weights=ServerMediatedBinding(),
+    )
+
+    with pytest.raises(TypeError, match="ServerMediatedBinding weights reality"):
         backend.add_adapter(adapter)
 
-    assert adapter.backend is None
-    assert adapter.qualified_name not in backend._added_adapters
+    assert "answerability_alora" not in backend._added_adapters
+    assert "answerability_alora" not in backend._composed_adapters
 
 
 def test_load_peft_adapter_rejects_embedded_adapter():
     """Embedded adapters are selected by the chat template, not loaded by PEFT."""
     backend = _make_backend()
     adapter = _make_embedded_adapter_stub()
-    backend.add_adapter(adapter)
+    backend.add_adapter(adapter, config=_EMBEDDED_STUB_CONFIG)
+    key = _composed_adapter_key(adapter)
 
     with pytest.raises(TypeError, match="through PEFT"):
-        backend.load_peft_adapter(adapter.qualified_name)
+        backend.load_peft_adapter(key)
 
     backend._model.load_adapter.assert_not_called()
 
@@ -1028,7 +1068,8 @@ def test_generate_with_adapter_lock_deactivates_and_calls_generate_func():
     `_model.set_adapter` directly, Epic #929 Phase 2 / issue #1141), never
     touches the activation verbs or `load_peft_adapter`, and forwards to
     `generate_func` (its return value is the method's). Since #1465 routed
-    intrinsic generation through `_generate_intrinsic_with_adapter_scope`, no
+    intrinsic generation through
+    `_generate_composed_local_file_with_adapter_scope`, no
     production caller passes it an adapter to activate — which is why the
     method takes no adapter name at all. The method's deactivate-then-generate
     ordering is fixed by its body, not observable from these patched verbs.
@@ -1103,7 +1144,8 @@ def test_adapter_activation_lock_is_the_generation_lock():
 def test_generation_lock_is_reentrant():
     """`_generation_lock` must be a `threading.RLock`, not a plain `threading.Lock`.
 
-    `_generate_intrinsic_with_adapter_scope` (issue #1465) holds `_generation_lock`
+    `_generate_composed_local_file_with_adapter_scope` (issue #1465) holds
+    `_generation_lock`
     for the whole prepare -> activate -> generate -> deactivate critical section
     on one thread, and the binding's verb calls (prepare/activate/deactivate)
     re-acquire the same lock (via `_adapter_activation_lock()`) from inside that
@@ -1128,7 +1170,8 @@ def test_generation_lock_reentrant_activation_does_not_deadlock():
     `activate()`/`deactivate()` (driven by `adapter_scope()`) acquire
     `_adapter_activation_lock()`, which is `_generation_lock`. Intrinsic
     generation holds `_generation_lock` for its whole critical section (see
-    `_generate_intrinsic_with_adapter_scope`), so that inner acquisition happens
+    `_generate_composed_local_file_with_adapter_scope`), so that inner acquisition
+    happens
     on the same thread while the outer one is still held. Runs on a background
     thread with a bounded join so a regression to a non-reentrant lock fails
     fast instead of hanging the suite.
@@ -1151,49 +1194,36 @@ def test_generation_lock_reentrant_activation_does_not_deadlock():
     )
 
 
-def _make_fake_intrinsic_adapter(
-    qualified_name: str, revision: str = "fake0000000000000000000000000000000000000"
-) -> IntrinsicAdapter:
-    """Builds a minimal `IntrinsicAdapter` stand-in, bypassing `__init__` (which
-    downloads the adapter's `io.yaml`), exposing the attribute set
-    `_generate_intrinsic_with_adapter_scope` reads — `.identity` (reused
-    directly, not rebuilt, so this must already be the real `Identity`
-    `IntrinsicAdapter.__init__` would have built), `.qualified_name`, and
-    `.intrinsic_metadata.revision` — plus `.name`/`.adapter_type` for realism
-    (the method reaches those via `identity`, not the stand-in's own fields).
-    The stand-in pins `revision` to a catalogue SHA, mirroring the real
-    `IntrinsicsCatalogEntry.revision` (a required, non-optional `str`) rather
-    than allowing `None`.
+def _make_composed_local_file_adapter(
+    backend: LocalHFBackend,
+    qualified_name: str,
+    revision: str = "fake0000000000000000000000000000000000000",
+) -> _AdapterCore:
+    """Build a composed LocalFile `Adapter` with its binding wired to `backend`.
+
+    `_generate_composed_local_file_with_adapter_scope` drives `adapter_scope`
+    directly on a binding that `add_adapter`/`resolve_adapter` already prepared,
+    so — like `test_generate_composed_local_file_with_adapter_scope_*` above —
+    this pre-wires the `LocalFileBinding` (`.backend`, `.path`, `._loaded`)
+    instead of relying on a `load_peft_adapter` call inside the scope. The
+    `revision` is pinned to a catalogue-shaped SHA, mirroring a real
+    `LocalFileBinding.revision`.
     """
     name, _, adapter_type_str = qualified_name.rpartition("_")
     adapter_type = (
         AdapterType.ALORA if adapter_type_str == "alora" else AdapterType.LORA
     )
-    adapter = IntrinsicAdapter.__new__(IntrinsicAdapter)
-    adapter.name = name
-    adapter.qualified_name = qualified_name
-    adapter.adapter_type = adapter_type
-    adapter.intrinsic_metadata = IntrinsicsCatalogEntry(
-        name=name, repo_id="fake/repo", revision=revision
+    binding = LocalFileBinding(
+        name=name, adapter_type=adapter_type, repo_id="fake/repo", revision=revision
     )
-    object.__setattr__(
-        adapter,
-        "identity",
-        Identity(name=name, adapter_type=adapter_type.value, capability=name),
+    binding.backend = backend
+    binding.path = "/fake/path"
+    binding._loaded = True
+    return _AdapterCore(
+        identity=Identity(name=name, adapter_type=adapter_type.value, capability=name),
+        io_contract=get_io_contract(name),
+        weights=binding,
     )
-    return adapter
-
-
-def _register_fake_adapter(
-    backend: LocalHFBackend, qualified_name: str, path: str
-) -> None:
-    """Registers a minimal `IntrinsicAdapter` stand-in under `_added_adapters`,
-    satisfying what `load_peft_adapter` reads (`.path`, `.qualified_name`).
-    """
-    fake = IntrinsicAdapter.__new__(IntrinsicAdapter)
-    fake.path = path
-    fake.qualified_name = qualified_name
-    backend._added_adapters[qualified_name] = fake
 
 
 def _wire_fake_peft_model(backend: LocalHFBackend) -> None:
@@ -1223,7 +1253,7 @@ def test_generate_composed_local_file_with_adapter_scope_activates_during_genera
     goes through `stub_backend`, whose fixture replaces it with a
     pass-through bypassing the lock hold, `adapter_scope` drive, and both
     `_assert_correct_adapters` calls entirely — so the method that owns that
-    logic had no direct coverage of its own, unlike its shim sibling above.
+    logic would otherwise have no direct coverage of its own.
     """
     from mellea.backends.adapters._core import (
         Adapter as _AdapterCore,
@@ -1267,51 +1297,26 @@ def test_generate_composed_local_file_with_adapter_scope_activates_during_genera
     backend._model.set_adapter.assert_any_call([])  # type: ignore[attr-defined]
 
 
-def test_generate_intrinsic_with_adapter_scope_activates_during_generation():
-    """Generation demonstrably runs with the adapter active — asserted from
-    inside the generate callback via the real (mocked) PEFT model state, not
-    smoke-tested by checking generation merely succeeds.
-    """
-    backend = _make_backend()
-    _wire_fake_peft_model(backend)
-    adapter = _make_fake_intrinsic_adapter("answerability_alora")
-    _register_fake_adapter(backend, adapter.qualified_name, "/fake/path")
-
-    seen_during_generation = []
-
-    def fake_generate():
-        seen_during_generation.append(backend._model.active_adapters())
-        return "output"
-
-    out = backend._generate_intrinsic_with_adapter_scope(adapter, fake_generate)
-
-    assert out == "output"
-    assert seen_during_generation == [[adapter.qualified_name]]
-    assert backend._model.active_adapters() == []
-    # Asserts the real verb ran deactivation, not just that _wire_fake_peft_model's
-    # `active_adapters()` mock still happens to read back empty.
-    backend._model.set_adapter.assert_any_call([])  # type: ignore[attr-defined]
-
-
-def test_generate_intrinsic_with_adapter_scope_fires_hooks_with_correct_payload():
-    """The hooks `_generate_intrinsic_with_adapter_scope`'s docstring claims to
-    enable must actually fire, with a payload that matches reality — not just
-    smoke-tested by checking that *some* hooks fire.
+def test_generate_composed_local_file_with_adapter_scope_fires_hooks_with_correct_payload():
+    """The hooks `_generate_composed_local_file_with_adapter_scope` enables must
+    actually fire, with a payload that matches reality — not just smoke-tested by
+    checking that *some* hooks fire.
 
     Regression coverage for two bugs caught in review: `revision` reported as
     `None` (mislabelled "unpinned") despite the adapter being pinned, and
-    `binding_type` set to an invented `"intrinsic_legacy"` value instead of the
-    `"local_file"` reality this binding actually is.
+    `binding_type` set to an invented value instead of the `"local_file"`
+    reality this binding actually is.
     """
     backend = _make_backend()
     _wire_fake_peft_model(backend)
-    adapter = _make_fake_intrinsic_adapter(
-        "answerability_alora", revision="deadbeef00000000000000000000000000000000"
+    adapter = _make_composed_local_file_adapter(
+        backend, "answerability_alora", revision="deadbeef" + "0" * 32
     )
-    _register_fake_adapter(backend, adapter.qualified_name, "/fake/path")
 
     with capture_adapter_hooks() as mock_invoke:
-        out = backend._generate_intrinsic_with_adapter_scope(adapter, lambda: "output")
+        out = backend._generate_composed_local_file_with_adapter_scope(
+            adapter, lambda: "output"
+        )
 
     assert out == "output"
     payloads = hook_payloads(mock_invoke)
@@ -1326,48 +1331,50 @@ def test_generate_intrinsic_with_adapter_scope_fires_hooks_with_correct_payload(
     assert invocation.name == "answerability"
     assert invocation.adapter_type == "alora"
     assert invocation.binding_type == "local_file"
-    assert invocation.revision == "deadbeef00000000000000000000000000000000"
+    assert invocation.revision == "deadbeef" + "0" * 32
 
 
-def test_generate_intrinsic_with_adapter_scope_deactivates_on_error():
-    """`adapter_scope()`'s deactivate-in-finally guarantee holds on the intrinsic path."""
+def test_generate_composed_local_file_with_adapter_scope_deactivates_on_error():
+    """`adapter_scope()`'s deactivate-in-finally guarantee holds on the composed path."""
     backend = _make_backend()
     _wire_fake_peft_model(backend)
-    adapter = _make_fake_intrinsic_adapter("answerability_alora")
-    _register_fake_adapter(backend, adapter.qualified_name, "/fake/path")
+    adapter = _make_composed_local_file_adapter(backend, "answerability_alora")
 
     def failing_generate():
         raise RuntimeError("boom")
 
     with pytest.raises(RuntimeError, match="boom"):
-        backend._generate_intrinsic_with_adapter_scope(adapter, failing_generate)
+        backend._generate_composed_local_file_with_adapter_scope(
+            adapter, failing_generate
+        )
 
     assert backend._model.active_adapters() == []
     backend._model.set_adapter.assert_any_call([])  # type: ignore[attr-defined]
 
 
-def test_generate_intrinsic_with_adapter_scope_reports_error_outcome_in_hook_payload():
-    """A failed intrinsic generation reports `outcome="error"` with both phase events.
+def test_generate_composed_local_file_with_adapter_scope_reports_error_outcome_in_hook_payload():
+    """A failed composed generation reports `outcome="error"` with both phase events.
 
     The `AdapterMixin.adapter_scope` contract for a failing body is pinned
     generically (against a `LocalFileBinding`) in `test_adapter_scope.py`; this
-    pins it with the intrinsic payload — `name`, `adapter_type`, `binding_type`
-    and the pinned `revision` — so a regression can't silently mislabel
-    intrinsic failures while the generic coverage keeps passing.
+    pins it with the composed-adapter payload — `name`, `adapter_type`,
+    `binding_type` and the pinned `revision` — so a regression can't silently
+    mislabel these failures while the generic coverage keeps passing.
     """
     backend = _make_backend()
     _wire_fake_peft_model(backend)
-    adapter = _make_fake_intrinsic_adapter(
-        "answerability_alora", revision="deadbeef00000000000000000000000000000000"
+    adapter = _make_composed_local_file_adapter(
+        backend, "answerability_alora", revision="deadbeef" + "0" * 32
     )
-    _register_fake_adapter(backend, adapter.qualified_name, "/fake/path")
 
     def failing_generate():
         raise RuntimeError("boom")
 
     with capture_adapter_hooks() as mock_invoke:
         with pytest.raises(RuntimeError, match="boom"):
-            backend._generate_intrinsic_with_adapter_scope(adapter, failing_generate)
+            backend._generate_composed_local_file_with_adapter_scope(
+                adapter, failing_generate
+            )
 
     payloads = hook_payloads(mock_invoke)
     phases = [p.phase for p in payloads if hasattr(p, "phase")]
@@ -1381,36 +1388,8 @@ def test_generate_intrinsic_with_adapter_scope_reports_error_outcome_in_hook_pay
     assert invocation.name == "answerability"
     assert invocation.adapter_type == "alora"
     assert invocation.binding_type == "local_file"
-    assert invocation.revision == "deadbeef00000000000000000000000000000000"
+    assert invocation.revision == "deadbeef" + "0" * 32
 
-    assert backend._model.active_adapters() == []
-
-
-def test_generate_intrinsic_with_adapter_scope_fires_no_hooks_on_prepare_failure():
-    """A `load_peft_adapter` failure happens before `adapter_scope()` is entered.
-
-    So no adapter hooks fire at all, activation state is unchanged, and the
-    next call still succeeds — a failed load must not poison later calls.
-    """
-    backend = _make_backend()
-    _wire_fake_peft_model(backend)
-    adapter = _make_fake_intrinsic_adapter("answerability_alora")
-    _register_fake_adapter(backend, adapter.qualified_name, "/fake/path")
-
-    with (
-        capture_adapter_hooks() as mock_invoke,
-        patch.object(
-            backend, "load_peft_adapter", side_effect=RuntimeError("load failed")
-        ),
-    ):
-        with pytest.raises(RuntimeError, match="load failed"):
-            backend._generate_intrinsic_with_adapter_scope(adapter, lambda: "output")
-
-    assert hook_payloads(mock_invoke) == []
-    assert backend._model.active_adapters() == []
-
-    out = backend._generate_intrinsic_with_adapter_scope(adapter, lambda: "output")
-    assert out == "output"
     assert backend._model.active_adapters() == []
 
 
@@ -1427,14 +1406,12 @@ def test_concurrent_intrinsic_calls_cannot_observe_each_others_adapter():
     """
     backend = _make_backend()
     _wire_fake_peft_model(backend)
-    _register_fake_adapter(backend, "answerability_lora", "/fake/a")
-    _register_fake_adapter(backend, "uncertainty_lora", "/fake/b")
 
     mismatches: list[tuple[str, list[str]]] = []
     errors: list[BaseException] = []
 
     def run(qualified_name: str):
-        adapter = _make_fake_intrinsic_adapter(qualified_name)
+        adapter = _make_composed_local_file_adapter(backend, qualified_name)
 
         def fake_generate():
             time.sleep(0.05)
@@ -1444,7 +1421,9 @@ def test_concurrent_intrinsic_calls_cannot_observe_each_others_adapter():
             return "ok"
 
         try:
-            backend._generate_intrinsic_with_adapter_scope(adapter, fake_generate)
+            backend._generate_composed_local_file_with_adapter_scope(
+                adapter, fake_generate
+            )
         except Exception as exc:  # surfaced via `errors`, not swallowed
             errors.append(exc)
 
@@ -1459,7 +1438,8 @@ def test_concurrent_intrinsic_calls_cannot_observe_each_others_adapter():
 
     assert not any(t.is_alive() for t in threads)
     # A `Thread` swallows exceptions from its target by default, so without this
-    # check a totally broken `_generate_intrinsic_with_adapter_scope` (e.g. an
+    # check a totally broken
+    # `_generate_composed_local_file_with_adapter_scope` (e.g. an
     # AttributeError before `fake_generate` ever runs) would leave `mismatches`
     # empty and this test would pass vacuously.
     assert errors == []
@@ -1471,14 +1451,13 @@ def test_list_adapters_reflects_registration_not_just_loading():
     if they've never been loaded (aligns HF's semantics with OpenAI's).
     """
     backend = _make_backend()
-    adapter = _make_intrinsic_adapter_stub()
-    adapter.backend = None
-    adapter.get_local_hf_path = lambda base_model_name: "/fake/path"
+    adapter = _make_embedded_adapter_stub()
+    key = _composed_adapter_key(adapter)
 
-    backend.add_adapter(adapter)
+    backend.add_adapter(adapter, config=_EMBEDDED_STUB_CONFIG)
 
-    assert adapter.qualified_name not in backend._loaded_adapters
-    assert adapter.qualified_name in backend.list_adapters()
+    assert key not in backend._loaded_adapters
+    assert key in backend.list_adapters()
 
 
 def test_add_non_local_hf_adapter_raises():
@@ -1493,16 +1472,15 @@ def test_add_non_local_hf_adapter_raises():
 def test_remove_adapter_removes_from_added_adapters():
     """remove_adapter() is the inverse of add_adapter() (#1528)."""
     backend = _make_backend()
-    adapter = _make_intrinsic_adapter_stub()
-    adapter.backend = None
-    adapter.get_local_hf_path = lambda base_model_name: "/fake/path"
-    backend.add_adapter(adapter)
-    assert adapter.qualified_name in backend.list_adapters()
+    adapter = _make_embedded_adapter_stub()
+    key = _composed_adapter_key(adapter)
+    backend.add_adapter(adapter, config=_EMBEDDED_STUB_CONFIG)
+    assert key in backend.list_adapters()
 
-    backend.remove_adapter(adapter.qualified_name)
+    backend.remove_adapter(key)
 
-    assert adapter.qualified_name not in backend.list_adapters()
-    assert adapter.qualified_name not in backend._added_adapters
+    assert key not in backend.list_adapters()
+    assert key not in backend._composed_adapters
 
 
 def test_remove_adapter_unregistered_name_is_noop():
@@ -1663,15 +1641,15 @@ def test_add_adapter_rejects_composed_adapter_with_mismatched_identity_and_weigh
     assert binding.backend is None
 
 
-def test_add_adapter_shim_refuses_name_already_claimed_by_composed_adapter():
-    """The legacy/shim add_adapter path must see composed-adapter registrations too.
+def test_add_adapter_bare_binding_refuses_name_already_claimed_by_composed_adapter():
+    """A bare add_adapter path must see composed-adapter registrations too.
 
-    Regression: the duplicate-name guard on the shim path only checked
+    Regression: the duplicate-name guard on the bare-binding path only checked
     `_added_adapters`, not `_composed_adapters` — a composed Adapter already
-    registered under a qualified name did not stop a later shim
-    `EmbeddedIntrinsicAdapter` (or bare `LocalFileBinding`) from silently
-    claiming the same name, defeating the "adapter loading is not
-    idempotent" invariant the warning message itself describes.
+    registered under a qualified name did not stop a later bare
+    `LocalFileBinding` from silently claiming the same name, defeating the
+    "adapter loading is not idempotent" invariant the warning message itself
+    describes.
     """
     from mellea.backends.adapters._core import (
         Adapter as _AdapterCore,
@@ -1691,14 +1669,15 @@ def test_add_adapter_shim_refuses_name_already_claimed_by_composed_adapter():
     backend.add_adapter(composed, config={"parameters": {}})
     assert "answerability_alora" in backend._composed_adapters
 
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", DeprecationWarning)
-        shim = EmbeddedIntrinsicAdapter("answerability", config={}, technology="alora")
+    binding = LocalFileBinding(
+        name="answerability", adapter_type=AdapterType.ALORA, repo_id="fake/repo"
+    )
+    binding.get_local_hf_path = lambda base_model_name: "/fake/path"
 
-    backend.add_adapter(shim)
+    backend.add_adapter(binding)
 
-    assert shim.backend is None
-    assert "answerability_alora" not in backend._added_adapters
+    assert binding.backend is None
+    assert backend._added_adapters.get("answerability_alora") is not binding
 
 
 def test_register_embedded_adapter_model_refused_duplicate_does_not_clobber_cached_config():
@@ -1870,14 +1849,11 @@ def test_add_adapter_after_remove_adapter_allows_a_fresh_registration():
     backend's lifetime.
     """
     backend = _make_backend()
-    first = _make_intrinsic_adapter_stub()
-    first.backend = None
-    first.get_local_hf_path = lambda base_model_name: "/fake/path"
+    first = _make_local_file_binding_stub()
     backend.add_adapter(first)
     backend.remove_adapter(first.qualified_name)
 
-    second = _make_intrinsic_adapter_stub()
-    second.backend = None
+    second = _make_local_file_binding_stub()
     second.get_local_hf_path = lambda base_model_name: "/fake/path-2"
     backend.add_adapter(second)
 
@@ -1896,9 +1872,7 @@ def test_remove_adapter_clears_backend_and_path_references():
     re-registration anywhere (see the next test).
     """
     backend = _make_backend()
-    adapter = _make_intrinsic_adapter_stub()
-    adapter.backend = None
-    adapter.get_local_hf_path = lambda base_model_name: "/fake/path"
+    adapter = _make_local_file_binding_stub()
     backend.add_adapter(adapter)
     assert adapter.backend is backend
     assert adapter.path == "/fake/path"
@@ -1917,9 +1891,7 @@ def test_add_adapter_after_remove_adapter_allows_reregistering_the_same_object()
     silent no-op, never re-registered, with no exception raised.
     """
     backend = _make_backend()
-    adapter = _make_intrinsic_adapter_stub()
-    adapter.backend = None
-    adapter.get_local_hf_path = lambda base_model_name: "/fake/path"
+    adapter = _make_local_file_binding_stub()
     backend.add_adapter(adapter)
     backend.remove_adapter(adapter.qualified_name)
 
@@ -1942,9 +1914,7 @@ def test_remove_adapter_raises_if_still_loaded():
     can succeed.
     """
     backend = _make_backend()
-    adapter = _make_intrinsic_adapter_stub()
-    adapter.backend = None
-    adapter.get_local_hf_path = lambda base_model_name: "/fake/path"
+    adapter = _make_local_file_binding_stub()
     backend.add_adapter(adapter)
     backend.load_peft_adapter(adapter.qualified_name)
     assert adapter.qualified_name in backend._loaded_adapters
@@ -1976,9 +1946,7 @@ def test_load_peft_adapter_records_loaded_state_before_set_adapter_failure():
     the old, orphaned weights.
     """
     backend = _make_backend()
-    adapter = _make_intrinsic_adapter_stub()
-    adapter.backend = None
-    adapter.get_local_hf_path = lambda base_model_name: "/fake/path"
+    adapter = _make_local_file_binding_stub()
     backend.add_adapter(adapter)
     backend._model.set_adapter.side_effect = RuntimeError("PEFT set_adapter failure")  # type: ignore[union-attr]
 
@@ -2077,7 +2045,7 @@ def test_seed_sentinel_is_stripped(stub_backend):
 async def test_intrinsic_seed_with_zero_temperature_keeps_greedy(stub_backend):
     """The intrinsic path must not let seed override explicit temperature=0."""
     backend = _make_intrinsic_backend_stub(stub_backend)
-    adapter = _make_intrinsic_adapter_stub()
+    adapter = _make_embedded_adapter_stub()
     captured = {}
 
     def fake_transformers_inputs(rewritten, tokenizer, model, ll_tokenizer=None):
@@ -2090,7 +2058,7 @@ async def test_intrinsic_seed_with_zero_temperature_keeps_greedy(stub_backend):
         return object()
 
     # Pre-populate the adapter so the capability-based lookup finds it.
-    backend._added_adapters = {adapter.qualified_name: adapter}
+    _register_adapter_stub(backend, adapter)
 
     with (
         patch(
@@ -2518,8 +2486,8 @@ async def test_intrinsic_logits_populated_when_option_set(stub_backend):
     backend._tokenizer = MagicMock(eos_token_id=0)
     backend.model_id = "stub-model"
 
-    adapter = _make_intrinsic_adapter_stub()
-    backend._added_adapters = {adapter.qualified_name: adapter}
+    adapter = _make_embedded_adapter_stub()
+    _register_adapter_stub(backend, adapter)
 
     class _FakeChatCompletionResponse:
         class _Choice:
@@ -2667,8 +2635,8 @@ async def test_intrinsic_closure_cell_and_kv_cache_released_after_post_processin
         if t is not None
     ]
 
-    adapter = _make_intrinsic_adapter_stub()
-    backend._added_adapters = {adapter.qualified_name: adapter}
+    adapter = _make_embedded_adapter_stub()
+    _register_adapter_stub(backend, adapter)
 
     class _FakeChatCompletionResponse:
         class _Choice:
@@ -2945,8 +2913,8 @@ async def test_multimodal_blocks_in_intrinsic_ctx_raise_error(
     this test exercises that branch directly.
     """
     backend = _make_intrinsic_backend_stub(stub_backend)
-    adapter = _make_intrinsic_adapter_stub()
-    backend._added_adapters = {adapter.qualified_name: adapter}
+    adapter = _make_embedded_adapter_stub()
+    _register_adapter_stub(backend, adapter)
     ctx = ChatContext().add(Message("user", "Hello", images=images, audio=audio))
 
     with pytest.raises(ValueError, match="LocalHFBackend does not support"):

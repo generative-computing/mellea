@@ -65,7 +65,6 @@ from .adapters._core import (
 from .adapters.adapter import (
     AdapterInput,
     AdapterMixin,
-    EmbeddedIntrinsicAdapter,
     _composed_adapter_key,
     _discover_embedded_adapters,
 )
@@ -130,8 +129,6 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         ValueError: If `model_id` is an empty string, if neither `api_key` nor
             `OPENAI_API_KEY` is set, or if `model_id` is a `ModelIdentifier` with no `openai_name` set.
     """
-
-    _supports_composed_adapters = True
 
     def __init__(
         self,
@@ -304,12 +301,10 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             2, aclose=lambda client: client.close()
         )
 
-        # EmbeddedIntrinsicAdapter is itself an _AdapterCore subclass, so this
-        # single type covers both the shim and composed-Adapter realities.
         self._added_adapters: dict[str, _AdapterCore] = {}
         # Raw io.yaml config for composed Adapter instances (Epic #929, issue
         # #1144), keyed by _composed_adapter_key(). A composed Adapter has no
-        # `.config` field (that's shim-only state); see
+        # `.config` field, so its io.yaml is cached here; see
         # _intrinsic_adapter_name_and_config.
         self._composed_adapter_configs: dict[str, dict] = {}
         self._adapter_lock = threading.RLock()
@@ -351,46 +346,25 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         """Register an adapter with this backend.
 
         Accepts the full `AdapterInput` union to honour the mixin contract, but
-        currently only `EmbeddedIntrinsicAdapter` (the Embedded/Granite Switch
-        reality) is supported; other realities are rejected at runtime. As a
-        side effect, an `EmbeddedBinding` weights handler is stamped with this
-        backend's `base_model_name` in its `source` field. Refuses a name
-        already registered instead of silently overwriting it.
+        currently only a composed `Adapter` whose `weights` is an
+        `EmbeddedBinding` (the Embedded/Granite Switch reality) is supported;
+        other realities are rejected at runtime. As a side effect, the
+        `EmbeddedBinding` weights handler is stamped with this backend's
+        `base_model_name` in its `source` field. Refuses a name already
+        registered instead of silently overwriting it.
 
         Args:
-            adapter (AdapterInput): The adapter to register. Must be an
-                `EmbeddedIntrinsicAdapter` or a composed `Adapter` whose
-                `weights` is an `EmbeddedBinding`.
-            config (dict | None): Raw io.yaml config for a composed `Adapter`.
-                Required for that shape (its config cannot be cheaply
-                re-derived later); rejected for `EmbeddedIntrinsicAdapter`,
-                which already carries its own `.config`.
+            adapter (AdapterInput): The adapter to register. Must be a composed
+                `Adapter` whose `weights` is an `EmbeddedBinding`.
+            config (dict | None): Raw io.yaml config for the composed `Adapter`.
+                Required (its config cannot be cheaply re-derived later).
 
         Raises:
-            TypeError: If `adapter` is not a supported Embedded adapter, or
-                `config` is given for an `EmbeddedIntrinsicAdapter`.
-            ValueError: If `adapter` is a composed `Adapter` and `config` is
-                not given — registering it without one would make it
-                discoverable but permanently unable to generate.
+            TypeError: If `adapter` is not a supported Embedded adapter.
+            ValueError: If `config` is not given — registering the adapter
+                without one would make it discoverable but permanently unable
+                to generate.
         """
-        if isinstance(adapter, EmbeddedIntrinsicAdapter):
-            if config is not None:
-                raise TypeError(
-                    "config= is not accepted for an EmbeddedIntrinsicAdapter; "
-                    "it already carries its own .config."
-                )
-            if adapter.qualified_name in self._added_adapters:
-                MelleaLogger.get_logger().warning(
-                    f"attempted to add adapter {adapter.qualified_name!r} but it is "
-                    "already registered; refusing to overwrite it."
-                )
-                return
-            adapter.backend = self
-            if isinstance(adapter.weights, EmbeddedBinding):
-                adapter.weights.source = self.base_model_name
-            self._added_adapters[adapter.qualified_name] = adapter
-            return
-
         if isinstance(adapter, _AdapterCore):
             if not isinstance(adapter.weights, EmbeddedBinding):
                 raise TypeError(
@@ -430,8 +404,9 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             return
 
         raise TypeError(
-            "OpenAIBackend currently only supports EmbeddedIntrinsicAdapter or a "
-            f"composed Adapter. Got: {type(adapter).__name__}"
+            "OpenAIBackend currently only supports a composed Adapter whose "
+            "weights is an EmbeddedBinding. "
+            f"Got: {type(adapter).__name__}"
         )
 
     def list_adapters(self) -> list[str]:
@@ -462,10 +437,6 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                     f"could not remove adapter {adapter_qualified_name} for backend "
                     f"{self}: adapter was not registered"
                 )
-                return
-
-            if isinstance(adapter, EmbeddedIntrinsicAdapter):
-                adapter.backend = None
 
     def _adapter_activation_lock(
         self,
@@ -488,13 +459,12 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
     # ------------------------------------------------------------------
 
     def _intrinsic_adapter_name_and_config(
-        self, adapter: "EmbeddedIntrinsicAdapter | _AdapterCore"
+        self, adapter: "_AdapterCore"
     ) -> tuple[str, dict]:
         """Return the adapter-function name and raw io.yaml config for an adapter.
 
-        `EmbeddedIntrinsicAdapter` carries both directly (`.name`/`.config`).
-        A composed `Adapter` carries neither — `io_contract` does not yet
-        drive `IntrinsicsRewriter`/`IntrinsicsResultProcessor` (Epic #929,
+        A composed `Adapter` carries neither directly — `io_contract` does not
+        yet drive `IntrinsicsRewriter`/`IntrinsicsResultProcessor` (Epic #929,
         issue #1144) — so its config is looked up from
         `_composed_adapter_configs`, cached at registration time (see
         `add_adapter`/`register_embedded_adapter_model`) since it comes from
@@ -511,8 +481,6 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             ValueError: A composed adapter has no cached config (never
                 registered via `add_adapter`/`register_embedded_adapter_model`).
         """
-        if isinstance(adapter, EmbeddedIntrinsicAdapter):
-            return adapter.name, adapter.config
         key = _composed_adapter_key(adapter)
         config = self._composed_adapter_configs.get(key)
         if config is None:
@@ -553,8 +521,9 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         # Locked (unlike __init__'s call to this, which still runs
         # single-threaded during construction, before the backend is exposed
         # to any other thread): this method is now also the documented
-        # post-construction replacement for `EmbeddedIntrinsicAdapter.from_hub()`
-        # on a live backend, so a caller here can race another thread's
+        # post-construction way to load embedded adapters from a Hub repo or
+        # model directory on a live backend, so a caller here can race another
+        # thread's
         # `add_adapter`/`resolve_adapter` — both `add_adapter`'s
         # read-then-write across `_added_adapters` and `_discover_embedded_adapters`'
         # mutation of global `warnings` filter state need the same lock
@@ -1060,10 +1029,8 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             ValueError: If no embedded adapter is registered for the requested
                 intrinsic, or a composed `Adapter` has no io.yaml config
                 cached (see `_intrinsic_adapter_name_and_config`).
-            TypeError: If the adapter is neither an `EmbeddedIntrinsicAdapter`
-                nor a composed `Adapter`, or its `weights` isn't an
-                `EmbeddedBinding` (for the shim, only reachable if a caller
-                reassigns `.weights` after construction).
+            TypeError: If the adapter is not a composed `Adapter`, or its
+                `weights` isn't an `EmbeddedBinding`.
         """
         if not ctx.is_chat_context:
             raise NotImplementedError("Intrinsics require a chat context.")
@@ -1085,12 +1052,10 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         # TODO: OpenAIBackend only supports EmbeddedAdapters.
         #       It should be refactored into a specific adapter.transform() function.
-        # EmbeddedIntrinsicAdapter is itself an _AdapterCore subclass, so checking
-        # for _AdapterCore alone covers both the shim and composed-Adapter realities.
         if not isinstance(adapter, _AdapterCore):
             raise TypeError(
-                "OpenAIBackend only supports EmbeddedIntrinsicAdapter or a composed "
-                f"Adapter, got: {type(adapter).__name__}"
+                "OpenAIBackend only supports a composed Adapter, "
+                f"got: {type(adapter).__name__}"
             )
 
         adapter_name, intrinsic_config = self._intrinsic_adapter_name_and_config(
@@ -1209,14 +1174,13 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         # Embedded adapters activate via control tokens in the chat template;
         # the binding owns the final request edit so callers cannot override
-        # the adapter selected for this intrinsic. `adapter.weights` is always
-        # an EmbeddedBinding here — EmbeddedIntrinsicAdapter.__init__
-        # constructs one unconditionally — but the shim permits attribute
-        # mutation, so a caller reassigning `.weights` must fail loudly here
-        # rather than silently skip activation and send an unactivated request.
+        # the adapter selected for this intrinsic. A composed embedded Adapter
+        # always carries an EmbeddedBinding, but guard against a mismatched
+        # `.weights` (e.g. a wrongly-constructed adapter) so activation fails
+        # loudly here rather than silently sending an unactivated request.
         if not isinstance(adapter.weights, EmbeddedBinding):
             raise TypeError(
-                f"EmbeddedIntrinsicAdapter.weights must be an EmbeddedBinding; "
+                f"embedded adapter weights must be an EmbeddedBinding; "
                 f"got {type(adapter.weights).__name__}. Activation cannot proceed."
             )
         activation_request = EmbeddedActivationRequest(

@@ -6,7 +6,7 @@ description: "Compose your own trained LoRA/aLoRA adapter into Mellea without a 
 
 This tutorial walks through registering a custom, non-catalog adapter
 function by composing an `Adapter` directly — the replacement for the
-deprecated `CustomIntrinsicAdapter` shim (Epic #929, issue #1144).
+removed `CustomIntrinsicAdapter` shim (Epic #929, issue #1144).
 
 By the end you will have covered:
 
@@ -137,7 +137,7 @@ result = m.instruct(
 
 ## What replaced the old approach
 
-The deprecated `CustomIntrinsicAdapter` shim did two things under the hood
+The removed `CustomIntrinsicAdapter` shim did two things under the hood
 that this tutorial's composed `Adapter` replaces without a class of its own:
 
 1. **Adapter registration** — `LocalFileBinding` already accepts an arbitrary

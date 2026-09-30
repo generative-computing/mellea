@@ -82,7 +82,7 @@ def test_registry_invariant_ignores_runtime_custom_catalogue_entry(monkeypatch):
 
 
 def test_get_io_contract_falls_back_permissively_for_unknown_names():
-    """A name outside the catalog (e.g. a `CustomIntrinsicAdapter`) must not raise."""
+    """A name outside the catalog (a custom, non-catalog adapter) must not raise."""
     contract = get_io_contract("some-custom-user-adapter")
     result = contract.parse(json.dumps({"anything": "goes"}))
     assert result == {"anything": "goes"}

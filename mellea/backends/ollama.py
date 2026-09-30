@@ -236,8 +236,6 @@ class OllamaModelBackend(FormatterBackend, AdapterMixin):
         OSError: If the model cannot be pulled from the Ollama library.
     """
 
-    _supports_composed_adapters = True
-
     def __init__(
         self,
         model_id: str | ModelIdentifier = model_ids.IBM_GRANITE_4_2_3B,
