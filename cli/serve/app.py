@@ -268,7 +268,28 @@ def _build_model_options_from_response_request(request: ResponseRequest) -> dict
         if key not in excluded_fields
     }
 
-    return ModelOption.replace_keys(filtered_options, openai_to_model_option)
+    result = ModelOption.replace_keys(filtered_options, openai_to_model_option)
+
+    # Only "function" tool types are supported. Native tool types (web_search,
+    # file_search, mcp, code_interpreter) require OpenAI server-side execution
+    # and are not implemented. Reject them here so callers get a clear 400
+    # instead of an internal AssertionError deep in the backend.
+    _UNSUPPORTED_TOOL_TYPES = {"web_search", "file_search", "mcp", "code_interpreter"}
+    if ModelOption.TOOLS in result:
+        unsupported = [
+            t["type"]
+            for t in result[ModelOption.TOOLS]
+            if t.get("type") in _UNSUPPORTED_TOOL_TYPES
+        ]
+        if unsupported:
+            raise ValueError(
+                f"Tool type(s) {unsupported} are not supported by m serve. "
+                "Only 'function' tools are supported. Native tool types "
+                "(web_search, file_search, mcp, code_interpreter) require "
+                "server-side execution that is not yet implemented."
+            )
+
+    return result
 
 
 def _convert_response_input_to_messages(

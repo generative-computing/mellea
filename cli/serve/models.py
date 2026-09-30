@@ -5,12 +5,10 @@
 __all__ = [
     "ChatMessage",
     "ContextManagementConfig",
-    "FileSearchTool",
     "ImageUrlContent",
     "InputAudioContent",
     "InputAudioData",
     "InputContent",
-    "MCPTool",
     "MessageContent",
     "OutputTextContent",
     "PromptCacheOptions",
@@ -24,7 +22,6 @@ __all__ = [
     "ResponseTool",
     "ResponseUsage",
     "TextContent",
-    "WebSearchTool",
 ]
 
 from typing import Any, Literal
@@ -380,35 +377,17 @@ class ResponseInputItem(BaseModel):
     tool_calls: list[Any] | None = None
 
 
-class WebSearchTool(BaseModel):
-    """Native web-search tool declaration."""
-
-    type: Literal["web_search"]
-
-
-class FileSearchTool(BaseModel):
-    """Native file-search tool declaration."""
-
-    type: Literal["file_search"]
-    vector_store_ids: list[str]
-
-
-class MCPTool(BaseModel):
-    """Native MCP server tool declaration."""
-
-    type: Literal["mcp"]
-    server_label: str
-    server_url: str
-
-
 class ResponseTool(BaseModel):
-    """Tool declaration accepted by the Responses API."""
+    """Tool declaration accepted by the Responses API.
+
+    Only ``type: "function"`` is currently supported by m serve. The other
+    types (``web_search``, ``file_search``, ``mcp``, ``code_interpreter``)
+    are accepted by the schema so that requests are parsed and rejected with
+    a clear 400 error rather than a Pydantic validation failure.
+    """
 
     type: Literal["function", "web_search", "file_search", "mcp", "code_interpreter"]
     function: FunctionDefinition | None = None
-    web_search: WebSearchTool | None = None
-    file_search: FileSearchTool | None = None
-    mcp: MCPTool | None = None
 
 
 class ContextManagementConfig(BaseModel):
