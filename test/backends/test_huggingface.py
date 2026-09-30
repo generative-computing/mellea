@@ -33,7 +33,6 @@ pytestmark = [
 
 from mellea import MelleaSession
 from mellea.backends import ModelOption, model_ids
-from mellea.backends.adapters import IntrinsicAdapter
 from mellea.backends.cache import SimpleLRUCache
 from mellea.backends.huggingface import LocalHFBackend, _assert_correct_adapters
 from mellea.core import (
@@ -64,14 +63,8 @@ def backend():
         backend = LocalHFBackend(
             model_id=model_ids.IBM_GRANITE_4_1_3B, cache=SimpleLRUCache(5)
         )
-        backend.add_adapter(
-            IntrinsicAdapter(
-                "requirement-check", base_model_name=backend.base_model_name
-            )
-        )
-        backend.add_adapter(
-            IntrinsicAdapter("answerability", base_model_name=backend.base_model_name)
-        )
+        backend.resolve_adapter("requirement-check")
+        backend.resolve_adapter("answerability")
     yield backend
 
     from test.conftest import cleanup_gpu_backend
@@ -368,10 +361,10 @@ async def test_generate_with_lock(backend) -> None:
     b._model = model
     b._added_adapters = {}
     b._loaded_adapters = {}
-    b.add_adapter(
-        IntrinsicAdapter("requirement-check", base_model_name=b.base_model_name)
-    )
-    b.add_adapter(IntrinsicAdapter("answerability", base_model_name=b.base_model_name))
+    b._composed_adapters = {}
+    b._composed_adapter_configs = {}
+    b.resolve_adapter("requirement-check")
+    b.resolve_adapter("answerability")
 
     memoized: dict[torch.Tensor, str] = dict()  # type: ignore[name-defined]
     gen_func = model.generate
@@ -556,9 +549,9 @@ async def test_error_during_generate_with_lock(backend) -> None:
             raise
     b._added_adapters = {}
     b._loaded_adapters = {}
-    b.add_adapter(
-        IntrinsicAdapter("requirement-check", base_model_name=b.base_model_name)
-    )
+    b._composed_adapters = {}
+    b._composed_adapter_configs = {}
+    b.resolve_adapter("requirement-check")
 
     regular_generate = b._model.generate
 

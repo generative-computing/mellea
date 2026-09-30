@@ -8,23 +8,21 @@ register an adapter by capability name) and :meth:`AdapterMixin._find_adapter`
 (look up a registered adapter).  :class:`AdapterMixin` is mixed into backends that
 support runtime adapter loading and unloading.
 
-`LocalHFAdapter`, `IntrinsicAdapter`, and `EmbeddedIntrinsicAdapter` are
-**deprecation shims** retained for backwards compatibility.  They satisfy
-`isinstance(x, _core.Adapter)` but delegate all behaviour to the new dataclass.
-`get_adapter_for_intrinsic` is similarly deprecated; prefer `resolve_adapter`.
+`Adapter` and `LocalHFAdapter` are the legacy adapter ABCs retained for
+third-party backends; the composed `Adapter` dataclass in `._core` is the
+current adapter surface. `get_adapter_for_intrinsic` is deprecated; prefer
+`resolve_adapter`.
 """
 
 import abc
 import contextlib
 import hashlib
 import pathlib
-import re
 import shutil
 import tempfile
 import time
-import warnings
 from collections.abc import Callable
-from typing import ClassVar, Literal, TypeAlias, TypeVar, cast
+from typing import Literal, TypeAlias, TypeVar, cast
 
 import yaml
 
@@ -100,209 +98,14 @@ class LocalHFAdapter(Adapter):
         ...
 
 
-class _ShimWeightsBinding(WeightsBinding):
-    """Placeholder weights binding for the deprecated IntrinsicAdapter shims.
-
-    All lifecycle verbs raise NotImplementedError; it exists only so the
-    shims can satisfy the Adapter protocol.
-    """
-
-    def prepare(self) -> None:
-        raise NotImplementedError("WeightsBinding not yet implemented")
-
-    def activate(self) -> None:
-        raise NotImplementedError("WeightsBinding not yet implemented")
-
-    def deactivate(self) -> None:
-        raise NotImplementedError("WeightsBinding not yet implemented")
-
-    def release(self) -> None:
-        raise NotImplementedError("WeightsBinding not yet implemented")
-
-
-class IntrinsicAdapter(LocalHFAdapter, _AdapterCore):
-    """Deprecated shim for adapters that implement adapter functions.
-
-    Deprecated:
-        Use :class:`~mellea.backends.adapters.Adapter` directly.
-        `IntrinsicAdapter` will be removed in a future release (Epic #929,
-        issue #1144).
-
-    Subtype of :class:`Adapter` for models that:
-
-    * implement adapter functions
-    * are packaged as LoRA or aLoRA adapters on top of a base model
-    * use the shared model loading code in `mellea.formatters.granite.intrinsics`
-    * use the shared input and output processing code in
-      `mellea.formatters.granite.intrinsics`
-
-    Args:
-        intrinsic_name (str): Name of the adapter function (e.g. `"answerability"`);
-            the adapter's `qualified_name` will be derived from this.
-        adapter_type (AdapterType): Enum describing the adapter type; defaults to
-            `AdapterType.ALORA`.
-        config_file (str | pathlib.Path | None): Path to a YAML config file defining
-            the adapter function's I/O transformations; mutually exclusive with
-            `config_dict`.
-        config_dict (dict | None): Dict defining the adapter function's I/O
-            transformations; mutually exclusive with `config_file`.
-        base_model_name (str | None): Base model name used to look up the I/O
-            processing config when neither `config_file` nor `config_dict` are
-            provided.
-
-    Attributes:
-        intrinsic_name (str): Name of the adapter function this adapter implements.
-        intrinsic_metadata (IntrinsicsCatalogEntry): Catalog metadata for the adapter function.
-        base_model_name (str | None): Base model name provided at construction, if any.
-        adapter_type (AdapterType): The adapter type (`LORA` or `ALORA`).
-        config (dict): Parsed I/O transformation configuration for the adapter function.
-
-    Note:
-        `identity`, `io_contract`, and `weights` are internal scaffolding populated
-        in `__init__` to satisfy the :class:`~mellea.backends.adapters.Adapter`
-        protocol; they are not meaningful consumer-facing attributes. `io_contract`
-        is the real, declared contract for `intrinsic_name` (issue #1516); `weights`
-        remains the Phase 1 `_ShimWeightsBinding` placeholder and raises
-        `NotImplementedError` until Phase 2 (issue #1141) replaces it.
-    """
-
-    def __setattr__(self, name: str, value: object) -> None:
-        """Allow mutation; bypasses the frozen restriction on _AdapterCore."""
-        object.__setattr__(self, name, value)
-
-    def __delattr__(self, name: str) -> None:
-        """Allow deletion; bypasses the frozen restriction on _AdapterCore."""
-        object.__delattr__(self, name)
-
-    def __init__(
-        self,
-        intrinsic_name: str,
-        adapter_type: AdapterType = AdapterType.ALORA,
-        config_file: str | pathlib.Path | None = None,
-        config_dict: dict | None = None,
-        base_model_name: str | None = None,
-    ):
-        """Initialize IntrinsicAdapter for the named adapter function, loading its I/O configuration."""
-        warnings.warn(
-            "IntrinsicAdapter is deprecated; use Adapter directly (Epic #929, issue #1144).",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        super().__init__(intrinsic_name, adapter_type)
-
-        self.intrinsic_name = intrinsic_name
-        self.intrinsic_metadata = fetch_intrinsic_metadata(intrinsic_name)
-        self.base_model_name = base_model_name
-
-        if adapter_type not in self.intrinsic_metadata.adapter_types:
-            raise ValueError(
-                f"Adapter function '{intrinsic_name}' not available as an adapter of type "
-                f"'{adapter_type}. Available types are "
-                f"{self.intrinsic_metadata.adapter_types}."
-            )
-        self.adapter_type = adapter_type
-
-        # If any of the optional params are specified, attempt to set up the
-        # config for the adapter function here.
-        if config_file and config_dict:
-            raise ValueError(
-                f"Conflicting values for config_file and config_dict "
-                f"parameters provided. Values were {config_file=} "
-                f"and {config_dict=}"
-            )
-        if config_file is None and config_dict is None and self.base_model_name is None:
-            raise ValueError(
-                "At least one of [config_file, config_dict, base_model_name] "
-                "must be provided."
-            )
-        if config_file is None and config_dict is None:
-            assert self.base_model_name is not None, (
-                "must provide `base_model_name` if not providing a `config_file` or `config_dict`"
-            )
-            # We're converting the adapter type to a boolean flag here.
-            assert adapter_type in (AdapterType.ALORA, AdapterType.LORA), (
-                f"{adapter_type} not supported"
-            )
-            is_alora = self.adapter_type == AdapterType.ALORA
-            config_file = intrinsics.obtain_io_yaml(
-                self.intrinsic_name,
-                self.base_model_name,
-                self.intrinsic_metadata.repo_id,
-                revision=self.intrinsic_metadata.revision,
-                alora=is_alora,
-            )
-        if config_file:
-            with open(config_file, encoding="utf-8") as f:
-                config_dict = yaml.safe_load(f)
-                if not isinstance(config_dict, dict):
-                    raise ValueError(
-                        f"YAML file {config_file} does not evaluate to a "
-                        f"dictionary when parsed."
-                    )
-        assert config_dict is not None  # Code above should initialize this variable
-        self.config: dict = config_dict
-
-        # Populate the new Adapter triple so isinstance(self, _AdapterCore) holds.
-        # io_contract comes from the same registry resolve_adapter() consults
-        # (see issue #1516), not a placeholder. weights stays the Phase 2
-        # _ShimWeightsBinding placeholder; that axis is #1141/#1142.
-        _AdapterCore.__init__(
-            self,
-            identity=Identity(
-                name=intrinsic_name,
-                adapter_type="alora"
-                if self.adapter_type == AdapterType.ALORA
-                else "lora",
-                capability=self.intrinsic_metadata.effective_capability,
-            ),
-            io_contract=get_io_contract(intrinsic_name),
-            weights=_ShimWeightsBinding(),
-        )
-
-    def get_local_hf_path(self, base_model_name: str) -> str:
-        """Return the local filesystem path from which adapter weights should be loaded.
-
-        Downloads the adapter weights if they are not already cached locally.
-
-        Args:
-            base_model_name (str): The base model name; typically the last component
-                of the Hugging Face model ID (e.g. `"granite-3.3-8b-instruct"`).
-
-        Returns:
-            str: Filesystem path to the downloaded adapter weights directory.
-        """
-        return self.download_and_get_path(base_model_name)
-
-    def download_and_get_path(self, base_model_name: str) -> str:
-        """Download the required adapter function files if necessary and return the path to them.
-
-        Args:
-            base_model_name: the base model; typically the last part of the Hugging Face
-                model id like "granite-3.3-8b-instruct"
-
-        Returns:
-            a path to the files
-        """
-        is_alora = self.adapter_type == AdapterType.ALORA
-        return str(
-            intrinsics.obtain_lora(
-                self.intrinsic_name,
-                base_model_name,
-                self.intrinsic_metadata.repo_id,
-                revision=self.intrinsic_metadata.revision,
-                alora=is_alora,
-            )
-        )
-
-
 T = TypeVar("T")
 
 
 def _composed_adapter_key(adapter: "_AdapterCore") -> str:
     """Return the registry key for a composed `Adapter`, mirroring `qualified_name`.
 
-    A composed `Adapter` (unlike the deprecated shims) has no `qualified_name`
-    of its own; backends key their registries on this instead. For a
+    A composed `Adapter` has no `qualified_name` of its own; backends key
+    their registries on this instead. For a
     LocalFile/PEFT composed adapter, this must produce the same string as
     `adapter.weights.qualified_name` (`LocalFileBinding`'s own key) so a
     backend's `_added_adapters` (keyed on the binding) and `_composed_adapters`
@@ -323,28 +126,286 @@ def _composed_adapter_key(adapter: "_AdapterCore") -> str:
     return f"{adapter.identity.name}_{adapter.identity.adapter_type}"
 
 
-def _discover_embedded_adapters(
-    source: str,
-    *,
+def _embedded_adapter_from_entry(
+    intrinsic_name: str, config: dict, technology: str
+) -> "_AdapterCore":
+    """Build a composed embedded `Adapter` from one `adapter_index.json` entry.
+
+    Args:
+        intrinsic_name (str): Adapter function name from the index entry
+            (e.g. `"answerability"`).
+        config (dict): Parsed `io.yaml` transformation configuration.
+        technology (str): Adapter technology in the switch model — `"lora"` or
+            `"alora"`. Determines the `Identity.adapter_type`.
+
+    Returns:
+        _AdapterCore: A composed `Adapter` whose `weights` is an
+            `EmbeddedBinding` (activation runs through the served model's chat
+            template), carrying the declared I/O contract for `intrinsic_name`.
+
+    Raises:
+        ValueError: If `technology` is neither `"lora"` nor `"alora"`.
+    """
+    if technology not in ("lora", "alora"):
+        raise ValueError(f"technology must be 'lora' or 'alora', got '{technology}'")
+    capability = intrinsic_name
+    if intrinsic_name in known_intrinsic_names():
+        capability = fetch_intrinsic_metadata(intrinsic_name).effective_capability
+    return _AdapterCore(
+        identity=Identity(
+            name=intrinsic_name,
+            adapter_type=cast(Literal["lora", "alora"], technology),
+            capability=capability,
+        ),
+        io_contract=get_io_contract(intrinsic_name),
+        weights=EmbeddedBinding(),
+    )
+
+
+def _embedded_adapters_from_model_directory(
+    model_path: str | pathlib.Path, intrinsic_name: str | None = None
+) -> list[tuple["_AdapterCore", dict]]:
+    """Load composed embedded adapters from a Granite Switch model directory.
+
+    Reads `adapter_index.json` and the corresponding `io_configs/*/io.yaml`
+    files from the model directory, returning one composed `Adapter` (paired
+    with its raw `io.yaml` config) per index entry.
+
+    Args:
+        model_path (str | pathlib.Path): Path to a Granite Switch model
+            directory that contains `adapter_index.json` and `io_configs/`.
+        intrinsic_name (str | None): If provided, only load the adapter
+            matching this adapter function name. `None` loads all adapters.
+
+    Returns:
+        list[tuple[_AdapterCore, dict]]: One `(adapter, io_yaml_config)` pair
+            per entry in the index.
+
+    Raises:
+        FileNotFoundError: If `adapter_index.json` is missing.
+        ValueError: If an `io.yaml` file listed in the index cannot be found,
+            if an `io_config` path escapes the model directory, if an entry's
+            `technology` is not `"lora"`/`"alora"`, or if no adapters are found.
+    """
+    import json as _json
+
+    model_path = pathlib.Path(model_path)
+    index_path = model_path / "adapter_index.json"
+    if not index_path.exists():
+        raise FileNotFoundError(f"No adapter_index.json found at {index_path}")
+
+    with open(index_path, encoding="utf-8") as f:
+        index = _json.load(f)
+
+    adapters: list[tuple[_AdapterCore, dict]] = []
+    for entry in index.get("adapters", []):
+        entry_name = entry.get("adapter_name")
+        if entry_name is None:
+            continue
+        if intrinsic_name is not None and entry_name != intrinsic_name:
+            continue
+        io_config_rel = entry.get("io_config")
+        if io_config_rel is None:
+            continue
+
+        io_config_path = model_path / io_config_rel
+        try:
+            io_config_path = io_config_path.resolve(strict=True)
+        except (FileNotFoundError, OSError):
+            raise ValueError(
+                f"io.yaml for adapter function '{entry_name}' "
+                f"not found at {model_path / io_config_rel}"
+            )
+        if not io_config_path.is_relative_to(model_path.resolve()):
+            raise ValueError(
+                f"io_config path for adapter function '{entry_name}' "
+                f"escapes the model directory: {io_config_path}"
+            )
+
+        with open(io_config_path, encoding="utf-8") as f:
+            config_dict = yaml.safe_load(f)
+
+        adapter = _embedded_adapter_from_entry(
+            entry_name, config_dict, entry.get("technology", "lora")
+        )
+        adapters.append((adapter, config_dict))
+
+    if not adapters:
+        if intrinsic_name is not None:
+            raise ValueError(
+                f"No adapter found for adapter function '{intrinsic_name}' in {model_path}"
+            )
+        raise ValueError(f"No adapters found in {model_path}")
+
+    return adapters
+
+
+def _embedded_adapters_from_hub(
+    repo_id: str,
     revision: str = "main",
     cache_dir: str | None = None,
     intrinsic_name: str | None = None,
 ) -> list[tuple["_AdapterCore", dict]]:
-    """Discover embedded adapter functions from a Granite Switch source.
+    """Load composed embedded adapters from a Granite Switch model on the Hub.
 
-    Non-shim equivalent of `EmbeddedIntrinsicAdapter.from_source()`: returns
-    composed `Adapter` instances instead of the deprecated shim (Epic #929,
-    issue #1144). Reuses the shim's discovery, `adapter_index.json`/`io.yaml`
-    parsing, and hub-snapshot materialization internally — including its
-    path-escape guard — rather than duplicating that logic, and lifts out the
-    already-correct `identity`/`io_contract`/`weights` triple each shim
-    instance built.
+    Downloads `adapter_index.json` and the `io_configs/` directory into a
+    persistent self-contained local directory, then delegates to
+    `_embedded_adapters_from_model_directory`.
 
-    The raw parsed `io.yaml` config is returned alongside each adapter because
-    a composed `Adapter` has no field for it (that's shim-only state) and it
-    cannot be cheaply re-derived later — callers that need it at generation
-    time (see `LocalHFBackend`/`OpenAIBackend`'s `_generate_from_intrinsic`)
-    must cache it themselves, keyed by `_composed_adapter_key`.
+    `huggingface_hub.snapshot_download`'s default cache-backed snapshot
+    directory populates `io_configs/` with symlinks that resolve into a
+    sibling `blobs/` directory *outside* the snapshot root. That breaks the
+    contract `_embedded_adapters_from_model_directory` expects (a
+    self-contained model directory) and trips its path-escape check. To satisfy
+    that contract, the downloaded snapshot is materialised under the Hugging
+    Face cache into a self-contained directory keyed by its immutable revision,
+    so `io_configs/` contains real files rather than symlinks escaping the
+    directory. This preserves standard Hugging Face Hub cache reuse and offline
+    loading while preventing stale files from a mutable revision.
+
+    Args:
+        repo_id (str): Hugging Face Hub repository ID
+            (e.g. `"ibm-granite/granite-switch-micro"`).
+        revision (str): Git revision to download from.
+        cache_dir (str | None): Local cache directory; `None` for the default.
+        intrinsic_name (str | None): If provided, only load the adapter
+            matching this adapter function name. `None` loads all adapters.
+
+    Returns:
+        list[tuple[_AdapterCore, dict]]: One `(adapter, io_yaml_config)` pair
+            per entry in the index.
+
+    Raises:
+        ImportError: If `huggingface_hub` is not installed.
+        PermissionError: If the repository is private or gated and the current
+            Hugging Face credentials do not grant access.
+        FileNotFoundError: If the downloaded snapshot has no
+            `adapter_index.json` (wrong repo/revision, not a Granite Switch
+            model, or a stale cache).
+        ValueError: If no adapters are found (delegated from
+            `_embedded_adapters_from_model_directory`).
+    """
+    try:
+        import huggingface_hub
+        from huggingface_hub.constants import HF_HUB_CACHE
+        from huggingface_hub.errors import GatedRepoError, RepositoryNotFoundError
+    except ImportError as e:
+        raise ImportError(
+            "huggingface_hub is required to download embedded adapter configs from "
+            'Hugging Face Hub. Please install it with: pip install "mellea[switch]"'
+        ) from e
+
+    try:
+        snapshot_root = pathlib.Path(
+            huggingface_hub.snapshot_download(
+                repo_id=repo_id,
+                allow_patterns=["adapter_index.json", "io_configs/**"],
+                cache_dir=cache_dir,
+                revision=revision,
+            )
+        )
+    except (GatedRepoError, RepositoryNotFoundError) as e:
+        auth_hint = (
+            f"Could not access '{repo_id}' on Hugging Face Hub. If this is a "
+            "private or gated repository, authenticate first (run "
+            "`huggingface-cli login` or set the HF_TOKEN environment variable) "
+            "and confirm your account has been granted access to the repository. "
+            "Otherwise, the repository ID may be misspelled."
+        )
+        raise PermissionError(auth_hint) from e
+
+    cache_root = pathlib.Path(cache_dir or HF_HUB_CACHE)
+    cache_key = hashlib.sha256(f"{repo_id}\0{snapshot_root.name}".encode()).hexdigest()
+    local_root = cache_root / "mellea" / "embedded-adapter-configs" / cache_key
+
+    try:
+        # Validate the cache by content, not just directory existence: a
+        # prior run that crashed or lost a `temporary_dir.replace()` race
+        # (see below) can leave `local_root` as a directory missing
+        # `adapter_index.json`, which `is_dir()` alone would trust forever.
+        if not (local_root / "adapter_index.json").is_file():
+            local_root.parent.mkdir(parents=True, exist_ok=True)
+            if local_root.is_dir():
+                # Invalid leftover from a prior partial run -- clear it so
+                # `temporary_dir.replace(local_root)` below doesn't fail
+                # trying to rename onto a non-empty stale directory.
+                shutil.rmtree(local_root)
+            temporary_dir = pathlib.Path(
+                tempfile.mkdtemp(dir=local_root.parent, prefix=f"{cache_key}-")
+            )
+            try:
+                import json as _json
+
+                index_path = snapshot_root / "adapter_index.json"
+                with open(index_path, encoding="utf-8") as f:
+                    index = _json.load(f)
+                shutil.copyfile(index_path, temporary_dir / "adapter_index.json")
+
+                snapshot_cache_root = snapshot_root.parent.parent.resolve()
+                for entry in index.get("adapters", []):
+                    io_config_rel = entry.get("io_config")
+                    if io_config_rel is None:
+                        continue
+                    io_config_path = (snapshot_root / io_config_rel).resolve(
+                        strict=True
+                    )
+                    if not io_config_path.is_relative_to(snapshot_cache_root):
+                        raise ValueError(
+                            f"io_config path '{io_config_rel}' escapes "
+                            "the downloaded Hugging Face snapshot"
+                        )
+                    destination = temporary_dir / io_config_rel
+                    destination.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copyfile(io_config_path, destination)
+
+                adapters = _embedded_adapters_from_model_directory(
+                    temporary_dir, intrinsic_name=intrinsic_name
+                )
+                try:
+                    temporary_dir.replace(local_root)
+                except OSError:
+                    if not local_root.is_dir():
+                        raise
+                else:
+                    return adapters
+            finally:
+                if temporary_dir.exists():
+                    shutil.rmtree(temporary_dir)
+
+        return _embedded_adapters_from_model_directory(
+            local_root, intrinsic_name=intrinsic_name
+        )
+    except FileNotFoundError as e:
+        # snapshot_download succeeded but the index is absent: wrong
+        # repo/revision, a repo that isn't a Granite Switch model, or a
+        # stale cache. Replace the cryptic snapshot-cache path with a
+        # repo-scoped message that names authentication as one possible
+        # cause without asserting it.
+        raise FileNotFoundError(
+            f"adapter_index.json was not found in the downloaded snapshot of "
+            f"'{repo_id}'. Verify it is a Granite Switch model and that the "
+            f"revision '{revision}' is correct; if the repository is private "
+            "or gated, confirm you are authenticated (run "
+            "`huggingface-cli login` or set the HF_TOKEN environment variable)."
+        ) from e
+    except ValueError as e:
+        if intrinsic_name is not None:
+            raise ValueError(
+                f"No adapter found for adapter function '{intrinsic_name}' in {repo_id}"
+            ) from e
+        raise ValueError(f"No adapters found in {repo_id}") from e
+
+
+def _embedded_adapters_from_source(
+    source: str,
+    revision: str = "main",
+    cache_dir: str | None = None,
+    intrinsic_name: str | None = None,
+) -> list[tuple["_AdapterCore", dict]]:
+    """Load composed embedded adapters from a local directory or Hugging Face Hub.
+
+    Automatically detects whether `source` is a local filesystem path or a
+    Hugging Face Hub repo ID, and delegates accordingly.
 
     Args:
         source (str): Local path to a model directory, or a Hugging Face Hub
@@ -358,25 +419,49 @@ def _discover_embedded_adapters(
         list[tuple[_AdapterCore, dict]]: One `(adapter, io_yaml_config)` pair
             per entry in the index.
     """
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", DeprecationWarning)
-        shims = EmbeddedIntrinsicAdapter.from_source(
-            source,
-            revision=revision,
-            cache_dir=cache_dir,
-            intrinsic_name=intrinsic_name,
+    if pathlib.Path(source).is_dir():
+        return _embedded_adapters_from_model_directory(
+            source, intrinsic_name=intrinsic_name
         )
-    return [
-        (
-            _AdapterCore(
-                identity=shim.identity,
-                io_contract=shim.io_contract,
-                weights=shim.weights,
-            ),
-            shim.config,
-        )
-        for shim in shims
-    ]
+    return _embedded_adapters_from_hub(
+        source, revision=revision, cache_dir=cache_dir, intrinsic_name=intrinsic_name
+    )
+
+
+def _discover_embedded_adapters(
+    source: str,
+    *,
+    revision: str = "main",
+    cache_dir: str | None = None,
+    intrinsic_name: str | None = None,
+) -> list[tuple["_AdapterCore", dict]]:
+    """Discover embedded adapter functions from a Granite Switch source.
+
+    Thin keyword-only wrapper over `_embedded_adapters_from_source`, kept as
+    the stable name both backends import. Returns composed `Adapter` instances
+    paired with their raw `io.yaml` config.
+
+    The raw parsed `io.yaml` config is returned alongside each adapter because
+    a composed `Adapter` has no field for it and it cannot be cheaply
+    re-derived later — callers that need it at generation time (see
+    `LocalHFBackend`/`OpenAIBackend`'s `_generate_from_intrinsic`) must cache
+    it themselves, keyed by `_composed_adapter_key`.
+
+    Args:
+        source (str): Local path to a model directory, or a Hugging Face Hub
+            repo ID (e.g. `"ibm-granite/granite-switch-micro"`).
+        revision (str): Git revision (only used for Hub downloads).
+        cache_dir (str | None): Cache directory (only used for Hub downloads).
+        intrinsic_name (str | None): If provided, only load the adapter
+            matching this adapter function name. `None` loads all adapters.
+
+    Returns:
+        list[tuple[_AdapterCore, dict]]: One `(adapter, io_yaml_config)` pair
+            per entry in the index.
+    """
+    return _embedded_adapters_from_source(
+        source, revision=revision, cache_dir=cache_dir, intrinsic_name=intrinsic_name
+    )
 
 
 def get_adapter_for_intrinsic(
@@ -526,21 +611,6 @@ class AdapterMixin(Backend, abc.ABC):
         base_model_name (str): The short model name used to identify adapter
             variants (e.g. `"granite-3.3-8b-instruct"` for
             `"ibm-granite/granite-3.3-8b-instruct"`).
-    """
-
-    _supports_composed_adapters: ClassVar[bool] = False
-    """Whether this backend's `add_adapter` understands a composed `Adapter`.
-
-    Opt-in, defaulting to `False`: `_uses_embedded_adapters` predates the
-    composed `Adapter` contract (Epic #929, issue #1144), so a third-party
-    subclass can already be reachable from `resolve_adapter()`'s embedded
-    branch while its `add_adapter` only knows the deprecated
-    `EmbeddedIntrinsicAdapter` shim's attribute shape. Signature inspection
-    cannot distinguish "modern" from "legacy" here — a `**kwargs` catch-all
-    present for unrelated reasons, or a pre-existing `config` parameter
-    meaning something else entirely, both read as "accepts config=". Only an
-    explicit declaration can carry that fact; `LocalHFBackend` and
-    `OpenAIBackend` both set this to `True`.
     """
 
     # ---- Universal verbs (every adapter reality) ----
@@ -717,9 +787,9 @@ class AdapterMixin(Backend, abc.ABC):
         against a concurrent lifecycle call on the same binding.
 
         A code path already holding this lock can re-enter it: on
-        `LocalHFBackend`, `_generate_intrinsic_with_adapter_scope` holds
+        `LocalHFBackend`, `_generate_composed_local_file_with_adapter_scope` holds
         `_generation_lock` for the whole generation, and the
-        `_IntrinsicPeftBinding` verbs it drives through `adapter_scope()`
+        `LocalFileBinding` verbs it drives through `adapter_scope()`
         take `_adapter_activation_lock()` again on the same thread. An
         override must therefore return a reentrant lock (`threading.RLock`,
         as `LocalHFBackend` does) — a plain `threading.Lock` here is a real
@@ -768,42 +838,6 @@ class AdapterMixin(Backend, abc.ABC):
         """
         return contextlib.nullcontext()
 
-    def _add_embedded_adapter_compat(
-        self, adapter: "_AdapterCore", config: dict
-    ) -> None:
-        """Register a composed embedded Adapter, tolerating a pre-#1144 `add_adapter`.
-
-        `AdapterMixin.add_adapter` gained a `config` keyword-only parameter in
-        Epic #929, issue #1144 (needed because a composed `Adapter` has no
-        field to carry a shim's `.config`). `_uses_embedded_adapters` predates
-        that: a third-party `AdapterMixin` subclass written before this
-        parameter existed, but already supporting the Embedded reality, is
-        reachable here and would raise
-        `TypeError: add_adapter() got an unexpected keyword argument 'config'`
-        — or worse, silently misbehave, if it happens to already accept a
-        `config=`/`**kwargs` for unrelated reasons and gets handed a composed
-        `Adapter` its body doesn't know how to read (it has no
-        `.qualified_name`/`.config`/`.technology`, unlike the shim). Gated on
-        `_supports_composed_adapters`, not signature inspection, for exactly
-        that reason: a parameter name can't tell you whether the method body
-        understands the new object shape.
-
-        Args:
-            adapter: The composed `Adapter` to register.
-            config: Raw io.yaml config for `adapter`.
-        """
-        if self._supports_composed_adapters:
-            self.add_adapter(adapter, config=config)
-            return
-        # Legacy subclass predating the composed-Adapter contract: it only
-        # knows the deprecated EmbeddedIntrinsicAdapter shim, which carries
-        # its own .config and needs no config= parameter.
-        self.add_adapter(
-            EmbeddedIntrinsicAdapter(
-                adapter.identity.name, config, technology=adapter.identity.adapter_type
-            )
-        )
-
     def resolve_adapter(self, name: str) -> _AdapterCore:
         """Find or lazily register an adapter by capability name.
 
@@ -844,9 +878,8 @@ class AdapterMixin(Backend, abc.ABC):
             )
 
         # add_adapter()'s own duplicate check is an unguarded read-then-write on
-        # _added_adapters, and catch_warnings() below mutates thread-unsafe global
-        # filter state — both race under concurrent first-time resolves for the
-        # same name. `_adapter_resolve_lock()` closes both: a no-op by default,
+        # _added_adapters, which races under concurrent first-time resolves for
+        # the same name. `_adapter_resolve_lock()` closes it: a no-op by default,
         # and each concrete backend's reentrant lock otherwise. Deliberately not
         # `_adapter_activation_lock()`: that lock is taken *inside*
         # `add_adapter()`'s composed-LocalFileBinding branch around the dict
@@ -855,9 +888,7 @@ class AdapterMixin(Backend, abc.ABC):
         # `add_adapter()`, which can call `binding.prepare()`), would invert the
         # adapter lock order and deadlock against a concurrent
         # `prepare()`/`release()` on the same binding.
-        # Suppress DeprecationWarning: the shim constructors warn user-facing code,
-        # not internal registration paths.
-        with self._adapter_resolve_lock(), warnings.catch_warnings():
+        with self._adapter_resolve_lock():
             # Re-check now the lock is held: a concurrent resolve may have already
             # registered this name. Without this, the loser redundantly re-fetches
             # and then hits the backend's own duplicate guard, which logs a
@@ -866,71 +897,48 @@ class AdapterMixin(Backend, abc.ABC):
             if found is not None:
                 return found
 
-            warnings.simplefilter("ignore", DeprecationWarning)
             if getattr(self, "_uses_embedded_adapters", False):
                 repo_id = (
                     getattr(self, "_adapter_source", None)
                     or getattr(self, "_model_id", None)
                     or base
                 )
-                # Composed Adapter, not the deprecated EmbeddedIntrinsicAdapter
-                # shim (Epic #929, issue #1144). Valid only for backends whose
-                # add_adapter supports the Embedded/Granite Switch reality
-                # (currently OpenAIBackend and LocalHFBackend when configured
-                # with load_embedded_adapters=True).
+                # Register composed Adapters discovered from the Granite Switch
+                # source. Valid only for backends whose add_adapter supports the
+                # Embedded/Granite Switch reality (currently OpenAIBackend and
+                # LocalHFBackend when configured with load_embedded_adapters=True).
                 #
                 # Passing config= lets add_adapter() cache it atomically with
                 # registration, gated behind its own duplicate-key guard — a
                 # refused duplicate (a different object already holds the
                 # key) therefore never reaches the config write, so this
                 # can't clobber a live adapter's cached config the way a
-                # register-then-separately-cache sequence could. Routed
-                # through _add_embedded_adapter_compat, not called directly,
-                # for a third-party AdapterMixin subclass whose add_adapter
-                # predates config= (see that method's docstring).
+                # register-then-separately-cache sequence could.
                 for a, config in _discover_embedded_adapters(
                     repo_id, intrinsic_name=name
                 ):
-                    self._add_embedded_adapter_compat(a, config)
+                    self.add_adapter(a, config=config)
             else:
                 # AdapterType.LORA is the pre-Phase-1 default (mirrors old _util.py).
                 # Every current catalog entry supports LORA.  Phase 2 (see epic #929)
                 # will select the type from catalog availability instead of hardcoding.
                 metadata = fetch_intrinsic_metadata(name)
-                if self._supports_composed_adapters:
-                    # Composed Adapter, not the deprecated IntrinsicAdapter shim
-                    # (Epic #929, issue #1144).
-                    self.add_adapter(
-                        _AdapterCore(
-                            identity=Identity(
-                                name=name,
-                                adapter_type="lora",
-                                capability=metadata.effective_capability,
-                            ),
-                            io_contract=get_io_contract(name),
-                            weights=LocalFileBinding(
-                                name=name,
-                                adapter_type=AdapterType.LORA,
-                                repo_id=metadata.repo_id,
-                                revision=metadata.revision,
-                            ),
-                        )
+                self.add_adapter(
+                    _AdapterCore(
+                        identity=Identity(
+                            name=name,
+                            adapter_type="lora",
+                            capability=metadata.effective_capability,
+                        ),
+                        io_contract=get_io_contract(name),
+                        weights=LocalFileBinding(
+                            name=name,
+                            adapter_type=AdapterType.LORA,
+                            repo_id=metadata.repo_id,
+                            revision=metadata.revision,
+                        ),
                     )
-                else:
-                    # Legacy subclass predating the composed-Adapter contract
-                    # (same reasoning as _add_embedded_adapter_compat): its
-                    # add_adapter only knows the deprecated IntrinsicAdapter
-                    # shim's attribute shape, not a composed Adapter's. This
-                    # is exactly what this branch passed before Epic #929,
-                    # issue #1144 — IntrinsicAdapter is dual-shaped (both
-                    # LocalHFAdapter, for `.qualified_name`/`.backend`/`.path`,
-                    # and _AdapterCore, so `_find_adapter` below and this
-                    # method's own `-> _AdapterCore` return type still hold).
-                    self.add_adapter(
-                        IntrinsicAdapter(
-                            name, adapter_type=AdapterType.LORA, base_model_name=base
-                        )
-                    )
+                )
 
         found = self._find_adapter(name)
         if found is not None:
@@ -938,9 +946,9 @@ class AdapterMixin(Backend, abc.ABC):
 
         # `_find_adapter` only matches `_AdapterCore` entries. If registration
         # above silently failed because a `LocalFileBinding` already claims a
-        # colliding qualified name (they share `f"{name}_{type}"` with
-        # `IntrinsicAdapter`), say so — the alternative is an opaque KeyError
-        # that gives no hint the two registration paths collided.
+        # colliding qualified name (both registration paths share the
+        # `f"{name}_{type}"` key space), say so — the alternative is an opaque
+        # KeyError that gives no hint the two registration paths collided.
         # list(...): same concurrent-mutation hazard as `_find_adapter` — snapshot
         # before iterating rather than holding a live view over `_added_adapters`.
         added = list(getattr(self, "_added_adapters", {}).items())
@@ -1008,7 +1016,8 @@ class AdapterMixin(Backend, abc.ABC):
         that work runs on the shared event-loop thread while this thread holds
         the lock — a same-thread `RLock` doesn't help across threads.
 
-        `LocalHFBackend._generate_intrinsic_with_adapter_scope` is the reference
+        `LocalHFBackend._generate_composed_local_file_with_adapter_scope` is the
+        reference
         example of a caller that *does* close the gap for its own call site: it
         holds `_generation_lock` around the entire scope, which is safe there
         only because the scope *body* is fully synchronous end to end and
@@ -1166,11 +1175,9 @@ class AdapterMixin(Backend, abc.ABC):
         #
         # The snapshot also means this lookup can still see an entry that
         # `remove_adapter()` just popped — harmless today because a qualified
-        # name is held by either a `LocalFileBinding` or an `IntrinsicAdapter`
-        # shim (never both) and the generation path consumes only shims.
-        # `remove_adapter()` is public, though, so any registered entry — shim
-        # or binding — can be popped: re-check that invariant when #1465 moves
-        # generation inside `adapter_scope`.
+        # name is held by a single registered entry. `remove_adapter()` is
+        # public, though, so any registered entry can be popped: re-check that
+        # invariant when #1465 moves generation inside `adapter_scope`.
         adapters = list(getattr(self, "_added_adapters", {}).values())
         # LocalFile/PEFT composed Adapters (Epic #929, issue #1144) don't live
         # in _added_adapters — that dict holds their LocalFileBinding, keyed
@@ -1201,423 +1208,3 @@ class AdapterMixin(Backend, abc.ABC):
                 ):
                     return a
         return None
-
-
-class EmbeddedIntrinsicAdapter(_AdapterCore):
-    """Deprecated shim for adapter functions embedded in a Granite Switch model.
-
-    Deprecated:
-        Use :class:`~mellea.backends.adapters.Adapter` directly.
-        `EmbeddedIntrinsicAdapter` will be removed in a future release
-        (Epic #929, issue #1144).
-
-    Unlike PEFT-based adapters that are loaded into the model at runtime,
-    embedded adapters are already baked into the model weights and activated
-    via control tokens injected by the model's chat template.  Only the I/O
-    transformation config (`io.yaml`) is needed; no adapter weights are
-    downloaded or loaded.
-
-    Args:
-        intrinsic_name (str): Name of the adapter function (e.g. `"answerability"`).
-        config (dict): Parsed I/O transformation configuration (from `io.yaml`).
-        technology (str): Adapter technology in the switch model — `"lora"` or
-            `"alora"`.  Determines where the control token is placed in the
-            chat template (beginning of sequence for LoRA, before generation
-            prompt for aLoRA).
-
-    Attributes:
-        intrinsic_name (str): Name of the adapter function this adapter implements.
-        config (dict): Parsed I/O transformation configuration.
-        technology (str): `"lora"` or `"alora"`.
-
-    Note:
-        `identity`, `io_contract`, and `weights` are internal scaffolding
-        populated in `__init__` to satisfy the `Adapter` protocol; they are
-        not meaningful consumer-facing attributes.
-
-        - `identity`: always a real value.
-
-        - `io_contract`: the real, declared contract for `intrinsic_name`
-          (issue #1516); no longer a placeholder.
-
-        - `weights`: a real `EmbeddedBinding`; activation runs through it.
-    """
-
-    def __setattr__(self, name: str, value: object) -> None:
-        """Allow mutation; bypasses the frozen restriction on _AdapterCore."""
-        object.__setattr__(self, name, value)
-
-    def __delattr__(self, name: str) -> None:
-        """Allow deletion; bypasses the frozen restriction on _AdapterCore."""
-        object.__delattr__(self, name)
-
-    def __init__(self, intrinsic_name: str, config: dict, technology: str = "lora"):
-        """Initialize an embedded adapter function with its I/O config."""
-        if technology not in ("lora", "alora"):
-            raise ValueError(
-                f"technology must be 'lora' or 'alora', got '{technology}'"
-            )
-        warnings.warn(
-            "EmbeddedIntrinsicAdapter is deprecated; use Adapter directly (Epic #929, issue #1144).",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        adapter_type = AdapterType.ALORA if technology == "alora" else AdapterType.LORA
-
-        # Old-style Adapter fields — set manually since we no longer inherit from the
-        # legacy Adapter ABC.  Preserved for backward compatibility until Phase 4.
-        self.name = intrinsic_name
-        self.adapter_type = adapter_type
-        self.qualified_name = intrinsic_name + "_" + adapter_type.value
-        self.backend: Backend | None = None
-        self.path: str | None = None
-
-        self.intrinsic_name = intrinsic_name
-        self.config = config
-        self.technology = technology
-        capability = intrinsic_name
-        if intrinsic_name in known_intrinsic_names():
-            capability = fetch_intrinsic_metadata(intrinsic_name).effective_capability
-
-        # Populate the new Adapter triple so isinstance(self, _AdapterCore) holds.
-        # technology is validated above; cast to the Literal type mypy expects.
-        identity = Identity(
-            name=intrinsic_name,
-            adapter_type=cast(Literal["lora", "alora"], technology),
-            capability=capability,
-        )
-
-        io_contract = get_io_contract(intrinsic_name)
-
-        weights = EmbeddedBinding()
-
-        _AdapterCore.__init__(
-            self, identity=identity, io_contract=io_contract, weights=weights
-        )
-
-    @staticmethod
-    def from_model_directory(
-        model_path: str | pathlib.Path, intrinsic_name: str | None = None
-    ) -> list["EmbeddedIntrinsicAdapter"]:
-        """Load embedded adapters from a Granite Switch model directory.
-
-        Reads `adapter_index.json` and the corresponding `io_configs/*/io.yaml`
-        files from the model directory.
-
-        Args:
-            model_path (str | pathlib.Path): Path to a Granite Switch model
-                directory that contains `adapter_index.json` and `io_configs/`.
-            intrinsic_name (str | None): If provided, only load the adapter
-                matching this adapter function name. `None` loads all adapters.
-
-        Returns:
-            list[EmbeddedIntrinsicAdapter]: One adapter per entry in the index.
-
-        Raises:
-            FileNotFoundError: If `adapter_index.json` is missing.
-            ValueError: If an `io.yaml` file listed in the index cannot be found
-                or if no adapters are found.
-        """
-        import json as _json
-
-        model_path = pathlib.Path(model_path)
-        index_path = model_path / "adapter_index.json"
-        if not index_path.exists():
-            raise FileNotFoundError(f"No adapter_index.json found at {index_path}")
-
-        with open(index_path, encoding="utf-8") as f:
-            index = _json.load(f)
-
-        adapters: list[EmbeddedIntrinsicAdapter] = []
-        for entry in index.get("adapters", []):
-            entry_name = entry.get("adapter_name")
-            if entry_name is None:
-                continue
-            if intrinsic_name is not None and entry_name != intrinsic_name:
-                continue
-            io_config_rel = entry.get("io_config")
-            if io_config_rel is None:
-                continue
-
-            io_config_path = model_path / io_config_rel
-            try:
-                io_config_path = io_config_path.resolve(strict=True)
-            except (FileNotFoundError, OSError):
-                raise ValueError(
-                    f"io.yaml for adapter function '{entry_name}' "
-                    f"not found at {model_path / io_config_rel}"
-                )
-            if not io_config_path.is_relative_to(model_path.resolve()):
-                raise ValueError(
-                    f"io_config path for adapter function '{entry_name}' "
-                    f"escapes the model directory: {io_config_path}"
-                )
-
-            with open(io_config_path, encoding="utf-8") as f:
-                config_dict = yaml.safe_load(f)
-
-            adapters.append(
-                EmbeddedIntrinsicAdapter(
-                    intrinsic_name=entry_name,
-                    config=config_dict,
-                    technology=entry.get("technology", "lora"),
-                )
-            )
-
-        if not adapters:
-            if intrinsic_name is not None:
-                raise ValueError(
-                    f"No adapter found for adapter function '{intrinsic_name}' in {model_path}"
-                )
-            raise ValueError(f"No adapters found in {model_path}")
-
-        return adapters
-
-    @staticmethod
-    def from_hub(
-        repo_id: str,
-        revision: str = "main",
-        cache_dir: str | None = None,
-        intrinsic_name: str | None = None,
-    ) -> list["EmbeddedIntrinsicAdapter"]:
-        """Load embedded adapters from a Granite Switch model on Hugging Face Hub.
-
-        Downloads `adapter_index.json` and the `io_configs/` directory into a
-        persistent self-contained local directory, then delegates to
-        `from_model_directory`.
-
-        `huggingface_hub.snapshot_download`'s default cache-backed snapshot
-        directory populates `io_configs/` with symlinks that resolve into a
-        sibling `blobs/` directory *outside* the snapshot root. That breaks the
-        contract `from_model_directory` expects (a self-contained model
-        directory) and trips its path-escape check. To satisfy that contract,
-        the downloaded snapshot is materialised under the Hugging Face cache
-        into a self-contained directory keyed by its immutable revision, so
-        `io_configs/` contains real files rather than symlinks escaping the
-        directory. This preserves standard Hugging Face Hub cache reuse and
-        offline loading while preventing stale files from a mutable revision.
-
-        Args:
-            repo_id (str): Hugging Face Hub repository ID
-                (e.g. `"ibm-granite/granite-switch-micro"`).
-            revision (str): Git revision to download from.
-            cache_dir (str | None): Local cache directory; `None` for the default.
-            intrinsic_name (str | None): If provided, only load the adapter
-                matching this adapter function name. `None` loads all adapters.
-
-        Returns:
-            list[EmbeddedIntrinsicAdapter]: One adapter per entry in the index.
-
-        Raises:
-            ImportError: If `huggingface_hub` is not installed.
-            PermissionError: If the repository is private or gated and the
-                current Hugging Face credentials do not grant access.
-            FileNotFoundError: If the downloaded snapshot has no
-                `adapter_index.json` (wrong repo/revision, not a Granite Switch
-                model, or a stale cache).
-            ValueError: If no adapters are found (delegated from
-                `from_model_directory`).
-        """
-        try:
-            import huggingface_hub
-            from huggingface_hub.constants import HF_HUB_CACHE
-            from huggingface_hub.errors import GatedRepoError, RepositoryNotFoundError
-        except ImportError as e:
-            raise ImportError(
-                "huggingface_hub is required to download embedded adapter configs from "
-                'Hugging Face Hub. Please install it with: pip install "mellea[switch]"'
-            ) from e
-
-        try:
-            snapshot_root = pathlib.Path(
-                huggingface_hub.snapshot_download(
-                    repo_id=repo_id,
-                    allow_patterns=["adapter_index.json", "io_configs/**"],
-                    cache_dir=cache_dir,
-                    revision=revision,
-                )
-            )
-        except (GatedRepoError, RepositoryNotFoundError) as e:
-            auth_hint = (
-                f"Could not access '{repo_id}' on Hugging Face Hub. If this is a "
-                "private or gated repository, authenticate first (run "
-                "`huggingface-cli login` or set the HF_TOKEN environment variable) "
-                "and confirm your account has been granted access to the repository. "
-                "Otherwise, the repository ID may be misspelled."
-            )
-            raise PermissionError(auth_hint) from e
-
-        cache_root = pathlib.Path(cache_dir or HF_HUB_CACHE)
-        cache_key = hashlib.sha256(
-            f"{repo_id}\0{snapshot_root.name}".encode()
-        ).hexdigest()
-        local_root = cache_root / "mellea" / "embedded-adapter-configs" / cache_key
-
-        try:
-            # Validate the cache by content, not just directory existence: a
-            # prior run that crashed or lost a `temporary_dir.replace()` race
-            # (see below) can leave `local_root` as a directory missing
-            # `adapter_index.json`, which `is_dir()` alone would trust forever.
-            if not (local_root / "adapter_index.json").is_file():
-                local_root.parent.mkdir(parents=True, exist_ok=True)
-                if local_root.is_dir():
-                    # Invalid leftover from a prior partial run -- clear it so
-                    # `temporary_dir.replace(local_root)` below doesn't fail
-                    # trying to rename onto a non-empty stale directory.
-                    shutil.rmtree(local_root)
-                temporary_dir = pathlib.Path(
-                    tempfile.mkdtemp(dir=local_root.parent, prefix=f"{cache_key}-")
-                )
-                try:
-                    import json as _json
-
-                    index_path = snapshot_root / "adapter_index.json"
-                    with open(index_path, encoding="utf-8") as f:
-                        index = _json.load(f)
-                    shutil.copyfile(index_path, temporary_dir / "adapter_index.json")
-
-                    snapshot_cache_root = snapshot_root.parent.parent.resolve()
-                    for entry in index.get("adapters", []):
-                        io_config_rel = entry.get("io_config")
-                        if io_config_rel is None:
-                            continue
-                        io_config_path = (snapshot_root / io_config_rel).resolve(
-                            strict=True
-                        )
-                        if not io_config_path.is_relative_to(snapshot_cache_root):
-                            raise ValueError(
-                                f"io_config path '{io_config_rel}' escapes "
-                                "the downloaded Hugging Face snapshot"
-                            )
-                        destination = temporary_dir / io_config_rel
-                        destination.parent.mkdir(parents=True, exist_ok=True)
-                        shutil.copyfile(io_config_path, destination)
-
-                    adapters = EmbeddedIntrinsicAdapter.from_model_directory(
-                        temporary_dir, intrinsic_name=intrinsic_name
-                    )
-                    try:
-                        temporary_dir.replace(local_root)
-                    except OSError:
-                        if not local_root.is_dir():
-                            raise
-                    else:
-                        return adapters
-                finally:
-                    if temporary_dir.exists():
-                        shutil.rmtree(temporary_dir)
-
-            return EmbeddedIntrinsicAdapter.from_model_directory(
-                local_root, intrinsic_name=intrinsic_name
-            )
-        except FileNotFoundError as e:
-            # snapshot_download succeeded but the index is absent: wrong
-            # repo/revision, a repo that isn't a Granite Switch model, or a
-            # stale cache. Replace the cryptic snapshot-cache path with a
-            # repo-scoped message that names authentication as one possible
-            # cause without asserting it.
-            raise FileNotFoundError(
-                f"adapter_index.json was not found in the downloaded snapshot of "
-                f"'{repo_id}'. Verify it is a Granite Switch model and that the "
-                f"revision '{revision}' is correct; if the repository is private "
-                "or gated, confirm you are authenticated (run "
-                "`huggingface-cli login` or set the HF_TOKEN environment variable)."
-            ) from e
-        except ValueError as e:
-            if intrinsic_name is not None:
-                raise ValueError(
-                    f"No adapter found for adapter function '{intrinsic_name}' in {repo_id}"
-                ) from e
-            raise ValueError(f"No adapters found in {repo_id}") from e
-
-    @staticmethod
-    def from_source(
-        source: str,
-        revision: str = "main",
-        cache_dir: str | None = None,
-        intrinsic_name: str | None = None,
-    ) -> list["EmbeddedIntrinsicAdapter"]:
-        """Load embedded adapters from a local directory or Hugging Face Hub.
-
-        Automatically detects whether `source` is a local filesystem path
-        or a Hugging Face Hub repo ID, and delegates accordingly.
-
-        Args:
-            source (str): Local path to a model directory, or a Hugging Face
-                Hub repo ID (e.g. `"ibm-granite/granite-switch-micro"`).
-            revision (str): Git revision (only used for Hub downloads).
-            cache_dir (str | None): Cache directory (only used for Hub downloads).
-            intrinsic_name (str | None): If provided, only load the adapter
-                matching this adapter function name. `None` loads all adapters.
-
-        Returns:
-            list[EmbeddedIntrinsicAdapter]: One adapter per entry in the index.
-        """
-        if pathlib.Path(source).is_dir():
-            return EmbeddedIntrinsicAdapter.from_model_directory(
-                source, intrinsic_name=intrinsic_name
-            )
-        return EmbeddedIntrinsicAdapter.from_hub(
-            source,
-            revision=revision,
-            cache_dir=cache_dir,
-            intrinsic_name=intrinsic_name,
-        )
-
-
-class CustomIntrinsicAdapter(IntrinsicAdapter):
-    """Deprecated shim for user-defined custom adapter functions.
-
-    .. deprecated::
-        Use :class:`~mellea.backends.adapters.Adapter` directly.
-        `CustomIntrinsicAdapter` will be removed in a future release
-        (Epic #929, issue #1144).
-
-    This class has the same functionality as `IntrinsicAdapter`, except that
-    its constructor monkey-patches Mellea global variables to enable the backend
-    to load the user's adapter.
-
-    Args:
-        model_id (str): The Hugging Face model ID used for downloading model weights;
-            expected format is `"<user-id>/<repo-name>"`.
-        intrinsic_name (str | None): Catalog name for the adapter function; defaults to the
-            repository name portion of `model_id` if not provided.
-        base_model_name (str): The short name of the base model (NOT its repo ID).
-    """
-
-    def __init__(
-        self, *, model_id: str, intrinsic_name: str | None = None, base_model_name: str
-    ):
-        """Initialize CustomIntrinsicAdapter and patch the global adapter function catalog if needed."""
-        warnings.warn(
-            "CustomIntrinsicAdapter is deprecated; use Adapter directly (Epic #929, issue #1144).",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        assert re.match(".*/.*", model_id), (
-            "expected a Hugging Face model id with format <user-id>/<repo-name>"
-        )
-        intrinsic_name = (
-            intrinsic_name if intrinsic_name is not None else model_id.split("/")[1]
-        )
-
-        # patch the catalog. TODO this is a temporary hack until we re-org adapters.
-        from mellea.backends.adapters import catalog
-
-        if intrinsic_name not in catalog._INTRINSICS_CATALOG:
-            catalog._INTRINSICS_CATALOG_ENTRIES.append(
-                catalog.IntrinsicsCatalogEntry(
-                    name=intrinsic_name, repo_id=model_id, revision="main"
-                )
-            )
-            catalog._INTRINSICS_CATALOG = {
-                e.name: e for e in catalog._INTRINSICS_CATALOG_ENTRIES
-            }
-
-        # Suppress DeprecationWarning from the IntrinsicAdapter shim: the warning we
-        # emitted above is already correctly attributed to the caller's frame.
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", DeprecationWarning)
-            IntrinsicAdapter.__init__(
-                self, intrinsic_name=intrinsic_name, base_model_name=base_model_name
-            )

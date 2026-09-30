@@ -21,7 +21,7 @@ import warnings
 from collections import OrderedDict
 from collections.abc import Callable, Coroutine, Sequence
 from importlib import metadata
-from typing import Any, ClassVar, TypeVar, cast
+from typing import Any, TypeVar, cast
 
 import jinja2
 import jinja2.meta
@@ -94,20 +94,16 @@ from .adapters import (
     EmbeddedActivationRequest,
     EmbeddedBinding,
     Identity,
-    IntrinsicAdapter,
     LocalHFAdapter,
 )
 from .adapters._core import (
     Adapter as _AdapterCore,
-    IOContract,
     LocalFileBinding,
-    WeightsBinding,
     _await_embedded_generation,
     _fire_embedded_invocation_complete,
 )
 from .adapters.adapter import (
     AdapterInput,
-    EmbeddedIntrinsicAdapter,
     _composed_adapter_key,
     _discover_embedded_adapters,
 )
@@ -485,7 +481,6 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
     """
 
     _cached_blocks: dict[str, DynamicCache] = dict()
-    _supports_composed_adapters = True
 
     def __init__(
         self,
@@ -602,9 +597,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         )
 
         # Adapters can be made known to the backend (added) and loaded.
-        self._added_adapters: dict[
-            str, LocalHFAdapter | LocalFileBinding | EmbeddedIntrinsicAdapter
-        ] = {}
+        self._added_adapters: dict[str, LocalHFAdapter | LocalFileBinding] = {}
         self._loaded_adapters: dict[str, LocalHFAdapter | LocalFileBinding] = {}
         # Composed Adapter instances (Epic #929, issue #1144), keyed by
         # _composed_adapter_key(). LocalFile/PEFT composed adapters also
@@ -615,9 +608,9 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         # bare binding doesn't carry.
         self._composed_adapters: dict[str, _AdapterCore] = {}
         # Raw io.yaml config for composed Embedded adapters, keyed the same
-        # way. Embedded composed adapters have no `.config` field (that's
-        # shim-only state) and it can't be cheaply re-derived at generation
-        # time, unlike the LocalFile case (see _intrinsic_adapter_name_and_config).
+        # way. A composed Embedded adapter carries no config of its own, and it
+        # can't be cheaply re-derived at generation time, unlike the LocalFile
+        # case (see _intrinsic_adapter_name_and_config).
         self._composed_adapter_configs: dict[str, dict] = {}
         self._adapter_source = adapter_source
         self._uses_embedded_adapters = load_embedded_adapters
@@ -627,7 +620,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         activation (`_adapter_activation_lock()` returns this same lock).
 
         Reentrant (`threading.RLock`, not `threading.Lock`) because
-        `_generate_intrinsic_with_adapter_scope` holds it for a whole
+        `_generate_composed_local_file_with_adapter_scope` holds it for a whole
         prepare -> activate -> generate -> deactivate critical section, and
         `adapter_scope()`'s `activate()`/`deactivate()` re-acquire it from
         inside that section, on the same thread, via `_adapter_activation_lock()`.
@@ -808,8 +801,9 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         Standard (non-intrinsic) generation runs without adapters: any active
         adapter is deactivated before the model call, and the model's active
         state is asserted before and after. Adapter-active generation goes
-        elsewhere — `_generate_intrinsic_with_adapter_scope` for runtime PEFT
-        adapters (routed through `adapter_scope`, with its lifecycle hooks) and
+        elsewhere — `_generate_composed_local_file_with_adapter_scope` for
+        runtime PEFT adapters (routed through `adapter_scope`, with its
+        lifecycle hooks) and
         `_generate_embedded_with_generation_lock` for Granite Switch adapters,
         which are activated while rendering the chat template.
 
@@ -852,79 +846,6 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             _assert_correct_adapters("", self._model)
             return generate_func(*args, **kwargs)
 
-    def _generate_intrinsic_with_adapter_scope(
-        self,
-        adapter: IntrinsicAdapter,
-        generate_func: Callable[..., _T],
-        *args: Any,
-        **kwargs: Any,
-    ) -> _T:
-        """Runs `generate_func` with `adapter` active, inside `AdapterMixin.adapter_scope`.
-
-        The model call now runs inside `adapter_scope`, so activation and
-        deactivation fire the `ADAPTER_FUNCTION_PHASE_COMPLETE`/
-        `ADAPTER_FUNCTION_INVOCATION_COMPLETE` hooks (`phase="activate"` and
-        `"deactivate"` only — `"generate"`/`"parse"` are not emitted; adding
-        those is out of scope here, see #1466), and deactivation is guaranteed
-        even if `generate_func` raises. Those hooks dispatch while
-        `_generation_lock` is held below: the deadlock and stall consequences
-        in `adapter_scope()`'s hook-dispatch paragraph apply here in full,
-        since this backend's `_generation_lock` is what the dispatching thread
-        holds, and the `RLock` cannot rescue a subscriber that re-enters from
-        the event-loop thread — reentrance only helps the owning thread.
-        `ADAPTER_FUNCTION_*` subscribers must therefore be non-blocking and
-        must never re-enter this backend; a merely slow one stalls all
-        generation on this backend for that dispatch's duration.
-
-        `IntrinsicAdapter` (the legacy shim `adapter` is expected to be) carries
-        an inert `_ShimWeightsBinding` that raises on every verb, so it can't be
-        handed to `adapter_scope()` directly. This method builds a fresh
-        `_AdapterCore` around `adapter`'s own `identity` (not a rebuilt one —
-        rebuilding it would re-run `Identity.__post_init__`'s capability-registry
-        check on every call) wrapping a `_IntrinsicPeftBinding`, which drives
-        this backend's own `load_peft_adapter`/`activate_peft_adapter`/
-        `deactivate_peft_adapter` verbs — the same verbs
-        `_generate_with_adapter_lock` used to call directly.
-
-        Holds `_generation_lock` for the *entire* prepare -> activate ->
-        generate -> deactivate section, not just around activation, so a
-        concurrent caller's `activate()` can never interleave with this call's
-        generation — the atomicity gap `adapter_scope()`'s own docstring flags
-        as unresolved for a caller that doesn't do this. Safe here because each
-        invocation of this method runs entirely on one thread (in production it
-        is only ever invoked via a single `asyncio.to_thread` call — see its
-        call site in `_generate_from_intrinsic`; the tests call it directly,
-        one invocation per thread) and never re-enters generation on
-        another thread: the inner re-acquisition of `_generation_lock` inside
-        `adapter_scope()`'s `activate()`/`deactivate()` (via
-        `_adapter_activation_lock()`) is therefore same-thread and reentrant.
-        Concurrent invocations land on different `asyncio.to_thread` pool
-        threads and simply serialise on the lock.
-
-        Args:
-            adapter: The (legacy) `IntrinsicAdapter` to activate for this call.
-            generate_func: The synchronous generation callable to invoke while
-                `adapter` is active.
-            *args: Positional arguments forwarded to `generate_func`.
-            **kwargs: Keyword arguments forwarded to `generate_func`.
-
-        Returns:
-            Whatever `generate_func` returns.
-        """
-        weights = _IntrinsicPeftBinding(
-            self, adapter.qualified_name, adapter.intrinsic_metadata.revision
-        )
-        scope_adapter = _AdapterCore(
-            identity=adapter.identity, io_contract=_UnusedIOContract(), weights=weights
-        )
-        with self._generation_lock:
-            weights.prepare()
-            with self.adapter_scope(scope_adapter):
-                _assert_correct_adapters(adapter.qualified_name, self._model)
-                out = generate_func(*args, **kwargs)
-                _assert_correct_adapters(adapter.qualified_name, self._model)
-                return out
-
     def _generate_composed_local_file_with_adapter_scope(
         self,
         adapter: _AdapterCore,
@@ -934,11 +855,10 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
     ) -> _T:
         """Runs `generate_func` with a composed `Adapter`'s `LocalFileBinding` active.
 
-        Composed-Adapter counterpart of `_generate_intrinsic_with_adapter_scope`
-        (Epic #929, issue #1144). Unlike the deprecated `IntrinsicAdapter` shim,
-        `adapter.weights` here is already a real, registered `LocalFileBinding`
-        (see `add_adapter`) — there is no throwaway `_IntrinsicPeftBinding` to
-        build, so this drives `adapter_scope` directly on `adapter` itself.
+        Drives intrinsic generation for a composed `Adapter` (Epic #929, issue
+        #1144). `adapter.weights` here is already a real, registered
+        `LocalFileBinding` (see `add_adapter`), so this drives `adapter_scope`
+        directly on `adapter` itself.
 
         Does not call `binding.prepare()`: `add_adapter`/`resolve_adapter`
         already guarantee it before this method's caller can reach a
@@ -978,19 +898,18 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 return out
 
     def _intrinsic_adapter_name_and_config(
-        self, adapter: IntrinsicAdapter | EmbeddedIntrinsicAdapter | _AdapterCore
+        self, adapter: _AdapterCore
     ) -> tuple[str, dict]:
         """Return the adapter-function name and raw io.yaml config for an adapter.
 
-        The shims (`IntrinsicAdapter`/`EmbeddedIntrinsicAdapter`) carry both
-        directly (`.name`/`.config`). A composed `Adapter` carries neither —
-        `io_contract` does not yet drive `IntrinsicsRewriter`/
-        `IntrinsicsResultProcessor` (Epic #929, issue #1144) — so this is a
-        pure cache read from `_composed_adapter_configs` for both realities.
-        The LocalFile/PEFT reality is cached by `add_adapter`'s composed
-        branch (via `_obtain_local_file_io_yaml_config`), alongside the
-        weights download `binding.prepare()` already does there; the
-        Embedded/Granite Switch reality is cached at registration time (see
+        A composed `Adapter` carries neither directly — `io_contract` does not
+        yet drive `IntrinsicsRewriter`/`IntrinsicsResultProcessor` (Epic #929,
+        issue #1144) — so this is a pure cache read from
+        `_composed_adapter_configs` for both realities. The LocalFile/PEFT
+        reality is cached by `add_adapter`'s composed branch (via
+        `_obtain_local_file_io_yaml_config`), alongside the weights download
+        `binding.prepare()` already does there; the Embedded/Granite Switch
+        reality is cached at registration time (see
         `add_adapter`/`register_embedded_adapter_model`). Deliberately not
         fetched here: this method runs inline inside the async
         `_generate_from_intrinsic`, and `obtain_io_yaml`'s Hugging Face Hub
@@ -1010,8 +929,6 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             TypeError: A composed Adapter's `weights` is neither a
                 `LocalFileBinding` nor an `EmbeddedBinding`.
         """
-        if isinstance(adapter, (IntrinsicAdapter, EmbeddedIntrinsicAdapter)):
-            return adapter.name, adapter.config
         if isinstance(adapter.weights, (LocalFileBinding, EmbeddedBinding)):
             key = _composed_adapter_key(adapter)
             config = self._composed_adapter_configs.get(key)
@@ -1028,7 +945,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         )
 
     def _obtain_local_file_io_yaml_config(self, binding: LocalFileBinding) -> dict:
-        """Download and parse `binding`'s io.yaml, mirroring `IntrinsicAdapter.__init__`.
+        """Download and parse `binding`'s io.yaml.
 
         Called synchronously from `add_adapter`'s composed-`LocalFileBinding`
         branch, before `binding.prepare()`'s (larger) weights download runs
@@ -1100,11 +1017,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 not support multimodal inputs), or a composed Embedded
                 adapter has no io.yaml config cached (see
                 `_intrinsic_adapter_name_and_config`).
-            TypeError: If the adapter is neither an `IntrinsicAdapter`, an
-                `EmbeddedIntrinsicAdapter`, nor a composed `Adapter`; if an
-                `EmbeddedIntrinsicAdapter`'s `weights` is not an
-                `EmbeddedBinding`; or if a composed `Adapter`'s `weights` is
-                an unsupported binding type.
+            TypeError: If the adapter is not a composed `Adapter`, or if a
+                composed `Adapter`'s `weights` is an unsupported binding type.
         """
         if not ctx.is_chat_context:
             raise Exception("Does not yet support non-chat contexts.")
@@ -1166,12 +1080,10 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
         # TODO: Code below this point is mostly specific to RagIntrinsics
         #       It should be refactored into a specific adapter.transform() function.
-        if not isinstance(
-            adapter, (IntrinsicAdapter, EmbeddedIntrinsicAdapter, _AdapterCore)
-        ):
+        if not isinstance(adapter, _AdapterCore):
             raise TypeError(
-                "LocalHFBackend only supports IntrinsicAdapter, EmbeddedIntrinsicAdapter, "
-                f"or a composed Adapter, got: {type(adapter).__name__}"
+                "LocalHFBackend only supports a composed Adapter, got: "
+                f"{type(adapter).__name__}"
             )
 
         adapter_name, intrinsic_config = self._intrinsic_adapter_name_and_config(
@@ -1210,17 +1122,6 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         #       us having specific caching for each Component/Message.
 
         rewritten_request = rewritten.model_dump()
-        # A caller can reassign `.weights` on the mutable EmbeddedIntrinsicAdapter
-        # shim after construction; a composed Adapter's `.weights` is frozen and
-        # therefore always agrees with its own type, so this guard only ever
-        # fires for the shim.
-        if isinstance(adapter, EmbeddedIntrinsicAdapter) and not isinstance(
-            adapter.weights, EmbeddedBinding
-        ):
-            raise TypeError(
-                "EmbeddedIntrinsicAdapter.weights must be an EmbeddedBinding; "
-                f"got {type(adapter.weights).__name__}. Activation cannot proceed."
-            )
         adapter_weights = adapter.weights
         if isinstance(adapter_weights, EmbeddedBinding):
             extra_body = rewritten_request.setdefault("extra_body", {})
@@ -1314,17 +1215,6 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 ),
                 adapter.identity,
             )
-        elif isinstance(adapter, IntrinsicAdapter):
-            chat_response = asyncio.to_thread(
-                self._generate_intrinsic_with_adapter_scope,
-                adapter,
-                granite_formatters.base.util.generate_with_transformers,  # type: ignore
-                # Passed as args/kwargs to generate.
-                self._tokenizer,
-                model_arg,
-                generate_input,
-                other_input,
-            )
         else:
             chat_response = asyncio.to_thread(
                 self._generate_composed_local_file_with_adapter_scope,
@@ -1352,8 +1242,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             input_ids,
             embedded_identity: Identity | None,
         ):
-            # embedded_identity is set only for EmbeddedIntrinsicAdapter calls
-            # (the legacy PEFT path already gets this signal via adapter_scope).
+            # embedded_identity is set only for embedded-adapter calls
+            # (the LocalFile/PEFT path already gets this signal via adapter_scope).
             # Kept in one try so any failure below — not just from transform
             # itself — fires outcome="error" instead of reporting success and
             # then raising, the exact bug #1559 reverted.
@@ -2784,8 +2674,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
         Args:
             adapter (AdapterInput): The adapter to register. Must be a
-                `LocalHFAdapter`, `LocalFileBinding`, `EmbeddedIntrinsicAdapter`,
-                or a composed `Adapter`; other adapter realities are rejected.
+                `LocalHFAdapter`, `LocalFileBinding`, or a composed `Adapter`;
+                other adapter realities are rejected.
             config (dict | None): Raw io.yaml config for a composed `Adapter`
                 whose `weights` is an `EmbeddedBinding`. Required for that
                 shape (its config cannot be cheaply re-derived later, unlike a
@@ -2805,23 +2695,17 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 its cause.
             Exception: If `adapter` has already been added to a different backend.
         """
-        if not isinstance(
-            adapter,
-            (LocalHFAdapter, LocalFileBinding, EmbeddedIntrinsicAdapter, _AdapterCore),
-        ):
+        if not isinstance(adapter, (LocalHFAdapter, LocalFileBinding, _AdapterCore)):
             raise TypeError(
                 "LocalHFBackend requires a LocalHFAdapter, LocalFileBinding, "
-                "EmbeddedIntrinsicAdapter, or a composed Adapter; got "
+                "or a composed Adapter; got "
                 f"{type(adapter).__name__}."
             )
 
-        # A composed Adapter that isn't one of the shim subclasses (both of
-        # which are also _AdapterCore instances): dispatch on its weights
-        # binding instead of the shim/legacy branches below, which mutate
-        # attributes a composed Adapter's frozen dataclass doesn't have.
-        if isinstance(adapter, _AdapterCore) and not isinstance(
-            adapter, (IntrinsicAdapter, EmbeddedIntrinsicAdapter)
-        ):
+        # A composed Adapter: dispatch on its weights binding instead of the
+        # legacy LocalHFAdapter branches below, which mutate attributes a
+        # composed Adapter's frozen dataclass doesn't have.
+        if isinstance(adapter, _AdapterCore):
             # Validated ahead of the duplicate-registration guard below: a
             # malformed config= argument must raise even when the call would
             # otherwise be a silently-refused duplicate.
@@ -2978,21 +2862,10 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 f"but {adapter.qualified_name!r} is already registered as a "
                 f"{type(existing).__name__} on {self.__class__.__name__}. The backend is "
                 "refusing to do this, because adapter loading is not idempotent. "
-                "LocalFileBinding and IntrinsicAdapter/resolve_adapter() registrations "
+                "LocalFileBinding and resolve_adapter() registrations "
                 "share this qualified-name key space and cannot both claim the same name."
             )
             return None
-
-        if isinstance(adapter, EmbeddedIntrinsicAdapter):
-            if not isinstance(adapter.weights, EmbeddedBinding):
-                raise TypeError(
-                    "EmbeddedIntrinsicAdapter.weights must be an EmbeddedBinding; "
-                    f"got {type(adapter.weights).__name__}."
-                )
-            adapter.backend = self
-            adapter.weights.source = self.base_model_name
-            self._added_adapters[adapter.qualified_name] = adapter
-            return
 
         adapter.path = adapter.get_local_hf_path(self.base_model_name)
         adapter.backend = self
@@ -3028,14 +2901,12 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         """
         # Locked (unlike __init__'s call to this, which still runs
         # single-threaded during construction, before the backend is exposed
-        # to any other thread): this method is now also the documented
-        # post-construction replacement for `EmbeddedIntrinsicAdapter.from_hub()`
-        # on a live backend, so a caller here can race another thread's
-        # `add_adapter`/`resolve_adapter` — both `add_adapter`'s
-        # read-then-write across `_composed_adapters` and
-        # `_discover_embedded_adapters`'s mutation of global `warnings` filter
-        # state need the same lock `resolve_adapter` already takes around its
-        # own `add_adapter` calls. `_adapter_resolve_lock()`, not
+        # to any other thread): this method registers embedded adapters on a
+        # live backend, so a caller here can race another thread's
+        # `add_adapter`/`resolve_adapter` — `add_adapter`'s read-then-write
+        # across `_composed_adapters` needs the same lock `resolve_adapter`
+        # already takes around its own `add_adapter` calls.
+        # `_adapter_resolve_lock()`, not
         # `_adapter_activation_lock()`: see the lock-order note on the latter
         # — this method's own I/O (this Hub discovery call) must not run
         # under the lock `add_adapter()`'s composed-LocalFileBinding branch
@@ -3099,11 +2970,6 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 )
             raise ValueError(
                 f"could not load adapter {adapter_qualified_name} for backend {self}: adapter was not previously added"
-            )
-        if isinstance(adapter, EmbeddedIntrinsicAdapter):
-            raise TypeError(
-                f"cannot load embedded adapter {adapter_qualified_name} through PEFT; "
-                "it is activated by the chat template"
             )
 
         try:
@@ -3284,7 +3150,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         """Reuse `_generation_lock` for exclusivity around adapter activation.
 
         `activate_peft_adapter`/`deactivate_peft_adapter` document "must be called
-        while holding `_generation_lock`" as a precondition, and they have three
+        while holding `_generation_lock`" as a precondition, and they have two
         callers:
 
         1. `_generate_with_adapter_lock` (the standard, non-intrinsic
@@ -3293,16 +3159,14 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
            because standard generation always runs against the base model.
         2. `LocalFileBinding.activate()`/`.deactivate()` (driven by
            `AdapterMixin.adapter_scope()`), which holds no lock of its own.
-        3. `_IntrinsicPeftBinding.activate()`/`.deactivate()` (driven by
-           `_generate_intrinsic_with_adapter_scope` via
-           `AdapterMixin.adapter_scope()`), the intrinsic-path counterpart of
-           caller 2's `LocalFileBinding` — whose driver also holds
-           `_generation_lock` itself for the whole prepare -> activate ->
-           generate -> deactivate section (#1465).
+           This is also the intrinsic-generation path: intrinsic generation
+           for a composed `Adapter` drives `adapter_scope()` on its
+           `LocalFileBinding` while holding `_generation_lock` itself for the
+           whole prepare -> activate -> generate -> deactivate section (#1465).
 
-        This method exists for callers 2 and 3 — so it is not a duplicate of
-        the lock caller 1 (and, on the outer level, caller 3's driver) takes,
-        it is the only thing satisfying the precondition on those paths.
+        This method exists for caller 2 — so it is not a duplicate of the lock
+        caller 1 takes, it is the only thing satisfying the precondition on
+        that path.
 
         A fourth consumer, unrelated to that precondition: `add_adapter()`'s
         composed-`Adapter` branches also take this lock, briefly, around
@@ -3312,7 +3176,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
         Caller 3's verb acquisitions therefore nest inside its driver's
         `_generation_lock` hold on the same thread (see
-        `_generate_intrinsic_with_adapter_scope`'s docstring), which is
+        `_generate_composed_local_file_with_adapter_scope`'s docstring), which is
         exactly why `_generation_lock` is a `threading.RLock`: a plain
         `threading.Lock` would deadlock on that same-thread re-acquisition
         (this was #1465's known lock-reentrancy issue).
@@ -3340,7 +3204,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         Returns:
             list[str]: Qualified adapter names for all adapters that have been
                 registered via `add_adapter`, whether or not they have also
-                been loaded via `load_peft_adapter`. For a shim or a bare
+                been loaded via `load_peft_adapter`. For a bare
                 `LocalFileBinding`, this is `adapter.qualified_name`; for a
                 composed `Adapter`, it's the equivalent
                 `_composed_adapter_key()` format (the two formats agree).
@@ -3381,84 +3245,3 @@ def _assert_correct_adapters(expected_state: str, model: PreTrainedModel):
             )
         else:
             raise e
-
-
-class _UnusedIOContract(IOContract):
-    """Placeholder `IOContract` for `_generate_intrinsic_with_adapter_scope`'s `_AdapterCore`.
-
-    `_generate_from_intrinsic` builds its own I/O handling directly (the
-    rewriter/result-processor pipeline driven by `adapter.config`) and only
-    needs `adapter_scope()` for its activate/deactivate lifecycle hooks —
-    `adapter_scope()` never reads `Adapter.io_contract`, so this slot is filled
-    only to satisfy the dataclass's required field.
-    """
-
-    def build_prompt(self, **kwargs: object) -> Component:
-        raise NotImplementedError(
-            "not used on the intrinsic generation path: "
-            "_generate_from_intrinsic builds prompts via IntrinsicsRewriter."
-        )
-
-    def parse(self, raw: str) -> dict[str, object]:
-        raise NotImplementedError(
-            "not used on the intrinsic generation path: "
-            "_generate_from_intrinsic parses output via IntrinsicsResultProcessor."
-        )
-
-
-class _IntrinsicPeftBinding(WeightsBinding):
-    """Drives already-registered PEFT verbs for one intrinsic-generation call.
-
-    `IntrinsicAdapter` (the legacy shim, see `mellea.backends.adapters.adapter`)
-    carries an inert `_ShimWeightsBinding` that raises on every verb, so it
-    can't be handed to `adapter_scope()` directly.
-    `_generate_intrinsic_with_adapter_scope` builds one of these fresh per call
-    instead, and it drives the backend's own `load_peft_adapter`/
-    `activate_peft_adapter`/`deactivate_peft_adapter` verbs — the same verbs
-    `_generate_with_adapter_lock` used to call directly before generation was
-    routed through `adapter_scope`.
-
-    `binding_type` is `"local_file"`, not a distinct value: this binding loads
-    LoRA/aLoRA weights downloaded to local disk via PEFT — the same reality
-    `LocalFileBinding` reports — so it must share that value rather than
-    fragment the weights-reality metric dimension. A distinct class exists
-    rather than reusing `LocalFileBinding` directly because `LocalFileBinding.prepare()`
-    calls `add_adapter()`, which would collide with the `IntrinsicAdapter`
-    already registered under this `qualified_name`.
-
-    `prepare()` loads the weights (mirrors `LocalFileBinding.prepare()`'s
-    phase boundary: the load belongs to `"prepare"`, not `"activate"`, so
-    `phase="activate"` duration stays comparable across bindings).
-    `release()` is a no-op: registration happened in `add_adapter()` when the
-    intrinsic adapter was resolved (see `AdapterMixin.resolve_adapter`), and
-    this binding doesn't own that lifecycle — it only exists for the duration
-    of one generate call. `revision` — the value `adapter_scope()` reports to
-    the `ADAPTER_FUNCTION_INVOCATION_COMPLETE` hook — is set explicitly rather
-    than left for `adapter_scope()`'s `getattr(..., None)` fallback, because
-    `IntrinsicAdapter`s are always pinned to a catalogue SHA; reporting
-    `None` would mislabel every intrinsic invocation as unpinned.
-    """
-
-    binding_type: ClassVar[str] = "local_file"
-
-    def __init__(
-        self, backend: LocalHFBackend, qualified_name: str, revision: str | None
-    ) -> None:
-        self._backend = backend
-        self._qualified_name = qualified_name
-        self.revision = revision
-
-    def prepare(self) -> None:
-        with self._backend._adapter_activation_lock():
-            self._backend.load_peft_adapter(self._qualified_name)
-
-    def activate(self) -> None:
-        with self._backend._adapter_activation_lock():
-            self._backend.activate_peft_adapter(self._qualified_name)
-
-    def deactivate(self) -> None:
-        with self._backend._adapter_activation_lock():
-            self._backend.deactivate_peft_adapter(self._qualified_name)
-
-    def release(self) -> None:
-        return

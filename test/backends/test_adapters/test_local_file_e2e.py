@@ -94,7 +94,7 @@ async def test_local_file_binding_full_lifecycle_against_real_model(backend):
     assert binding.backend is backend
     assert binding.qualified_name in backend.list_adapters()
 
-    # `_generate_intrinsic_with_adapter_scope()` holds this lock for its whole
+    # `_generate_composed_local_file_with_adapter_scope()` holds this lock for its whole
     # prepare -> activate -> generate -> deactivate critical section.
     # `adapter_scope()` reacquires it during activation/deactivation, so this
     # real-model test also proves that same-thread reentrancy works in practice.

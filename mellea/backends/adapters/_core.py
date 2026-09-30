@@ -27,7 +27,7 @@ Note:
     The existing :class:`~mellea.backends.adapters.adapter.Adapter` ABC in
     `adapter.py` is not modified here.  This module introduces a new
     `Adapter` *dataclass* that is re-exported from
-    `mellea.backends.adapters`.  Both coexist until shim removal in 4.1.
+    `mellea.backends.adapters`.  Both coexist for now.
     The old ABC is not part of the public `__init__.py` surface, so there is
     no namespace collision on the public API.
 """
@@ -1069,11 +1069,7 @@ class Adapter:
     # (registration and the verbs key on the binding's `qualified_name`;
     # `_find_adapter` scans on the identity) and both return `None` on a miss,
     # so a disagreement surfaces as "adapter not found" far from its cause. It
-    # could not be enforced here because the deprecated shims carry a
-    # `_ShimWeightsBinding` with no `name`/`adapter_type` to compare at all
-    # (their identity tracks the configured name/type) — that no longer
-    # blocks the LocalFile/PEFT reality now that the shims retire in #1144, so
-    # `LocalHFBackend.add_adapter` enforces it there instead, at registration
-    # time. `EmbeddedBinding` has no `name`/`adapter_type` of its own, so the
-    # Embedded/Granite Switch reality still has nothing to cross-check
-    # against.
+    # is enforced not here but in `LocalHFBackend.add_adapter`, at registration
+    # time, so a construction that never reaches a backend isn't rejected.
+    # `EmbeddedBinding` has no `name`/`adapter_type` of its own, so the
+    # Embedded/Granite Switch reality has nothing to cross-check against.

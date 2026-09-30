@@ -31,7 +31,7 @@ from openai.types.chat.chat_completion_token_logprob import (
 from openai.types.completion_usage import CompletionUsage
 
 from mellea.backends import ModelOption
-from mellea.backends.adapters.adapter import EmbeddedIntrinsicAdapter
+from mellea.backends.adapters.adapter import _embedded_adapter_from_entry
 from mellea.backends.openai import OpenAIBackend
 from mellea.core import ModelOutputThunk, Requirement
 from mellea.stdlib import functional as mfuncs
@@ -168,10 +168,10 @@ def _make_backend_with_adapter(
         base_url="http://localhost:9999/v1",
         model_options=model_options,
     )
-    adapter = EmbeddedIntrinsicAdapter(
+    adapter = _embedded_adapter_from_entry(
         intrinsic_name="answerability", config=config, technology="alora"
     )
-    backend.add_adapter(adapter)
+    backend.add_adapter(adapter, config=config)
     return backend
 
 
@@ -181,12 +181,12 @@ def _make_context() -> ChatContext:
 
 
 def _make_backend_with_composed_adapter(config: dict) -> OpenAIBackend:
-    """Return an OpenAIBackend with a composed `Adapter` registered directly.
+    """Return an OpenAIBackend with a composed `Adapter` built by hand.
 
-    Composed-Adapter counterpart of `_make_backend_with_adapter` (Epic #929,
-    issue #1144): `add_adapter` and `_generate_from_intrinsic` must drive the
-    same generation path for a composed `Adapter` as for the deprecated
-    `EmbeddedIntrinsicAdapter` shim.
+    Builds the composed `Adapter` directly (rather than through
+    `_embedded_adapter_from_entry`, as `_make_backend_with_adapter` does) so
+    the hand-constructed identity/io_contract/weights path is exercised too
+    (Epic #929, issue #1144).
     """
     from mellea.backends.adapters._core import (
         Adapter as _AdapterCore,
@@ -245,9 +245,8 @@ async def test_chat_template_kwargs_set():
 
 
 async def test_composed_adapter_drives_generate_from_intrinsic():
-    """A composed `Adapter` (not the `EmbeddedIntrinsicAdapter` shim) drives
-    the same generation path — activation, name/config resolution — as the
-    shim (Epic #929, issue #1144)."""
+    """A hand-constructed composed `Adapter` drives the full generation
+    path — activation, name/config resolution (Epic #929, issue #1144)."""
     backend = _make_backend_with_composed_adapter(_SIMPLE_CONFIG)
     ctx = _make_context()
     mock_create = AsyncMock(return_value=_simple_chat_completion())
@@ -385,28 +384,25 @@ async def test_no_adapter_raises_valueerror():
 
 
 def test_remove_adapter_frees_name_for_reuse():
-    """Removing a shim adapter frees its name and clears its backend reference."""
+    """Removing a composed adapter frees its name for a fresh registration."""
     backend = _make_backend_with_adapter(_SIMPLE_CONFIG)
     qualified_name = "answerability_alora"
     first = backend._added_adapters[qualified_name]
-    replacement = EmbeddedIntrinsicAdapter(
+    replacement = _embedded_adapter_from_entry(
         intrinsic_name="answerability",
         config=deepcopy(_SIMPLE_CONFIG),
         technology="alora",
     )
 
     # While the name is occupied, the registration is refused.
-    backend.add_adapter(replacement)
+    backend.add_adapter(replacement, config=deepcopy(_SIMPLE_CONFIG))
     assert backend._added_adapters[qualified_name] is first
-    assert replacement.backend is None
 
     backend.remove_adapter(qualified_name)
 
     assert qualified_name not in backend.list_adapters()
-    assert isinstance(first, EmbeddedIntrinsicAdapter)
-    assert first.backend is None
 
-    backend.add_adapter(replacement)
+    backend.add_adapter(replacement, config=deepcopy(_SIMPLE_CONFIG))
 
     assert backend._added_adapters[qualified_name] is replacement
 
@@ -916,11 +912,12 @@ def _make_backend_with_requirement_adapter() -> OpenAIBackend:
         base_url="http://localhost:9999/v1",
     )
     backend.add_adapter(
-        EmbeddedIntrinsicAdapter(
+        _embedded_adapter_from_entry(
             intrinsic_name="requirement-check",
             config=deepcopy(_SIMPLE_CONFIG),
             technology="alora",
-        )
+        ),
+        config=deepcopy(_SIMPLE_CONFIG),
     )
     return backend
 

@@ -221,7 +221,7 @@ def call_intrinsic(
 
     # Adapter activation is the backend's responsibility — the HF backend acquires
     # its generation lock and activates the adapter inside adapter_scope(), driven
-    # from _generate_intrinsic_with_adapter_scope immediately before generation.
+    # from _generate_composed_local_file_with_adapter_scope immediately before generation.
     # Activating here (outside that lock) would race with concurrent async requests.
     intrinsic = Intrinsic(
         intrinsic_name,

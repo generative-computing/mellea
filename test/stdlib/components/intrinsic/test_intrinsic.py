@@ -12,9 +12,8 @@ from mellea.stdlib.components import Intrinsic
 class TestCustomNonCatalogName:
     """A name outside the intrinsics catalog (Epic #929, issue #1144).
 
-    Replaces the deprecated `CustomIntrinsicAdapter` shim's catalog
-    monkey-patch: a custom adapter function can construct an `Intrinsic`
-    without any catalog mutation, as long as it supplies `adapter_types`.
+    A custom adapter function can construct an `Intrinsic` without any
+    catalog mutation, as long as it supplies `adapter_types`.
     """
 
     def test_custom_name_without_adapter_types_raises(self):

@@ -6,8 +6,7 @@ Instead of using `load_embedded_adapters=True` (which loads all adapters from
 the model repo at init), this example shows how to create an OpenAIBackend with
 `load_embedded_adapters=False` and then manually load individual adapters using
 `register_embedded_adapter_model(intrinsic_name=...)`, which composes an
-`Adapter` (Identity + IOContract + EmbeddedBinding) instead of the deprecated
-`EmbeddedIntrinsicAdapter` shim.
+`Adapter` (Identity + IOContract + EmbeddedBinding).
 
 This is useful when:
 - You only need a subset of the model's embedded adapters.
