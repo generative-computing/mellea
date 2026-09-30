@@ -39,11 +39,7 @@ from mellea.backends.adapters._core import (
     Identity,
     LocalFileBinding,
 )
-from mellea.backends.adapters.adapter import (
-    EmbeddedIntrinsicAdapter,
-    IntrinsicAdapter,
-    _alora_invocation_sequence_present,
-)
+from mellea.backends.adapters.adapter import _alora_invocation_sequence_present
 from mellea.backends.adapters.catalog import AdapterType
 
 # The requirement-check aLoRA's real declared invocation sequence (#1679):
@@ -96,31 +92,13 @@ def _identity(adapter_type: str) -> Identity:
 
 
 class TestQualifiedNameForActivationCheck:
-    """`_alora_qualified_name_for_activation_check` gates which adapter shapes are checked."""
+    """`_alora_qualified_name_for_activation_check` gates which adapter shapes are checked.
 
-    def test_intrinsic_adapter_alora_returns_qualified_name(self):
-        adapter = IntrinsicAdapter.__new__(IntrinsicAdapter)
-        adapter.qualified_name = "requirement-check_alora"
-        object.__setattr__(adapter, "identity", _identity("alora"))
-
-        result = huggingface._alora_qualified_name_for_activation_check(adapter)
-        assert result == "requirement-check_alora"
-
-    def test_intrinsic_adapter_lora_is_skipped(self):
-        adapter = IntrinsicAdapter.__new__(IntrinsicAdapter)
-        adapter.qualified_name = "requirement-check_lora"
-        object.__setattr__(adapter, "identity", _identity("lora"))
-
-        assert huggingface._alora_qualified_name_for_activation_check(adapter) is None
-
-    def test_embedded_adapter_is_always_skipped(self):
-        with pytest.warns(DeprecationWarning):
-            adapter = EmbeddedIntrinsicAdapter(
-                intrinsic_name="requirement-check",
-                config={"parameters": {}},
-                technology="alora",
-            )
-        assert huggingface._alora_qualified_name_for_activation_check(adapter) is None
+    The guard now accepts only the composed `Adapter` (`_AdapterCore`) that
+    `_find_adapter` returns — the deprecated `IntrinsicAdapter` /
+    `EmbeddedIntrinsicAdapter` shim shapes it also handled were removed with the
+    shims in PR #1700, so the cases below cover every shape the guard can see.
+    """
 
     def test_composed_adapter_alora_with_local_file_binding(self):
         binding = LocalFileBinding(

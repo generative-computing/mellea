@@ -11,6 +11,7 @@ Switch model is required — see `test/backends/test_openai_intrinsics.py` for
 the GPU-backed e2e counterpart.
 """
 
+import dataclasses
 from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
 import pytest
@@ -19,7 +20,7 @@ from openai.types.chat.chat_completion import Choice
 from openai.types.completion_usage import CompletionUsage
 
 from mellea.backends.adapters import EmbeddedBinding, ServerMediatedBinding
-from mellea.backends.adapters.adapter import EmbeddedIntrinsicAdapter
+from mellea.backends.adapters.adapter import _embedded_adapter_from_entry
 from mellea.backends.openai import OpenAIBackend
 from mellea.formatters.granite import IntrinsicsResultProcessor
 from mellea.plugins.types import HookType
@@ -63,9 +64,10 @@ def _backend_with_adapter(technology: str) -> OpenAIBackend:
         base_url="http://localhost:9999/v1",
     )
     backend.add_adapter(
-        EmbeddedIntrinsicAdapter(
+        _embedded_adapter_from_entry(
             intrinsic_name="answerability", config=_SIMPLE_CONFIG, technology=technology
-        )
+        ),
+        config=_SIMPLE_CONFIG,
     )
     return backend
 
@@ -299,16 +301,19 @@ async def test_invocation_complete_fires_error_on_empty_choices():
 
 
 async def test_reassigned_weights_fail_loudly():
-    """Reassigning `.weights` off the EmbeddedBinding must fail at generation.
+    """Reassigning `.weights` off the EmbeddedBinding must be impossible.
 
-    The shim permits attribute mutation, so a caller reassigning `.weights`
-    after construction must hit the explicit TypeError rather than silently
-    skipping activation and sending an unactivated request (issue #1142).
+    The composed `Adapter` is a frozen dataclass, so a caller cannot swap
+    `.weights` after construction to send an unactivated request — the
+    assignment itself raises rather than silently skipping activation
+    (issue #1142). This is the composed-Adapter guarantee that replaces the
+    deprecated shim's mutable-attribute-then-fail-at-generation path.
     """
     backend = _backend_with_adapter("alora")
     adapter = backend._added_adapters["answerability_alora"]
-    adapter.weights = ServerMediatedBinding()
 
-    ctx = ChatContext().add(Message("user", "What is the square root of 4?"))
-    with pytest.raises(TypeError, match=r"weights must be an EmbeddedBinding"):
-        await mfuncs.aact(Intrinsic("answerability"), ctx, backend, strategy=None)
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        adapter.weights = ServerMediatedBinding()
+
+    # The registered adapter still activates correctly — nothing was mutated.
+    assert isinstance(adapter.weights, EmbeddedBinding)
