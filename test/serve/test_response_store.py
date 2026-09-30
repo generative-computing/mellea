@@ -186,6 +186,32 @@ class TestResponsesEndpointStore:
         assert response.id not in _response_store
 
     @pytest.mark.asyncio
+    async def test_expires_at_set_when_store_true(self):
+        """expires_at is created_at + TTL when the response is stored."""
+        module = _make_mock_module("answer")
+        endpoint = app_module.make_responses_endpoint(module)
+        app_module._response_ttl_seconds = 1800
+
+        before = int(time.time())
+        request = ResponseRequest(model="m", input="hello", store=True)
+        response = await endpoint(request)
+        after = int(time.time())
+
+        assert response.expires_at is not None
+        assert before + 1800 <= response.expires_at <= after + 1800
+
+    @pytest.mark.asyncio
+    async def test_expires_at_none_when_store_false(self):
+        """expires_at is None when store=False because the response is never persisted."""
+        module = _make_mock_module("ephemeral")
+        endpoint = app_module.make_responses_endpoint(module)
+
+        request = ResponseRequest(model="m", input="hi", store=False)
+        response = await endpoint(request)
+
+        assert response.expires_at is None
+
+    @pytest.mark.asyncio
     async def test_previous_response_id_prepends_history(self):
         """A second request with previous_response_id receives the prior history."""
         module = _make_mock_module("second reply")

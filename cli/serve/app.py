@@ -417,9 +417,13 @@ def make_responses_endpoint(module):
                 input_tokens=0, output_tokens=0, total_tokens=0
             )
 
+            storing = request.store is not False
             response = Response(
                 id=response_id,
                 created_at=created_timestamp,
+                expires_at=created_timestamp + _response_ttl_seconds
+                if storing
+                else None,
                 model=request.model,
                 status="completed",
                 output=output_items,
@@ -430,7 +434,7 @@ def make_responses_endpoint(module):
             )
 
             # Store the response and full history for future previous_response_id use.
-            if request.store is not False:
+            if storing:
                 _response_store[response_id] = _StoredResponse(
                     response=response,
                     history=_build_history_from_messages(messages, output.value or ""),
@@ -600,7 +604,9 @@ async def get_response(response_id: str) -> Response | JSONResponse:
 
     Returns the completed ``Response`` object that was stored when
     ``store=True`` (the default) on the original ``POST /v1/responses``
-    request.  Returns 404 if the response has expired or was never stored.
+    request.  Returns 404 if the response has expired or was created with
+    ``store=False``.  The ``expires_at`` field on the response indicates
+    the exact Unix timestamp when the entry will be evicted.
     """
     stored = _response_store.get(response_id)
     if stored is None:
