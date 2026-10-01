@@ -201,6 +201,25 @@ def test_del_skips_its_waits_during_interpreter_finalization(monkeypatch):
         loop.close()
 
 
+def test_del_survives_module_globals_torn_down(monkeypatch):
+    """At shutdown module globals like `sys` may be `None` before `__del__` runs."""
+    # Do not ever instantiate this manually. Only doing here for testing.
+    handler = elh._EventLoopHandler()
+    loop = handler._event_loop
+    thread = handler._thread
+
+    monkeypatch.setattr(elh, "sys", None)
+    try:
+        # Treated as finalization: must not raise, and must not wait on the thread.
+        handler.__del__()
+        assert handler._event_loop is None
+    finally:
+        thread.join(timeout=5.0)
+        if not loop.is_closed():
+            loop.close()
+    assert not thread.is_alive()
+
+
 def test_submit_after_shutdown_raises_runtime_error():
     """A cleared loop reference must not surface as an AttributeError from asyncio."""
     # Do not ever instantiate this manually. Only doing here for testing.
