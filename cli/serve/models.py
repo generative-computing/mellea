@@ -24,7 +24,7 @@ __all__ = [
     "TextContent",
 ]
 
-from typing import Any, Literal
+from typing import Any, Literal, Union
 
 from pydantic import BaseModel, Field, RootModel, model_validator
 
@@ -466,8 +466,13 @@ class Response(BaseModel):
     """Model used to generate the response."""
 
     status: Literal["completed", "failed", "in_progress", "incomplete"]
-    output: list[ResponseOutputItem]
-    """Typed output items (messages, function calls, etc.)."""
+    output: list[ResponseOutputMessage | ResponseFunctionCall | ResponseOutputItem]
+    """Typed output items (messages, function calls, etc.).
+
+    Uses a Union type to ensure Pydantic serializes subclass-specific fields
+    (e.g., ``content`` and ``role`` for messages, ``name`` and ``arguments``
+    for function calls) rather than stripping them to the base class schema.
+    """
 
     output_text: str
     """Convenience field: concatenated text from all output message items."""
