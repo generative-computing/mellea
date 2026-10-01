@@ -37,6 +37,7 @@ from ..helpers import (
     DEFAULT_CHUNK_TIMEOUT,
     ClientCache,
     get_current_event_loop,
+    has_user_content,
     merge_provider_fields,
     message_to_openai_message,
     messages_to_docs,
@@ -1091,22 +1092,9 @@ class OllamaModelBackend(FormatterBackend, AdapterMixin):
         # Add the final message.
         messages.extend(self.formatter.to_chat_messages([action]))
 
-        # Issue #1597: refuse to send an empty user prompt. `SimpleContext`
-        # intentionally discards recorded turns from `view_for_generation()`,
-        # so a caller who chains `.add(...)` and then passes an empty action
-        # would otherwise hit the model with no user-role content at all.
-        # Some chat models (e.g. Granite 4.2, see #1587) spin on empty prompts
-        # and burn tokens silently. Fail fast instead.
-        if not any(
-            m.role == "user"
-            and (
-                (m.content and m.content.strip())
-                or m.images
-                or m.audio
-                or getattr(m, "_docs", None)
-            )
-            for m in messages
-        ):
+        # Issue #1597: refuse to send an empty user prompt; see
+        # `has_user_content` for why whitespace-only text still counts as empty.
+        if not has_user_content(messages):
             raise ValueError(
                 "Refusing to call the model: no user-role content in the assembled "
                 "conversation. This usually means a stateless context (e.g. "

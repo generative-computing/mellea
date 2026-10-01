@@ -204,6 +204,58 @@ async def test_user_message_with_image_passes_guard_on_openai():
     )
 
 
+async def test_user_message_with_audio_passes_guard_on_openai():
+    """P3 passthrough: a user message with empty text but audio must NOT raise."""
+    from mellea.core import AudioBlock, CBlock
+    from mellea.stdlib.components import Message as MelleaMessage
+    from mellea.stdlib.context import SimpleContext
+
+    backend = _make_openai_backend()
+    ctx = SimpleContext().add(CBlock("recorded-only"))
+    # Minimal valid base64 payload ("RIFF" header); the guard only checks presence.
+    audio = AudioBlock("UklGRg==", format="wav")
+    action = MelleaMessage("user", "", audio=[audio])
+
+    with patch.object(
+        backend._async_client.chat.completions, "create", new_callable=AsyncMock
+    ) as mock_create:
+        mock_create.return_value = _ok_chat_completion()
+
+        mot, _ = await backend.generate_from_chat_context(action, ctx)
+        await mot.avalue()
+
+    assert mock_create.called, (
+        "User message with audio must reach the model even when its text "
+        "content is empty."
+    )
+
+
+async def test_user_message_with_docs_passes_guard_on_openai():
+    """P3 passthrough: a user message with empty text but documents must NOT raise."""
+    from mellea.core import CBlock
+    from mellea.stdlib.components import Message as MelleaMessage
+    from mellea.stdlib.context import SimpleContext
+
+    backend = _make_openai_backend()
+    ctx = SimpleContext().add(CBlock("recorded-only"))
+    # Documents attach via Message's documents parameter (coerced to Document
+    # components); the guard treats them as user content.
+    action = MelleaMessage("user", "", documents=["product spec passage"])
+
+    with patch.object(
+        backend._async_client.chat.completions, "create", new_callable=AsyncMock
+    ) as mock_create:
+        mock_create.return_value = _ok_chat_completion()
+
+        mot, _ = await backend.generate_from_chat_context(action, ctx)
+        await mot.avalue()
+
+    assert mock_create.called, (
+        "User message with documents must reach the model even when its text "
+        "content is empty."
+    )
+
+
 # ---------------------------------------------------------------------------
 # LiteLLM backend
 # ---------------------------------------------------------------------------
