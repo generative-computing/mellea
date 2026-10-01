@@ -315,6 +315,25 @@ result, _ = await react(
 See [`docs/examples/mcp/github_activity_summary.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/mcp/github_activity_summary.py)
 for a complete example against the hosted GitHub MCP server.
 
+You.com's MCP server is a keyless option for web search: its free profile
+exposes a `you-search` tool without an API key, so it works with no
+credentials:
+
+```python
+# Requires: mellea[tools]
+# Returns: list[MelleaTool]
+from mellea.stdlib.tools.mcp import discover_mcp_tools, http_connection
+
+connection = http_connection("https://api.you.com/mcp?profile=free")
+specs = await discover_mcp_tools(connection)
+tools = [s.as_mellea_tool() for s in specs if s.name in {"you-search"}]
+```
+
+See [`docs/examples/mcp/youcom_search.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/mcp/youcom_search.py)
+for a complete example that answers a question with cited web sources. Set a
+`YDC_API_KEY` to use the authenticated endpoint instead, which also serves
+content extraction and research tools.
+
 ---
 
 **See also:** [Tutorial 04: Making Agents Reliable](../tutorials/04-making-agents-reliable.md) | [Instruct, Validate, Repair](../concepts/instruct-validate-repair.md)

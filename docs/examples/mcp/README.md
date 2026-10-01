@@ -87,3 +87,33 @@ uv run python docs/examples/mcp/github_activity_summary.py --days 14
 The script discovers every tool on the GitHub MCP server, filters down to
 `get_me` and `search_pull_requests`, then asks the model to summarize your
 pull-request activity over the specified window.
+
+## Web search with You.com (Mellea as client)
+
+Uses You.com's hosted MCP server to answer a question with live web sources.
+The free profile needs no API key, so the example runs with no credentials —
+the same discover/select/wrap workflow as above, driven by `react()`.
+
+See code in [`youcom_search.py`](youcom_search.py).
+
+### Running the web search example
+
+Install Mellea with tools support:
+
+```bash
+pip install 'mellea[tools]'
+```
+
+Run:
+
+```bash
+uv run python docs/examples/mcp/youcom_search.py --query "What is the Mellea Python library?"
+```
+
+The script connects to the keyless free profile
+(`https://api.you.com/mcp?profile=free`), discovers the server's tools,
+filters down to `you-search`, and asks the model to answer the query with
+citations. Set a `YDC_API_KEY` environment variable (from
+[you.com/platform/api-keys](https://you.com/platform/api-keys)) to use the
+authenticated endpoint, which also serves content extraction and research
+tools.
