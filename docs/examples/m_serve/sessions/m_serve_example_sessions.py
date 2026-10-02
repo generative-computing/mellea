@@ -35,7 +35,9 @@ _MessageRole = Literal["system", "user", "assistant", "tool"]
 
 
 def serve(
-    input: list[ChatMessage], model_options: dict | None = None
+    input: list[ChatMessage],
+    requirements: list[str] | None = None,
+    model_options: dict | None = None,
 ) -> ModelOutputThunk:
     """Pass the full conversation history to the model and return its reply."""
     # Build a ChatContext from the full message list (which includes prior turns
