@@ -13,7 +13,8 @@ the list of role/content dicts expected by `apply_chat_template`; and
 from __future__ import annotations
 
 import inspect
-from collections.abc import Callable
+import json
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
 from ..core import Context, MelleaLogger, ModelToolCall, Span
@@ -21,7 +22,7 @@ from ..core.base import AbstractMelleaTool, ModelOutputThunk
 from ..formatters import ChatFormatter
 from ..helpers import merge_provider_fields
 from ..stdlib.components import Message
-from .tools import parse_tools, validate_tool_arguments
+from .tools import _parse_tool_calls, validate_tool_arguments
 
 # Chat = dict[Literal["role", "content"], str] # external apply_chat_template type hint is weaker
 # Chat = dict[str, str | list[dict[str, Any]] ] # for multi-modal models
@@ -144,6 +145,50 @@ def to_chat(
     return ctx_as_conversation
 
 
+def _decode_text_args(
+    args: Mapping[str, Any], properties: Mapping[str, Any], required: Sequence[str]
+) -> dict[str, Any]:
+    """Decode XML-call values that stand for a list, dict or None.
+
+    The template writes lists and dicts as JSON and `None` as `None`. `None` or
+    `null` becomes None only for an optional parameter that can take it; other
+    scalars are left to `validate_tool_arguments`.
+
+    Args:
+        args: The call's arguments, as parsed from the model output.
+        properties: The tool schema's `properties`.
+        required: The tool schema's `required` parameter names.
+
+    Returns:
+        A new dict with the decoded values; `args` is not modified.
+    """
+    decoded = dict(args)
+    for name, value in args.items():
+        if not isinstance(value, str):
+            continue
+        schema = properties.get(name) or {}
+        # `type` may be a list, at the top level or in an `anyOf` branch.
+        types: set[Any] = set()
+        for branch in [schema, *schema.get("anyOf", [])]:
+            declared = branch.get("type")
+            types.update(declared if isinstance(declared, list) else [declared])
+        if value.strip() in ("None", "null"):
+            # Nullable, or optional with no non-None default (a None default isn't emitted).
+            if name not in required and ("null" in types or "default" not in schema):
+                decoded[name] = None
+            continue
+        if not types & {"object", "array"}:
+            continue
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError:
+            # Left for validate_tool_arguments to report.
+            continue
+        if isinstance(parsed, dict | list):
+            decoded[name] = parsed
+    return decoded
+
+
 def to_tool_calls(
     tools: dict[str, AbstractMelleaTool], decoded_result: str
 ) -> list[ModelToolCall] | None:
@@ -154,10 +199,17 @@ def to_tool_calls(
         decoded_result: Raw model output string that may contain tool call markup.
 
     Returns:
-        List of validated `ModelToolCall` (order preserved), or `None` if no tool calls were found.
+        List of validated `ModelToolCall` in the order parsed (XML-format calls
+        first, then JSON), or `None` if no tool calls were found.
     """
     model_tool_calls: list[ModelToolCall] = []
-    for tool_name, tool_args in parse_tools(decoded_result):
+    parsed, unparsed = _parse_tool_calls(decoded_result)
+    if unparsed:
+        MelleaLogger.get_logger().warning(
+            f"model output contains {unparsed} <tool_call> block(s) that could "
+            "not be parsed as a tool call"
+        )
+    for tool_name, tool_args, from_xml in parsed:
         func = tools.get(tool_name)
         if func is None:
             MelleaLogger.get_logger().warning(
@@ -167,9 +219,14 @@ def to_tool_calls(
 
         # Clean up the function args slightly. Some models seem to
         # hallucinate parameters when none are required.
-        param_map = func.as_json_tool["function"]["parameters"]["properties"]
+        parameters = func.as_json_tool["function"]["parameters"]
+        param_map = parameters["properties"]
         if len(param_map) == 0:
             tool_args = {}
+        elif from_xml:  # only XML values arrive as text
+            tool_args = _decode_text_args(
+                tool_args, param_map, parameters.get("required") or []
+            )
 
         # Validate and coerce argument types
         validated_args = validate_tool_arguments(func, tool_args, strict=False)

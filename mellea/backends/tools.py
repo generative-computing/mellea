@@ -471,23 +471,128 @@ def find_func(d: object) -> tuple[str | None, Mapping | None]:
     return None, None
 
 
+# Granite 4.2's XML tool-call format:
+# <tool_call>\n<function=NAME>\n<parameter=KEY>\nVALUE\n</parameter>\n</function>\n</tool_call>
+# The body may hold only parameter blocks, so a value can contain any text except
+# `</parameter>` (unescapable) and a broken call can't run into the next one.
+# `</tool_call>` is optional, for truncated output.
+_XML_TOOL_CALL_RE = re.compile(
+    r"<tool_call>\s*<function=([^>\n]+)>\s*"
+    r"((?:<parameter=[^>\n]+>(?:(?!</parameter>).)*</parameter>\s*)*)"
+    r"</function>\s*(?:</tool_call>)?",
+    re.DOTALL,
+)
+_XML_PARAMETER_RE = re.compile(r"<parameter=([^>\n]+)>(.*?)</parameter>", re.DOTALL)
+
+
+def _json_tool_call_spans(text: str) -> list[tuple[int, int]]:
+    """Return the `(start, end)` offsets in `text` of the calls `json_extraction` would find."""
+    spans: list[tuple[int, int]] = []
+    # Raw text, unlike `json_extraction`'s, so strings may hold literal newlines.
+    decoder = json.JSONDecoder(strict=False)
+    index = text.find("{")
+    while index != -1:
+        try:
+            obj, end = decoder.raw_decode(text, index)
+        except json.JSONDecodeError:
+            index = text.find("{", index + 1)
+            continue
+        name, args = find_func(obj)
+        if name is not None and args is not None:
+            spans.append((index, end))
+        index = text.find("{", end)
+    return spans
+
+
+def _parse_xml_tool_calls(llm_response: str) -> tuple[list[tuple[str, Mapping]], str]:
+    """Extract XML-format tool calls, skipping any quoted in a JSON call's arguments.
+
+    Values are raw strings, minus the newline the template wraps each one in.
+
+    Returns:
+        The calls, and `llm_response` with them blanked out.
+    """
+    matches = list(_XML_TOOL_CALL_RE.finditer(llm_response))
+    if not matches:
+        return [], llm_response
+    json_spans = _json_tool_call_spans(llm_response)
+    matches = [
+        m
+        for m in matches
+        if not any(start <= m.start() < end for start, end in json_spans)
+    ]
+
+    calls: list[tuple[str, Mapping]] = []
+    for match in matches:
+        args = {
+            name.strip(): value.removeprefix("\n").removesuffix("\n")
+            for name, value in _XML_PARAMETER_RE.findall(match.group(2))
+        }
+        calls.append((match.group(1).strip(), args))
+
+    remainder = llm_response
+    for match in reversed(matches):  # back to front, so earlier offsets stay valid
+        remainder = f"{remainder[: match.start()]} {remainder[match.end() :]}"
+    return calls, remainder
+
+
 def parse_tools(llm_response: str) -> list[tuple[str, Mapping]]:
-    """A simple parser that will scan a string for tools and attempt to extract them; only works for json based outputs.
+    """A simple parser that will scan a string for tools and attempt to extract them.
+
+    Recognizes JSON calls (`{"name": ..., "arguments": {...}}`, bare or in
+    `<tool_call>` tags) and Granite 4.2's XML format
+    (`<tool_call><function=NAME><parameter=KEY>VALUE</parameter></function></tool_call>`),
+    whose values are returned as strings. Markup quoted inside a call's
+    arguments is not parsed as a call.
 
     Args:
         llm_response: Raw string output from a language model.
 
     Returns:
-        List of `(tool_name, arguments)` tuples for each tool call found.
+        List of `(tool_name, arguments)` tuples for each tool call found, XML
+        calls first.
     """
-    processed = " ".join(llm_response.split())
+    calls, _ = _parse_tool_calls(llm_response)
+    return [(name, args) for name, args, _ in calls]
 
-    tools = []
+
+def _parse_tool_calls(llm_response: str) -> tuple[list[tuple[str, Mapping, bool]], int]:
+    """Like `parse_tools`, but also flags XML calls and counts unparsed `<tool_call>` tags.
+
+    Returns:
+        `(tool_name, arguments, from_xml)` per call, XML first, and the number
+        of `<tool_call>` tags that produced no call.
+    """
+    # XML calls are blanked out of `remainder`, so their values aren't re-parsed as JSON.
+    xml_calls, remainder = _parse_xml_tool_calls(llm_response)
+    tools = [(name, args, True) for name, args in xml_calls]
+    processed = " ".join(remainder.split())
+
     for possible_tool in json_extraction(processed):
         tool_name, tool_arguments = find_func(possible_tool)
         if tool_name is not None and tool_arguments is not None:
-            tools.append((tool_name, tool_arguments))
-    return tools
+            tools.append((tool_name, tool_arguments, False))
+    return tools, _count_unparsed_tool_call_tags(remainder)
+
+
+def _count_unparsed_tool_call_tags(text: str) -> int:
+    """Count `<tool_call>` tags that open no JSON call, in text with XML calls blanked out.
+
+    Tags quoted in a JSON call's arguments, or wrapping a JSON call or list, don't count.
+    """
+    if "<tool_call>" not in text:
+        return 0
+    json_spans = _json_tool_call_spans(text)
+    json_starts = {start for start, _ in json_spans}
+    unparsed = 0
+    for tag in re.finditer("<tool_call>", text):
+        if any(start <= tag.start() < end for start, end in json_spans):
+            continue
+        body = len(text) - len(text[tag.end() :].lstrip())
+        if body in json_starts or text.startswith("[", body):
+            continue
+        unparsed += 1
+    return unparsed
 
 
 def validate_tool_arguments(
@@ -508,7 +613,8 @@ def validate_tool_arguments(
         args: Raw arguments from model (post-JSON parsing)
         coerce_types: If True, attempt type coercion for common cases (default: True)
         strict: If True, raise ValidationError on failures; if False, log warnings
-                and return original args (default: False)
+                and return the failing args unvalidated, the rest validated
+                (default: False)
 
     Returns:
         Validated and optionally coerced arguments dict
@@ -791,11 +897,20 @@ def validate_tool_arguments(
             MelleaLogger.get_logger().error(error_msg)
             raise
         else:
-            # Log warning and return original args
+            # Pass the failing arguments through as given; validate the rest.
             MelleaLogger.get_logger().warning(
-                error_msg + "\nReturning original arguments without validation."
+                error_msg
+                + "\nReturning those arguments as given; the rest were validated."
             )
-            return dict(args)
+            failed = {error["loc"][0] for error in e.errors() if error["loc"]}
+            relaxed: dict[str, Any] = {
+                name: (Any, None) if name in failed else definition
+                for name, definition in field_definitions.items()
+            }
+            # Extra arguments are dumped as given (`extra="allow"`).
+            return create_model(
+                f"{tool_name}_Validator", __config__=model_config, **relaxed
+            )(**args).model_dump(exclude_unset=True)
 
     except Exception as e:
         # Catch any other errors during validation

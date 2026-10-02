@@ -243,7 +243,7 @@ class TestPydanticParameterValidation:
         # Missing 'body' field
         args = {"email": {"to": "user@example.com", "subject": "Test"}}
 
-        # In lenient mode, should return original args
+        # In lenient mode, the failing argument comes back as given
         validated = validate_tool_arguments(tool, args, strict=False)
         assert validated == args
 
@@ -362,7 +362,7 @@ class TestEdgeCases:
         with pytest.raises(ValidationError):
             validate_tool_arguments(tool, args, strict=True)
 
-        # In lenient mode, returns original
+        # In lenient mode, the failing and extra arguments come back as given
         validated = validate_tool_arguments(tool, args, strict=False)
         assert validated == args
 
