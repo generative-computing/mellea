@@ -420,6 +420,8 @@ def make_responses_endpoint(module):
             else:
                 output = await asyncio.to_thread(module.serve, **serve_kwargs)
 
+            storing = request.store is not False
+
             if request.stream:
                 return StreamingResponse(
                     stream_response_chunks(
@@ -429,6 +431,9 @@ def make_responses_endpoint(module):
                         created=created_timestamp,
                         conversation=request.conversation,
                         include=request.include,
+                        store=storing,
+                        ttl=_response_ttl_seconds,
+                        previous_response_id=request.previous_response_id,
                     ),
                     media_type="text/event-stream",
                 )
@@ -439,7 +444,6 @@ def make_responses_endpoint(module):
                 input_tokens=0, output_tokens=0, total_tokens=0
             )
 
-            storing = request.store is not False
             response = Response(
                 id=response_id,
                 created_at=created_timestamp,
