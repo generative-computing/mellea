@@ -21,6 +21,7 @@ By the end you will have covered:
 - Observing the typed event vocabulary (`ChunkEvent`, `QuickCheckEvent`, …)
   by iterating `stream(as_events=True)`
 - Subclassing `ChunkingStrategy` to define a custom split boundary
+- Retrying and repairing a failed attempt with a `SamplingStrategy`
 
 **Prerequisites:** [Tutorial 02](./02-streaming-and-async.md) (async and streaming),
 [Tutorial 04](./04-making-agents-reliable.md) (requirements and validation),
@@ -635,6 +636,117 @@ three.
 
 ---
 
+## Step 7: Retrying and repairing on failure
+
+Steps 1–6 detect a failure and stop. A `SamplingStrategy` goes further: it repairs
+and retries a failed attempt instead of giving up. Pass `strategy=` to `stream()`
+and, up to `loop_budget` attempts, the failure is folded into a repaired
+instruction and the generation is re-run.
+
+A mid-stream `"fail"` is cancelled at the failing chunk and repaired via the
+strategy's `stream_repair()`, without producing the rest of the output. (A
+completed attempt whose final `validate()` fails is repaired via `repair()`.)
+`RepairTemplateStrategy` folds the failure reason into the reworked instruction,
+so the retry has that feedback to work from:
+
+```python
+# Requires: mellea
+# Returns: None
+import asyncio
+import re
+
+from mellea.core.backend import Backend
+from mellea.core.base import Context
+from mellea.core.requirement import PartialValidationResult, Requirement, ValidationResult
+from mellea.stdlib.components import Instruction
+from mellea.stdlib.sampling import RepairTemplateStrategy
+from mellea.stdlib.streaming import CompletedEvent, RetryEvent, stream
+
+_SENTENCE_END = re.compile(r"[.!?]+")
+
+
+class MaxSentencesReq(Requirement):
+    def __init__(self, limit: int) -> None:
+        super().__init__()
+        self._limit = limit
+        self._count = 0
+
+    def format_for_llm(self) -> str:
+        return f"The response must be at most {self._limit} sentences."
+
+    async def _stream_validate(
+        self, chunk: str, *, backend: Backend, ctx: Context
+    ) -> PartialValidationResult:
+        self._count += len(_SENTENCE_END.findall(chunk))
+        if self._count > self._limit:
+            return PartialValidationResult(
+                "fail", reason=f"Exceeded {self._limit}-sentence limit"
+            )
+        return PartialValidationResult("unknown")
+
+    async def validate(
+        self, backend: Backend, ctx: Context, *, format=None, model_options=None
+    ) -> ValidationResult:
+        return ValidationResult(result=self._count <= self._limit)
+
+
+async def main() -> None:
+    from mellea.stdlib.session import start_session
+
+    m = start_session()
+
+    async with await stream(
+        Instruction("Write about the history of the internet."),
+        m.backend,
+        m.ctx,
+        requirements=[MaxSentencesReq(limit=2)],
+        chunking="sentence",
+        strategy=RepairTemplateStrategy(loop_budget=3),
+        as_events=True,
+    ) as streamer:
+        async for event in streamer:
+            match event:
+                case RetryEvent():
+                    print(f"  retry -> attempt {event.attempt}: {event.reason}")
+                case CompletedEvent():
+                    print(
+                        f"  completed — success={event.success} "
+                        f"attempts={event.attempts_used}"
+                    )
+                case _:
+                    pass
+
+    print(f"\nWinning text: {streamer.full_text!r}")
+    for a in streamer.attempts:
+        print(
+            f"  attempt {a.attempt}: failed_early={a.failed_early} "
+            f"success={a.success} selected={a.selected}"
+        )
+
+
+asyncio.run(main())
+```
+
+```text Sample output
+  retry -> attempt 2: Streaming validation failed: Exceeded 2-sentence limit
+  completed — success=True attempts=2
+
+Winning text: 'The internet began as ARPANET, a U.S. Defense Department project in the late 1960s. It grew into a global public network in the 1990s.'
+  attempt 1: failed_early=True success=False selected=False
+  attempt 2: failed_early=False success=True selected=True
+```
+
+> **Note:** LLM output is non-deterministic. Whether attempt 1 fails — and how
+> many attempts the run takes — depends on the model. If the first attempt
+> complies, no `RetryEvent` fires and only one attempt is recorded.
+
+Attempt 1's chunks and attempt 2's chunks arrive through the same `async for`,
+with the `RetryEvent` marking the boundary. After the run, `streamer.attempts`
+holds one `StreamAttempt` per try — the first `failed_early`, the second completed
+and `selected` as the result.
+
+---
+
 ## What you built
 
 | Concept | What it gives you |
@@ -646,6 +758,7 @@ three.
 | `"word"` / `"sentence"` / `"paragraph"` | Built-in chunking strategies trading reaction speed for context |
 | `ChunkingStrategy` subclass | Custom split boundaries for structured output (lists, code, CSV) |
 | Requirement `chunking=` | Each requirement validates at its own granularity, independent of the stream |
+| `stream(strategy=...)` | Repair and retry a failed attempt, up to `loop_budget`, with per-attempt history on `streamer.attempts` |
 
 ---
 

@@ -22,14 +22,20 @@ from __future__ import annotations
 import asyncio
 import time
 import uuid
-from collections.abc import AsyncGenerator, AsyncIterator, Sequence
+from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable, Sequence
 from copy import copy
 from dataclasses import dataclass, field
-from typing import Any, Literal, overload
+from typing import TYPE_CHECKING, Any, Literal, overload
 
 from ..backends.model_options import ModelOption
 from ..core.backend import Backend
-from ..core.base import CBlock, Component, Context, ModelOutputThunk
+from ..core.base import (
+    CBlock,
+    Component,
+    ComputedModelOutputThunk,
+    Context,
+    ModelOutputThunk,
+)
 from ..core.chunking import Chunker, ChunkingStrategy, resolve_chunking_strategy
 from ..core.requirement import (
     PartialValidationResult,
@@ -37,8 +43,14 @@ from ..core.requirement import (
     Requirement,
     ValidationResult,
 )
+from ..core.sampling import SampleActionType
 from ..plugins.manager import has_plugins, invoke_hook
 from ..plugins.types import HookType
+
+if TYPE_CHECKING:
+    # Annotation-only: not importable at module level — `streaming` loads during
+    # `mellea.stdlib` init, before `sampling.base` is built (circular import).
+    from .sampling.base import BaseSamplingStrategy
 
 # ---------------------------------------------------------------------------
 # Streaming event types
@@ -72,7 +84,8 @@ class ChunkEvent(StreamEvent):
     Args:
         text: The chunk text that was validated and emitted.
         chunk_index: Zero-based position of this chunk in the stream.
-        attempt: Sampling attempt number; currently always `1`.
+        attempt: The sampling attempt this belongs to, numbered from `1`; increments
+            across retries when a `strategy` is used, else always `1`.
     """
 
     text: str
@@ -93,7 +106,8 @@ class QuickCheckEvent(StreamEvent):
 
     Args:
         chunk_index: Zero-based position of the chunk that was validated.
-        attempt: Sampling attempt number; currently always `1`.
+        attempt: The sampling attempt this belongs to, numbered from `1`; increments
+            across retries when a `strategy` is used, else always `1`.
         passed: `True` if all active requirements returned non-`"fail"`
             for this chunk.
         results: `PartialValidationSummary` from each active requirement, in the
@@ -116,7 +130,8 @@ class StreamingDoneEvent(StreamEvent):
     exception.
 
     Args:
-        attempt: Sampling attempt number; currently always `1`.
+        attempt: The sampling attempt this belongs to, numbered from `1`; increments
+            across retries when a `strategy` is used, else always `1`.
         full_text: Complete accumulated text at stream end.
     """
 
@@ -132,7 +147,8 @@ class FullValidationEvent(StreamEvent):
     during streaming).  Not emitted on early exit.
 
     Args:
-        attempt: Sampling attempt number; currently always `1`.
+        attempt: The sampling attempt this belongs to, numbered from `1`; increments
+            across retries when a `strategy` is used, else always `1`.
         passed: `True` if all final `ValidationResult` objects passed.
         results: `ValidationResult` from each requirement, in requirement order.
     """
@@ -144,19 +160,26 @@ class FullValidationEvent(StreamEvent):
 
 @dataclass
 class RetryEvent(StreamEvent):
-    """Reserved for future use.
+    """Emitted before a sampling `strategy` starts a repaired re-attempt.
 
-    Defined for API completeness — `RetryEvent` is not currently emitted; today
-    retry is caller-driven re-invocation of `stream`. If retry is added to
-    streaming itself, this event will fire before each re-attempt.
+    Fired after an attempt fails (a mid-stream `"fail"` or a failing final
+    `validate()`) and before the next attempt's first chunk. Only emitted when
+    `stream()` was given a `strategy`; never on the single-attempt path
+    (`strategy=None`).
 
     Args:
-        attempt: Attempt number being started (1-based).
+        attempt: Attempt number being started (the first attempt is `1`).
         reason: Human-readable reason for the retry.
+        failed_early: `True` when the previous attempt broke on a mid-stream
+            `"fail"` (repaired via `stream_repair`); `False` when it completed and
+            its final `validate()` failed (repaired via `repair`).
+        failed_count: Number of failing validations that triggered the retry.
     """
 
     attempt: int
     reason: str
+    failed_early: bool
+    failed_count: int
 
 
 @dataclass
@@ -171,7 +194,7 @@ class CompletedEvent(StreamEvent):
             result and no unhandled exception); `False` otherwise.
         full_text: Validated-and-emitted output.  On early exit or exception,
             reflects whatever passed validation before the stop.
-        attempts_used: Number of stream attempts; currently always `1`.
+        attempts_used: Number of attempts run (1 without a strategy).
     """
 
     success: bool
@@ -198,6 +221,56 @@ class ErrorEvent(StreamEvent):
 # ---------------------------------------------------------------------------
 
 
+@dataclass
+class StreamAttempt:
+    """One attempt within a streaming sampling run (`stream(..., strategy=...)`).
+
+    A streaming sampling run records one `StreamAttempt` per generation attempt.
+    Unlike the non-streaming `SamplingResult`, an attempt may be either completed
+    (reached its natural end) or broken early (a requirement returned `"fail"`
+    mid-stream and the attempt was cancelled), so the fields cover both cases.
+    Exactly one attempt in a run is `selected` — the one whose output the
+    `Streamer`'s top-level fields reflect.
+
+    Args:
+        attempt: This attempt's position in the run, numbered from `1`.
+        action: The action used for this attempt (the repaired action for
+            attempts after the first).
+        context: The context used for this attempt.
+        completed_normally: `True` if the attempt reached its natural end, as
+            opposed to breaking early on a mid-stream `"fail"`.
+        success: `True` if the attempt completed and its final `validate()`
+            passed. Always `False` for an early-broken attempt.
+        failed_early: `True` if a requirement returned `"fail"` mid-stream and the
+            attempt was cancelled before natural completion.
+        failure_reason: Human-readable reason when `failed_early` is `True`.
+        full_text: The text produced by this attempt — through the last emitted
+            chunk for an early-broken attempt, the full output when completed.
+        mot: This attempt's computed thunk when `completed_normally`; `None` for an
+            early-broken attempt.
+        streaming_failures: `(Requirement, PartialValidationResult)` pairs for the
+            mid-stream chunk that failed, when `failed_early`.
+        final_validations: `ValidationResult`s from the stream-end `validate()`
+            calls; empty for an early-broken attempt.
+        selected: `True` for the single attempt chosen as the run's result.
+    """
+
+    attempt: int
+    action: SampleActionType
+    context: Context
+    completed_normally: bool = False
+    success: bool = False
+    failed_early: bool = False
+    failure_reason: str | None = None
+    full_text: str = ""
+    mot: ComputedModelOutputThunk | None = None
+    streaming_failures: list[tuple[Requirement, PartialValidationResult]] = field(
+        default_factory=list
+    )
+    final_validations: list[ValidationResult] = field(default_factory=list)
+    selected: bool = False
+
+
 class Streamer:
     """Async-iterable handle for a `stream` call.
 
@@ -216,6 +289,14 @@ class Streamer:
         validation_backend: Backend used for validation calls.
         event_queue: Optional queue; when set, every emitted `StreamEvent` is
             also pushed onto it. `None` for the plain chunk-iterating path.
+        strategy: Sampling strategy driving retry/repair, or `None` for a single
+            attempt.
+        action: The base action, used to seed the repair history on the sampling
+            path.
+        pre_action_ctx: The pre-action context, used as the first attempt's
+            `old_ctx` for `repair`/`stream_repair`.
+        relaunch: Callable that starts a fresh streaming generation for a retry,
+            given the next action and context.
 
     Attributes:
         failed_early: `True` if a requirement returned `"fail"` during streaming
@@ -230,11 +311,23 @@ class Streamer:
         full_text: Validated-and-emitted output. On natural completion, the full
             accumulated text; on early exit, the accumulated text through the last
             emitted chunk.
-        mot: The computed thunk, set on natural completion; `None` otherwise.
+        mot: The selected attempt's computed thunk; `None` if that attempt broke early.
         final_validations: `ValidationResult` objects from the stream-end
             `validate()` calls; empty on early exit.
+        attempts: One `StreamAttempt` record per attempt; a single entry when no
+            `strategy` is set. The attributes above describe the selected attempt.
         streaming_id: UUID correlating this stream's START/EVENT/END hooks.
     """
+
+    # Per-run result state, (re)set by `_reset` at construction and at the start of
+    # each attempt; `attempts` is excluded since it accumulates across attempts.
+    failed_early: bool
+    completed_normally: bool
+    failure_reason: str | None
+    streaming_failures: list[tuple[Requirement, PartialValidationResult]]
+    full_text: str
+    mot: ModelOutputThunk | None
+    final_validations: list[ValidationResult]
 
     def __init__(
         self,
@@ -244,20 +337,27 @@ class Streamer:
         requirements: list[Requirement],
         validation_backend: Backend,
         streaming_id: str,
-        event_queue: asyncio.Queue[StreamEvent | None] | None = None,
+        event_queue: asyncio.Queue[StreamEvent | None] | None,
+        strategy: BaseSamplingStrategy | None,
+        action: Component[Any] | CBlock,
+        pre_action_ctx: Context,
+        relaunch: Callable[
+            [Component[Any] | CBlock, Context],
+            Awaitable[tuple[ModelOutputThunk, Context]],
+        ],
     ) -> None:
         """Wrap an in-flight generation; iterating the `Streamer` drives it."""
-        self.failed_early: bool = False
-        self.completed_normally: bool = False
-        self.failure_reason: str | None = None
-        self.streaming_failures: list[tuple[Requirement, PartialValidationResult]] = []
-        self.full_text: str = ""
-        self.mot: ModelOutputThunk | None = None
-        self.final_validations: list[ValidationResult] = []
+        self._reset()
+        self.attempts: list[StreamAttempt] = []
         # Correlates this stream's START/EVENT/END hooks; created in `stream()`
         # so START can fire before generation opens the backend span.
         self.streaming_id: str = streaming_id
         self._event_queue = event_queue
+        # Sampling-only state, unused when `strategy is None`.
+        self._strategy = strategy
+        self._action = action
+        self._old_ctx = pre_action_ctx
+        self._relaunch = relaunch
         # The in-flight thunk, for teardown. Held separately from the public `mot`,
         # which is only set once the stream completes.
         self._mot = mot
@@ -265,6 +365,16 @@ class Streamer:
         self._gen: AsyncGenerator[str, None] = _drive(
             self, mot, ctx, chunking, requirements, validation_backend
         )
+
+    def _reset(self) -> None:
+        """Reset the per-attempt result state; called at construction and each retry."""
+        self.failed_early = False
+        self.completed_normally = False
+        self.failure_reason = None
+        self.streaming_failures = []
+        self.full_text = ""
+        self.mot = None
+        self.final_validations = []
 
     def __aiter__(self) -> AsyncIterator[str]:
         """Return the generator that drives generation and yields chunks."""
@@ -276,6 +386,7 @@ class Streamer:
         success: bool = False,
         error: Exception | None = None,
         full_text_length: int = 0,
+        attempts_used: int = 1,
     ) -> None:
         """Cancel the generation and fire the terminal events, at most once.
 
@@ -299,7 +410,9 @@ class Streamer:
                 await _emit_event(
                     self.streaming_id,
                     CompletedEvent(
-                        success=success, full_text=self.full_text, attempts_used=1
+                        success=success,
+                        full_text=self.full_text,
+                        attempts_used=attempts_used,
                     ),
                     event_queue=self._event_queue,
                 )
@@ -307,6 +420,11 @@ class Streamer:
                 if has_plugins(HookType.STREAMING_END):
                     from ..plugins.hooks.streaming import StreamingEndPayload
 
+                    sampling_success = (
+                        any(a.selected and a.success for a in self.attempts)
+                        if self._strategy is not None
+                        else None
+                    )
                     await invoke_hook(
                         HookType.STREAMING_END,
                         StreamingEndPayload(
@@ -317,6 +435,11 @@ class Streamer:
                             model=self._mot.generation.model,
                             provider=self._mot.generation.provider,
                             full_text_length=full_text_length,
+                            attempts_used=attempts_used,
+                            strategy_name=type(self._strategy).__name__
+                            if self._strategy is not None
+                            else None,
+                            sampling_success=sampling_success,
                         ),
                     )
 
@@ -379,6 +502,7 @@ class EventStreamer:
         chunking: str | ChunkingStrategy | None,
         requirements: Sequence[Requirement] | None,
         validation_backend: Backend | None,
+        strategy: BaseSamplingStrategy | None = None,
     ) -> None:
         """Drive the stream to completion, funnelling its events into the queue."""
         try:
@@ -389,6 +513,7 @@ class EventStreamer:
                 chunking=chunking,
                 requirements=requirements,
                 validation_backend=validation_backend,
+                strategy=strategy,
                 event_queue=self._queue,
             )
         except BaseException as exc:
@@ -504,6 +629,11 @@ class EventStreamer:
         return self._streamer.final_validations if self._streamer is not None else []
 
     @property
+    def attempts(self) -> list[StreamAttempt]:
+        """Per-attempt `StreamAttempt` records on the sampling path; else empty."""
+        return self._streamer.attempts if self._streamer is not None else []
+
+    @property
     def streaming_id(self) -> str | None:
         """UUID correlating this stream's START/EVENT/END hooks; `None` pre-start."""
         return self._streamer.streaming_id if self._streamer is not None else None
@@ -520,6 +650,7 @@ async def _emit_event(
     *,
     requirements: list[Requirement] | None = None,
     event_queue: asyncio.Queue[StreamEvent | None] | None = None,
+    strategy_name: str | None = None,
 ) -> None:
     """Fire the STREAMING_EVENT hook for `ev`, also pushing it onto `event_queue` if set.
 
@@ -533,6 +664,8 @@ async def _emit_event(
             order; `None` for other event types.
         event_queue: Optional queue; when set, `ev` is also pushed onto it.
             `None` for the plain chunk-iterating path.
+        strategy_name: For a `RetryEvent`, the sampling strategy's class name so a
+            subscriber can attribute the attempt; `None` for other event types.
     """
     if event_queue is not None:
         event_queue.put_nowait(ev)
@@ -542,7 +675,10 @@ async def _emit_event(
         await invoke_hook(
             HookType.STREAMING_EVENT,
             StreamingEventPayload(
-                streaming_id=streaming_id, event=ev, requirements=requirements or []
+                streaming_id=streaming_id,
+                event=ev,
+                requirements=requirements or [],
+                strategy_name=strategy_name,
             ),
         )
 
@@ -554,6 +690,7 @@ async def _validate_chunk(
     requirements: list[Requirement],
     validation_backend: Backend,
     ctx: Context,
+    attempt: int,
     *,
     on_flush: bool = False,
 ) -> bool:
@@ -573,6 +710,7 @@ async def _validate_chunk(
         requirements: Requirements to validate against.
         validation_backend: Backend used for validation calls.
         ctx: The generation context.
+        attempt: Sampling attempt number.
         on_flush: `True` when validating the trailing flushed fragment.
 
     Returns:
@@ -599,7 +737,10 @@ async def _validate_chunk(
     await _emit_event(
         streamer.streaming_id,
         QuickCheckEvent(
-            chunk_index=chunk_index, attempt=1, passed=not failures, results=summaries
+            chunk_index=chunk_index,
+            attempt=attempt,
+            passed=not failures,
+            results=summaries,
         ),
         requirements=requirements,
         event_queue=streamer._event_queue,
@@ -613,6 +754,42 @@ async def _validate_chunk(
         f"Streaming validation failed{where}: {failures[-1][1].reason or ''}"
     )
     return False
+
+
+def _select_failure(
+    streamer: Streamer, strategy: BaseSamplingStrategy, requirements: list[Requirement]
+) -> None:
+    """On budget exhaustion, pick a failed attempt and project it onto `streamer`.
+
+    Uses `strategy.select_from_failure` over the completed attempts (it expects
+    full `ValidationResult`s), falling back to the last attempt if none completed.
+    The chosen attempt is flagged `selected` and its outcome is copied onto the
+    `Streamer`'s top-level fields.
+
+    Args:
+        streamer: The handle whose top-level fields receive the chosen attempt.
+        strategy: The sampling strategy providing `select_from_failure`.
+        requirements: Requirements, zipped with each attempt's validations.
+    """
+    attempts = streamer.attempts
+    completed = [a for a in attempts if a.completed_normally]
+    if completed:
+        idx = strategy.select_from_failure(
+            [a.action for a in completed],
+            [a.mot for a in completed],  # type: ignore[misc]
+            [list(zip(requirements, a.final_validations)) for a in completed],
+        )
+        chosen = completed[idx]
+    else:
+        chosen = attempts[-1]
+    chosen.selected = True
+    streamer.full_text = chosen.full_text
+    streamer.mot = chosen.mot if chosen.completed_normally else None
+    streamer.completed_normally = chosen.completed_normally
+    streamer.failed_early = chosen.failed_early
+    streamer.failure_reason = chosen.failure_reason
+    streamer.streaming_failures = list(chosen.streaming_failures)
+    streamer.final_validations = list(chosen.final_validations)
 
 
 async def _drive(
@@ -629,28 +806,40 @@ async def _drive(
     so the single `finally` always runs — cleanup and STREAMING_END fire on every
     exit path (natural end, early exit, caller break, exception).
 
-    On natural completion every requirement's `validate()` runs on the full output
-    (early exit already returned, so all requirements reached the end unfailed);
+    On natural completion every requirement's `validate()` runs on the full output;
     this is what checks judge/aLoRA requirements that streamed only `"unknown"`.
+
+    With a sampling strategy (`streamer._strategy`) that same flow runs inside a
+    retry loop of up to `loop_budget` attempts. A failed attempt is repaired and
+    regenerated: a mid-stream `"fail"` routes through `stream_repair`, a failing
+    final `validate()` routes through `repair`. The caller's `async for` continues
+    flat across attempts, with a `RetryEvent` before each retry. Without a strategy
+    it runs once.
 
     Args:
         streamer: The handle recording terminal state for the caller.
-        mot: The in-flight streaming thunk.
-        ctx: The generation context.
+        mot: The in-flight streaming thunk for the first attempt.
+        ctx: The generation context for the first attempt (used for validation).
         chunking: Resolved chunking strategy, or `None` for raw deltas.
-        requirements: Requirements to validate against.
+        requirements: Requirements to validate against; re-copied per retry.
         validation_backend: Backend used for validation calls.
 
     Yields:
-        str: Each validated chunk, in order.
+        str: Each validated chunk, in order, across all attempts.
     """
+    strategy = streamer._strategy
+    loop_budget = strategy.loop_budget if strategy is not None else 1
+    attempt = 0
+    cur_action: Any = streamer._action
+    cur_old_ctx: Context = streamer._old_ctx
+    cur_new_ctx: Context = ctx
+    cur_mot: ModelOutputThunk = mot
+
     # `accumulated` is the full raw text across deltas; the Chunker holds only the
     # pending fragment. chunking=None means yield raw deltas, no Chunker.
     accumulated = ""
-    chunk_index = 0
     success = False
     error: Exception | None = None
-    chunker = Chunker(chunking) if chunking is not None else None
     emitted_end = 0  # offset in `accumulated` just past the last emitted chunk
 
     def _snapshot_full_text(chunk: str) -> None:
@@ -661,91 +850,195 @@ async def _drive(
         streamer.full_text = accumulated[:emitted_end]
 
     try:
-        async for delta in mot:
-            accumulated += delta
+        while True:
+            attempt += 1
+            attempt_record = StreamAttempt(
+                attempt=attempt, action=cur_action, context=cur_new_ctx
+            )
+            streamer.attempts.append(attempt_record)
 
-            if chunker is None:
-                new_chunks = [delta] if delta else []  # raw mode: delta is the chunk
-            else:
-                new_chunks = chunker.feed(delta)
+            # Reset per-attempt state (a no-op on the first attempt).
+            streamer._reset()
+            accumulated = ""
+            emitted_end = 0
+            chunk_index = 0
 
-            for c in new_chunks:
-                if not await _validate_chunk(
-                    streamer, c, chunk_index, requirements, validation_backend, ctx
-                ):
-                    return
-                _snapshot_full_text(c)  # record before yield; a break skips past it
-                await _emit_event(
-                    streamer.streaming_id,
-                    ChunkEvent(text=c, chunk_index=chunk_index, attempt=1),
-                    event_queue=streamer._event_queue,
-                )
-                yield c
-                chunk_index += 1
+            # Fresh copies each attempt so per-requirement streaming state
+            # (counters, chunkers) never leaks across attempts.
+            reqs = [copy(req) for req in requirements]
+            chunker = Chunker(chunking) if chunking is not None else None
 
-        # Flush the trailing fragment the chunker withheld (skipped in raw mode).
-        reqs_flushed = False
-        if chunker is not None:
-            for c in chunker.flush():
-                reqs_flushed = True
-                if not await _validate_chunk(
-                    streamer,
-                    c,
-                    chunk_index,
-                    requirements,
-                    validation_backend,
-                    ctx,
-                    on_flush=True,
-                ):
-                    return
-                _snapshot_full_text(c)
-                await _emit_event(
-                    streamer.streaming_id,
-                    ChunkEvent(text=c, chunk_index=chunk_index, attempt=1),
-                    event_queue=streamer._event_queue,
-                )
-                yield c
-                chunk_index += 1
+            async for delta in cur_mot:
+                accumulated += delta
+                if chunker is None:
+                    new_chunks = [delta] if delta else []  # raw mode
+                else:
+                    new_chunks = chunker.feed(delta)
+                for c in new_chunks:
+                    if not await _validate_chunk(
+                        streamer,
+                        c,
+                        chunk_index,
+                        reqs,
+                        validation_backend,
+                        cur_new_ctx,
+                        attempt,
+                    ):
+                        break
+                    _snapshot_full_text(c)
+                    await _emit_event(
+                        streamer.streaming_id,
+                        ChunkEvent(text=c, chunk_index=chunk_index, attempt=attempt),
+                        event_queue=streamer._event_queue,
+                    )
+                    yield c
+                    chunk_index += 1
+                if streamer.failed_early:
+                    break
 
-        if not reqs_flushed and any(r.chunking is not None for r in requirements):
-            if not await _validate_chunk(
-                streamer,
-                "",
-                chunk_index,
-                requirements,
-                validation_backend,
-                ctx,
-                on_flush=True,
+            # Flush the trailing fragment the chunker withheld (skipped in raw mode).
+            reqs_flushed = False
+            if not streamer.failed_early and chunker is not None:
+                for c in chunker.flush():
+                    reqs_flushed = True
+                    if not await _validate_chunk(
+                        streamer,
+                        c,
+                        chunk_index,
+                        reqs,
+                        validation_backend,
+                        cur_new_ctx,
+                        attempt,
+                        on_flush=True,
+                    ):
+                        break
+                    _snapshot_full_text(c)
+                    await _emit_event(
+                        streamer.streaming_id,
+                        ChunkEvent(text=c, chunk_index=chunk_index, attempt=attempt),
+                        event_queue=streamer._event_queue,
+                    )
+                    yield c
+                    chunk_index += 1
+
+            # Residual pass for requirements carrying their own chunking.
+            if (
+                not streamer.failed_early
+                and not reqs_flushed
+                and any(r.chunking is not None for r in reqs)
             ):
-                return
-
-        streamer.full_text = accumulated
-        streamer.mot = mot
-        streamer.completed_normally = True
-        await _emit_event(
-            streamer.streaming_id,
-            StreamingDoneEvent(attempt=1, full_text=accumulated),
-            event_queue=streamer._event_queue,
-        )
-
-        # Reached only on natural completion, so every requirement is still
-        # unfailed and gets a full-output validate().
-        if requirements:
-            streamer.final_validations = list(
-                await asyncio.gather(
-                    *[req.validate(validation_backend, ctx) for req in requirements]
+                await _validate_chunk(
+                    streamer,
+                    "",
+                    chunk_index,
+                    reqs,
+                    validation_backend,
+                    cur_new_ctx,
+                    attempt,
+                    on_flush=True,
                 )
+
+            if not streamer.failed_early:
+                # Natural completion: every requirement is still unfailed and gets
+                # a full-output validate().
+                streamer.full_text = accumulated
+                streamer.mot = cur_mot
+                streamer.completed_normally = True
+                await _emit_event(
+                    streamer.streaming_id,
+                    StreamingDoneEvent(attempt=attempt, full_text=accumulated),
+                    event_queue=streamer._event_queue,
+                )
+                if reqs:
+                    streamer.final_validations = list(
+                        await asyncio.gather(
+                            *[
+                                req.validate(validation_backend, cur_new_ctx)
+                                for req in reqs
+                            ]
+                        )
+                    )
+                    await _emit_event(
+                        streamer.streaming_id,
+                        FullValidationEvent(
+                            attempt=attempt,
+                            passed=all(v.as_bool() for v in streamer.final_validations),
+                            results=streamer.final_validations,
+                        ),
+                        event_queue=streamer._event_queue,
+                    )
+
+            # Snapshot this attempt's outcome.
+            attempt_record.completed_normally = streamer.completed_normally
+            attempt_record.failed_early = streamer.failed_early
+            attempt_record.failure_reason = streamer.failure_reason
+            attempt_record.full_text = streamer.full_text
+            attempt_record.mot = (
+                ComputedModelOutputThunk(cur_mot)
+                if streamer.completed_normally
+                else None
+            )
+            attempt_record.streaming_failures = list(streamer.streaming_failures)
+            attempt_record.final_validations = list(streamer.final_validations)
+            attempt_record.success = attempt_record.completed_normally and all(
+                v.as_bool() for v in attempt_record.final_validations
+            )
+
+            # Done: no strategy (single attempt) or a passing attempt.
+            if strategy is None or attempt_record.success:
+                attempt_record.selected = True
+                break
+
+            # Out of budget with no passing attempt: select a failed one.
+            if attempt >= loop_budget:
+                _select_failure(streamer, strategy, requirements)
+                break
+
+            # Retry: cancel the failed attempt without firing terminal events,
+            # repair from the failure, and relaunch a fresh generation.
+            await cur_mot.aclose()
+            past_actions = [a.action for a in streamer.attempts]
+            past_mots = [a.mot for a in streamer.attempts]
+            if streamer.failed_early:
+                cur_action, cur_old_ctx = strategy.stream_repair(
+                    cur_old_ctx,
+                    cur_new_ctx,
+                    past_actions,
+                    past_mots,
+                    [a.streaming_failures for a in streamer.attempts],
+                )
+            else:
+                cur_action, cur_old_ctx = strategy.repair(
+                    cur_old_ctx,
+                    cur_new_ctx,
+                    past_actions,
+                    past_mots,
+                    [
+                        list(zip(requirements, a.final_validations))
+                        for a in streamer.attempts
+                    ],
+                )
+            failed_count = (
+                len(streamer.streaming_failures)
+                if streamer.failed_early
+                else sum(1 for v in streamer.final_validations if not v.as_bool())
             )
             await _emit_event(
                 streamer.streaming_id,
-                FullValidationEvent(
-                    attempt=1,
-                    passed=all(v.as_bool() for v in streamer.final_validations),
-                    results=streamer.final_validations,
+                RetryEvent(
+                    attempt=attempt + 1,
+                    reason=streamer.failure_reason or "final validation failed",
+                    failed_early=streamer.failed_early,
+                    failed_count=failed_count,
                 ),
                 event_queue=streamer._event_queue,
+                strategy_name=type(strategy).__name__,
             )
-        success = True
+            cur_mot, cur_new_ctx = await streamer._relaunch(cur_action, cur_old_ctx)
+            streamer._mot = cur_mot
+
+        # Only reached on a normal break; an exception skips it (success stays False).
+        success = streamer.completed_normally
     except Exception as exc:
         # Record for the STREAMING_END span, then re-raise so the exception
         # still propagates to the caller through the `async for`.
@@ -757,9 +1050,12 @@ async def _drive(
         )
         raise
     finally:
-        # Driver-side teardown on every exit path
+        # Driver-side teardown on every exit path, once.
         await streamer._finalize(
-            success=success, error=error, full_text_length=len(streamer.full_text)
+            success=success,
+            error=error,
+            full_text_length=len(streamer.full_text),
+            attempts_used=attempt,
         )
 
 
@@ -776,6 +1072,7 @@ async def _stream(
     chunking: str | ChunkingStrategy | None = None,
     requirements: Sequence[Requirement] | None = None,
     validation_backend: Backend | None = None,
+    strategy: BaseSamplingStrategy | None = None,
     event_queue: asyncio.Queue[StreamEvent | None] | None = None,
 ) -> Streamer:
     """Start a streaming generation and return its `Streamer`.
@@ -794,6 +1091,8 @@ async def _stream(
             streaming and against the full output at stream end. `None` yields
             chunks without validation.
         validation_backend: Backend for validation calls; defaults to `backend`.
+        strategy: Optional sampling strategy enabling retry/repair; `None` for a
+            single attempt.
         event_queue: Optional queue; when set, every emitted `StreamEvent` is
             also pushed onto it. `None` for the plain chunk-iterating path.
 
@@ -805,11 +1104,13 @@ async def _stream(
         RuntimeError: If the backend returns an already-computed thunk instead
             of a streaming one — i.e. it is not honouring `ModelOption.STREAM`.
     """
-    strategy = resolve_chunking_strategy(chunking)
+    chunking_strategy = resolve_chunking_strategy(chunking)
 
-    # Copy so a raising __copy__ surfaces before generation starts, and the
-    # caller's requirement instances are never mutated by streaming state.
-    cloned_reqs = [copy(req) for req in (requirements or [])]
+    strategy_reqs = strategy.requirements if strategy is not None else None
+    # Union strategy and per-call requirements (deduped); copy each so streaming
+    # never mutates the caller's instances.
+    merged_reqs = list(dict.fromkeys([*(requirements or []), *(strategy_reqs or [])]))
+    cloned_reqs = [copy(req) for req in merged_reqs]
     resolved_backend = validation_backend if validation_backend is not None else backend
 
     streaming_id = str(uuid.uuid4())
@@ -822,20 +1123,31 @@ async def _stream(
                 streaming_id=streaming_id,
                 has_requirements=bool(cloned_reqs),
                 requirement_count=len(cloned_reqs),
-                chunking_strategy=type(strategy).__name__ if strategy else "none",
+                chunking_strategy=type(chunking_strategy).__name__
+                if chunking_strategy
+                else "none",
+                strategy_name=type(strategy).__name__ if strategy is not None else None,
+                loop_budget=strategy.loop_budget if strategy is not None else None,
             ),
         )
 
-    mot = None
-    try:
-        mot, gen_ctx = await backend.generate_from_context(
-            action, ctx, model_options={ModelOption.STREAM: True}
+    async def _start_generation(
+        act: Component[Any] | CBlock, from_ctx: Context
+    ) -> tuple[ModelOutputThunk, Context]:
+        """Start one streaming generation; used for attempt 1 and each retry."""
+        m, m_ctx = await backend.generate_from_context(
+            act, from_ctx, model_options={ModelOption.STREAM: True}
         )
-        if mot.is_computed():
+        if m.is_computed():
             raise RuntimeError(
                 "stream() requires a streaming backend; the backend returned an "
                 "already-computed MOT. Ensure the backend honours ModelOption.STREAM."
             )
+        return m, m_ctx
+
+    mot = None
+    try:
+        mot, gen_ctx = await _start_generation(action, ctx)
     except BaseException as exc:
         if has_plugins(HookType.STREAMING_END):
             from ..plugins.hooks.streaming import StreamingEndPayload
@@ -848,12 +1160,25 @@ async def _stream(
                     exception=exc if isinstance(exc, Exception) else None,
                     model=mot.generation.model if mot is not None else None,
                     provider=mot.generation.provider if mot is not None else None,
+                    strategy_name=type(strategy).__name__
+                    if strategy is not None
+                    else None,
                 ),
             )
         raise
 
     return Streamer(
-        mot, gen_ctx, strategy, cloned_reqs, resolved_backend, streaming_id, event_queue
+        mot,
+        gen_ctx,
+        chunking_strategy,
+        cloned_reqs,
+        resolved_backend,
+        streaming_id,
+        event_queue,
+        strategy,
+        action,
+        ctx,
+        _start_generation,
     )
 
 
@@ -866,6 +1191,7 @@ async def stream(
     chunking: str | ChunkingStrategy | None = ...,
     requirements: Sequence[Requirement] | None = ...,
     validation_backend: Backend | None = ...,
+    strategy: BaseSamplingStrategy | None = ...,
     as_events: Literal[False] = ...,
 ) -> Streamer: ...
 
@@ -879,6 +1205,7 @@ async def stream(
     chunking: str | ChunkingStrategy | None = ...,
     requirements: Sequence[Requirement] | None = ...,
     validation_backend: Backend | None = ...,
+    strategy: BaseSamplingStrategy | None = ...,
     as_events: Literal[True],
 ) -> EventStreamer: ...
 
@@ -892,6 +1219,7 @@ async def stream(
     chunking: str | ChunkingStrategy | None = ...,
     requirements: Sequence[Requirement] | None = ...,
     validation_backend: Backend | None = ...,
+    strategy: BaseSamplingStrategy | None = ...,
     as_events: bool,
 ) -> Streamer | EventStreamer: ...
 
@@ -904,6 +1232,7 @@ async def stream(
     chunking: str | ChunkingStrategy | None = None,
     requirements: Sequence[Requirement] | None = None,
     validation_backend: Backend | None = None,
+    strategy: BaseSamplingStrategy | None = None,
     as_events: bool = False,
 ) -> Streamer | EventStreamer:
     """Start a streaming generation.
@@ -938,10 +1267,14 @@ async def stream(
         ctx: The generation context.
         chunking: A `ChunkingStrategy`, a recognized alias string, or `None`
             (default) to yield raw deltas unchunked.
-        requirements: Requirements validated against each chunk during
-            streaming and against the full output at stream end. `None` yields
-            chunks without validation.
+        requirements: Requirements validated against each chunk during streaming
+            and against the full output at stream end, merged with any set on
+            `strategy`; with neither, chunks stream without validation.
         validation_backend: Backend for validation calls; defaults to `backend`.
+        strategy: Optional `BaseSamplingStrategy` enabling retry/repair. When set, a
+            failed attempt is repaired and retried up to the strategy's `loop_budget`
+            (`concurrency_budget` is not used); `None` (default) runs a single
+            attempt with no retry.
         as_events: When `True`, return an `EventStreamer` that iterates typed
             `StreamEvent` objects; when `False` (default), return a `Streamer`
             that iterates validated `str` chunks.
@@ -965,6 +1298,7 @@ async def stream(
                 chunking=chunking,
                 requirements=requirements,
                 validation_backend=validation_backend,
+                strategy=strategy,
             )
         )
         try:
@@ -981,4 +1315,5 @@ async def stream(
         chunking=chunking,
         requirements=requirements,
         validation_backend=validation_backend,
+        strategy=strategy,
     )

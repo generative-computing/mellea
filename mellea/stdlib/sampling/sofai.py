@@ -119,7 +119,7 @@ class SOFAISamplingStrategy(SamplingStrategy):
         old_ctx: Context,
         new_ctx: Context,
         past_actions: Sequence[SampleActionType],
-        past_results: list[ComputedModelOutputThunk],
+        past_results: Sequence[ComputedModelOutputThunk | None],
         past_val: list[list[tuple[Requirement, ValidationResult]]],
     ) -> tuple[SampleActionType, Context]:
         """Create targeted feedback message from validation results.

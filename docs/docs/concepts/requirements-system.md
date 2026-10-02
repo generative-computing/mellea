@@ -387,6 +387,10 @@ field:
 - `"fail"` — the stream is cancelled immediately; no further chunks reach the
   consumer; `validate()` is skipped for this requirement.
 
+By default a `"fail"` ends the stream. Passing a `SamplingStrategy` to `stream()`
+instead repairs and retries the failed attempt — see
+[Retrying with a sampling strategy](../how-to/use-async-and-streaming.md#retrying-with-a-sampling-strategy).
+
 State isolation is per-clone: `stream()` copies each requirement
 with `copy()` before generation starts, so the original objects are never
 mutated. Requirements that accumulate state across chunks (e.g. a running word

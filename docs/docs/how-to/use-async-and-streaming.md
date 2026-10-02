@@ -349,6 +349,55 @@ print(f"Completed normally: {streamer.completed_normally}")
 See the [Streaming Validation tutorial](../tutorials/06-streaming-validation.md)
 for a full walkthrough.
 
+### Retrying with a sampling strategy
+
+By default, a failed stream stops. Pass a `SamplingStrategy` to `stream()` and a
+failed attempt is repaired and retried instead, up to the strategy's
+`loop_budget`. A retry is triggered by either:
+
+- a mid-stream `"fail"` — generation is cancelled at the failing chunk and
+  repaired via the strategy's `stream_repair()`, without producing the rest of
+  the output;
+- a completed attempt whose final `validate()` fails — repaired via `repair()`.
+
+Chunks from every attempt arrive through the same `async for`; a `RetryEvent`
+separates one attempt from the next, and `streamer.attempts` holds the
+per-attempt history after the run. If `loop_budget` is exhausted with no passing
+attempt, `select_from_failure()` selects which attempt the `Streamer`'s final
+state (`full_text`, `mot`, and so on) reports.
+
+> **Note:** A plain `Streamer` yields only chunks, with no `RetryEvent` between
+> attempts, so concatenating them joins a discarded attempt's output onto the
+> winner's. To keep only the winning output, iterate with `as_events=True` and
+> group by `ChunkEvent.attempt`, or read `streamer.full_text` after the run (it
+> reflects only the selected attempt).
+
+```python
+from mellea.stdlib.sampling import RepairTemplateStrategy
+from mellea.stdlib.streaming import RetryEvent, stream
+
+async with await stream(
+    action,
+    m.backend,
+    m.ctx,
+    requirements=[req],
+    strategy=RepairTemplateStrategy(loop_budget=3),
+    as_events=True,
+) as streamer:
+    async for event in streamer:
+        if isinstance(event, RetryEvent):
+            print(f"  retry -> attempt {event.attempt}: {event.reason}")
+
+for a in streamer.attempts:
+    print(f"  attempt {a.attempt}: success={a.success} selected={a.selected}")
+```
+
+Strategies built on `loop_budget`, `repair`, and `stream_repair` —
+`RejectionSamplingStrategy`, `RepairTemplateStrategy`, and `MultiTurnStrategy` —
+support streaming retries. See
+[`docs/examples/streaming/sampling_streaming.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/streaming/sampling_streaming.py)
+for a full runnable example.
+
 ### The `_stream_validate` tri-state
 
 Each call to `_stream_validate` returns a `PartialValidationResult` with one of
