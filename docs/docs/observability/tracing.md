@@ -231,6 +231,14 @@ Backend spans cover individual LLM API calls. They follow the
 | `gen_ai.response.id` | Response identifier from the backend |
 | `gen_ai.response.time_to_first_chunk` | Time to first chunk in seconds; streaming requests only |
 
+Backend spans also carry the prompt-template attributes from the
+[OpenInference semantic conventions](https://arize-ai.github.io/openinference/spec/semantic_conventions.html):
+
+| Attribute | Description |
+| --------- | ----------- |
+| `llm.prompt_template.template` | Source of the prompt template rendered for the action; `chat` generations only |
+| `llm.prompt_template.variables` | The template's post-substitution variables, truncated to 500 characters; recorded only when `MELLEA_TRACES_CONTENT=true` |
+
 Mellea also adds context-specific attributes to backend spans:
 
 | Attribute | Description |

@@ -199,6 +199,75 @@ async def test_post_call_finishes_span_with_usage_attrs(
 
 
 @pytest.mark.asyncio
+async def test_post_call_emits_prompt_template_attrs(
+    backend_plugin, enabled_tracing, monkeypatch
+):
+    """`llm.prompt_template.{template,variables}` populated from `mot.generation` in post_call."""
+    monkeypatch.setenv("MELLEA_TRACES_CONTENT", "true")
+
+    fake_span = MagicMock()
+    fake_tracer = MagicMock()
+    fake_tracer.start_span.return_value = fake_span
+
+    pre = GenerationPreCallPayload(action=None, context=None, generation_id="pt-gid")
+    with patch("mellea.telemetry.tracing.get_backend_tracer", return_value=fake_tracer):
+        await backend_plugin.on_pre_call(pre, {})
+
+    mot = ModelOutputThunk("hi")
+    mot.generation = GenerationMetadata(
+        model="gpt-4o",
+        provider="openai",
+        prompt_template="Write about {{topic}}.",
+        prompt_template_variables={"topic": "LLMs"},
+    )
+    post = GenerationPostCallPayload(
+        prompt="p", model_output=mot, latency_ms=1.0, generation_id="pt-gid"
+    )
+    await backend_plugin.on_post_call(post, {})
+
+    attrs = _attrs(fake_span)
+    assert attrs["llm.prompt_template.template"] == "Write about {{topic}}."
+    assert attrs["llm.prompt_template.variables"] == '{"topic": "LLMs"}'
+
+
+@pytest.mark.asyncio
+async def test_post_call_gates_variables_when_content_disabled(
+    backend_plugin, enabled_tracing, monkeypatch
+):
+    """Variables are withheld (but the template is still emitted) when content capture is off."""
+    monkeypatch.delenv("MELLEA_TRACES_CONTENT", raising=False)
+    monkeypatch.delenv(
+        "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT", raising=False
+    )
+
+    fake_span = MagicMock()
+    fake_tracer = MagicMock()
+    fake_tracer.start_span.return_value = fake_span
+
+    pre = GenerationPreCallPayload(
+        action=None, context=None, generation_id="pt-gid-off"
+    )
+    with patch("mellea.telemetry.tracing.get_backend_tracer", return_value=fake_tracer):
+        await backend_plugin.on_pre_call(pre, {})
+
+    mot = ModelOutputThunk("hi")
+    mot.generation = GenerationMetadata(
+        model="gpt-4o",
+        provider="openai",
+        prompt_template="Write about {{topic}}.",
+        prompt_template_variables={"topic": "LLMs"},
+    )
+    post = GenerationPostCallPayload(
+        prompt="p", model_output=mot, latency_ms=1.0, generation_id="pt-gid-off"
+    )
+    await backend_plugin.on_post_call(post, {})
+
+    attrs = _attrs(fake_span)
+    assert attrs["llm.prompt_template.template"] == "Write about {{topic}}."
+    assert "llm.prompt_template.variables" not in attrs
+
+
+@pytest.mark.asyncio
 async def test_error_finishes_span_with_error_status(backend_plugin, enabled_tracing):
     fake_span = MagicMock()
     fake_tracer = MagicMock()
@@ -210,7 +279,9 @@ async def test_error_finishes_span_with_error_status(backend_plugin, enabled_tra
 
     err = ValueError("rate limit")
     mot = ModelOutputThunk(None)
-    mot.generation = GenerationMetadata(model="gpt-4o", provider="openai")
+    mot.generation = GenerationMetadata(
+        model="gpt-4o", provider="openai", prompt_template="Write about {{topic}}."
+    )
     err_payload = GenerationErrorPayload(
         exception=err, model_output=mot, generation_id="gid-err"
     )
@@ -221,6 +292,7 @@ async def test_error_finishes_span_with_error_status(backend_plugin, enabled_tra
     fake_span.end.assert_called_once()
     attrs = _attrs(fake_span)
     assert attrs["error.type"] == "ValueError"
+    assert attrs["llm.prompt_template.template"] == "Write about {{topic}}."
     assert "gid-err" not in tracing._in_flight_spans
 
 

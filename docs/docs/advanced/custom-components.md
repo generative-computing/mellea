@@ -100,6 +100,8 @@ class FeedbackForm(Component[dict[str, str]]):
         return json.loads(raw.strip())
 ```
 
+> **Tip:** Keep `format_for_llm` side-effect-free — it may be called more than once per generation.
+
 Pass the component to `m.act()` to get a result:
 
 ```python
