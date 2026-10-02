@@ -251,6 +251,7 @@ def _build_model_options_from_response_request(request: ResponseRequest) -> dict
         "parallel_tool_calls",
         "context_management",
         "prompt_cache_options",
+        "format",  # Handled separately for structured outputs
         "extra",
         # Not-yet-implemented
         "top_p",
@@ -403,7 +404,31 @@ def make_responses_endpoint(module):
 
             model_options = _build_model_options_from_response_request(request)
 
+            # Handle format (structured outputs)
             format_model: type[BaseModel] | None = None
+            if request.format is not None:
+                if request.format.type == "json_schema":
+                    # json_schema presence is validated by ResponseFormat.model_validator
+                    json_schema = cast(JsonSchemaFormat, request.format.json_schema)
+                    try:
+                        format_model = json_schema_to_pydantic(
+                            json_schema.schema_, json_schema.name
+                        )
+                    except (ValueError, TypeError, RecursionError) as e:
+                        message = (
+                            "Invalid JSON schema: recursive $ref is not supported"
+                            if isinstance(e, RecursionError)
+                            else f"Invalid JSON schema: {e!s}"
+                        )
+                        return create_openai_error_response(
+                            status_code=400,
+                            message=message,
+                            error_type="invalid_request_error",
+                            param="format.json_schema.schema",
+                        )
+                # For "json_object" and "text", format_model remains None
+                # Note: "json_object" mode is not yet implemented - the backend
+                # receives no signal to produce JSON output (same as "text" mode)
 
             serve_kwargs: dict[str, Any] = {
                 "input": messages,

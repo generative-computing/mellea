@@ -144,6 +144,14 @@ class TestBuildModelOptionsFromResponseRequest:
         assert "model" not in opts
         assert "input" not in opts
 
+    def test_format_excluded_from_model_options(self):
+        """Verify format parameter is excluded from model_options (handled separately)."""
+        from cli.serve.models import ResponseFormat
+
+        req = ResponseRequest(model="m", input="hi", format=ResponseFormat(type="text"))
+        opts = _build_model_options_from_response_request(req)
+        assert "format" not in opts
+
 
 # ---------------------------------------------------------------------------
 # _convert_response_input_to_messages
@@ -383,6 +391,60 @@ class TestResponsesEndpointNonStreaming:
         # Should not raise — just verifying the code path executes cleanly
         response = await endpoint(simple_request)
         assert isinstance(response, Response)
+
+    @pytest.mark.asyncio
+    async def test_format_text_passed_to_serve(self, mock_module, simple_request):
+        """Verify format=text is handled and format=None is passed to serve()."""
+        from cli.serve.models import ResponseFormat
+
+        received_format = None
+
+        def capture_format(input, requirements=None, model_options=None, format=None):
+            nonlocal received_format
+            received_format = format
+            return ModelOutputThunk("ok")
+
+        mock_module.serve = capture_format
+        endpoint = make_responses_endpoint(mock_module)
+
+        # Test with format=text (should result in format_model=None)
+        request_with_format = ResponseRequest(
+            model="m", input="hi", format=ResponseFormat(type="text")
+        )
+        response = await endpoint(request_with_format)
+        assert isinstance(response, Response)
+        assert received_format is None
+
+    @pytest.mark.asyncio
+    async def test_format_json_schema_invalid_returns_400(self, mock_module):
+        """Verify invalid JSON schema in format parameter returns 400 error."""
+        from cli.serve.models import ResponseFormat
+
+        endpoint = make_responses_endpoint(mock_module)
+
+        # Invalid schema (recursive $ref)
+        request_with_invalid_schema = ResponseRequest(
+            model="m",
+            input="hi",
+            format=ResponseFormat(
+                type="json_schema",
+                json_schema={
+                    "name": "Invalid",
+                    "schema": {
+                        "$ref": "#/definitions/Node",
+                        "definitions": {
+                            "Node": {
+                                "type": "object",
+                                "properties": {"child": {"$ref": "#/definitions/Node"}},
+                            }
+                        },
+                    },
+                    "strict": True,
+                },
+            ),
+        )
+        response = await endpoint(request_with_invalid_schema)
+        assert response.status_code == 400  # type: ignore[union-attr]
 
 
 # ---------------------------------------------------------------------------
