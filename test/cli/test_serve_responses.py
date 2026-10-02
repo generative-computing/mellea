@@ -14,7 +14,7 @@ from cli.serve.app import (
     _response_store,
     make_responses_endpoint,
 )
-from cli.serve.models import Response, ResponseInputItem, ResponseRequest
+from cli.serve.models import InputContent, Response, ResponseInputItem, ResponseRequest
 from cli.serve.streaming import stream_response_chunks
 from mellea.backends.model_options import ModelOption
 from mellea.core.base import ModelOutputThunk
@@ -209,13 +209,123 @@ class TestConvertResponseInputToMessages:
         assert msgs[0].role == "system"
         assert msgs[1].role == "user"
 
-    def test_non_string_content_becomes_none(self):
-        """Content that is a list (multimodal) is dropped to None — string only for now."""
+    def test_multimodal_text_content_converted(self):
+        """Content blocks (multimodal) are converted to MessageContent list."""
         items = [
             ResponseInputItem(
-                role="user", content=[{"type": "input_text", "text": "hi"}]
+                role="user",
+                content=[
+                    InputContent(type="input_text", text="What's in this image?"),
+                    InputContent(
+                        type="input_image", image_url="https://example.com/img.jpg"
+                    ),
+                ],
             )
         ]
+        msgs = _convert_response_input_to_messages(items, None)
+        assert len(msgs) == 1
+        assert msgs[0].role == "user"
+        assert isinstance(msgs[0].content, list)
+        assert len(msgs[0].content) == 2
+        # First block: text
+        assert msgs[0].content[0].type == "text"
+        assert msgs[0].content[0].text == "What's in this image?"
+        # Second block: image
+        assert msgs[0].content[1].type == "image_url"
+        assert msgs[0].content[1].image_url == {"url": "https://example.com/img.jpg"}
+
+    def test_multimodal_image_only_content(self):
+        """Image-only content is converted properly."""
+        items = [
+            ResponseInputItem(
+                role="user",
+                content=[
+                    InputContent(
+                        type="input_image", image_url="data:image/png;base64,ABC123"
+                    )
+                ],
+            )
+        ]
+        msgs = _convert_response_input_to_messages(items, None)
+        assert len(msgs) == 1
+        assert isinstance(msgs[0].content, list)
+        assert len(msgs[0].content) == 1
+        assert msgs[0].content[0].type == "image_url"
+        assert msgs[0].content[0].image_url == {"url": "data:image/png;base64,ABC123"}
+
+    def test_multimodal_instructions(self):
+        """Multimodal instructions are converted properly."""
+        instructions = [
+            ResponseInputItem(
+                role="developer",
+                content=[
+                    InputContent(
+                        type="input_text", text="Analyze this image carefully."
+                    ),
+                    InputContent(
+                        type="input_image", image_url="https://example.com/ref.jpg"
+                    ),
+                ],
+            )
+        ]
+        items = [ResponseInputItem(role="user", content="Hello")]
+        msgs = _convert_response_input_to_messages(items, instructions)
+        assert len(msgs) == 2
+        assert msgs[0].role == "system"
+        assert isinstance(msgs[0].content, list)
+        assert len(msgs[0].content) == 2
+        assert msgs[0].content[0].type == "text"
+        assert msgs[0].content[0].text == "Analyze this image carefully."
+        assert msgs[0].content[1].type == "image_url"
+        assert msgs[0].content[1].image_url == {"url": "https://example.com/ref.jpg"}
+        assert msgs[1].role == "user"
+        assert msgs[1].content == "Hello"
+
+    def test_mixed_string_and_multimodal(self):
+        """String content and multimodal content can coexist."""
+        items = [
+            ResponseInputItem(role="user", content="Just text"),
+            ResponseInputItem(
+                role="user",
+                content=[
+                    InputContent(type="input_text", text="Text with image"),
+                    InputContent(
+                        type="input_image", image_url="https://example.com/test.png"
+                    ),
+                ],
+            ),
+        ]
+        msgs = _convert_response_input_to_messages(items, None)
+        assert len(msgs) == 2
+        assert msgs[0].content == "Just text"
+        assert isinstance(msgs[1].content, list)
+        assert len(msgs[1].content) == 2
+
+    def test_file_content_type_ignored_with_warning(self, caplog):
+        """File content blocks are ignored with a warning."""
+        import logging
+
+        items = [
+            ResponseInputItem(
+                role="user",
+                content=[
+                    InputContent(type="input_text", text="Here is a file:"),
+                    InputContent(type="input_file", file_id="file-123"),
+                ],
+            )
+        ]
+        with caplog.at_level(logging.WARNING):
+            msgs = _convert_response_input_to_messages(items, None)
+        assert len(msgs) == 1
+        # Only text block should be present
+        assert len(msgs[0].content) == 1
+        assert msgs[0].content[0].type == "text"
+        # Warning should be logged
+        assert "File content (type='input_file') is not yet supported" in caplog.text
+
+    def test_empty_content_list_returns_none(self):
+        """Empty content list results in None content."""
+        items = [ResponseInputItem(role="user", content=[])]
         msgs = _convert_response_input_to_messages(items, None)
         assert msgs[0].content is None
 
