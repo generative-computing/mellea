@@ -44,6 +44,7 @@ from .models import (
     ChatCompletionMessageToolCall,
     ChatCompletionRequest,
     Choice,
+    InputContent,
     JsonSchemaFormat,
     OpenAIError,
     OpenAIErrorResponse,
@@ -293,6 +294,55 @@ def _build_model_options_from_response_request(request: ResponseRequest) -> dict
     return result
 
 
+def _convert_input_content_to_message_content(
+    content: str | list[InputContent] | None,
+) -> str | list | None:
+    """Convert Responses API InputContent list to ChatMessage content format.
+
+    Handles both string content (backward compatible) and list of content
+    blocks (multimodal: text, images, files).
+
+    Args:
+        content: Either a string (text-only), a list of InputContent blocks,
+            or None.
+
+    Returns:
+        - str: If input is a string
+        - list[MessageContent]: If input is a list of content blocks
+        - None: If input is None
+
+    Raises:
+        ValueError: If an unsupported content type is encountered.
+    """
+    from mellea.serve.models import ImageUrlContent, TextContent
+
+    if content is None or isinstance(content, str):
+        return content
+
+    # Convert list of InputContent to list of MessageContent
+    message_content: list = []
+    for block in content:
+        if block.type == "input_text" and block.text is not None:
+            message_content.append(TextContent(type="text", text=block.text))
+        elif block.type == "input_image" and block.image_url is not None:
+            message_content.append(
+                ImageUrlContent(type="image_url", image_url={"url": block.image_url})
+            )
+        elif block.type == "input_file":
+            # File content is not yet supported - skip with a warning
+            logger.warning(
+                "File content (type='input_file') is not yet supported in multimodal "
+                "messages. This content block will be ignored."
+            )
+        else:
+            logger.warning(
+                f"Unsupported content block type: {block.type!r}. "
+                "This content block will be ignored."
+            )
+
+    return message_content if message_content else None
+
+
 def _convert_response_input_to_messages(
     input_data: str | list[ResponseInputItem],
     instructions: str | list[ResponseInputItem] | None,
@@ -303,6 +353,10 @@ def _convert_response_input_to_messages(
     mapping. The Responses API uses ``developer`` where Chat Completions uses
     ``system``; both are mapped to ``system`` so existing backends receive a
     role they understand.
+
+    Supports multimodal content: text, images (via image_url), and files
+    (not yet supported). Content blocks are converted from Responses API
+    format (InputContent) to ChatMessage format (MessageContent).
     """
     from mellea.serve.models import ChatMessage
 
@@ -320,15 +374,15 @@ def _convert_response_input_to_messages(
             messages.append(ChatMessage(role="system", content=instructions))
         else:
             for item in instructions:
-                text = item.content if isinstance(item.content, str) else None
-                messages.append(ChatMessage(role=_role(item.role), content=text))
+                content = _convert_input_content_to_message_content(item.content)
+                messages.append(ChatMessage(role=_role(item.role), content=content))
 
     if isinstance(input_data, str):
         messages.append(ChatMessage(role="user", content=input_data))
     else:
         for item in input_data:
-            text = item.content if isinstance(item.content, str) else None
-            messages.append(ChatMessage(role=_role(item.role), content=text))
+            content = _convert_input_content_to_message_content(item.content)
+            messages.append(ChatMessage(role=_role(item.role), content=content))
 
     return messages
 

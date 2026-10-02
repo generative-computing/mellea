@@ -12,7 +12,7 @@ Each subdirectory contains a server implementation and its matching client(s):
 | `streaming/` | Real-time token streaming via Server-Sent Events (SSE) |
 | `response-format/` | Structured output with `response_format` / JSON schema |
 | `tool-calling/` | Function/tool calling through the API |
-| `multimodal-image/` | Vision model serving with image inputs |
+| `multimodal-image/` | Vision model serving with image inputs (Chat Completions + Responses API) |
 | `multimodal-audio/` | Audio-text-to-text serving (llama-server and Ollama/Granite variants) |
 | `pii/` | PII detection service |
 | `model-routing/` | Using or ignoring the client-supplied model ID |
@@ -215,6 +215,30 @@ m serve docs/examples/m_serve/multimodal-image/m_serve_example_multimodal_image.
 # In another terminal, test with the multimodal client
 uv run python docs/examples/m_serve/multimodal-image/client_multimodal_image.py
 ```
+
+**Responses API Support:**
+
+The `/v1/responses` endpoint also supports multimodal inputs with image content blocks.
+Both endpoints (`/v1/chat/completions` and `/v1/responses`) handle multimodal content
+identically — the same server code works for both APIs.
+
+```bash
+# Test via Responses API
+uv run python docs/examples/m_serve/multimodal-image/client_responses_multimodal.py
+```
+
+**Content Block Format:**
+
+The Responses API uses a slightly different content block format than Chat Completions:
+
+| API | Text Block | Image Block |
+|-----|-----------|-------------|
+| Chat Completions | `{"type": "text", "text": "..."}` | `{"type": "image_url", "image_url": {"url": "..."}}` |
+| Responses | `{"type": "input_text", "text": "..."}` | `{"type": "input_image", "image_url": "..."}` |
+
+The server automatically converts Responses API format to the internal ChatMessage format,
+so your Mellea program receives the same multimodal `ChatMessage` objects regardless of
+which API endpoint the client uses.
 
 ### Multimodal Audio (llama-server + Gemma)
 
