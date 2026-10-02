@@ -885,6 +885,8 @@ class Component(Protocol, Generic[S]):
     def format_for_llm(self) -> TemplateRepresentation | str:
         """Formats the `Component` into a `TemplateRepresentation` or plain string for LLM consumption.
 
+        Implementations should be side-effect-free, as this may be called more than once per generation.
+
         Returns:
             TemplateRepresentation | str: A structured `TemplateRepresentation` (for components
             with tools, fields, or templates) or a plain string for simple components.
