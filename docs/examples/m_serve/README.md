@@ -127,6 +127,17 @@ Client code for testing tool calling via `/v1/responses`, demonstrating
 ### tool-calling/client_streaming_tool_calling.py
 Client code demonstrating streaming responses combined with tool calling.
 
+### tool-calling/m_serve_example_tool_calling_server_side.py
+Example of server-side tool execution: the `serve()` function runs the full
+agentic loop (model → tools → re-prompt) before returning. The client receives
+a complete answer in one request with no `function_call` items to handle.
+
+### tool-calling/client_responses_tool_calling_server_side.py
+Client code for testing server-side tool calling via `/v1/responses`.
+Contrast with `client_responses_tool_calling.py`: this client sends one request
+and gets a fully-resolved answer, while the other handles `function_call` items
+and makes follow-up requests itself.
+
 ## Concepts Demonstrated
 
 - **API Deployment**: Exposing Mellea programs as REST APIs
@@ -239,15 +250,30 @@ uv run python docs/examples/m_serve/multimodal-audio/client_multimodal_audio.py
 
 ### Tool Calling
 
+**Client-side tool execution** (client handles `function_call` items):
+
 ```bash
-# Start the tool calling example server
+# Start the server
 uv run m serve docs/examples/m_serve/tool-calling/m_serve_example_tool_calling.py
 
-# In another terminal, test with the tool calling client
+# Test via Chat Completions API
 uv run python docs/examples/m_serve/tool-calling/client_tool_calling.py
 
-# Or test with streaming tool calling
+# Test via Responses API (handles function_call items + follow-up)
+uv run python docs/examples/m_serve/tool-calling/client_responses_tool_calling.py
+
+# Test streaming + tool calling
 uv run python docs/examples/m_serve/tool-calling/client_streaming_tool_calling.py
+```
+
+**Server-side tool execution** (server runs full agentic loop, returns complete answer):
+
+```bash
+# Start the server-side tool calling server
+uv run m serve docs/examples/m_serve/tool-calling/m_serve_example_tool_calling_server_side.py
+
+# Test via Responses API — single request, complete answer
+uv run python docs/examples/m_serve/tool-calling/client_responses_tool_calling_server_side.py
 ```
 
 ### Model Routing
