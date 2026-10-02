@@ -432,6 +432,13 @@ class ResponseRequest(BaseModel):
     parallel_tool_calls: bool | None = True
     context_management: ContextManagementConfig | None = None
     prompt_cache_options: PromptCacheOptions | None = None
+    format: ResponseFormat | None = None
+    """Response format configuration for structured outputs.
+
+    Configuring `{ "type": "json_schema" }` enables Structured Outputs,
+    which ensures the model will match your supplied JSON schema.
+    The default format is `{ "type": "text" }`.
+    """
 
     extra: dict[str, Any] = Field(default_factory=dict)
 
