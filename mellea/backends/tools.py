@@ -613,7 +613,8 @@ def validate_tool_arguments(
         args: Raw arguments from model (post-JSON parsing)
         coerce_types: If True, attempt type coercion for common cases (default: True)
         strict: If True, raise ValidationError on failures; if False, log warnings
-                and return original args (default: False)
+                and return the failing args unvalidated, the rest validated
+                (default: False)
 
     Returns:
         Validated and optionally coerced arguments dict
@@ -896,11 +897,20 @@ def validate_tool_arguments(
             MelleaLogger.get_logger().error(error_msg)
             raise
         else:
-            # Log warning and return original args
+            # Pass the failing arguments through as given; validate the rest.
             MelleaLogger.get_logger().warning(
-                error_msg + "\nReturning original arguments without validation."
+                error_msg
+                + "\nReturning those arguments as given; the rest were validated."
             )
-            return dict(args)
+            failed = {error["loc"][0] for error in e.errors() if error["loc"]}
+            relaxed: dict[str, Any] = {
+                name: (Any, None) if name in failed else definition
+                for name, definition in field_definitions.items()
+            }
+            # Extra arguments are dumped as given (`extra="allow"`).
+            return create_model(
+                f"{tool_name}_Validator", __config__=model_config, **relaxed
+            )(**args).model_dump(exclude_unset=True)
 
     except Exception as e:
         # Catch any other errors during validation

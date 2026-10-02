@@ -156,14 +156,46 @@ class TestValidationModes:
     """Test strict vs. lenient validation modes."""
 
     def test_lenient_mode_with_invalid_type(self):
-        """Test that lenient mode returns original args on validation failure."""
+        """Test that lenient mode returns an invalid argument as given."""
         args = {"name": "Test", "age": "not_a_number", "score": 95.5, "active": True}
         tool = MelleaTool.from_callable(typed_tool)
         validated = validate_tool_arguments(tool, args, strict=False)
 
-        # Should return original args
+        # The invalid argument comes back as given; the rest were already typed
         assert validated == args
         assert validated["age"] == "not_a_number"
+
+    def test_lenient_mode_coerces_the_arguments_that_validate(self):
+        """One invalid argument is passed through as given; the rest are still coerced."""
+        args = {
+            "name": "Test",
+            "age": "not_a_number",
+            "score": "95.5",
+            "active": "true",
+        }
+        tool = MelleaTool.from_callable(typed_tool)
+        validated = validate_tool_arguments(tool, args, strict=False)
+
+        assert validated == {
+            "name": "Test",
+            "age": "not_a_number",
+            "score": 95.5,
+            "active": True,
+        }
+
+    def test_lenient_mode_keeps_unknown_args_when_another_fails(self):
+        """Extra arguments survive the per-argument fallback, as on success."""
+        args = {"name": "Test", "age": "x", "score": "1", "active": "1", "extra": "e"}
+        tool = MelleaTool.from_callable(typed_tool)
+        validated = validate_tool_arguments(tool, args, strict=False)
+
+        assert validated == {
+            "name": "Test",
+            "age": "x",
+            "score": 1.0,
+            "active": True,
+            "extra": "e",
+        }
 
     def test_strict_mode_with_invalid_type(self):
         """Test that strict mode raises ValidationError on failure."""
@@ -179,7 +211,7 @@ class TestValidationModes:
         tool = MelleaTool.from_callable(optional_tool)
         validated = validate_tool_arguments(tool, args, strict=False)
 
-        # Should return original args
+        # The missing argument stays missing; the rest come back validated
         assert validated == args
 
     def test_strict_mode_with_missing_required(self):

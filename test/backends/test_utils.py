@@ -219,12 +219,16 @@ def test_decode_text_args_list_type_inside_any_of():
 def test_to_tool_calls_granite_xml_none_text_for_optional_param_is_null(text: str):
     """The template renders a Python `None` as `None`; for an optional parameter that is a null."""
 
-    def search(query: str, limit: int | None = None) -> str:
+    def search(
+        query: str, page: int, limit: int | None = None, exact: bool = False
+    ) -> str:
         """Search.
 
         Args:
             query: what to search for
+            page: the results page
             limit: optional result limit
+            exact: match the query exactly
         """
         return query
 
@@ -233,11 +237,13 @@ def test_to_tool_calls_granite_xml_none_text_for_optional_param_is_null(text: st
     registry: dict[str, AbstractMelleaTool] = {
         "search": MelleaTool.from_callable(search)
     }
-    raw = _tool_call_xml("search", {"query": "cats", "limit": text})
+    raw = _tool_call_xml(
+        "search", {"query": "cats", "page": "2", "limit": text, "exact": "True"}
+    )
     result = to_tool_calls(registry, raw)
     assert result is not None
-    assert result[0].args["query"] == "cats"
-    assert result[0].args["limit"] is None
+    # The null must not stop the other arguments being coerced.
+    assert result[0].args == {"query": "cats", "page": 2, "limit": None, "exact": True}
 
 
 def test_to_tool_calls_none_text_for_required_param_is_kept():
