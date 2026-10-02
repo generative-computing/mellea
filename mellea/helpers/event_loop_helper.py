@@ -56,7 +56,13 @@ class _EventLoopHandler:
         scheduled again at that point, so waiting on one can only burn the
         timeout without changing the outcome.
         """
-        self._close_event_loop(join_timeout=0.0 if sys.is_finalizing() else 1.0)
+        try:
+            # Python sets module globals to `None` at shutdown. If it's
+            # `None`, treat `sys` as finalizing.
+            finalizing = sys.is_finalizing()
+        except AttributeError:
+            finalizing = True
+        self._close_event_loop(join_timeout=0.0 if finalizing else 1.0)
 
     def _close_event_loop(self, join_timeout: float = 5.0) -> None:
         """Shut down the event loop and its thread, releasing the loop's file descriptors.
