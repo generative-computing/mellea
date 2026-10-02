@@ -128,7 +128,12 @@ trained, non-catalog adapter does not need a dedicated shim class.
 
 ```python
 from mellea.backends.huggingface import LocalHFBackend
-from mellea.backends.adapters import Adapter, Identity, LocalFileBinding, get_io_contract
+from mellea.backends.adapters import (
+    Adapter,
+    Identity,
+    LocalFileBinding,
+    get_io_contract,
+)
 from mellea.backends.adapters.catalog import AdapterType
 from mellea.stdlib.context import ChatContext
 from mellea import MelleaSession
@@ -186,12 +191,17 @@ adapter is preferred whenever one is loaded, with three exceptions:
    is loaded but routing is suppressed for the entire backend instance.
 2. The requirement uses the `LLMaJRequirement` subtype explicitly — the caller is
    asking for LLM-as-a-judge regardless of what adapters are loaded.
-3. The adapter is unavailable (e.g. cannot be loaded) — Mellea falls back to
-   LLM-as-a-judge automatically. This is the *only* fallback case: if the
-   adapter runs but its output fails schema validation, `validate()` does not
-   fall back. Instead it surfaces the schema error on `ValidationResult.error`
-   and fails the check closed (`bool(result)` is `False`), so callers can tell
-   an unparsable adapter response apart from an ordinary "requirement not met".
+3. The adapter is unavailable — Mellea falls back to LLM-as-a-judge
+   automatically. This covers the adapter not being registered at all, and
+   (see [aLoRA activation is not guaranteed by
+   loading](#alora-activation-is-not-guaranteed-by-loading)) an aLoRA that is
+   registered but proven unable to activate for this prompt: generation for
+   it is skipped entirely, so it never reaches the case below. This is the
+   *only* fallback case: if the adapter genuinely runs and its output fails
+   schema validation, `validate()` does not fall back. Instead it surfaces
+   the schema error on `ValidationResult.error` and fails the check closed
+   (`bool(result)` is `False`), so callers can tell an unparsable adapter
+   response apart from an ordinary "requirement not met".
 
 If you want to force the adapter path even when using `generate_from_context`
 directly (bypassing the normal `validate()` call), use `ALoraRequirement` from
@@ -222,6 +232,46 @@ m = mellea.start_session(context_type="chat")
 ```
 
 See [What the validator sees](../concepts/requirements-system.md#what-the-validator-sees).
+
+### aLoRA activation is not guaranteed by loading
+
+An aLoRA only takes effect from the point its declared invocation token sequence appears
+in the assembled prompt. If that sequence is absent, PEFT switches the adapter off
+silently: generation still runs, still returns a well-formed score, and
+`list_adapters()`/`active_adapters()` still show the adapter as loaded, but the base
+model produced the output, not the adapter. Mellea checks for this, before any model
+call runs, for an aLoRA registered as a composed `Adapter` (`LocalFile/PEFT` reality,
+e.g. `LocalHFBackend`), and raises `AloraActivationError` (logging a warning the first
+time, naming the capability, the base model, and the decoded invocation sequence)
+rather than letting a fabricated result reach a caller.
+
+**This is not yet the path every adapter-function wrapper takes by default.**
+`resolve_adapter()`'s automatic registration still hardcodes `AdapterType.LORA`
+(Epic #929 Phase 2 tracks selecting from catalogue availability instead), so
+`core.check_certainty(...)`, `core.requirement_check(...)`, and the other high-level
+wrappers currently get a LoRA, not an aLoRA, and this check does not apply to LoRA at
+all. The check activates only where an aLoRA is actually the adapter in play today:
+
+- **A composed `Adapter` you registered yourself** with an aLoRA `LocalFileBinding`
+  (`add_adapter()` directly, bypassing `resolve_adapter()`'s default).
+- **Automatic `Requirement` routing** (a plain `Requirement`, or an explicit
+  `ALoraRequirement`) *once* such an aLoRA is registered under the matching name --
+  routing itself does not register one. When the check fires here, it's caught and
+  falls back to LLM-as-a-judge, logging a warning -- exactly the same treatment as
+  "adapter not registered" already gets. Only an `ALoraRequirement` over a context
+  with nothing to judge still raises outright; that's a different, pre-existing case.
+- **The deprecated `IntrinsicAdapter` shim**, but not on its first call: the shim's
+  PEFT weights load lazily inside generation, so the check has nothing to compare
+  against yet the first time. From the second call onward the weights are already
+  loaded and the check applies normally (Epic #929, issue #1144 tracks removing the
+  shim entirely).
+
+A direct adapter-function call reaching this check has no fallback layer below it and
+lets `AloraActivationError` propagate, so the caller sees a clear error instead of a
+silently wrong score -- but today that only happens on one of the three paths above,
+not on an unmodified default installation calling `core.check_certainty(...)` or
+similar. Server-mediated and embedded adapter deployments activate outside Mellea and
+are not covered by this check at all.
 
 ## Disable adapter validation
 
