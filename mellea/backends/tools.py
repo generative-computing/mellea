@@ -367,12 +367,16 @@ def add_tools_from_model_options(
 def add_tools_from_context_actions(
     tools_dict: dict[str, AbstractMelleaTool], ctx_actions: list[Span] | None
 ):
-    """If any of the actions in ctx_actions have tools in their template_representation, add those to the tools_dict.
+    """Extract and merge tools from component actions, with auto-prefixing to avoid collisions.
+
+    Tools from each component are prefixed with "component_{ID}__" to prevent naming collisions when
+    multiple components define tools with identical names. The component ID is derived from the
+    component object's identity for multi-turn stability. This allows safe composition of
+    multiple agents or tool-bearing components.
 
     Args:
-        tools_dict: Mutable mapping of tool name to tool instance; modified in-place. Dict keys are unique,
-            so if multiple components define tools with the same name, the last one wins (earlier definitions
-            are silently overwritten).
+        tools_dict: Mutable mapping of tool name to tool instance; modified in-place. Prefixed names
+            ensure tools from different components coexist without overwriting each other.
         ctx_actions: List of `Component`, `CBlock`, or `ModelOutputThunk` objects whose template
             representations may declare tools, or `None` to skip.
     """
@@ -387,12 +391,47 @@ def add_tools_from_context_actions(
         if not isinstance(tr, TemplateRepresentation) or tr.tools is None:
             continue
 
-        for tool_name, func in tr.tools.items():
-            tools_dict[tool_name] = func
+        component_id = hex(id(action))[-8:]
+        component_type = type(action).__name__
+
+        for original_tool_name, tool_instance in tr.tools.items():
+            # Auto-prefix tool name using component ID to avoid collisions
+            prefixed_name = f"component_{component_id}__{original_tool_name}"
+
+            # Validate function name length (OpenAI and most providers enforce 64-char limit)
+            if len(prefixed_name) > 64:
+                MelleaLogger.get_logger().warning(
+                    f"Tool name exceeds 64-character limit (OpenAI/Ollama/HF constraint): "
+                    f"'{prefixed_name}' ({len(prefixed_name)} chars). "
+                    f"Original: '{original_tool_name}' ({len(original_tool_name)} chars). "
+                    f"Providers may reject this tool call. Consider using shorter tool names."
+                )
+
+            # Validate function name pattern (OpenAI constraint: characters must be [a-zA-Z0-9_-])
+            # Length is checked separately above; this regex only validates character set
+            if not re.match(r"^[a-zA-Z0-9_-]+$", prefixed_name):
+                MelleaLogger.get_logger().warning(
+                    f"Tool name contains invalid characters (allowed: [a-zA-Z0-9_-]): "
+                    f"'{prefixed_name}'. Providers may reject this tool call."
+                )
+
+            # Detect collision and warn if it still occurs (defensive)
+            if prefixed_name in tools_dict:
+                MelleaLogger.get_logger().warning(
+                    f"Tool name collision even after prefixing: '{prefixed_name}' "
+                    f"already exists (component {component_type} {component_id}); skipping tool '{original_tool_name}'"
+                )
+                continue
+
+            # Add tool with prefixed name
+            tools_dict[prefixed_name] = tool_instance
 
 
 def convert_tools_to_json(tools: dict[str, AbstractMelleaTool]) -> list[dict]:
     """Convert tools to json dict representation.
+
+    Ensures that tool names in JSON schemas match the keys in the tools dict,
+    which is necessary when tools have been renamed (e.g., prefixed for conflict avoidance).
 
     Args:
         tools: Mapping of tool name to `AbstractMelleaTool` instance.
@@ -405,7 +444,20 @@ def convert_tools_to_json(tools: dict[str, AbstractMelleaTool]) -> list[dict]:
     - WatsonxAI uses `from langchain_ibm.chat_models import convert_to_openai_tool` in their demos, but it gives the same values.
     - OpenAI uses the same format / schema.
     """
-    return [t.as_json_tool for t in tools.values()]
+    result = []
+    for tool_name, tool_instance in tools.items():
+        tool_json = tool_instance.as_json_tool.copy()
+
+        # Update the function name in JSON to match the dict key (for prefixed names).
+        # This ensures the model sees and requests the prefixed name.
+        if tool_json.get("function", {}).get("name") != tool_name:
+            if "function" in tool_json:
+                tool_json["function"] = tool_json["function"].copy()
+                tool_json["function"]["name"] = tool_name
+
+        result.append(tool_json)
+
+    return result
 
 
 def json_extraction(text: str) -> Generator[dict, None, None]:
