@@ -1367,6 +1367,10 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         Returns:
             tuple[ModelOutputThunk[C], Context]: A thunk holding the (lazy) model output
                 and an updated context that includes `action` and the new output.
+
+        Raises:
+            ValueError: If no user-role message has non-whitespace text,
+                images, audio, or documents.
         """
         await self.do_generate_walk(action)
 

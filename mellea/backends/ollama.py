@@ -1077,6 +1077,8 @@ class OllamaModelBackend(FormatterBackend, AdapterMixin):
                 cannot be downloaded or decoded.
             ValueError: If a message contains an `AudioBlock` or `AudioUrlBlock`;
                 Ollama does not support audio input.
+            ValueError: If no user-role message has non-whitespace text,
+                images, audio, or documents.
         """
         # Start by awaiting any necessary computation.
         await self.do_generate_walk(action)

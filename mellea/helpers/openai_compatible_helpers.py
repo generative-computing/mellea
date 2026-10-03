@@ -623,12 +623,19 @@ def build_tool_calls(output: ModelOutputThunk) -> list[ToolCallDict] | None:
 def has_user_content(messages: list[Message]) -> bool:
     """Whether the assembled conversation carries real user-role content.
 
-    Issue #1597: ``SimpleContext`` intentionally discards recorded turns from
-    ``view_for_generation()``, so a caller who chains ``.add(...)`` and then
+    Issue #1597: `SimpleContext` intentionally discards recorded turns from
+    `view_for_generation()`, so a caller who chains `.add(...)` and then
     passes an empty action would otherwise hit the model with no user-role
     content at all. Some chat models (e.g. Granite 4.2, see #1587) spin on
     empty prompts and burn tokens silently. Whitespace-only text counts as
     empty; images, audio, and documents count as content.
+
+    Args:
+        messages: The chat messages about to be sent to the model.
+
+    Returns:
+        True if any user-role message has non-whitespace text, images,
+        audio, or documents; False otherwise.
     """
     return any(
         m.role == "user"
