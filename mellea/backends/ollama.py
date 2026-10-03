@@ -37,6 +37,7 @@ from ..helpers import (
     DEFAULT_CHUNK_TIMEOUT,
     ClientCache,
     get_current_event_loop,
+    has_user_content,
     merge_provider_fields,
     message_to_openai_message,
     messages_to_docs,
@@ -1076,6 +1077,8 @@ class OllamaModelBackend(FormatterBackend, AdapterMixin):
                 cannot be downloaded or decoded.
             ValueError: If a message contains an `AudioBlock` or `AudioUrlBlock`;
                 Ollama does not support audio input.
+            ValueError: If no user-role message has non-whitespace text,
+                images, audio, or documents.
         """
         # Start by awaiting any necessary computation.
         await self.do_generate_walk(action)
@@ -1090,6 +1093,17 @@ class OllamaModelBackend(FormatterBackend, AdapterMixin):
         messages: list[Message] = self.formatter.to_chat_messages(linearized_context)
         # Add the final message.
         messages.extend(self.formatter.to_chat_messages([action]))
+
+        # Issue #1597: refuse to send an empty user prompt; see
+        # `has_user_content` for why whitespace-only text still counts as empty.
+        if not has_user_content(messages):
+            raise ValueError(
+                "Refusing to call the model: no user-role content in the assembled "
+                "conversation. This usually means a stateless context (e.g. "
+                "SimpleContext) was combined with an empty or whitespace-only "
+                "action; recorded turns are not forwarded to the model. See "
+                "issue #1597."
+            )
         # construct the conversation from our messages, adding a system prompt at the first message if one was provided.
         conversation: list[dict] = []
         # We use system prompt None/empty-string semantics in a way that is consistent with Hugging Face and other libraries.

@@ -42,6 +42,7 @@ from ..helpers import (
     chat_completion_delta_merge,
     extract_model_tool_requests,
     get_current_event_loop,
+    has_user_content,
     message_to_openai_message,
     prefetch_audio_urls,
     send_to_queue,
@@ -369,6 +370,17 @@ class LiteLLMBackend(FormatterBackend):
                 raise Exception("The LiteLLM backend does not support aLoRA adapters.")
             case _:
                 messages.extend(self.formatter.to_chat_messages([action]))
+
+        # Issue #1597: refuse to send an empty user prompt; see
+        # `has_user_content` for why whitespace-only text still counts as empty.
+        if not has_user_content(messages):
+            raise ValueError(
+                "Refusing to call the model: no user-role content in the assembled "
+                "conversation. This usually means a stateless context (e.g. "
+                "SimpleContext) was combined with an empty or whitespace-only "
+                "action; recorded turns are not forwarded to the model. See "
+                "issue #1597."
+            )
 
         # TODO: the supports_vision function is not reliably predicting if models support vision. E.g., ollama/llava is not a vision model?
         # if any(m.images is not None for m in messages):

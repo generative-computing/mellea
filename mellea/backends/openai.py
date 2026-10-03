@@ -45,6 +45,7 @@ from ..helpers import (
     chat_completion_delta_merge,
     extract_model_tool_requests,
     get_current_event_loop,
+    has_user_content,
     is_vllm_server_with_structured_output,
     message_to_openai_message,
     messages_to_docs,
@@ -1342,6 +1343,10 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         Returns:
             tuple[ModelOutputThunk[C], Context]: A thunk holding the (lazy) model output
                 and an updated context that includes `action` and the new output.
+
+        Raises:
+            ValueError: If no user-role message has non-whitespace text,
+                images, audio, or documents.
         """
         await self.do_generate_walk(action)
 
@@ -1376,6 +1381,17 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         messages.extend(self.formatter.to_chat_messages([action]))
         # ALoraRequirement may arrive here when no adapter is registered;
         # _generate is responsible for logging a warning in that case.
+
+        # Issue #1597: refuse to send an empty user prompt; see
+        # `has_user_content` for why whitespace-only text still counts as empty.
+        if not has_user_content(messages):
+            raise ValueError(
+                "Refusing to call the model: no user-role content in the assembled "
+                "conversation. This usually means a stateless context (e.g. "
+                "SimpleContext) was combined with an empty or whitespace-only "
+                "action; recorded turns are not forwarded to the model. See "
+                "issue #1597."
+            )
 
         conversation: list[dict] = []
 
