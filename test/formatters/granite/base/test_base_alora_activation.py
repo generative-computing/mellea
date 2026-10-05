@@ -307,13 +307,6 @@ class TestAloraDifferentialEndToEnd:
     scores measured 0.047 vs 0.999 in the #1679 diagnostic eval.
     """
 
-    @pytest.mark.xfail(
-        strict=True,
-        raises=AssertionError,
-        reason="the published requirement-check aLoRA io.yaml instruction does "
-        "not tokenise to its declared invocation sequence, so the adapter "
-        "cannot activate until the adapter is republished",
-    )
     def test_requirement_check_adapter_moves_score(self, alora_backend):
         from mellea.stdlib.components import Message
         from mellea.stdlib.components.intrinsic import core

@@ -163,7 +163,7 @@ _GUARDIAN_REPO = "ibm-granite/granitelib-guardian-r1.0"
 # `mellea/backends/adapters/adapter.py`) only proves the adapter switched on,
 # not that its verdicts are trustworthy.
 _RAG_SHA = "2f0b2c79c6731068625aca8045c2eb2e8912b353"  # main @ 2026-05-26
-_CORE_R1_SHA = "d0a2a96a4cd07e96f0fe7ca29a42bfe088299d43"  # main @ 2026-05-26
+_CORE_R1_SHA = "c4b4fc6ec4fa05b6c8f02b25ac8822da085962b5"  # main @ 2026-10-05, fixes requirement-check aLoRA io.yaml invocation sequence (#1699)
 _GUARDIAN_SHA = "773b254e98f993a605ec4b6259634906e0e64e8e"  # main @ 2026-05-26
 
 
