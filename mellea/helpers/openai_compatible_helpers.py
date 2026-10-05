@@ -688,7 +688,7 @@ def build_response_usage(output: ModelOutputThunk) -> ResponseUsage | None:
         A `ResponseUsage` object when usage metadata is present, otherwise
         `None`.
     """
-    if output.generation.usage is None:
+    if output.generation is None or output.generation.usage is None:
         return None
 
     prompt_tokens = output.generation.usage.get("prompt_tokens", 0)

@@ -830,6 +830,12 @@ class TestBuildResponseUsage:
         output = ModelOutputThunk("hi")
         assert build_response_usage(output) is None
 
+    def test_returns_none_when_generation_is_none(self):
+        """Handles case where output.generation is None (defensive check)."""
+        output = ModelOutputThunk("hi")
+        output.generation = None
+        assert build_response_usage(output) is None
+
     def test_maps_prompt_to_input_tokens(self):
         output = ModelOutputThunk("hi")
         output.generation.usage = {
