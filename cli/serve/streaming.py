@@ -195,6 +195,7 @@ async def stream_response_chunks(
     - ``response.in_progress`` — signals streaming has started
     - ``response.output_text.delta`` — one per streamed token (or one for pre-computed)
     - ``response.output_text.done`` — full accumulated text
+    - ``response.output_item.added`` — emitted when tool calls are present, before tool call events
     - ``response.function_call_arguments.delta`` — one per tool call argument payload
     - ``response.function_call_arguments.done`` — one per tool call (if any)
     - ``response.completed`` — full ``Response`` object matching the non-streaming shape
@@ -253,22 +254,10 @@ async def stream_response_chunks(
 
         item_id = f"msg_{uuid.uuid4().hex[:24]}"
 
-        # Emit output_item.added before content events
-        yield (
-            f"event: response.output_item.added\n"
-            f"data: {json.dumps({'type': 'response.output_item.added', 'sequence_number': sequence_number, 'output_index': output_index, 'item': {'id': item_id, 'type': 'message', 'status': 'in_progress', 'role': 'assistant', 'content': []}})}\n\n"
-        )
-        sequence_number += 1
-
         if output.is_computed():
             text = output.value or ""
             accumulated_text = text
-            # For pre-computed output, emit content part added + delta + done
-            yield (
-                f"event: response.content_part.added\n"
-                f"data: {json.dumps({'type': 'response.content_part.added', 'sequence_number': sequence_number, 'output_index': output_index, 'content_index': content_index, 'part': {'type': 'output_text', 'text': ''}})}\n\n"
-            )
-            sequence_number += 1
+            # For pre-computed output, emit delta + done
             yield (
                 f"event: response.output_text.delta\n"
                 f"data: {json.dumps({'type': 'response.output_text.delta', 'sequence_number': sequence_number, 'output_index': output_index, 'content_index': content_index, 'item_id': item_id, 'delta': text})}\n\n"
@@ -280,13 +269,6 @@ async def stream_response_chunks(
             )
             sequence_number += 1
         else:
-            # Emit content part added before streaming deltas
-            yield (
-                f"event: response.content_part.added\n"
-                f"data: {json.dumps({'type': 'response.content_part.added', 'sequence_number': sequence_number, 'output_index': output_index, 'content_index': content_index, 'part': {'type': 'output_text', 'text': ''}})}\n\n"
-            )
-            sequence_number += 1
-
             while not output.is_computed():
                 delta = await output.astream()
                 if delta:
@@ -305,8 +287,10 @@ async def stream_response_chunks(
 
         tool_calls = build_tool_calls(output)
         if tool_calls:
+            # output_index for tool calls: starts at 0 if no text, 1 if text exists
+            text_output_index = 0 if accumulated_text else -1
             for idx, tool_call in enumerate(tool_calls):
-                output_index = idx + 1
+                output_index = text_output_index + 1 + idx
                 arguments = tool_call["function"]["arguments"]
                 # Emit a single delta carrying the full arguments string.
                 # The backend doesn't stream arguments incrementally, so one
