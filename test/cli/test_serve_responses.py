@@ -725,6 +725,28 @@ class TestStreamResponseChunks:
         assert fc_events[0]["data"]["output_index"] == 1
 
     @pytest.mark.asyncio
+    async def test_tool_call_output_index_zero_without_text(self):
+        """Tool call output_index is 0 when there's no text output."""
+        from mellea.core.base import ModelToolCall
+
+        output = ModelOutputThunk("")
+        tc = Mock(spec=ModelToolCall)
+        tc.name = "get_weather"
+        tc.args = {"location": "Paris"}
+        tc.tool_call_id = "call_abc"
+        output.tool_calls = [tc]
+
+        events = await self._collect(
+            output, response_id="resp_tc", model="m", created=1234
+        )
+
+        fc_events = [
+            e for e in events if e["event"] == "response.function_call_arguments.done"
+        ]
+        assert len(fc_events) == 1
+        assert fc_events[0]["data"]["output_index"] == 0
+
+    @pytest.mark.asyncio
     async def test_error_emits_failed_event(self):
         """An exception mid-stream emits response.failed."""
         output = Mock()
