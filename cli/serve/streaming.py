@@ -192,29 +192,29 @@ async def stream_response_chunks(
 
     Emits the following event sequence:
 
-    - ``response.created`` — initial in-progress envelope
-    - ``response.in_progress`` — signals streaming has started
-    - ``response.output_text.delta`` — one per streamed token (or one for pre-computed)
-    - ``response.output_text.done`` — full accumulated text
-    - ``response.output_item.added`` — emitted when tool calls are present, before tool call events
-    - ``response.function_call_arguments.delta`` — one per tool call argument payload
-    - ``response.function_call_arguments.done`` — one per tool call (if any)
-    - ``response.completed`` — full ``Response`` object matching the non-streaming shape
+    - `response.created` — initial in-progress envelope
+    - `response.in_progress` — signals streaming has started
+    - `response.output_text.delta` — one per streamed token (or one for pre-computed)
+    - `response.output_text.done` — full accumulated text
+    - `response.output_item.added` — emitted when tool calls are present, before tool call events
+    - `response.function_call_arguments.delta` — one per tool call argument payload
+    - `response.function_call_arguments.done` — one per tool call (if any)
+    - `response.completed` — full `Response` object matching the non-streaming shape
 
-    On error, emits ``response.failed`` instead of the completion event.
+    On error, emits `response.failed` instead of the completion event.
 
     Args:
         output: The model output thunk to stream.
-        response_id: Unique response identifier (``resp_…``).
+        response_id: Unique response identifier (`resp_…`).
         model: Model name to include in event payloads.
         created: Unix timestamp of when the response was created.
         conversation: Optional conversation ID to echo back in events.
-        include: Reserved for future use. The ``response.completed`` event
-            always carries the full ``Response`` object including usage.
-            Defaults to ``None``.
+        include: Reserved for future use. The `response.completed` event
+            always carries the full `Response` object including usage.
+            Defaults to `None`.
         store: Whether the response is being stored server-side. Controls
-            ``expires_at`` in the completed envelope.
-        ttl: Response TTL in seconds. Used to compute ``expires_at``.
+            `expires_at` in the completed envelope.
+        ttl: Response TTL in seconds. Used to compute `expires_at`.
         previous_response_id: Echoed back in the completed envelope.
     """
     try:
