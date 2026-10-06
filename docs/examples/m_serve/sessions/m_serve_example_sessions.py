@@ -3,9 +3,9 @@
 """Example server for multi-turn session demo via the Responses API.
 
 The Responses API supports multi-turn conversations without the client
-resending the full history.  Each completed response is stored in the
-server's in-memory session store.  Pass the ``id`` from a previous
-response as ``previous_response_id`` in the next request and the server
+resending the full history. Each completed response is stored in the
+server's in-memory session store. Pass the `id` from a previous
+response as `previous_response_id` in the next request and the server
 reconstructs the history automatically.
 
 Usage:

@@ -1,13 +1,13 @@
 """Responses API client for the server-side tool-calling example.
 
 Demonstrates the key difference from the client-side tool-calling example:
-when tool execution happens inside ``serve()``, the server runs the full
+when tool execution happens inside `serve()`, the server runs the full
 agentic loop (call model → execute tools → re-prompt) before returning.
 The client sends a single request and receives a fully-resolved answer —
-no ``function_call`` items to handle, no follow-up request needed.
+no `function_call` items to handle, no follow-up request needed.
 
-Compare with ``client_responses_tool_calling.py``, which handles the
-``function_call`` items itself and makes a second request to get the
+Compare with `client_responses_tool_calling.py`, which handles the
+`function_call` items itself and makes a second request to get the
 final answer.
 
 Usage:

@@ -380,8 +380,8 @@ class ResponseInputItem(BaseModel):
 class ResponseTool(BaseModel):
     """Tool declaration accepted by the Responses API.
 
-    Only ``type: "function"`` is currently supported by m serve. The other
-    types (``web_search``, ``file_search``, ``mcp``, ``code_interpreter``)
+    Only `type: "function"` is currently supported by m serve. The other
+    types (`web_search`, `file_search`, `mcp`, `code_interpreter`)
     are accepted by the schema so that requests are parsed and rejected with
     a clear 400 error rather than a Pydantic validation failure.
     """

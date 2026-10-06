@@ -196,8 +196,7 @@ async def stream_response_chunks(
     - `response.in_progress` — signals streaming has started
     - `response.output_text.delta` — one per streamed token (or one for pre-computed)
     - `response.output_text.done` — full accumulated text
-    - `response.output_item.added` — emitted when tool calls are present, before tool call events
-    - `response.function_call_arguments.delta` — one per tool call argument payload
+    - `response.function_call_arguments.delta` — one per tool call argument payload (if any)
     - `response.function_call_arguments.done` — one per tool call (if any)
     - `response.completed` — full `Response` object matching the non-streaming shape
 

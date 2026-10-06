@@ -1,11 +1,11 @@
 # pytest: skip_always
 """Multi-turn session client using the Responses API.
 
-Demonstrates server-side session storage via ``previous_response_id``.
+Demonstrates server-side session storage via `previous_response_id`.
 Each request only sends the new user turn; the server prepends the prior
 conversation history automatically.
 
-Contrast with ``/v1/chat/completions`` where the client must resend the
+Contrast with `/v1/chat/completions` where the client must resend the
 full message history on every request.
 
 Usage:

@@ -350,8 +350,8 @@ def _convert_response_input_to_messages(
     """Convert Responses API input + instructions to a ChatMessage list.
 
     Handles string shorthand, message arrays, and developer/system role
-    mapping. The Responses API uses ``developer`` where Chat Completions uses
-    ``system``; both are mapped to ``system`` so existing backends receive a
+    mapping. The Responses API uses `developer` where Chat Completions uses
+    `system`; both are mapped to `system` so existing backends receive a
     role they understand.
 
     Supports multimodal content: text, images (via image_url), and files
@@ -393,7 +393,7 @@ def _build_history_from_messages(
     """Serialize a message list + assistant reply into a plain dict history.
 
     The history is stored in a format that both the responses and chat/completions
-    endpoints can consume: a list of ``{"role": str, "content": str}`` dicts,
+    endpoints can consume: a list of `{"role": str, "content": str}` dicts,
     matching the ChatMessage wire format.
     """
     history: list[dict[str, Any]] = [
@@ -409,11 +409,11 @@ def make_responses_endpoint(module):
     Mirrors make_chat_endpoint() with Responses API-specific adaptations:
     input conversion, semantic streaming, and Response output format.
 
-    Supports multi-turn sessions via ``previous_response_id``: when set, the
+    Supports multi-turn sessions via `previous_response_id`: when set, the
     server looks up the stored history from that response and prepends it to
     the current input, so the client only needs to send the new turn.
-    Completed responses are stored in the in-memory ``_response_store`` when
-    ``store=True`` (the default) and expire after ``_response_ttl_seconds``.
+    Completed responses are stored in the in-memory `_response_store` when
+    `store=True` (the default) and expire after `_response_ttl_seconds`.
     """
     serve_sig = inspect.signature(module.serve)
     accepts_format = "format" in serve_sig.parameters
@@ -707,10 +707,10 @@ def make_chat_endpoint(module):
 async def get_response(response_id: str) -> Response | JSONResponse:
     """Retrieve a stored response by ID.
 
-    Returns the completed ``Response`` object that was stored when
-    ``store=True`` (the default) on the original ``POST /v1/responses``
-    request.  Returns 404 if the response has expired or was created with
-    ``store=False``.  The ``expires_at`` field on the response indicates
+    Returns the completed `Response` object that was stored when
+    `store=True` (the default) on the original `POST /v1/responses`
+    request. Returns 404 if the response has expired or was created with
+    `store=False`. The `expires_at` field on the response indicates
     the exact Unix timestamp when the entry will be evicted.
     """
     stored = _response_store.get(response_id)
