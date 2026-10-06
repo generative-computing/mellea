@@ -666,7 +666,7 @@ class ResponseOutputMessage(ResponseOutputItem):
 
 
 class ResponseFunctionCall(ResponseOutputItem):
-    """A function-call output item."""
+    """Function call used with Responses API."""
 
     type: Literal["function_call"]  # type: ignore[assignment]
     name: str
