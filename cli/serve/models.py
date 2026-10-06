@@ -463,10 +463,10 @@ class Response(BaseModel):
     expires_at: int | None = None
     """Unix timestamp after which this response is no longer retrievable.
 
-    Set to ``created_at + TTL`` when ``store=True`` (the default); ``None``
-    when ``store=False`` because the response is never persisted and cannot
-    be retrieved via ``GET /v1/responses/{id}``.  The TTL is controlled by
-    the ``--response-ttl`` server flag (default: 1800 seconds / 30 minutes).
+    Set to `created_at + TTL` when `store=True` (the default); `None`
+    when `store=False` because the response is never persisted and cannot
+    be retrieved via `GET /v1/responses/{id}`. The TTL is controlled by
+    the `--response-ttl` server flag (default: 1800 seconds / 30 minutes).
     """
 
     model: str
@@ -477,7 +477,7 @@ class Response(BaseModel):
     """Typed output items (messages, function calls, etc.).
 
     Uses a Union type to ensure Pydantic serializes subclass-specific fields
-    (e.g., ``content`` and ``role`` for messages, ``name`` and ``arguments``
+    (e.g., `content` and `role` for messages, `name` and `arguments`
     for function calls) rather than stripping them to the base class schema.
     """
 
