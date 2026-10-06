@@ -4,6 +4,7 @@
 """Streaming utilities for OpenAI-compatible server responses."""
 
 import json
+import uuid
 from collections.abc import AsyncGenerator
 from typing import Literal
 
@@ -250,8 +251,6 @@ async def stream_response_chunks(
         output_index = 0
         content_index = 0
         # Generate a message item ID for the output_text events
-        import uuid
-
         item_id = f"msg_{uuid.uuid4().hex[:24]}"
 
         if output.is_computed():
@@ -288,9 +287,9 @@ async def stream_response_chunks(
         tool_calls = build_tool_calls(output)
         if tool_calls:
             # output_index for tool calls: starts at 0 if no text, 1 if text exists
-            text_output_index = 0 if accumulated_text else -1
-            for idx, tool_call in enumerate(tool_calls):
-                output_index = text_output_index + 1 + idx
+            start_index = 1 if accumulated_text else 0
+            for idx, tool_call in enumerate(tool_calls, start=start_index):
+                output_index = idx
                 arguments = tool_call["function"]["arguments"]
                 # Emit a single delta carrying the full arguments string.
                 # The backend doesn't stream arguments incrementally, so one
