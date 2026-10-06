@@ -2,19 +2,19 @@
 
 """m serve module that executes tool calls server-side before responding.
 
-Unlike the standard tool-calling example (which surfaces ``function_call``
+Unlike the standard tool-calling example (which surfaces `function_call`
 output items for the client to handle), this module runs the agentic loop
 entirely on the server:
 
-1. ``serve()`` calls the model with the tool definitions.
+1. `serve()` calls the model with the tool definitions.
 2. If the model requests tool calls, the server executes them using
-   ``call_tools()`` and appends the results to the session context.
+   `call_tools()` and appends the results to the session context.
 3. The model is called again with the tool results in context.
 4. Steps 2-3 repeat until the model stops requesting tools (up to
-   ``MAX_TOOL_ROUNDS`` rounds).
+   `MAX_TOOL_ROUNDS` rounds).
 5. A single, fully-resolved response is returned to the client.
 
-The client therefore never sees intermediate ``function_call`` items — it
+The client therefore never sees intermediate `function_call` items — it
 only receives the final answer.
 
 Usage:
@@ -171,7 +171,7 @@ def _resolve_tools(model_options: dict | None) -> dict[str, AbstractMelleaTool]:
     """Map tool definitions from model_options to server-side implementations.
 
     Accepts both OpenAI-style JSON dicts (from the /v1/responses path) and
-    native ``AbstractMelleaTool`` instances (from the ``__main__`` path).
+    native `AbstractMelleaTool` instances (from the `__main__` path).
     """
     if model_options is None or ModelOption.TOOLS not in model_options:
         return {}
@@ -197,23 +197,23 @@ def serve(
     The agentic loop runs entirely within this function:
 
     1. Call the model with the user message and tool definitions.
-    2. If the model requests tool calls, execute them with ``call_tools()``
+    2. If the model requests tool calls, execute them with `call_tools()`
        and add the results to the session context.
     3. Call the model again to synthesise a final answer from the results.
-    4. Repeat until the model stops requesting tools or ``MAX_TOOL_ROUNDS``
+    4. Repeat until the model stops requesting tools or `MAX_TOOL_ROUNDS`
        is reached.
 
-    The caller (client) receives a fully-resolved ``ModelOutputThunk`` — no
-    ``function_call`` items are surfaced to the client.
+    The caller (client) receives a fully-resolved `ModelOutputThunk` — no
+    `function_call` items are surfaced to the client.
 
     Args:
         input: List of chat messages from the request.
         requirements: Optional list of requirement strings (unused here).
         model_options: Model options forwarded from the request, including
-            ``ModelOption.TOOLS`` and ``ModelOption.TOOL_CHOICE``.
+            `ModelOption.TOOLS` and `ModelOption.TOOL_CHOICE`.
 
     Returns:
-        A ``ModelOutputThunk`` containing the final text response.
+        A `ModelOutputThunk` containing the final text response.
     """
     tools = _resolve_tools(model_options)
     final_model_options = dict(model_options or {})
