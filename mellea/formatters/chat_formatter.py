@@ -11,12 +11,29 @@ outputs. Concrete backends call this formatter when preparing input for a chat
 completion endpoint.
 """
 
+from typing import Any
+
 from ..core import Component, Formatter, ModelOutputThunk, Span, TemplateRepresentation
 from ..stdlib.components.chat import Message, message_from_template_representation
 
 
 class ChatFormatter(Formatter):
     """Formatter used by Legacy backends to format Contexts as Messages."""
+
+    def prompt_template_for(
+        self, action: Span
+    ) -> tuple[str | None, dict[str, Any] | None]:
+        """Return the template source and rendered variables for an action.
+
+        Chat formatters render no templates and return `(None, None)`.
+
+        Args:
+            action (Span): The component or block a backend generates from.
+
+        Returns:
+            `(None, None)`.
+        """
+        return None, None
 
     def to_chat_messages(self, cs: list[Span]) -> list[Message]:
         """Convert a linearized chat history into a list of chat messages.

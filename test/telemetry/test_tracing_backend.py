@@ -18,7 +18,7 @@ from mellea.plugins.manager import (
     drain_background_tasks,
     enable_background_collection,
 )
-from mellea.stdlib.components import Message
+from mellea.stdlib.components import Instruction, Message
 from mellea.stdlib.context import ChatContext
 from test.telemetry.conftest import reset_tracing_state
 
@@ -291,7 +291,7 @@ async def test_token_usage_recorded_after_completion_mocked(
     ctx = ChatContext().add(Message(role="user", content="Say 'test' and nothing else"))
 
     mot, _ = await mocked_tracing_backend.generate_from_context(
-        Message(role="assistant", content=""), ctx
+        Instruction(description="Say 'test' and nothing else."), ctx
     )
     await mot.avalue()
     await drain_background_tasks()
@@ -311,6 +311,7 @@ async def test_token_usage_recorded_after_completion_mocked(
     assert attributes.get("gen_ai.request.model") == "test-model"
     assert attributes.get("gen_ai.usage.input_tokens") == 5
     assert attributes.get("gen_ai.usage.output_tokens") == 10
+    assert attributes.get("llm.prompt_template.template")
 
 
 @pytest.mark.integration
