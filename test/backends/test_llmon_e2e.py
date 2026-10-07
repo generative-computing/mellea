@@ -93,22 +93,61 @@ def llmon_session() -> mellea.MelleaSession:
 def test_served_instruct_round_trip_returns_plain_text(llmon_session):
     """`m.instruct` with `instruction_cls=LLMONInstruction` yields plain text.
 
-    Whether the model replies with raw Machine-LLMON or already-detokenized prose,
-    `LLMONInstruction._parse` must land on an `LLMONResult` whose string value is
-    plain text with no LLMON markup.
+    Runs with `llmonize_input=True`, so `format_for_llm` encodes the instruction
+    into a Machine-LLMON `instr`/`data` object before it is sent — the wire input
+    is LLMON markup, not plain prose. Whether the model replies with raw
+    Machine-LLMON or already-detokenized prose, `LLMONInstruction._parse` must
+    still land on an `LLMONResult` whose string value is plain text with no LLMON
+    markup.
     """
+    prompt = "Summarise this customer feedback in one sentence: {{text}}"
+    user_variables = {"text": "loved the product, but shipping was very slow"}
+
     result = llmon_session.instruct(
-        "Summarise this customer feedback in one sentence: {{text}}",
+        prompt,
         requirements=[
             "The summary must be a single sentence.",
             "Include both positive and negative aspects if both are present.",
         ],
-        user_variables={"text": "loved the product, but shipping was very slow"},
+        user_variables=user_variables,
         instruction_cls=LLMONInstruction,
+        # Encode the input as Machine LLMON on the way out (opt-in; default False).
+        instruction_kwargs={"llmonize_input": True},
     )
 
     thunk = result.result if isinstance(result, SamplingResult) else result
     parsed = thunk.parsed_repr
+
+    # Print the round-trip so `pytest -s` shows what Mellea and LLMON exchanged:
+    # the prompt template + user vars the test supplied, the exact chat payload
+    # Mellea actually sent on the wire (`generate_log.prompt` — here the
+    # LLMON-encoded messages, since llmonize_input=True), the raw bytes the model
+    # emitted (possibly Machine LLMON), and the plain text LLMON parsing extracted.
+    wire_messages = thunk._generate_log.prompt if thunk._generate_log else None
+
+    print("\n" + "=" * 72)
+    print("LLMON ROUND-TRIP")
+    print("=" * 72)
+    print(f"MODEL:            {_LLMON_MODEL_ID}  @  {_LLMON_BASE_URL}")
+    print(f"PROMPT TEMPLATE:  {prompt}")
+    print(f"USER VARIABLES:   {user_variables}")
+    print("-" * 72)
+    print("WIRE INPUT (generate_log.prompt — LLMON-encoded messages sent to model):")
+    if isinstance(wire_messages, list):
+        for i, msg in enumerate(wire_messages):
+            role = msg.get("role", "?") if isinstance(msg, dict) else "?"
+            content = msg.get("content", msg) if isinstance(msg, dict) else msg
+            print(f"  [{i}] role={role}")
+            print(content)
+    else:
+        print(wire_messages)
+    print("-" * 72)
+    print("RAW MODEL OUTPUT (thunk.value, pre-parse):")
+    print(thunk.value)
+    print("-" * 72)
+    print("PARSED RESULT (LLMONResult, str()):")
+    print(str(parsed))
+    print("=" * 72)
 
     assert isinstance(parsed, LLMONResult)
     text = str(parsed)
