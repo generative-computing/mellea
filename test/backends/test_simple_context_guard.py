@@ -279,6 +279,24 @@ async def test_simple_context_with_empty_action_raises_on_litellm():
     assert not mock_acomplete.called
 
 
+async def test_simple_context_with_whitespace_action_raises_on_litellm():
+    """LiteLLM: whitespace-only user content must also raise (issue #1587)."""
+    pytest.importorskip("litellm", reason="litellm not installed")
+    from mellea.core import CBlock
+    from mellea.stdlib.context import SimpleContext
+
+    backend = _make_litellm_backend()
+    ctx = SimpleContext()
+
+    with patch("litellm.acompletion", new_callable=AsyncMock) as mock_acomplete:
+        mock_acomplete.return_value = _ok_litellm_response()
+
+        with pytest.raises(ValueError, match="user"):
+            await backend.generate_from_context(CBlock(value="   \n\t"), ctx)
+
+    assert not mock_acomplete.called
+
+
 async def test_nonempty_user_content_still_sends_request_on_litellm():
     """LiteLLM counterpart to the OpenAI sanity check above."""
     pytest.importorskip("litellm", reason="litellm not installed")

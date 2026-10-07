@@ -1101,8 +1101,7 @@ class OllamaModelBackend(FormatterBackend, AdapterMixin):
                 "Refusing to call the model: no user-role content in the assembled "
                 "conversation. This usually means a stateless context (e.g. "
                 "SimpleContext) was combined with an empty or whitespace-only "
-                "action; recorded turns are not forwarded to the model. See "
-                "issue #1597."
+                "action; recorded turns are not forwarded to the model."
             )
         # construct the conversation from our messages, adding a system prompt at the first message if one was provided.
         conversation: list[dict] = []

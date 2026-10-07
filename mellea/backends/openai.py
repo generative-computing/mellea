@@ -905,6 +905,8 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         Raises:
             ValueError: If `action` is an `ALoraRequirement` but `ctx` renders no
                 conversation, leaving the requirement-check adapter nothing to judge.
+            ValueError: If no user-role message has non-whitespace text,
+                images, audio, or documents.
 
         Returns:
             tuple[ModelOutputThunk[C], Context]: A thunk holding the (lazy) model output
@@ -1413,8 +1415,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 "Refusing to call the model: no user-role content in the assembled "
                 "conversation. This usually means a stateless context (e.g. "
                 "SimpleContext) was combined with an empty or whitespace-only "
-                "action; recorded turns are not forwarded to the model. See "
-                "issue #1597."
+                "action; recorded turns are not forwarded to the model."
             )
 
         conversation: list[dict] = []
