@@ -89,14 +89,43 @@ instr = LLMONInstruction("Summarise this feedback.", llmonize_input=True)
 Whether structured input improves a given model's behavior is deployment-dependent
 — it is off by default so the plain path is unchanged.
 
+### Constrained decoding (soft vs. hard, opt-in via `constrain_output=True`)
+
+By default generation is **soft**: the model is prompted but not enforced. Setting
+`constrain_output=True` is **hard** mode — `output_grammar()` returns the LLMON
+reply-object grammar (`llmon_grammar()`), which a grammar-aware backend uses to
+mask decoding to valid Machine LLMON:
+
+```python
+instr = LLMONInstruction("Summarise this feedback.", constrain_output=True)
+# or through the normal API:
+m.instruct(
+    "Summarise this feedback: {{text}}",
+    user_variables={"text": "loved it, shipping slow"},
+    instruction_cls=LLMONInstruction,
+    instruction_kwargs={"constrain_output": True},
+)
+```
+
+Enforcement needs a backend with a grammar hook:
+
+- **HuggingFace** (`LocalHFBackend`): enforced via the llguidance logits processor.
+- **vLLM-backed OpenAI servers**: plumbed as `extra_body["guided_grammar"]`. The
+  grammar is GBNF, which vLLM consumes natively, so it is passed through unchanged
+  (experimental — this path is plumbed and mock-tested but not enforcement-tested,
+  since vLLM is not available in the test environment).
+- **Ollama and official OpenAI**: no grammar hook, so `constrain_output=True` is a
+  silent no-op (soft fallback) — exactly how `format=` degrades on backends without
+  structured output. The tested `llmon95:latest` is on Ollama, so hard mode cannot
+  be enforced against that specific model.
+
+`constrain_output` is orthogonal to `llmonize_input` and may be combined.
+
 ### `format=` is rejected
 
 `LLMONInstruction` rejects `format=`: LLMON has its own grammar, so constraining
-the same generation to a Pydantic schema is contradictory.
-
-> **Coming soon:** a soft/hard grammar-constraint option (constrain decoding to the
-> LLMON grammar vs. let the model generate it unchecked). Design notes live in the
-> repo's `HARD-LLMON-GRAMMAR-CONSTRAINED-DECODING.md`; not yet implemented.
+the same generation to a Pydantic schema is contradictory. Use `constrain_output`
+(above) for grammar enforcement instead.
 
 ## The `llmon` library dependency
 
@@ -107,10 +136,12 @@ The grammar work is delegated to the sanctioned `llmon` converter library
 pip install "mellea[llmon]"
 ```
 
-The two primitives in `mellea.stdlib.components.llmon` are
-`parse_llmon_reply(text: str) -> str` (reply-in) and
+The primitives in `mellea.stdlib.components.llmon` are
+`parse_llmon_reply(text: str) -> str` (reply-in),
 `encode_llmon_input(instruction: str, data: str | None) -> str` (out-direction),
-both backed by `lang.json.llmon_converters.LLMONConverters`.
+and `llmon_grammar() -> str` (the GBNF grammar for hard mode). All are built from
+the Machine-LLMON terminals in `lang.common.common` /
+`lang.json.llmon_converters.LLMONConverters`.
 
 ## Related
 

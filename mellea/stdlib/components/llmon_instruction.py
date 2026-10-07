@@ -18,21 +18,31 @@ own and will even infer `instr`/`exec`/`data` structure from a plain prompt. So
 neither Mellea nor this server LLMONizes the input by default. See
 `LLMON-SUMMARY.md` for the full verification.
 
-This subclass handles both directions over the ordinary chat backend (no new
-backend):
+This subclass handles the round-trip over the ordinary chat backend (no new
+backend), with three independent, opt-in behaviors:
 
 - **Reply-in (default, always on).** `_parse` runs `parse_llmon_reply` (backed by
   the `llmon` library), which strips raw Machine LLMON from the reply and returns
   the plain assistant text as an `LLMONResult`. A reply that is already plain prose
   passes through unchanged.
-- **Out-direction (opt-in via `llmonize_input=True`).** When set,
+- **Input encoding (opt-in via `llmonize_input=True`).** When set,
   `format_for_llm` encodes the rendered instruction (and any `grounding_context`)
   into a Machine-LLMON `instr`/`data` object — structured input the model was
   trained to read — instead of the plain prose `Instruction` sends by default.
   Default is `False`: the plain-prompt path round-trips, and whether structured
   input improves behavior is deployment-dependent (see `LLMON-SUMMARY.md`).
+- **Output constraint (opt-in via `constrain_output=True`, soft vs. hard mode).**
+  When set, `output_grammar` returns the LLMON reply-object grammar
+  (`llmon_grammar`), which a grammar-aware backend uses to constrain decoding to
+  valid Machine LLMON (hard mode). Default is `False` (soft mode): generation is
+  only prompted, not enforced. Enforcement needs a backend with a grammar hook —
+  the HuggingFace llguidance path, or a vLLM server via `guided_grammar`; on Ollama
+  or official OpenAI it is a silent no-op (soft fallback). NOTE: the tested
+  `llmon95:latest` is served on Ollama, which ignores guided decoding, so hard mode
+  cannot be enforced against that specific model (see `LLMON-SUMMARY.md`).
 
-Either way the *returned* value is plain text (`LLMONResult`), never LLMON markup.
+`llmonize_input` and `constrain_output` are orthogonal and may be combined. In
+every case the *returned* value is plain text (`LLMONResult`), never LLMON markup.
 
 The constructor also rejects `format=`, since LLMON has its own grammar and cannot
 also be constrained to a Pydantic schema.
@@ -42,7 +52,7 @@ from __future__ import annotations
 
 from ...core import Component, ModelOutputThunk, Span, TemplateRepresentation
 from .instruction import Instruction
-from .llmon import encode_llmon_input, parse_llmon_reply
+from .llmon import encode_llmon_input, llmon_grammar, parse_llmon_reply
 
 
 class LLMONResult(Component[str]):
@@ -110,13 +120,23 @@ class LLMONInstruction(Instruction):
     """An `Instruction` for an LLMON model: parses the reply, optionally encodes input.
 
     Use this against a model trained on LLMON over a chat-completions endpoint (see
-    the module docstring). On the way back, `_parse` strips any raw Machine LLMON
-    and returns plain text as an `LLMONResult`. On the way out, `llmonize_input`
-    controls whether the instruction is encoded as a Machine-LLMON `instr`/`data`
-    object or sent as the plain prose `Instruction` renders by default.
+    the module docstring). Three independent behaviors, each opt-in:
 
-    `format=` (Pydantic constrained decoding) is incompatible with LLMON's own
-    grammar and is rejected.
+    - **Reply-in (always on).** `_parse` strips any raw Machine LLMON and returns
+      plain text as an `LLMONResult`.
+    - **Input encoding (`llmonize_input`).** When `True`, `format_for_llm` encodes
+      the instruction as a Machine-LLMON `instr`/`data` object instead of the plain
+      prose `Instruction` renders by default.
+    - **Output constraint (`constrain_output`, soft vs. hard).** When `True`,
+      `output_grammar` returns the LLMON reply-object grammar so a grammar-aware
+      backend constrains decoding to valid Machine LLMON (hard mode). When `False`
+      (default), generation is unconstrained and merely prompted (soft mode). On a
+      backend without a grammar hook (e.g. Ollama, official OpenAI) this degrades to
+      a silent no-op, like `format=` does on unsupported backends.
+
+    `llmonize_input` and `constrain_output` are orthogonal and may be combined; the
+    returned value is always plain text regardless. `format=` (Pydantic constrained
+    decoding) is incompatible with LLMON's own grammar and is rejected.
 
     Args:
         format: Must be `None`. LLMON has its own grammar, so a Pydantic `format`
@@ -126,12 +146,20 @@ class LLMONInstruction(Instruction):
             the model receives explicit instruction/data boundaries. If `False`
             (the default), the instruction is sent as plain prose — which already
             round-trips, since the model infers LLMON structure from the weights.
+        constrain_output: If `True`, `output_grammar` returns the LLMON grammar so a
+            grammar-aware backend constrains decoding to valid Machine LLMON (hard
+            mode). If `False` (the default), generation is unconstrained (soft mode).
 
     See `Instruction` for the remaining constructor arguments.
     """
 
     def __init__(  # type: ignore[no-untyped-def]
-        self, *args, format: object = None, llmonize_input: bool = False, **kwargs
+        self,
+        *args,
+        format: object = None,
+        llmonize_input: bool = False,
+        constrain_output: bool = False,
+        **kwargs,
     ) -> None:
         """Initialize like `Instruction`, rejecting a non-`None` `format`.
 
@@ -146,6 +174,24 @@ class LLMONInstruction(Instruction):
             )
         super().__init__(*args, **kwargs)
         self._llmonize_input = llmonize_input
+        self._constrain_output = constrain_output
+
+    def output_grammar(self) -> tuple[str, str] | None:
+        """Return the output grammar for constrained decoding, or `None`.
+
+        A grammar-aware backend (the HuggingFace llguidance path; vLLM via
+        `guided_grammar`) calls this on the action it is generating. Returning a
+        grammar there masks generation to the LLMON reply-object shape; returning
+        `None` leaves decoding unconstrained. The hook is duck-typed — any component
+        exposing `output_grammar` participates, with no backend changes.
+
+        Returns:
+            `(grammar_text, syntax)` with `syntax == "gbnf"` when `constrain_output`
+            is `True`, else `None`.
+        """
+        if not self._constrain_output:
+            return None
+        return (llmon_grammar(), "gbnf")
 
     def format_for_llm(self) -> TemplateRepresentation:
         """Render the instruction, encoding it as a Machine-LLMON object when enabled.

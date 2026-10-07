@@ -10,7 +10,7 @@ the *input* is deployment-dependent — the tested `llmon95:latest` Ollama model
 a passthrough chat template and relies on the weights, so Mellea owns both
 directions if structured input is wanted. See `LLMON-SUMMARY.md`.
 
-This module provides the two primitives:
+This module provides three primitives:
 
 - `parse_llmon_reply` (reply-in): detects the Machine-LLMON open token and, if
   present, extracts the assistant block's plain text; otherwise returns the reply
@@ -20,9 +20,14 @@ This module provides the two primitives:
   into a Machine-LLMON `instr`/`data` object, the structured input the model was
   trained to read. This is what `LLMONInstruction.format_for_llm` uses when
   `llmonize_input=True`.
+- `llmon_grammar` (hard mode): returns a GBNF grammar for the Machine-LLMON reply
+  object, for constrained decoding. This is what `LLMONInstruction.output_grammar`
+  returns when `constrain_output=True`, so a grammar-aware backend (the HuggingFace
+  llguidance path; vLLM via `guided_grammar`) can mask generation to valid LLMON.
 
-Both delegate the actual grammar work to the `llmon` library, an optional
-dependency installed via `pip install "mellea[llmon]"`.
+The first two delegate the token/grammar work to the `llmon` library; the grammar
+is built from the library's Machine-LLMON terminal constants. The `llmon` library
+is an optional dependency installed via `pip install "mellea[llmon]"`.
 """
 
 from __future__ import annotations
@@ -65,6 +70,76 @@ _ASSISTANT_BLOCK_RE: re.Pattern[str] = re.compile(
     + re.escape(_llmon_common.OPEN_END_TAG),
     re.DOTALL,
 )
+
+
+def _gbnf_literal(token: str) -> str:
+    r"""Quote a Machine-LLMON token as a GBNF double-quoted string terminal.
+
+    Args:
+        token: The raw token text (e.g. `<|open|>`).
+
+    Returns:
+        The token as a double-quoted GBNF literal with `\` and `"` escaped.
+    """
+    escaped = token.replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
+
+
+# Built once: the grammar is a constant derived from the library's token table.
+_LLMON_GRAMMAR_CACHE: str | None = None
+
+
+def llmon_grammar() -> str:
+    """Return a GBNF grammar for the Machine-LLMON reply object.
+
+    The grammar constrains generation to the object shape an LLMON model emits as
+    a reply: a top-level object of named members, where each member's value is a
+    nested object, a list, a wrapped primitive (`int`/`float`/`bool`/`none`), or
+    free text. It is built from the `llmon` library's Machine-LLMON terminal
+    constants (not the library's stale, Human-LLMON README grammar), so it tracks
+    the library's token table if those tokens change.
+
+    GBNF is chosen because it is consumed natively by both grammar backends with no
+    extra dependency: vLLM's `guided_grammar` takes GBNF directly (so the
+    OpenAI/vLLM path emits this string unchanged), and `llguidance` accepts it via
+    `grammar_from("gbnf", ...)` for the HuggingFace path. It is memoized since it is
+    a constant.
+
+    Returns:
+        A GBNF grammar string whose root symbol matches one Machine-LLMON object.
+    """
+    global _LLMON_GRAMMAR_CACHE
+    if _LLMON_GRAMMAR_CACHE is not None:
+        return _LLMON_GRAMMAR_CACHE
+
+    c = _llmon_common
+    open_, close, open_end = c.OPEN_TAG, c.CLOSE_TAG, c.OPEN_END_TAG
+    start_obj, end_obj = c.START_OBJECT_TAG, c.END_OBJECT_TAG
+    start_list, end_list, comma = c.START_LIST_TAG, c.END_LIST_TAG, c.LIST_SEPARATOR_TAG
+
+    lit = _gbnf_literal
+    # `name` covers a user_tag_text ([_a-zA-Z][_a-zA-Z0-9.:]*); the `.`/`:` inside a
+    # tag name are literal here (the model emits them as the <|.|>/<|:|> tokens, but
+    # those appear inside the structural tags, not in a name). `text` is any run with
+    # no `<`, so it is bounded by the next structural tag (only a tag can start `<`).
+    grammar = "\n".join(
+        [
+            "root ::= object",
+            f"object ::= {lit(start_obj)} member+ {lit(end_obj)}",
+            f"member ::= {lit(open_)} name {lit(close)} value {lit(open_end)} name {lit(close)}",
+            f"list ::= {lit(start_list)} (value ({lit(comma)} value)*)? {lit(end_list)}",
+            "value ::= object | list | prim | text",
+            "prim ::= int_v | float_v | bool_v | none_v",
+            f"int_v ::= {lit(c.START_INT_TAG)} text {lit(c.END_INT_TAG)}",
+            f"float_v ::= {lit(c.START_FLOAT_TAG)} text {lit(c.END_FLOAT_TAG)}",
+            f"bool_v ::= {lit(c.START_BOOL_TAG)} text {lit(c.END_BOOL_TAG)}",
+            f"none_v ::= {lit(c.START_NONE_TAG)} {lit(c.END_NONE_TAG)}",
+            "name ::= [_a-zA-Z] [_a-zA-Z0-9.:]*",
+            "text ::= [^<]+",
+        ]
+    )
+    _LLMON_GRAMMAR_CACHE = grammar
+    return grammar
 
 
 def is_llmon(text: str) -> bool:

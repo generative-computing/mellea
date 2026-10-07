@@ -20,6 +20,7 @@ pytest.importorskip("lang.json.llmon_converters")
 from mellea.stdlib.components.llmon import (
     encode_llmon_input,
     is_llmon,
+    llmon_grammar,
     parse_llmon_reply,
 )
 from mellea.stdlib.components.llmon_instruction import LLMONInstruction, LLMONResult
@@ -217,3 +218,63 @@ class TestLLMONizeInput:
         rendered = TemplateFormatter(model_id="default").print(instr)
         assert is_llmon(rendered)
         assert parse_llmon_reply(rendered) == "Summarize this."
+
+
+class TestLLMONGrammar:
+    """`llmon_grammar` is a valid GBNF grammar accepting real encoded input."""
+
+    def test_grammar_is_gbnf_and_memoized(self):
+        g = llmon_grammar()
+        assert g.startswith("root ::=")  # GBNF uses `root ::=`, not Lark's `start:`
+        # Memoized: the same object is returned on repeat calls.
+        assert llmon_grammar() is g
+
+    def test_grammar_validates_in_llguidance(self):
+        llguidance = pytest.importorskip("llguidance")
+        err = llguidance.LLMatcher.validate_grammar(
+            llguidance.grammar_from("gbnf", llmon_grammar())
+        )
+        assert err == ""  # empty means valid
+
+    def test_grammar_accepts_real_encoded_input(self):
+        # The grammar must accept what encode_llmon_input emits (out-direction) and,
+        # by the same object shape, what a constrained model would produce.
+        llguidance = pytest.importorskip("llguidance")
+        pytest.importorskip("llguidance.hf")
+        transformers = pytest.importorskip("transformers")
+
+        tok = transformers.AutoTokenizer.from_pretrained("gpt2")
+        llt = llguidance.hf.from_tokenizer(tok, n_vocab=tok.vocab_size)
+        for text in (
+            encode_llmon_input("Summarize this."),
+            encode_llmon_input("Summarize this.", data="loved it, slow shipping"),
+        ):
+            matcher = llguidance.LLMatcher(
+                llt, llguidance.grammar_from("gbnf", llmon_grammar())
+            )
+            assert matcher.consume_tokens(tok.encode(text))
+            assert matcher.is_accepting()
+
+
+class TestConstrainOutput:
+    """`constrain_output` toggles the output-grammar hook (soft vs. hard mode)."""
+
+    def test_default_is_soft_no_grammar(self):
+        instr = LLMONInstruction("Task.")
+        assert instr._constrain_output is False
+        assert instr.output_grammar() is None
+
+    def test_hard_mode_returns_gbnf_grammar(self):
+        instr = LLMONInstruction("Task.", constrain_output=True)
+        spec = instr.output_grammar()
+        assert spec is not None
+        grammar_text, syntax = spec
+        assert syntax == "gbnf"
+        assert grammar_text == llmon_grammar()
+
+    def test_orthogonal_to_llmonize_input(self):
+        # The two flags are independent and may be combined.
+        instr = LLMONInstruction("Task.", llmonize_input=True, constrain_output=True)
+        assert instr._llmonize_input is True
+        assert instr._constrain_output is True
+        assert instr.output_grammar() is not None

@@ -233,13 +233,14 @@ def test_instruct_forwards_instruction_kwargs(mock_act):
         SimpleContext(),
         MagicMock(),
         instruction_cls=LLMONInstruction,
-        instruction_kwargs={"llmonize_input": True},
+        instruction_kwargs={"llmonize_input": True, "constrain_output": True},
     )
 
     built = mock_act.call_args[0][0]
     assert isinstance(built, LLMONInstruction)
-    # The subclass-specific kwarg reached the constructor and enabled encoding.
+    # The subclass-specific kwargs reached the constructor and enabled both modes.
     assert built._llmonize_input is True
+    assert built._constrain_output is True
 
 
 # --- achat() and ainstruct() async forwarding ---
