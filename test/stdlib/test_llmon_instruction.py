@@ -14,10 +14,14 @@ served endpoint itself is exercised by the e2e example, not here.
 import pytest
 
 # LLMON support is an optional extra (`pip install "mellea[llmon]"`); skip the
-# whole module when the `llmon` library (import root `converters`) is absent.
-pytest.importorskip("converters.JSON.llmon_converters")
+# whole module when the `llmon` library (import root `lang`) is absent.
+pytest.importorskip("lang.json.llmon_converters")
 
-from mellea.stdlib.components.llmon import is_llmon, parse_llmon_reply
+from mellea.stdlib.components.llmon import (
+    encode_llmon_input,
+    is_llmon,
+    parse_llmon_reply,
+)
 from mellea.stdlib.components.llmon_instruction import LLMONInstruction, LLMONResult
 
 # A raw Machine-LLMON assistant block, as a server that returns un-detokenized
@@ -63,6 +67,58 @@ class TestParseLLMONReply:
         assert parse_llmon_reply(block) == "hi"
 
 
+class TestLenientFallback:
+    """When the strict library conversion fails, a block scan recovers the answer.
+
+    A served model whose chat template consumed the opening blocks can return a
+    *partial* Machine-LLMON fragment that the library converter cannot parse
+    whole (it begins mid-stream, carries unescaped control characters, or echoes
+    instructions as preamble). These shapes are drawn from real `llmon95:latest`
+    replies.
+    """
+
+    def test_preamble_then_data_assistant_block(self):
+        # Reply opens with echoed instructions (no leading <|open|>), then the
+        # real answer sits in a data<|:|>assistant block. The library converter
+        # raises on this; the scan recovers the block text.
+        reply = (
+            ". customer feedback blah"
+            "<|open_end|>instr<|:|>user<|:|>2175<|close|>"
+            "<|open|>exec<|:|>3230<|close|>"
+            "<|open|>data<|:|>assistant<|:|>0689<|close|>"
+            "The customer loved the product but found shipping slow."
+            "<|open_end|>data<|:|>assistant<|:|>0689<|close|>"
+        )
+        assert (
+            parse_llmon_reply(reply)
+            == "The customer loved the product but found shipping slow."
+        )
+
+    def test_last_block_wins_over_earlier_echoed_block(self):
+        # Earlier assistant blocks are echoed context; the final one is the answer.
+        reply = (
+            "<|open|>data<|:|>assistant<|:|>1<|close|>stale echo<|open_end|>x"
+            "<|open|>assistant<|:|>2<|close|>the real answer<|open_end|>y"
+        )
+        assert parse_llmon_reply(reply) == "the real answer"
+
+    def test_control_characters_in_block_do_not_lose_the_answer(self):
+        # Unescaped newlines inside a string break json.loads in the strict path;
+        # the scan returns the block text (newlines preserved) rather than raw
+        # markup.
+        reply = (
+            "<|open|>data<|:|>assistant<|:|>7<|close|>line one\nline two"
+            "<|open_end|>data<|:|>assistant<|:|>7<|close|>"
+        )
+        assert parse_llmon_reply(reply) == "line one\nline two"
+
+    def test_fragment_with_no_complete_block_falls_back_to_raw(self):
+        # A fragment with the open token but no complete assistant block must not
+        # be mangled by a blanket token strip; it degrades to raw text.
+        fragment = " Explain step by step.<|open_end|>exec<|.|>output<|"
+        assert parse_llmon_reply(fragment) == fragment
+
+
 class TestParseBack:
     """`_parse` turns a llmonized reply into an `LLMONResult` component."""
 
@@ -90,6 +146,18 @@ class TestParseBack:
         assert tr.role == "assistant"
         assert tr.args["content"] == "hi"
 
+    def test_result_renders_through_template_formatter(self):
+        # Regression: an LLMONResult must render through the real formatter without
+        # raising "could not find template candidate". The requirement-validation
+        # path re-renders a judged output's parsed_repr, so a missing template
+        # there crashed every requirements=[...] round-trip. The result falls back
+        # to the shared Message template, which emits the content verbatim.
+        from mellea.formatters.template_formatter import TemplateFormatter
+
+        result = LLMONInstruction("Task.")._parse(_FakeThunk("the clean answer"))
+        rendered = TemplateFormatter(model_id="default").print(result)
+        assert rendered == "the clean answer"
+
 
 class TestFormatRejection:
     """LLMON mode rejects a Pydantic `format` (LLMON has its own grammar)."""
@@ -101,3 +169,51 @@ class TestFormatRejection:
     def test_format_none_ok(self):
         # Should construct without error.
         LLMONInstruction("Task.", format=None)
+
+
+class TestEncodeLLMONInput:
+    """`encode_llmon_input` builds Machine-LLMON input the model was trained to read."""
+
+    def test_instruction_only_round_trips(self):
+        encoded = encode_llmon_input("Summarize in one sentence")
+        assert is_llmon(encoded)
+        # The encoding is the out-direction inverse of parse: the library's
+        # reply converter reads it back to the same instr member.
+        assert parse_llmon_reply(encoded) == "Summarize in one sentence"
+
+    def test_instruction_and_data_both_present(self):
+        encoded = encode_llmon_input("Summarize", data="loved it, slow shipping")
+        assert is_llmon(encoded)
+        # Both members are present in the encoded object.
+        assert "Summarize" in encoded
+        assert "loved it, slow shipping" in encoded
+
+
+class TestLLMONizeInput:
+    """`llmonize_input=True` sends a Machine-LLMON object instead of plain prose."""
+
+    def test_default_is_plain_prose(self):
+        # Without the flag, format_for_llm defers to Instruction's prose rendering
+        # (template_order includes "Instruction"), not a llmonized object.
+        instr = LLMONInstruction("Summarize this.")
+        tr = instr.format_for_llm()
+        assert "Instruction" in (tr.template_order or [])
+        assert "content" not in tr.args  # prose path uses description/requirements
+
+    def test_llmonize_input_encodes_instruction(self):
+        instr = LLMONInstruction("Summarize this.", llmonize_input=True)
+        tr = instr.format_for_llm()
+        content = tr.args["content"]
+        assert is_llmon(content)
+        assert parse_llmon_reply(content) == "Summarize this."
+        assert tr.role == "user"
+
+    def test_llmonize_input_renders_through_formatter(self):
+        # The pre-encoded Machine-LLMON string must render verbatim via the shared
+        # Message template, with no LLMONInstruction.jinja2.
+        from mellea.formatters.template_formatter import TemplateFormatter
+
+        instr = LLMONInstruction("Summarize this.", llmonize_input=True)
+        rendered = TemplateFormatter(model_id="default").print(instr)
+        assert is_llmon(rendered)
+        assert parse_llmon_reply(rendered) == "Summarize this."

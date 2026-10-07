@@ -1,26 +1,28 @@
 # pytest: e2e, openai, skip
 
-"""Example: `m.instruct` against an LLMON model served behind chat-completions.
+"""Example: `m.instruct` against an LLMON-trained model over chat-completions.
 
-The LLMON model is served with its `chat_template.jinja` installed server-side,
-so the *server* llmonizes the prompt (drawing block ids, emitting the
-`instr`/`req` blocks, wiring the `exec` graph) and detokenizes the reply. Mellea
-sends a plain `{role, content}` message through the ordinary OpenAI-compatible
-chat backend — no new backend and no formatter swap.
+The LLMON behavior lives in the model's fine-tuned weights, not a server chat
+template (verified against `llmon95:latest`, whose Ollama template is a bare
+passthrough — see LLMON-SUMMARY.md). Mellea sends its message through the ordinary
+OpenAI-compatible chat backend — no new backend and no formatter swap — and
+`LLMONInstruction` owns the LLMON work on the Mellea side.
 
-NOTE: the outgoing message shape is unverified (see LLMON-STATUS.md). Some LLMON
-checkpoints expect structured instruction/data/exec fields on the message dict
-rather than a flat content string; if the server returns nothing sensible, inspect
-its chat_template.jinja to see whether it reads named fields.
+Reply-in: `instruction_cls=LLMONInstruction` makes the round-trip robust to a
+model that returns *raw* Machine LLMON. Its `_parse` runs `parse_llmon_reply`,
+which extracts the assistant block's plain text when raw tokens are present
+(robust to partial/garbled fragments) and passes already-plain prose through
+unchanged. The returned value is always plain text, never markup.
 
-`instruction_cls=LLMONInstruction` makes the round-trip robust to a server that
-returns *raw* Machine LLMON in the reply: its `_parse` runs `parse_llmon_reply`,
-which extracts the assistant block's text when raw tokens are present and passes
-already-detokenized prose through unchanged. A plain `m.instruct` (no
-`instruction_cls`) also works whenever the server returns detokenized prose.
+Out-direction (optional): `llmonize_input=True` on the instruction encodes it as a
+Machine-LLMON `instr`/`data` object so the model gets explicit instruction/data
+boundaries, instead of the plain prose sent by default. It is off here; flip it to
+compare. This example drives it via `instruction_cls`, which uses the default
+(plain) input path.
 
 Requires the `llmon` extra (`pip install "mellea[llmon]"`) and a served LLMON
-model reachable at `LLMON_TEST_BASE_URL` (default `http://localhost:8000`).
+model reachable at `LLMON_TEST_BASE_URL` (default `http://localhost:8000`; for the
+tested Ollama model use `http://localhost:11434` and `llmon95:latest`).
 
 To run this script from the root of the Mellea source tree:
     uv run python docs/examples/llmon/served_instruct_round_trip.py

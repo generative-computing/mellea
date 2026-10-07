@@ -109,7 +109,7 @@ switch = [
 ]
 
 # LLMON (LLM Object Notation, arXiv:2603.22519) reply parsing. The distribution
-# is named `llmon` but its import root is `converters` (see llmon_instruction.py).
+# is named `llmon` but its import root is `lang` (see llmon.py).
 llmon = [
     "llmon",
 ]
@@ -353,9 +353,9 @@ module = "cpex.*"
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-# `converters` is the import root of the `llmon` library (the `llmon` extra), an
+# `lang` is the import root of the `llmon` library (the `llmon` extra), an
 # optional dependency absent from environments that install mellea without it.
-module = "converters.*"
+module = "lang.*"
 ignore_missing_imports = true
 
 

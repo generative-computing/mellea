@@ -221,6 +221,27 @@ def test_instruct_honors_instruction_cls(mock_act):
     assert isinstance(mock_act.call_args[0][0], LLMONInstruction)
 
 
+@patch("mellea.stdlib.functional.act")
+def test_instruct_forwards_instruction_kwargs(mock_act):
+    """instruct() splats instruction_kwargs into the instruction_cls constructor."""
+    from mellea.stdlib.components.llmon_instruction import LLMONInstruction
+
+    mock_act.return_value = (MagicMock(), SimpleContext())
+
+    instruct(
+        "do the thing",
+        SimpleContext(),
+        MagicMock(),
+        instruction_cls=LLMONInstruction,
+        instruction_kwargs={"llmonize_input": True},
+    )
+
+    built = mock_act.call_args[0][0]
+    assert isinstance(built, LLMONInstruction)
+    # The subclass-specific kwarg reached the constructor and enabled encoding.
+    assert built._llmonize_input is True
+
+
 # --- achat() and ainstruct() async forwarding ---
 
 
