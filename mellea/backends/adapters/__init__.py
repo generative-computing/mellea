@@ -6,6 +6,7 @@
 from ._core import (
     Adapter,
     AdapterSchemaMismatchError,
+    AloraActivationError,
     EmbeddedActivationRequest,
     EmbeddedBinding,
     Identity,
@@ -36,6 +37,7 @@ __all__ = [
     "AdapterMixin",
     "AdapterSchemaMismatchError",
     "AdapterType",
+    "AloraActivationError",
     "EmbeddedActivationRequest",
     "EmbeddedBinding",
     "EmbeddedIntrinsicAdapter",

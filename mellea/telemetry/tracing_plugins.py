@@ -518,16 +518,15 @@ class SamplingTracingPlugin(Plugin, name="sampling_tracing", priority=1044):
             return
         from mellea.telemetry.tracing import add_span_event
 
-        add_span_event(
-            payload.sampling_id,
-            event_name="iteration",
-            attributes={
-                "mellea.sampling.iteration": payload.iteration,
-                "mellea.sampling.all_validations_passed": payload.all_validations_passed,
-                "mellea.validation.valid_count": payload.valid_count,
-                "mellea.validation.requirement_count": payload.total_count,
-            },
-        )
+        attrs: dict[str, Any] = {
+            "mellea.sampling.iteration": payload.iteration,
+            "mellea.sampling.all_validations_passed": payload.all_validations_passed,
+            "mellea.validation.valid_count": payload.valid_count,
+            "mellea.validation.requirement_count": payload.total_count,
+        }
+        if payload.sample_index is not None:
+            attrs["mellea.sampling.sample_index"] = payload.sample_index
+        add_span_event(payload.sampling_id, event_name="iteration", attributes=attrs)
 
     @hook("sampling_repair")
     async def on_repair(
@@ -538,15 +537,14 @@ class SamplingTracingPlugin(Plugin, name="sampling_tracing", priority=1044):
             return
         from mellea.telemetry.tracing import add_span_event
 
-        add_span_event(
-            payload.sampling_id,
-            event_name="repair",
-            attributes={
-                "mellea.sampling.repair_iteration": payload.repair_iteration,
-                "mellea.sampling.repair_type": payload.repair_type,
-                "mellea.validation.failed_count": len(payload.failed_validations),
-            },
-        )
+        attrs = {
+            "mellea.sampling.repair_iteration": payload.repair_iteration,
+            "mellea.sampling.repair_type": payload.repair_type,
+            "mellea.validation.failed_count": len(payload.failed_validations),
+        }
+        if payload.sample_index is not None:
+            attrs["mellea.sampling.sample_index"] = payload.sample_index
+        add_span_event(payload.sampling_id, event_name="repair", attributes=attrs)
 
     @hook("sampling_loop_end")
     async def on_loop_end(

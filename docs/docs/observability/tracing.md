@@ -174,8 +174,8 @@ produces a passing sample or exhausts its budget.
 | `mellea.sampling.strategy_type` | Sampling strategy class name (e.g., `RejectionSamplingStrategy`) |
 | `mellea.sampling.loop_budget` | Maximum iterations per subsample |
 | `mellea.sampling.requirement_count` | Number of requirements validated each iteration |
-| `mellea.sampling.success` | Whether at least one attempt passed all requirements |
-| `mellea.sampling.iterations_used` | Total iterations that completed across subsamples |
+| `mellea.sampling.success` | Whether the selected attempt passed all requirements. For fan-out strategies such as Majority voting, reflects the selected branch only. |
+| `mellea.sampling.iterations_used` | Number of iterations represented by the sampling result. For fan-out strategies such as Majority voting, this represents the selected branch. |
 | `mellea.sampling.failure_reason` | Human-readable reason when `mellea.sampling.success` is `false` |
 
 It also records an `iteration` span event per attempt and a `repair` span event
@@ -230,6 +230,14 @@ Backend spans cover individual LLM API calls. They follow the
 | `gen_ai.response.finish_reasons` | List of finish reasons (e.g., `["stop"]`) |
 | `gen_ai.response.id` | Response identifier from the backend |
 | `gen_ai.response.time_to_first_chunk` | Time to first chunk in seconds; streaming requests only |
+
+Backend spans also carry the prompt-template attributes from the
+[OpenInference semantic conventions](https://arize-ai.github.io/openinference/spec/semantic_conventions.html):
+
+| Attribute | Description |
+| --------- | ----------- |
+| `llm.prompt_template.template` | Source of the prompt template rendered for the action; `chat` generations only |
+| `llm.prompt_template.variables` | The template's post-substitution variables, truncated to 500 characters; recorded only when `MELLEA_TRACES_CONTENT=true` |
 
 Mellea also adds context-specific attributes to backend spans:
 

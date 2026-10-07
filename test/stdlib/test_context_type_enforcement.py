@@ -416,7 +416,7 @@ def _computed(value: str) -> ComputedModelOutputThunk:
 class _StubStrategy(SamplingStrategy):
     """A sampling strategy that returns a caller-supplied list of sample contexts.
 
-    Bypasses real generation entirely: `sample` ignores the backend and returns
+    Bypasses real generation entirely: `_sample` ignores the backend and returns
     a `SamplingResult` whose `sample_contexts` are exactly `self._contexts`, with
     one computed generation per context. This lets a test attach a deliberately
     mismatched context to any slot and assert whether the functional guard fires.
@@ -426,17 +426,20 @@ class _StubStrategy(SamplingStrategy):
         """Store the contexts to attach, one per generation, to the result."""
         self._contexts = contexts
 
-    async def sample(
+    async def _sample(
         self,
         action,
         context,
         backend,
         requirements,
         *,
+        effective_loop_budget,
         validation_ctx=None,
         format=None,
         model_options=None,
         tool_calls=False,
+        sampling_id,
+        show_progress=True,
     ) -> SamplingResult:
         """Return a `SamplingResult` wrapping `self._contexts`; the last is chosen."""
         gens = [_computed(f"gen{i}") for i in range(len(self._contexts))]
@@ -445,6 +448,7 @@ class _StubStrategy(SamplingStrategy):
             success=True,
             sample_generations=gens,
             sample_contexts=list(self._contexts),
+            sample_actions=[action] * len(gens),
         )
 
 

@@ -1,3 +1,161 @@
+## [v0.8.0](https://github.com/generative-computing/mellea/releases/tag/v0.8.0) - 2026-09-23
+
+<!-- Release notes generated using configuration in .github/release.yml at release/v0.8 -->
+
+## What's Changed
+### New Features
+* feat: surface container artifacts via executionresult artifacts by @AngeloDanducci in https://github.com/generative-computing/mellea/pull/1384
+* refactor:  make json_util a private module by @AngeloDanducci in https://github.com/generative-computing/mellea/pull/1399
+* feat: audio text to text support by @markstur in https://github.com/generative-computing/mellea/pull/1396
+* feat: carry reasoning across turns with per-backend replay policy by @AngeloDanducci in https://github.com/generative-computing/mellea/pull/1374
+* feat: imageblock and imgurblock ergonomics by @AngeloDanducci in https://github.com/generative-computing/mellea/pull/1377
+* feat: add license header remediation to pre commit by @AngeloDanducci in https://github.com/generative-computing/mellea/pull/1419
+* refactor(intrinsics): promote _DictContract to shared adapters module; collapse guardian.py's factuality contracts by @planetf1 in https://github.com/generative-computing/mellea/pull/1428
+* feat(telemetry): emit execute_tool spans for tool calls by @ajbozarth in https://github.com/generative-computing/mellea/pull/1430
+* refactor: extract shared Ollama eviction helper from conftest files by @AngeloDanducci in https://github.com/generative-computing/mellea/pull/1434
+* refactor: consolidate duplicate import_optional into optional.py by @AngeloDanducci in https://github.com/generative-computing/mellea/pull/1438
+* refactor(backends)!: narrow AdapterMixin verbs, centralize option resolution, add AdapterFunctionMetricsPlugin skeleton by @planetf1 in https://github.com/generative-computing/mellea/pull/1422
+* feat: add support for audio-text-to-text with m serve CLI and include examples by @markstur in https://github.com/generative-computing/mellea/pull/1443
+* refactor(backends): unify mot.raw.response shape across streaming and non-streaming by @cptnm3 in https://github.com/generative-computing/mellea/pull/1449
+* feat(telemetry): add sampling and validator tracing spans via hooks by @ajbozarth in https://github.com/generative-computing/mellea/pull/1488
+* refactor: enforce act/aact without strategy by @AngeloDanducci in https://github.com/generative-computing/mellea/pull/1468
+* refactor: introduce alias for component cblock modeloutputthunk union by @AngeloDanducci in https://github.com/generative-computing/mellea/pull/1458
+* feat!: emit per-chunk streaming span events on backend spans by @ajbozarth in https://github.com/generative-computing/mellea/pull/1496
+* feat: add mellea version dunder by @jakelorocco in https://github.com/generative-computing/mellea/pull/1524
+* feat(cli): allow model passed by OpenAI client to be used in the served Mellea program by @markstur in https://github.com/generative-computing/mellea/pull/1512
+* feat(backends): add default_extra_body to OpenAIBackend by @planetf1 in https://github.com/generative-computing/mellea/pull/1536
+* feat: remove m async fix command (and other improvements) by @jakelorocco in https://github.com/generative-computing/mellea/pull/1537
+* feat: add nemotron model ids by @jakelorocco in https://github.com/generative-computing/mellea/pull/1526
+* feat: allow components to declare their chat role via format_for_llm by @AngeloDanducci in https://github.com/generative-computing/mellea/pull/1542
+* feat: add zizmor audit job to CI quality workflow by @planetf1 in https://github.com/generative-computing/mellea/pull/1530
+* feat(backends): LocalFileBinding implements verbs (PEFT/aLoRA path) + from_catalog() (Epic #929 Phase 2) by @planetf1 in https://github.com/generative-computing/mellea/pull/1454
+* feat: make call_tools public by @akihikokuroda in https://github.com/generative-computing/mellea/pull/1544
+* feat(telemetry): align spans and metrics with OTel GenAI semantic conventions by @ajbozarth in https://github.com/generative-computing/mellea/pull/1551
+* refactor(streaming)!: replace stream_with_chunking with single-task stream() by @ajbozarth in https://github.com/generative-computing/mellea/pull/1543
+* refactor: improve message serialization by @AngeloDanducci in https://github.com/generative-computing/mellea/pull/1564
+* refactor(intrinsics): resolve the adapter's output contract from the adapter, not a parallel argument by @planetf1 in https://github.com/generative-computing/mellea/pull/1556
+* feat(backends): EmbeddedBinding implements apply_activation (Granite Switch path); remove render_controls + set_request_adapter (Epic #929 Phase 2) by @planetf1 in https://github.com/generative-computing/mellea/pull/1559
+* feat: add author-pluggable extension point for provider-specific message fields by @AngeloDanducci in https://github.com/generative-computing/mellea/pull/1586
+* feat(backends): populate mot.raw.response on the HF generate_from_raw by @cptnm3 in https://github.com/generative-computing/mellea/pull/1518
+* feat: add Granite 4.2 model defaults by @planetf1 in https://github.com/generative-computing/mellea/pull/1587
+* feat(backends): support embedded adapters on LocalHFBackend by @planetf1 in https://github.com/generative-computing/mellea/pull/1593
+* feat(streaming): add EventStreamer for iterating stream events by @ajbozarth in https://github.com/generative-computing/mellea/pull/1567
+* feat(backends): accept composed Adapter directly (Epic #929, issue #1144, PR1) by @planetf1 in https://github.com/generative-computing/mellea/pull/1619
+* feat: add per-requirement chunking for streaming validation by @ajbozarth in https://github.com/generative-computing/mellea/pull/1630
+* feat: preserve Context subtype and enforce input==output context type by @AngeloDanducci in https://github.com/generative-computing/mellea/pull/1582
+* feat(core): audio file/URL constructors and representation-aware capability guards by @jakelorocco in https://github.com/generative-computing/mellea/pull/1601
+* feat(backends): support Ollama adapter functions by @planetf1 in https://github.com/generative-computing/mellea/pull/1634
+### Bug Fixes
+* fix(ci): serialize ollama requests to prevent llama-server segfault cascade by @ajbozarth in https://github.com/generative-computing/mellea/pull/1381
+* fix: port telemetry test-order fix + broken aLora example skip to main (#1378) by @ajbozarth in https://github.com/generative-computing/mellea/pull/1382
+* fix(ci): generate API/CLI docs before snapshotting release version by @ajbozarth in https://github.com/generative-computing/mellea/pull/1386
+* fix: preserve tool_calls in multi-turn history and skip malformed tool-arg JSON for OpenAI-compatible backends by @mvanhorn in https://github.com/generative-computing/mellea/pull/1373
+* fix(ci): revert OLLAMA_NUM_PARALLEL serialization (#1381) by @ajbozarth in https://github.com/generative-computing/mellea/pull/1387
+* fix: test kv flake with rephrase and chatcontext by @AngeloDanducci in https://github.com/generative-computing/mellea/pull/1403
+* fix: refactor bash validation by @akihikokuroda in https://github.com/generative-computing/mellea/pull/1400
+* fix: force cpu accelerator for docling on apple silicon mps by @AngeloDanducci in https://github.com/generative-computing/mellea/pull/1417
+* fix: ollama releases prior to the pre release today ran into issues with amx runners by @AngeloDanducci in https://github.com/generative-computing/mellea/pull/1404
+* fix: pypi build files by @jakelorocco in https://github.com/generative-computing/mellea/pull/1414
+* fix: updated assert to fix flakeyness of sampling example by @rphadnis in https://github.com/generative-computing/mellea/pull/1420
+* fix: bump pinned Ollama version to 0.32.2 (rc0 tag removed) by @planetf1 in https://github.com/generative-computing/mellea/pull/1425
+* fix: raise ValueError for image/audio inputs in LocalHFBackend by @markstur in https://github.com/generative-computing/mellea/pull/1410
+* fix: Context.last_turn by @akihikokuroda in https://github.com/generative-computing/mellea/pull/1423
+* fix: add recursive nested-model $ref resolution in Pydantic tool parameter schemas by @akihikokuroda in https://github.com/generative-computing/mellea/pull/1416
+* fix: allow act to operate on CBlock and ModelOutputThunk by @AngeloDanducci in https://github.com/generative-computing/mellea/pull/1429
+* fix: bump langchain-core and litellm floors to clear cve by @AngeloDanducci in https://github.com/generative-computing/mellea/pull/1447
+* fix(hf): stop generation workers on stream timeout by @dk3yyyy in https://github.com/generative-computing/mellea/pull/1469
+* fix(backends): merge intrinsic extra_body once by @binggao1230 in https://github.com/generative-computing/mellea/pull/1300
+* fix: port analytics review improvements from website PR by @ajbozarth in https://github.com/generative-computing/mellea/pull/1463
+* fix: doc autogen test assertions by @AngeloDanducci in https://github.com/generative-computing/mellea/pull/1480
+* fix: change tool_calls from dict to list by @akihikokuroda in https://github.com/generative-computing/mellea/pull/1435
+* fix(core): replace bare assert with ValueError in ImageBlock/AudioBlock validation by @markstur in https://github.com/generative-computing/mellea/pull/1490
+* fix: assign the result of Context.add in transform/atransform by @planetf1 in https://github.com/generative-computing/mellea/pull/1477
+* fix: do not share session state across requests in m_serve examples by @markstur in https://github.com/generative-computing/mellea/pull/1481
+* fix: converge litellm to a single version across python versions by @AngeloDanducci in https://github.com/generative-computing/mellea/pull/1494
+* fix(stdlib): resolve postponed annotations in generative stub signature by @planetf1 in https://github.com/generative-computing/mellea/pull/1504
+* fix: surface HF auth failures when loading switch adapters by @psschwei in https://github.com/generative-computing/mellea/pull/1501
+* fix: feed tool results to open ai compat providers as role tool with id by @AngeloDanducci in https://github.com/generative-computing/mellea/pull/1505
+* fix: raise clear error when intrinsic context forwards no history by @psschwei in https://github.com/generative-computing/mellea/pull/1525
+* fix: resolve postponed annotations without failing on TYPE_CHECKING return types by @planetf1 in https://github.com/generative-computing/mellea/pull/1509
+* fix(hf): set whitespace_flexible=True in grammar_from_json_schema to prevent silent array collapse by @planetf1 in https://github.com/generative-computing/mellea/pull/1513
+* fix: harden computed model output thunks by @jakelorocco in https://github.com/generative-computing/mellea/pull/1519
+* fix: log non-OpenAI format= assumption once at init (#1502) by @sofiamartincraft in https://github.com/generative-computing/mellea/pull/1514
+* fix: mellea top level imports to be more ergonomic and lazily import some things to make startup time faster by @jakelorocco in https://github.com/generative-computing/mellea/pull/1538
+* fix(tools): stop validate_tool_arguments padding tool-call args with null by @avinash2692 in https://github.com/generative-computing/mellea/pull/1573
+* fix: rewrite broken aLora 101 example for the intrinsics API by @planetf1 in https://github.com/generative-computing/mellea/pull/1557
+* fix(backends): release() deregisters via a new remove_adapter() inverse verb by @planetf1 in https://github.com/generative-computing/mellea/pull/1554
+* fix: force safe click version via uv constraint by @AngeloDanducci in https://github.com/generative-computing/mellea/pull/1581
+* fix(backends): reject OpenAI model option overrides by @planetf1 in https://github.com/generative-computing/mellea/pull/1578
+* fix: preserve optional status and default values in tool serialization by @AngeloDanducci in https://github.com/generative-computing/mellea/pull/1570
+* fix(backends): route intrinsic generation through adapter_scope, fix lock reentrancy by @planetf1 in https://github.com/generative-computing/mellea/pull/1555
+* fix(adapter-functions): remove deprecated context relevance intrinsic by @planetf1 in https://github.com/generative-computing/mellea/pull/1579
+* fix(adapters): use effective capabilities in shim identities by @planetf1 in https://github.com/generative-computing/mellea/pull/1580
+* fix: surface validate parse errors as ValidationResult.error instead of propagating by @AngeloDanducci in https://github.com/generative-computing/mellea/pull/1591
+* fix: resolve HF symlinks in from_hub via temp local_dir by @Disha714 in https://github.com/generative-computing/mellea/pull/1495
+* fix: validate_tool_arguments does not enforce Literal/const constraints on tool fields by @JessicaHe22 in https://github.com/generative-computing/mellea/pull/1547
+* fix(hf): handle ModelOption.THINKING chat templates by @planetf1 in https://github.com/generative-computing/mellea/pull/1588
+* fix(backends): serialize resolve_adapter() registration under the activation lock by @planetf1 in https://github.com/generative-computing/mellea/pull/1607
+* fix(backends): fire adapter_function_invocation_complete for embedded adapter calls by @planetf1 in https://github.com/generative-computing/mellea/pull/1609
+* fix(tools): preserve MCP server-side tool name after rename by @ajbozarth in https://github.com/generative-computing/mellea/pull/1612
+* fix(rag): stop mirroring output schema key in groundedness batch prompt by @planetf1 in https://github.com/generative-computing/mellea/pull/1618
+* fix(backends): deep-merge extra_body.chat_template_kwargs in merge_model_options by @planetf1 in https://github.com/generative-computing/mellea/pull/1617
+* fix(hf): forward string THINKING levels as reasoning_effort, not low_effort by @planetf1 in https://github.com/generative-computing/mellea/pull/1639
+* fix(rag): normalise model-returned JSON types by @planetf1 in https://github.com/generative-computing/mellea/pull/1625
+* fix(telemetry): measure streaming latency at provider receipt by @ajbozarth in https://github.com/generative-computing/mellea/pull/1631
+* fix(hf): parse <think> tags into mot.thinking on LocalHFBackend by @planetf1 in https://github.com/generative-computing/mellea/pull/1616
+* fix: close backend clients and event-loop threads to stop resource leaks by @psschwei in https://github.com/generative-computing/mellea/pull/1648
+* fix: validation by @jakelorocco in https://github.com/generative-computing/mellea/pull/1628
+* fix(test): reliable nightly GPU runs — phased execution as default, script-owned timings by @planetf1 in https://github.com/generative-computing/mellea/pull/1643
+### Documentation
+* docs: sync changelog for v0.7.0 by @mellea-auto-release[bot] in https://github.com/generative-computing/mellea/pull/1383
+* docs: complete RST to Google-style docstring sweep by @mvanhorn in https://github.com/generative-computing/mellea/pull/1397
+* docs: add bash_executor example by @akihikokuroda in https://github.com/generative-computing/mellea/pull/1391
+* docs: document safer execution patterns by @akihikokuroda in https://github.com/generative-computing/mellea/pull/1393
+* docs: note policy_guardrails now raises AdapterSchemaMismatchError by @planetf1 in https://github.com/generative-computing/mellea/pull/1427
+* docs: organize the m_serve examples in subdirectories by @markstur in https://github.com/generative-computing/mellea/pull/1459
+* docs: add telemetry implementation guidance to AGENTS.md by @ajbozarth in https://github.com/generative-computing/mellea/pull/1461
+* docs: use markdown backticks in docstrings by @Jonesxq in https://github.com/generative-computing/mellea/pull/1472
+* docs: fix example notebook on colab by @psschwei in https://github.com/generative-computing/mellea/pull/1489
+* docs(telemetry): document the public-API consumption boundary by @ajbozarth in https://github.com/generative-computing/mellea/pull/1541
+* docs: add guidance on when to use which validation approach by @AngeloDanducci in https://github.com/generative-computing/mellea/pull/1540
+* docs: delete docs/dev/, migrate current content, close #1464's telemetry-doc gap by @planetf1 in https://github.com/generative-computing/mellea/pull/1483
+* docs: expand LiteLLM backend documentation  by @psschwei in https://github.com/generative-computing/mellea/pull/1548
+* docs: document construction-time ModelOption.THINKING suppression by @AngeloDanducci in https://github.com/generative-computing/mellea/pull/1571
+* docs: document PR template and checklist bot in AGENTS.md by @AngeloDanducci in https://github.com/generative-computing/mellea/pull/1585
+* docs: reframe docstring guidance as public API reference, not prompts by @ajbozarth in https://github.com/generative-computing/mellea/pull/1606
+* docs: document PR template system by @psschwei in https://github.com/generative-computing/mellea/pull/1641
+* docs: use relative .md links for all cross-doc references by @psschwei in https://github.com/generative-computing/mellea/pull/1647
+* docs: document ModelOption.THINKING behaviour for Granite by @planetf1 in https://github.com/generative-computing/mellea/pull/1645
+### Other Changes
+* chore: remove review guard on mellea/core by @psschwei in https://github.com/generative-computing/mellea/pull/1379
+* chore: remove review guard on intrinsics by @psschwei in https://github.com/generative-computing/mellea/pull/1380
+* chore: add spdx headers to code files by @psschwei in https://github.com/generative-computing/mellea/pull/1401
+* ci: add check for license/copyright headers on code files  by @psschwei in https://github.com/generative-computing/mellea/pull/1402
+* chore: drop superfluous dco merge queue check by @psschwei in https://github.com/generative-computing/mellea/pull/1478
+* test: add mocked backend tracing coverage by @dk3yyyy in https://github.com/generative-computing/mellea/pull/1471
+* test: honor capability overrides during example collection by @snowyukitty in https://github.com/generative-computing/mellea/pull/1451
+* chore: don't use nltk v3.10.1 by @psschwei in https://github.com/generative-computing/mellea/pull/1520
+* test(vision): activate Ollama vision e2e via Hugging Face GGUF pull by @planetf1 in https://github.com/generative-computing/mellea/pull/1527
+* test: assert const to enum schema survival for single-value Literal by @AngeloDanducci in https://github.com/generative-computing/mellea/pull/1596
+* test(backends): add real-model GPU e2e for intrinsic adapter_scope routing by @planetf1 in https://github.com/generative-computing/mellea/pull/1608
+* test(telemetry): avoid requiring provider chunk intervals by @planetf1 in https://github.com/generative-computing/mellea/pull/1626
+* test: add integration-level test coverage for ModelOption.THINKING on OllamaModelBackend by @planetf1 in https://github.com/generative-computing/mellea/pull/1613
+* test: add job for testing notebooks by @psschwei in https://github.com/generative-computing/mellea/pull/1649
+
+## New Contributors
+* @mellea-auto-release[bot] made their first contribution in https://github.com/generative-computing/mellea/pull/1383
+* @mvanhorn made their first contribution in https://github.com/generative-computing/mellea/pull/1373
+* @rphadnis made their first contribution in https://github.com/generative-computing/mellea/pull/1420
+* @dk3yyyy made their first contribution in https://github.com/generative-computing/mellea/pull/1471
+* @Jonesxq made their first contribution in https://github.com/generative-computing/mellea/pull/1472
+* @snowyukitty made their first contribution in https://github.com/generative-computing/mellea/pull/1451
+* @binggao1230 made their first contribution in https://github.com/generative-computing/mellea/pull/1300
+* @sofiamartincraft made their first contribution in https://github.com/generative-computing/mellea/pull/1514
+* @Disha714 made their first contribution in https://github.com/generative-computing/mellea/pull/1495
+* @JessicaHe22 made their first contribution in https://github.com/generative-computing/mellea/pull/1547
+
+**Full Changelog**: https://github.com/generative-computing/mellea/compare/v0.7.0...v0.8.0
+
 ## [v0.7.0](https://github.com/generative-computing/mellea/releases/tag/v0.7.0) - 2026-07-13
 
 <!-- Release notes generated using configuration in .github/release.yml at release/v0.7 -->

@@ -1,10 +1,16 @@
 # Copyright IBM Corp. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Unit tests for majority voting compare_strings methods — no backend required."""
+"""Unit tests for majority voting — no live backend required."""
+
+import asyncio
+from unittest.mock import Mock
 
 import pytest
 
+from mellea.stdlib.components import Instruction
+from mellea.stdlib.context import ChatContext
+from mellea.stdlib.requirements import Requirement, ValidationResult
 from mellea.stdlib.sampling import majority_voting
 from mellea.stdlib.sampling.majority_voting import (
     MajorityVotingStrategyForMath,
@@ -134,6 +140,59 @@ def test_rougel_compare_returns_float(rouge_strategy):
 def test_rougel_score_in_range(rouge_strategy):
     score = rouge_strategy.compare_strings("some text here", "some different text")
     assert 0.0 <= score <= 1.0
+
+
+# --- Cancellation & exception propagation across concurrent sample branches ---
+
+
+async def test_branch_exception_cancels_siblings_and_propagates():
+    """When one majority voting branch raises, sibling tasks are cancelled and exception propagates."""
+
+    class _BranchFailure(RuntimeError):
+        pass
+
+    sibling_started = asyncio.Event()
+    sibling_cancelled = asyncio.Event()
+    call_count = 0
+
+    async def mock_generate_from_context(action, ctx, **kwargs):
+        nonlocal call_count
+        call_count += 1
+
+        # Keep the first branch running so it can be cancelled by the failing branch.
+        if call_count == 1:
+            sibling_started.set()
+            try:
+                await asyncio.sleep(10.0)
+            except asyncio.CancelledError:
+                sibling_cancelled.set()
+                raise
+
+        # The other branch fails.
+        await sibling_started.wait()
+        raise _BranchFailure("branch failed")
+
+    backend = Mock()
+    backend.generate_from_context = mock_generate_from_context
+
+    always_pass = Requirement(
+        "always_pass", validation_fn=lambda _ctx: ValidationResult(result=True)
+    )
+
+    strategy = MBRDRougeLStrategy(number_of_samples=2, loop_budget=1)
+
+    with pytest.raises(_BranchFailure, match="branch failed"):
+        await strategy.sample(
+            action=Instruction(description="test cancel propagation"),
+            context=ChatContext(),
+            backend=backend,
+            requirements=[always_pass],
+            show_progress=False,
+        )
+
+    assert sibling_cancelled.is_set(), (
+        "Sibling task must be cancelled when a concurrent branch raises"
+    )
 
 
 if __name__ == "__main__":

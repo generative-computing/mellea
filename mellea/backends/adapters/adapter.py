@@ -23,7 +23,7 @@ import shutil
 import tempfile
 import time
 import warnings
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import ClassVar, Literal, TypeAlias, TypeVar, cast
 
 import yaml
@@ -411,6 +411,55 @@ def get_adapter_for_intrinsic(
     return adapter
 
 
+def _alora_invocation_sequence_present(
+    prompt_token_ids: Sequence[int], invocation_tokens: Sequence[int]
+) -> bool:
+    """Return whether an aLoRA's declared invocation token sequence occurs in a prompt.
+
+    An aLoRA only activates from the point where PEFT finds this exact
+    contiguous token-id subsequence in the assembled prompt
+    (`peft.tuners.lora.variants.calculate_alora_offsets`). When it is absent,
+    PEFT sets the activation offset to `None` and generation silently runs
+    against the base model with no error and no warning. This
+    function is the check Mellea runs itself, since PEFT does not surface the
+    mismatch: it holds both the loaded adapter's declared sequence and the
+    prompt it just assembled.
+
+    The check is deliberately a token-id subsequence search over the fully
+    assembled prompt, not a substring search over instruction text: tokeniser
+    merges across a text boundary (e.g. `>` and the following `:` fusing into
+    one token) can make a sequence that looks present in the source text
+    absent from the actual token ids, and vice versa for sequences supplied by
+    the chat template rather than the instruction.
+
+    Matches anywhere the sequence occurs, not only at the offset PEFT would
+    actually activate from (PEFT itself uses the *last* match — see
+    `calculate_alora_offsets`). If the exact token sequence happens to occur
+    earlier in the prompt (e.g. literally present in older conversation
+    turns), this returns `True` even though the adapter would activate from
+    that earlier, unintended position rather than not at all. That is a
+    different failure mode (wrong span, not no activation) and is not
+    detected here.
+
+    Args:
+        prompt_token_ids: Token ids of the assembled prompt that will be sent
+            to the model.
+        invocation_tokens: The aLoRA's declared `alora_invocation_tokens`.
+
+    Returns:
+        bool: `True` if `invocation_tokens` is empty (nothing declared to look
+        for) or occurs contiguously in `prompt_token_ids`; `False` otherwise.
+    """
+    inv = list(invocation_tokens)
+    if not inv:
+        return True
+    prompt = list(prompt_token_ids)
+    n = len(inv)
+    if n > len(prompt):
+        return False
+    return any(prompt[i : i + n] == inv for i in range(len(prompt) - n + 1))
+
+
 def _fire_phase_complete_hook(name: str, phase: str, duration_ms: float) -> None:
     """Fire the `adapter_function_phase_complete` metric hook for a phase that already ran.
 
@@ -736,11 +785,11 @@ class AdapterMixin(Backend, abc.ABC):
     def remove_adapter(self, adapter_qualified_name: str) -> None:
         """Deregister a previously added adapter, freeing its qualified name for reuse.
 
-        The inverse of `add_adapter()`. LocalFile/PEFT reality only today
-        (#1528) — `LocalFileBinding.release()` calls this after
-        `unload_peft_adapter()` so a released `qualified_name` becomes
-        claimable by a fresh binding rather than staying claimed for the
-        backend's lifetime.
+        The inverse of `add_adapter()`. LocalFile/PEFT bindings call this from
+        `LocalFileBinding.release()` after unloading their weights. Embedded
+        backends use it to clear their registration and cached configuration;
+        their weights are already part of the served model, so there is no
+        unload step.
 
         Args:
             adapter_qualified_name (str): The `adapter.qualified_name` of the

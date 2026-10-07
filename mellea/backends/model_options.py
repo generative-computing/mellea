@@ -221,15 +221,14 @@ class ModelOption:
         return new_options
 
     @staticmethod
-    def _merge_extra_body(
+    def merge_extra_body(
         base: dict[str, Any], overwrite: dict[str, Any]
     ) -> dict[str, Any]:
         """Merge two `extra_body` dicts, deep-merging their `chat_template_kwargs`.
 
-        Every other key is a flat overwrite, matching `merge_model_options`. If
-        either side's `chat_template_kwargs` is present but not a dict, the
-        deep-merge is skipped and `overwrite`'s value wins when present, else
-        `base`'s.
+        Every other key is a flat overwrite, matching `merge_model_options`.
+        `chat_template_kwargs` is omitted from the output when the merged nested
+        mapping is empty.
 
         Args:
             base (dict[str, Any]): Lower-precedence `extra_body` dict.
@@ -237,6 +236,11 @@ class ModelOption:
 
         Returns:
             dict[str, Any]: A new merged `extra_body` dict.
+
+        Raises:
+            TypeError: If `chat_template_kwargs` is present on either side but is
+                not a dict. The message names the offending value and which side
+                ("base" or "overwrite") it came from.
         """
         merged = dict(base)
         base_ctk = merged.pop("chat_template_kwargs", None)
@@ -246,19 +250,20 @@ class ModelOption:
 
         merged.update(overwrite)
 
-        base_ctk_ok = base_ctk is None or isinstance(base_ctk, dict)
-        overwrite_ctk_ok = overwrite_ctk is None or isinstance(overwrite_ctk, dict)
+        if base_ctk is not None and not isinstance(base_ctk, dict):
+            raise TypeError(
+                f"extra_body.chat_template_kwargs must be a dict; got"
+                f" {type(base_ctk).__name__!r} on the base side"
+            )
+        if overwrite_ctk is not None and not isinstance(overwrite_ctk, dict):
+            raise TypeError(
+                f"extra_body.chat_template_kwargs must be a dict; got"
+                f" {type(overwrite_ctk).__name__!r} on the overwrite side"
+            )
 
-        if base_ctk_ok and overwrite_ctk_ok:
-            if base_ctk is not None or overwrite_ctk is not None:
-                merged["chat_template_kwargs"] = {
-                    **(base_ctk or {}),
-                    **(overwrite_ctk or {}),
-                }
-        elif overwrite_ctk is not None:
-            merged["chat_template_kwargs"] = overwrite_ctk
-        elif base_ctk is not None:
-            merged["chat_template_kwargs"] = base_ctk
+        merged_ctk = {**(base_ctk or {}), **(overwrite_ctk or {})}
+        if merged_ctk:
+            merged["chat_template_kwargs"] = merged_ctk
         return merged
 
     @staticmethod
@@ -270,7 +275,7 @@ class ModelOption:
         Creates a new dict that contains all keys and values from persistent opts and overwrite opts.
         If there are duplicate keys, overwrite opts key value pairs will be used, except for
         `extra_body`: when both sides have a dict there, their `chat_template_kwargs` sub-dicts
-        are deep-merged (see `_merge_extra_body`) instead of one replacing the other.
+        are deep-merged (see `merge_extra_body`) instead of one replacing the other.
 
         Args:
             persistent_opts (dict[str, Any]): Base model options (lower precedence).
@@ -292,7 +297,7 @@ class ModelOption:
                     and isinstance(v, dict)
                     and isinstance(new_options.get(k), dict)
                 ):
-                    new_options[k] = ModelOption._merge_extra_body(new_options[k], v)
+                    new_options[k] = ModelOption.merge_extra_body(new_options[k], v)
                 else:
                     new_options[k] = v
         return new_options

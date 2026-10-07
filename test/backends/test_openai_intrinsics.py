@@ -90,6 +90,11 @@ def vllm_switch_process():
         yield None
         return
 
+    if os.environ.get("VLLM_SWITCH_PHASE_PENDING") == "1":
+        pytest.skip(
+            "Deferred to the final Granite Switch phase", allow_module_level=True
+        )
+
     if os.environ.get("VLLM_TEST_BASE_URL"):
         pytest.skip(
             "Generic vLLM server is active; Granite Switch tests require a separate server",

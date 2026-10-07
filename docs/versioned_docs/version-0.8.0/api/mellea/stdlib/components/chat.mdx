@@ -1,0 +1,296 @@
+---
+title: "mellea.stdlib.components.chat"
+sidebar_label: "mellea.stdlib.components.chat"
+description: "Chat primitives: the `Message` and `ToolMessage` components."
+---
+
+Chat primitives: the `Message` and `ToolMessage` components.
+
+
+
+
+
+Defines `Message`, the [`Component`](../../core/base#class-component) subtype used to represent a single turn in a
+chat history with a `role` (`user`, `assistant`, `system`, or `tool`),
+text `content`, and optional `images` and `documents` attachments. Also provides
+`ToolMessage` (a `Message` subclass that carries the tool name and arguments), and
+utilities for converting a [`Context`](../../core/base#class-context) into a flat list of `Message` objects:
+`as_chat_history` (strict typing) and `as_generic_chat_history` (flexible with
+configurable formatter).
+
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `message_from_template_representation` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/stdlib/components/chat.py#L333" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#message_from_template_representation}
+
+```python
+message_from_template_representation(tr: TemplateRepresentation) -> Message
+```
+
+
+Build a `Message` from a component's [`TemplateRepresentation`](../../core/base#class-templaterepresentation).
+
+Shared by `ChatFormatter.to_chat_messages` and `as_generic_chat_history` so a
+component's declared role and tool metadata are honored consistently across both
+conversion paths. The representation's `role` overrides `default_role` when set;
+role validation is deferred to `Message`, which raises `ValueError` for anything
+outside `Message.Role`. `thinking`, `tool_calls`, `provider_fields`, and (for
+`role="tool"`) `tool_call_id`/`tool_name` are carried onto the resulting message.
+
+**Args:**
+- `tr`: The template representation returned by the component's `format_for_llm`.
+- `default_role`: The positional role guess to use when `tr.role` is `None`.
+- `content`: The already-rendered text content for the message.
+
+**Returns:**
+- A `Message` with the resolved role, content, attachments, and tool metadata.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `as_chat_history` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/stdlib/components/chat.py#L367" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#as_chat_history}
+
+```python
+as_chat_history(ctx: Context) -> list[Message]
+```
+
+
+Returns a list of Messages corresponding to a Context.
+
+**Args:**
+- `ctx`: A linear [`Context`](../../core/base#class-context) whose entries are `Message` or [`ModelOutputThunk`](../../core/base#class-modeloutputthunk)
+objects with `Message` parsed representations.
+
+**Returns:**
+- List of `Message` objects in conversation order.
+
+**Raises:**
+- `ValueError`: If the context history is non-linear and cannot be cast to a
+flat list.
+- `AssertionError`: If any entry in the context cannot be converted to a
+`Message`.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `as_generic_chat_history` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/stdlib/components/chat.py#L418" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#as_generic_chat_history}
+
+```python
+as_generic_chat_history(ctx: Context, formatter: Callable[[object], str] | None = None) -> list[Message]
+```
+
+
+Returns a list of Messages corresponding to a Context, with flexible type handling.
+
+This function is more permissive than `as_chat_history()`, allowing arbitrary
+component types. Unknown types are converted to strings using a configurable
+formatter, making it suitable for general-purpose use where context composition
+may be heterogeneous.
+
+The formatter is applied to:
+- [`ModelOutputThunk`](../../core/base#class-modeloutputthunk) with non-Message `parsed_repr`
+- [`CBlock`](../../core/base#class-cblock) subclasses (subclasses only; plain [`CBlock`](../../core/base#class-cblock) is stringified)
+- Other unknown component types
+
+Existing `Message` objects are preserved as-is; their content is not formatted.
+This design preserves Message fidelity while providing an escape hatch for unknown types.
+
+**Args:**
+- `ctx`: A linear [`Context`](../../core/base#class-context) that may contain `Message`, [`ModelOutputThunk`](../../core/base#class-modeloutputthunk),
+or other [`Component`](../../core/base#class-component) types.
+- `formatter`: Optional callable that converts unknown types to strings.
+Defaults to `_default_formatter` which logs a warning and stringifies.
+
+**Returns:**
+- List of `Message` objects in conversation order.
+
+**Raises:**
+- `ValueError`: If the context history is non-linear and cannot be cast to a
+flat list.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `Message` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/stdlib/components/chat.py#L37" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#class-message}
+
+
+A single Message in a Chat history.
+
+**Args:**
+- `role`: The role that this message came from (e.g., `"user"`,
+`"assistant"`).
+- `content`: The content of the message.
+- `images`: Optional images
+associated with the message. Use [`ImageBlock`](../../core/base#class-imageblock) for base64-encoded
+images (supported by all vision backends) or [`ImageUrlBlock`](../../core/base#class-imageurlblock) for
+URL-referenced images (passed directly to OpenAI-compatible
+backends; backends that require base64, such as Ollama, download
+and encode the image automatically).
+- `audio`: Optional audio
+associated with the message.
+- `documents`: Optional documents associated with
+the message.
+- `tool_calls`: Optional OpenAI-compatible
+assistant tool calls associated with the message.
+- `tool_call_id`: Optional provider-supplied tool-call id that a
+`role="tool"` message references, so a tool-result turn can be linked
+back to the assistant tool call that produced it (issue #1389).
+`ToolMessage` sources this from its [`ModelToolCall`](../../core/base#class-modeltoolcall) instead; set it
+directly only when constructing a bare `role="tool"` `Message`.
+- `tool_name`: Optional name of the tool whose result a
+`role="tool"` message carries. Some backends (e.g. Ollama) key their
+tool-result turn on the tool name rather than a call id. A component
+declaring `role="tool"` can supply it directly; `ToolMessage` instead
+carries it as `.name`.
+- `thinking`: Optional reasoning trace produced by a thinking
+model on the turn that generated this message. Populated by `_parse`
+from `ModelOutputThunk.thinking`; carried through `as_chat_history`
+so backends can round-trip it on subsequent turns per their replay
+policy. `None` or empty for messages that carry no reasoning (e.g.
+user turns, or assistant turns from non-thinking models); the replay
+policy and serializers treat both falsy cases identically.
+- `provider_fields`: Optional author-declared
+extra wire fields Mellea does not model, keyed by provider target. Each
+outer key is a provider (matched against the backend's provider string,
+with the `"openai"` wire-family alias and a `"*"` wildcard); each inner
+dict holds fields merged into the wire message for that target. Mellea's
+known fields always win on a key collision, and a named target the request
+does not hit (with no `"*"`) raises at serialization. Defaults to `None`.
+
+**Attributes:**
+- `Role`: Type alias for the allowed role literals\: `"system"`,
+`"user"`, `"assistant"`, or `"tool"`.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `images` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/stdlib/components/chat.py#L120" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#images}
+
+```python
+images(self) -> None | list[ImageBlock | ImageUrlBlock]
+```
+
+Returns the images associated with this message.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `audio` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/stdlib/components/chat.py#L125" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#audio}
+
+```python
+audio(self) -> None | list[AudioBlock | AudioUrlBlock]
+```
+
+Returns the audio associated with this message.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `tool_calls` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/stdlib/components/chat.py#L130" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#tool_calls}
+
+```python
+tool_calls(self) -> list[dict[str, Any]] | None
+```
+
+Returns the OpenAI-compatible tool calls associated with this message.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `tool_call_id` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/stdlib/components/chat.py#L135" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#tool_call_id}
+
+```python
+tool_call_id(self) -> str | None
+```
+
+Returns the tool-call id this `role="tool"` message references, if any.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `tool_name` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/stdlib/components/chat.py#L140" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#tool_name}
+
+```python
+tool_name(self) -> str | None
+```
+
+Returns the name of the tool whose result this `role="tool"` message carries, if any.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `provider_fields` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/stdlib/components/chat.py#L145" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#provider_fields}
+
+```python
+provider_fields(self) -> dict[str, dict[str, Any]] | None
+```
+
+Returns the author-declared provider-keyed extra wire fields, if any.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `parts` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/stdlib/components/chat.py#L149" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#parts}
+
+```python
+parts(self) -> list[Span]
+```
+
+Return the constituent parts of this message, including content, documents, images, and audio.
+
+**Returns:**
+- list\[Span]: A list beginning with the content block,
+- followed by any attached documents, image blocks, and audio blocks.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `format_for_llm` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/stdlib/components/chat.py#L165" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#format_for_llm}
+
+```python
+format_for_llm(self) -> TemplateRepresentation
+```
+
+Formats the content for a Language Model.
+
+Declares this message's `role` and carries its `thinking`, `tool_calls`,
+and `tool_call_id` so the representation is a faithful, self-describing
+view of the message (see `message_from_template_representation`).
+
+**Returns:**
+- The formatted output suitable for language models.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `ToolMessage` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/stdlib/components/chat.py#L295" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#class-toolmessage}
+
+
+Adds the name field for function name.
+
+**Args:**
+- `role`: The role of this message; most backends use `"tool"`.
+- `content`: The content of the message; should be a stringified
+version of `tool_output`.
+- `tool_output`: The output of the tool or function call.
+- `name`: The name of the tool or function that was called.
+- `args`: The arguments passed to the tool.
+- `tool`: The [`ModelToolCall`](../../core/base#class-modeltoolcall) representation.
+
+**Attributes:**
+- `arguments`: The arguments that were passed to the
+tool; stored from the `args` constructor parameter.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

@@ -1,0 +1,707 @@
+---
+title: "Metrics"
+description: "Automatically collect LLM metrics and instrument your own code with OpenTelemetry counters, histograms, and up-down counters."
+# diataxis: how-to
+---
+
+**Prerequisites:** [Telemetry](./telemetry.md)
+introduces the environment variables and telemetry architecture. This page
+covers metrics collection in detail.
+
+Mellea automatically records LLM metrics across all backends using OpenTelemetry. Metrics follow the
+[Gen-AI Semantic Conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/)
+for standardized observability. The metrics API also lets you create your own
+counters, histograms, and up-down counters for application-level instrumentation.
+
+> **Note:** Metrics are an optional feature. All instrument calls are no-ops
+> when metrics are disabled or the `[telemetry]` extra is not installed.
+
+## Enable metrics
+
+```bash
+export MELLEA_METRICS_ENABLED=true
+```
+
+You also need at least one exporter configured — see
+[Metrics export configuration](#metrics-export-configuration) below.
+
+## Token usage metrics
+
+Mellea records token consumption automatically after each LLM call completes.
+No code changes are required.
+
+### Token instruments
+
+| Metric Name | Type | Unit | Description |
+| ----------- | ---- | ---- | ----------- |
+| `gen_ai.client.token.usage` | Histogram | `{token}` | Input and output token counts per request, split by `gen_ai.token.type` |
+
+### Token attributes
+
+All token metrics include these attributes following Gen-AI semantic conventions:
+
+| Attribute | Description | Example Values |
+| --------- | ----------- | -------------- |
+| `gen_ai.provider.name` | Backend provider name | `openai`, `ollama`, `ibm.watsonx.ai`, `litellm`, `huggingface` |
+| `gen_ai.request.model` | Model identifier | `gpt-4`, `llama3.2:7b`, `granite-3.1-8b-instruct` |
+| `gen_ai.operation.name` | GenAI operation | `chat`, `text_completion` |
+| `gen_ai.token.type` | Which token count this observation is | `input`, `output` |
+
+### Backend support
+
+| Backend | Streaming | Non-Streaming | Source |
+| ------- | --------- | ------------- | ------ |
+| OpenAI | Yes | Yes | `usage.prompt_tokens` and `usage.completion_tokens` |
+| Ollama | Yes | Yes | `prompt_eval_count` and `eval_count` |
+| WatsonX | No | Yes | `input_token_count` and `generated_token_count` (streaming API limitation) |
+| LiteLLM | Yes | Yes | `usage.prompt_tokens` and `usage.completion_tokens` |
+| Hugging Face | Yes | Yes | Calculated from input_ids and output sequences |
+
+### Token recording timing
+
+Token metrics are recorded **after the full response is received**, not
+incrementally during streaming:
+
+- **Non-streaming**: Metrics recorded immediately after `await mot.avalue()` completes.
+- **Streaming**: Metrics recorded after the stream is fully consumed (all chunks received).
+
+This ensures accurate token counts from the backend's usage metadata, which
+is only available after the complete response.
+
+```python
+mot, _ = await backend.generate_from_context(msg, ctx)
+
+# Metrics NOT recorded yet (stream still in progress)
+await mot.astream()
+
+# Metrics recorded here (after stream completion)
+await mot.avalue()
+```
+
+## Latency histograms
+
+Mellea tracks request duration and time-to-first-token (TTFB) automatically
+after each LLM call. No code changes are required.
+
+### Latency instruments
+
+| Metric Name | Type | Unit | Description |
+| ----------- | ---- | ---- | ----------- |
+| `mellea.llm.request.duration` | Histogram | `s` | Total request duration, from call to full response |
+| `gen_ai.client.operation.time_to_first_chunk` | Histogram | `s` | Time to first chunk (streaming requests only) |
+| `gen_ai.client.operation.time_per_output_chunk` | Histogram | `s` | Client-side interval between consecutive streamed chunks at receipt (streaming only; opt-in, see below) |
+
+### Latency attributes
+
+| Attribute | Description | Example Values |
+| --------- | ----------- | -------------- |
+| `gen_ai.provider.name` | Backend provider name | `openai`, `ollama`, `ibm.watsonx.ai`, `litellm`, `huggingface` |
+| `gen_ai.request.model` | Model identifier | `gpt-4`, `llama3.2:7b`, `granite-3.1-8b-instruct` |
+| `gen_ai.operation.name` | GenAI operation | `chat`, `text_completion` |
+| `gen_ai.request.stream` | Whether streaming mode was used (duration only) | `True`, `False` |
+| `error.type` | Exception class name, on failed operations only (duration only) | `TimeoutError`, `RateLimitError` |
+
+### Histogram buckets
+
+Bucket boundaries follow the Gen-AI semantic conventions:
+
+- **`mellea.llm.request.duration`**: `0.01, 0.02, 0.04, 0.08, 0.16, 0.32, 0.64, 1.28, 2.56, 5.12, 10.24, 20.48, 40.96, 81.92` seconds
+- **`gen_ai.client.operation.time_to_first_chunk`**: `0.01, 0.02, 0.04, 0.08, 0.16, 0.32, 0.64, 1.28, 2.56, 5.12, 10.24, 20.48, 40.96, 81.92` seconds
+- **`gen_ai.client.operation.time_per_output_chunk`**: `0.01, 0.02, 0.04, 0.08, 0.16, 0.32, 0.64, 1.28, 2.56, 5.12, 10.24, 20.48, 40.96, 81.92` seconds
+
+### Latency recording timing
+
+- **`mellea.llm.request.duration`**: Recorded for every `generate_from_context` call,
+  both streaming and non-streaming. Named `mellea.*` rather than using the `gen_ai.*` convention because it times the full client-side request, not just the model operation.
+- **`gen_ai.client.operation.time_to_first_chunk`**: Recorded only for streaming requests, measuring elapsed time
+  from the `generate_from_context` call until the first chunk arrives.
+- **`gen_ai.client.operation.time_per_output_chunk`**: Recorded per streamed chunk after the
+  first, measured from the previous chunk's receipt to this chunk's receipt. Opt-in; the
+  histogram stays empty unless `MELLEA_GENERATION_CHUNK_EVENTS=true`. It measures how fast
+  chunks arrive at the client, so client-side work between chunks (such as per-chunk
+  validation) counts toward the interval.
+
+Access latency data directly from a `ModelOutputThunk`:
+
+```python
+from mellea import start_session
+from mellea.backends import ModelOption
+
+with start_session() as m:
+    result = m.instruct(
+        "Explain quantum entanglement briefly",
+        model_options={ModelOption.STREAM: True},
+    )
+    if result.generation.streaming and result.generation.ttfb_ms is not None:
+        print(f"Time to first token: {result.generation.ttfb_ms:.1f} ms")
+```
+
+## Error metrics
+
+Mellea records LLM errors automatically after each failed backend call. No
+code changes are required. Errors are classified into semantic categories for
+consistent filtering across providers.
+
+### Error counter
+
+| Metric Name | Type | Unit | Description |
+| ----------- | ---- | ---- | ----------- |
+| `mellea.llm.errors` | Counter | `{error}` | Total LLM errors categorized by type |
+
+### Error attributes
+
+All error metrics include these attributes:
+
+| Attribute | Description | Example Values |
+| --------- | ----------- | -------------- |
+| `mellea.error.category` | Semantic error category (mellea-specific) | `rate_limit`, `timeout`, `auth`, `content_policy`, `invalid_request`, `transport_error`, `server_error`, `unknown` |
+| `gen_ai.provider.name` | Backend provider name | `openai`, `ollama`, `watsonx`, `litellm`, `huggingface` |
+| `gen_ai.request.model` | Model identifier | `gpt-4`, `llama3.2:7b`, `granite-3.1-8b-instruct` |
+| `gen_ai.operation.name` | GenAI operation | `chat`, `text_completion` |
+| `error.type` | Python exception class name (standard OTel) | `RateLimitError`, `TimeoutError`, `AuthenticationError` |
+
+### Error type categories
+
+The `mellea.error.category` attribute maps exceptions to human-friendly semantic labels:
+
+| Category | Description | Matched exceptions |
+| -------- | ----------- | ------------------ |
+| `rate_limit` | Request throttled by provider | `openai.RateLimitError`, class names containing `ratelimit` |
+| `timeout` | Request or connection timed out | `TimeoutError`, `openai.APITimeoutError`, class names containing `timeout` |
+| `auth` | Authentication or authorization failure | `openai.AuthenticationError`, `openai.PermissionDeniedError`, class names containing `auth` |
+| `content_policy` | Request rejected by content moderation | `openai.BadRequestError` with `code="content_policy_violation"`, class names containing `content_policy` |
+| `invalid_request` | Malformed or unsupported request | `openai.BadRequestError` (non-content-policy) |
+| `transport_error` | Network or connection failure | `ConnectionError`, `openai.APIConnectionError`, class names containing `connection`/`transport` |
+| `server_error` | Provider-side internal error | `openai.InternalServerError`, class names containing `server` |
+| `unknown` | Unrecognized exception type | Any exception not matched above |
+
+### When errors are recorded
+
+Error metrics are recorded when a backend raises an exception during generation,
+after the request has been dispatched to the provider. Construction-time errors
+(e.g. missing API key) are not captured by the error counter.
+
+## Cost metrics
+
+Mellea estimates request cost automatically after each LLM call when pricing data
+is available. No code changes are required.
+
+### Cost instrument
+
+| Metric Name | Type | Unit | Description |
+| ----------- | ---- | ---- | ----------- |
+| `mellea.llm.cost.usd` | Counter | `USD` | Estimated request cost in US dollars |
+
+### Cost attributes
+
+| Attribute | Description | Example Values |
+| --------- | ----------- | -------------- |
+| `gen_ai.provider.name` | Backend provider name | `openai`, `ollama`, `watsonx`, `litellm`, `huggingface` |
+| `gen_ai.request.model` | Model identifier | `gpt-5.4`, `claude-sonnet-4-6` |
+| `gen_ai.operation.name` | GenAI operation | `chat`, `text_completion` |
+
+### Pricing data
+
+Cost metrics use `litellm` (`mellea[litellm]`) as a pricing library. This is
+independent of the LiteLLM backend — pricing works with any Mellea backend, but
+cost is only recorded for models that `litellm` has pricing data for. Local and
+private model IDs (Ollama, Hugging Face, custom deployments) will log a one-time
+warning per model and produce no cost metric.
+
+Pricing is auto-enabled when `litellm` is installed. Use `MELLEA_PRICING_ENABLED`
+to override:
+
+| `MELLEA_PRICING_ENABLED` | litellm installed | Result |
+| ------------------------- | ----------------- | ------ |
+| `false` | either | Disabled (no warning) |
+| `true` | yes | Enabled |
+| `true` | no | Disabled + warning |
+| unset | yes | Enabled automatically |
+| unset | no | Disabled (no warning) |
+
+### Custom pricing
+
+Override or add pricing for any model using a JSON file with litellm's native
+per-token schema:
+
+```bash
+export MELLEA_PRICING_FILE=/path/to/my-pricing.json
+```
+
+```json
+{
+  "my-custom-model": {
+    "input_cost_per_token": 0.000001,
+    "output_cost_per_token": 0.000002
+  },
+  "claude-sonnet-4-6": {
+    "input_cost_per_token": 0.000003,
+    "output_cost_per_token": 0.000015,
+    "cache_read_input_token_cost": 0.0000003,
+    "cache_creation_input_token_cost": 0.000003750
+  }
+}
+```
+
+Minimal entries with only cost fields are accepted. Errors loading the file are
+logged as warnings and litellm's built-in pricing is used as a fallback.
+
+## Operational metrics
+
+Mellea records metrics for its internal sampling, validation, and tool execution
+loops. These counters give visibility into retry behavior, validation failure
+rates, and tool call health — independent of the underlying LLM provider.
+
+### Sampling counters
+
+| Metric Name | Type | Unit | Description |
+| ----------- | ---- | ---- | ----------- |
+| `mellea.sampling.attempts` | Counter | `{attempt}` | Sampling attempts per loop iteration |
+| `mellea.sampling.successes` | Counter | `{sample}` | Sampling loops that produced a passing sample |
+| `mellea.sampling.failures` | Counter | `{failure}` | Sampling loops that exhausted the loop budget without success |
+
+All sampling metrics include:
+
+| Attribute | Description | Example Values |
+| --------- | ----------- | -------------- |
+| `strategy` | Sampling strategy class name | `RejectionSamplingStrategy`, `MultiTurnStrategy`, `RepairTemplateStrategy` |
+
+### Requirement counters
+
+| Metric Name | Type | Unit | Description |
+| ----------- | ---- | ---- | ----------- |
+| `mellea.requirement.checks` | Counter | `{check}` | Requirement validation checks performed |
+| `mellea.requirement.failures` | Counter | `{failure}` | Requirement validation checks that failed |
+
+| Attribute | Description | Example Values |
+| --------- | ----------- | -------------- |
+| `requirement` | Requirement class name | `LLMaJRequirement`, `PythonExecutionReq`, `ALoraRequirement`, `GuardianCheck` *(deprecated v0.4)* |
+| `reason` | Human-readable failure reason (`mellea.requirement.failures` only) | `"Output did not satisfy constraint"`, `"unknown"` |
+
+> **Guardian adapter functions and metrics:** `guardian_check()`, `policy_guardrails()`,
+> `factuality_detection()`, and `factuality_correction()` are not `Requirement`
+> subclasses and do not emit `mellea.requirement.checks` or
+> `mellea.requirement.failures` metrics. If you migrate from `GuardianCheck` to
+> Guardian adapter functions, Guardian-related requirement counters will stop appearing
+> in your metrics. Wrap Guardian adapter function calls in a custom `Requirement` subclass
+> if you need to preserve this telemetry.
+
+### Tool counter
+
+| Metric Name | Type | Unit | Description |
+| ----------- | ---- | ---- | ----------- |
+| `mellea.tool.calls` | Counter | `{call}` | Tool invocations by name and status |
+
+| Attribute | Description | Example Values |
+| --------- | ----------- | -------------- |
+| `gen_ai.tool.name` | Name of the invoked tool | `"search"`, `"calculator"` |
+| `status` | Execution outcome | `success`, `failure` |
+
+## Adapter function metrics
+
+Mellea records metrics for adapter function calls (`core.requirement_check()`,
+`rag.check_answerability()`, `Intrinsic`/`ALoraRequirement`, and the
+deprecated shim classes alike) — no code changes are required beyond enabling
+metrics as above. They are recorded by `AdapterFunctionMetricsPlugin`
+(`mellea/telemetry/metrics_plugins.py`), which subscribes to the
+`adapter_function_invocation_complete` and `adapter_function_phase_complete`
+hooks fired by `AdapterMixin.adapter_scope()` and
+`EmbeddedBinding.apply_activation()`.
+
+### Adapter function instruments
+
+| Metric Name | Type | Attributes | Description |
+| ----------- | ---- | ---------- | ----------- |
+| `mellea.adapter_function.invocations` | Counter | `name`, `revision`, `binding_type`, `adapter_type`, `outcome` | Calls, split by outcome (`success`, `schema_error`, `error`) |
+| `mellea.adapter_function.phase_duration` | Histogram | `name`, `phase` | Lifecycle phase duration, in seconds |
+| `mellea.adapter_function.parse_failures` | Counter | `name`, `revision` | LocalFile/PEFT: calls that raised `AdapterSchemaMismatchError` *while still inside* `adapter_scope()` — see the known gap below. Embedded/Granite Switch: not subject to that gap — a malformed (non-JSON) response fires `outcome="schema_error"` directly, with no `adapter_scope()` involved |
+
+`revision` reports the *resolved* revision actually used, not the raw value
+passed in: for a `LocalFileBinding` constructed with `revision=None` (the
+default for a catalog adapter), `adapter_scope()` resolves it to the
+catalog's pinned SHA before recording the metric, so a catalog adapter used
+without an explicit revision still reports that SHA rather than `"unpinned"`.
+The `"unpinned"` label only appears when no revision could be resolved at
+all — for a `LocalFileBinding`, that means resolution itself failed (a
+non-catalog adapter with no explicit `revision` — see
+[Adding a custom adapter function](../tutorials/07-custom-adapter-function.md)).
+It is not a general filter for "running without a pinned revision." The
+Embedded/Granite Switch reality is the exception: weights are already baked
+into the served model, so there is no revision to resolve at all, and every
+Embedded invocation reports `revision="unpinned"` regardless of resolution
+success.
+
+`phase` is one of `"prepare"`, `"activate"`, `"generate"`, `"parse"`, or
+`"deactivate"` — though as of this writing only three are actually emitted:
+`"prepare"` once per `LocalFileBinding` (fired from `add_adapter`/
+`binding.prepare()` — the download-and-load cost), then
+`"activate"`/`"deactivate"` per call from `adapter_scope()` for the
+LocalFile/PEFT reality, or `"activate"` alone per call for the Embedded
+reality (`EmbeddedBinding.apply_activation()`, which has no lifecycle to
+deactivate). `"generate"`/`"parse"` phase timing is tracked as future work in
+issue #1466.
+
+> **Known gap (LocalFile/PEFT only):** every production caller
+> (`core.requirement_check()`, `call_intrinsic()`, `ALoraRequirement`) parses
+> the model's output *after* `adapter_scope()` has already exited and fired
+> `outcome="success"` — so a real `AdapterSchemaMismatchError` from one of
+> those call paths is correctly raised to your code, but is not yet reflected
+> in `parse_failures` or in `invocations{outcome="schema_error"}`. Tracked in
+> issue #1611. Until that's fixed, catch `AdapterSchemaMismatchError` in
+> application code (see
+> [Adapter schema migrations](../tutorials/08-adapter-schema-migrations.md))
+> rather than relying on these metrics to surface schema drift for that
+> reality.
+>
+> This gap does not apply to the Embedded/Granite Switch reality: a malformed
+> response there fires `outcome="schema_error"` (and increments
+> `parse_failures`) directly from the response-processing code, with no
+> `adapter_scope()` in that path to have already exited.
+
+### Adapter function dashboard queries
+
+**Success rate** — `mellea.adapter_function.invocations`, grouped by `name`
+and `outcome`:
+
+```promql
+sum by (name, outcome) (rate(mellea_adapter_function_invocations_total[5m]))
+```
+
+Watch `outcome="error"` and `outcome="schema_error"` separately — an error
+means the call itself failed (network, generation); a schema error means the
+call succeeded but its output didn't parse against the declared contract
+(subject to the known gap above).
+
+**Phase latency** — `mellea.adapter_function.phase_duration`, grouped by
+`name` and `phase`. A p95 activate-phase latency that jumps for one adapter
+but not others usually means its weights just got evicted from whatever
+cache your deployment relies on (HF Hub's local cache, or your own).
+
+**Parse-failure rate** — `mellea.adapter_function.parse_failures` divided by
+`mellea.adapter_function.invocations` for the same `name`. In principle this
+is the leading indicator for the schema-drift scenario in
+[Adapter schema migrations](../tutorials/08-adapter-schema-migrations.md): a
+sudden rise, correlated with a `revision` change in your own deploy history,
+would be exactly the signal to re-pin or roll back — subject to the known gap
+above.
+
+> **Adapter function tracing:** Mellea does not currently open OpenTelemetry
+> **spans** for adapter function calls — only these metrics, driven by hooks,
+> exist today. Span-level tracing is tracked separately in issue #1466. If
+> your dashboard needs request-level tracing today, correlate the metrics
+> above with your own application-level spans around the
+> `mfuncs.act()`/`m.instruct()` call site instead.
+
+## Metrics export configuration
+
+Mellea supports multiple metrics exporters that can be used independently or
+simultaneously.
+
+> **Warning:** If `MELLEA_METRICS_ENABLED=true` but no exporter is configured,
+> Mellea logs a warning. Metrics are collected but not exported.
+
+### Console exporter (debugging)
+
+Print metrics to console for local debugging without setting up an
+observability backend:
+
+```bash
+export MELLEA_METRICS_ENABLED=true
+export MELLEA_METRICS_CONSOLE=true
+python your_script.py
+```
+
+Metrics are printed as JSON at the configured export interval (default: 60
+seconds).
+
+### OTLP exporter (production)
+
+Export metrics to an OTLP collector for production observability platforms
+(Jaeger, Grafana, Datadog, etc.):
+
+```bash
+export MELLEA_METRICS_ENABLED=true
+export MELLEA_METRICS_OTLP=true
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+
+# Optional: metrics-specific endpoint (overrides general endpoint)
+export OTEL_EXPORTER_OTLP_METRICS_ENDPOINT=http://localhost:4318
+
+# Optional: set service name
+export OTEL_SERVICE_NAME=my-mellea-app
+
+# Optional: adjust export interval (milliseconds, default: 60000)
+export OTEL_METRIC_EXPORT_INTERVAL=30000
+```
+
+**OTLP collector setup example:**
+
+```bash
+cat > otel-collector-config.yaml <<EOF
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+
+exporters:
+  prometheus:
+    endpoint: 0.0.0.0:8889
+  debug:
+    verbosity: detailed
+
+service:
+  pipelines:
+    metrics:
+      receivers: [otlp]
+      exporters: [prometheus, debug]
+EOF
+
+docker run -p 4317:4317 -p 8889:8889 \
+  -v $(pwd)/otel-collector-config.yaml:/etc/otelcol/config.yaml \
+  otel/opentelemetry-collector:latest
+```
+
+### Prometheus exporter
+
+Register metrics with the `prometheus_client` default registry for
+Prometheus scraping:
+
+```bash
+export MELLEA_METRICS_ENABLED=true
+export MELLEA_METRICS_PROMETHEUS=true
+```
+
+When enabled, Mellea registers its OpenTelemetry metrics with the
+`prometheus_client` default registry via `PrometheusMetricReader`. Your
+application is responsible for exposing the registry. Common approaches:
+
+**Standalone HTTP server** (simplest):
+
+```python
+from prometheus_client import start_http_server
+
+start_http_server(9464)
+```
+
+**FastAPI middleware**:
+
+```python
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
+from fastapi import FastAPI, Response
+
+app = FastAPI()
+
+@app.get("/metrics")
+def metrics():
+    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
+```
+
+**Flask route**:
+
+```python
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
+from flask import Flask, Response
+
+app = Flask(__name__)
+
+@app.route("/metrics")
+def metrics():
+    return Response(generate_latest(), content_type=CONTENT_TYPE_LATEST)
+```
+
+Verify with:
+
+```bash
+curl http://localhost:9464/metrics
+```
+
+**Prometheus server configuration:**
+
+```yaml
+# prometheus.yml
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: 'mellea'
+    static_configs:
+      - targets: ['localhost:9464']
+```
+
+```bash
+docker run -p 9090:9090 \
+  -v $(pwd)/prometheus.yml:/etc/prometheus/prometheus.yml \
+  prom/prometheus
+```
+
+Access Prometheus UI at `http://localhost:9090` and query metrics like
+`gen_ai_client_token_usage`.
+
+### Multiple exporters simultaneously
+
+You can enable multiple exporters at once:
+
+```bash
+export MELLEA_METRICS_ENABLED=true
+export MELLEA_METRICS_CONSOLE=true
+export MELLEA_METRICS_OTLP=true
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+export MELLEA_METRICS_PROMETHEUS=true
+```
+
+This configuration prints metrics to console for immediate feedback, exports
+to an OTLP collector for centralized observability, and registers with the
+`prometheus_client` registry for Prometheus scraping.
+
+**Typical combinations:**
+
+- **Development**: Console + Prometheus for local testing
+- **Production**: OTLP + Prometheus for comprehensive monitoring
+- **Debugging**: Console only for quick verification
+
+## Custom metrics
+
+The metrics API exposes `create_counter`, `create_histogram`, and
+`create_up_down_counter` for instrumenting your own application code. These
+return no-ops when metrics are disabled, so you can call them unconditionally.
+
+```python
+from mellea.telemetry import create_counter, create_histogram, create_up_down_counter
+
+# Monotonically increasing values
+requests = create_counter("myapp.requests", unit="1", description="Total requests")
+requests.add(1, {"backend": "ollama", "model": "granite4.1:3b"})
+
+# Value distributions
+latency = create_histogram("myapp.latency", unit="ms", description="Request latency")
+latency.record(120.5, {"backend": "ollama"})
+
+# Values that increase or decrease
+active = create_up_down_counter(
+    "myapp.sessions.active", unit="1", description="Active sessions"
+)
+active.add(1)   # session started
+active.add(-1)  # session ended
+```
+
+## Programmatic access
+
+Check if metrics are enabled:
+
+```python
+from mellea.telemetry import is_metrics_enabled
+
+if is_metrics_enabled():
+    print("Metrics are being collected")
+```
+
+Access token usage and latency data from a `ModelOutputThunk`:
+
+```python
+from mellea import start_session
+from mellea.backends import ModelOption
+
+with start_session() as m:
+    result = m.instruct("Write a haiku about programming")
+
+    if result.generation.usage:
+        print(f"Prompt tokens: {result.generation.usage['prompt_tokens']}")
+        print(f"Completion tokens: {result.generation.usage['completion_tokens']}")
+        print(f"Total tokens: {result.generation.usage['total_tokens']}")
+
+    # Streaming mode also exposes time-to-first-token
+    streamed = m.instruct(
+        "Describe the solar system",
+        model_options={ModelOption.STREAM: True},
+    )
+    print(f"Streaming: {streamed.generation.streaming}")
+    if streamed.generation.ttfb_ms is not None:
+        print(f"Time to first token: {streamed.generation.ttfb_ms:.1f} ms")
+```
+
+The `generation` attribute is a `GenerationMetadata` dataclass. Its `usage` field
+is a dictionary with three keys: `prompt_tokens`, `completion_tokens`, and
+`total_tokens`. All backends populate this consistently. `streaming` and `ttfb_ms`
+are set automatically based on whether streaming mode was used.
+
+## Performance
+
+- **Zero overhead when disabled**: When `MELLEA_METRICS_ENABLED=false` (default),
+  no auto-registered metrics plugins are active and all instrument calls are no-ops.
+- **Minimal overhead when enabled**: Counter increments and histogram recordings
+  are extremely fast (~nanoseconds per operation).
+- **Async export**: Metrics are batched and exported asynchronously (default:
+  every 60 seconds).
+- **Non-blocking**: Metric recording never blocks LLM calls.
+- **Automatic collection**: Metrics are recorded via hooks after generation
+  completes — no manual instrumentation needed.
+
+## Troubleshooting
+
+**Metrics not appearing:**
+
+1. Verify `MELLEA_METRICS_ENABLED=true` is set.
+2. Check that at least one exporter is configured (Console, OTLP, or Prometheus).
+3. For OTLP: Verify `MELLEA_METRICS_OTLP=true` and the endpoint is reachable.
+4. For Prometheus: Verify `MELLEA_METRICS_PROMETHEUS=true` and your application
+   exposes the registry (`curl http://localhost:PORT/metrics`).
+5. Enable console output (`MELLEA_METRICS_CONSOLE=true`) to verify metrics are
+   being collected.
+
+**Missing OpenTelemetry dependency:**
+
+```text
+ImportError: No module named 'opentelemetry'
+```
+
+Install telemetry dependencies:
+
+```bash
+pip install "mellea[telemetry]"
+```
+
+**OTLP connection refused:**
+
+```text
+Failed to export metrics via OTLP
+```
+
+1. Verify the OTLP collector is running: `docker ps | grep otel`
+2. Check the endpoint URL is correct (default: `http://localhost:4317`).
+3. Verify network connectivity: `curl http://localhost:4317`
+4. Check collector logs for errors.
+
+**Metrics not updating:**
+
+1. Metrics are exported at intervals (default: 60 seconds). Wait for the
+   export cycle.
+2. Reduce the export interval for testing:
+   `export OTEL_METRIC_EXPORT_INTERVAL=10000` (10 seconds).
+3. For Prometheus: Metrics update on scrape, not continuously.
+4. Verify LLM calls are actually being made and completing successfully.
+
+**No exporter configured warning:**
+
+```text
+WARNING: Metrics are enabled but no exporters are configured
+```
+
+Enable at least one exporter:
+
+- Console: `export MELLEA_METRICS_CONSOLE=true`
+- OTLP: `export MELLEA_METRICS_OTLP=true` + endpoint
+- Prometheus: `export MELLEA_METRICS_PROMETHEUS=true`
+
+> **Full example:** [`docs/examples/telemetry/metrics_example.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/telemetry/metrics_example.py)
+
+---
+
+**See also:**
+
+- [Telemetry](./telemetry.md) — overview of all
+  telemetry features and configuration.
+- [Tracing](./tracing.md) — distributed traces
+  with Gen-AI semantic conventions.
+- [Logging](./logging.md) — console logging and OTLP
+  log export.

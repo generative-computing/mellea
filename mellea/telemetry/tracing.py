@@ -67,6 +67,7 @@ from mellea.telemetry._tracing_helpers import (
     set_attribute_safe,
     set_conversation_id,
     set_mellea_attrs,
+    set_prompt_template_attrs,
     set_request_attrs,
     set_response_attrs,
     set_usage_attrs,
@@ -380,6 +381,7 @@ def finish_backend_span_success(
         if gen is not None:
             set_request_attrs(span, gen, operation)
             set_response_attrs(span, gen)
+            set_prompt_template_attrs(span, gen)
         set_usage_attrs(span, usage)
         if mot is not None:
             set_mellea_attrs(span, mot)
@@ -411,6 +413,7 @@ def finish_backend_span_error(
     try:
         if gen is not None:
             set_request_attrs(span, gen, operation)
+            set_prompt_template_attrs(span, gen)
         span.record_exception(exception)
         span.set_status(trace.Status(trace.StatusCode.ERROR, str(exception)))
         span.set_attribute("error.type", type(exception).__name__)

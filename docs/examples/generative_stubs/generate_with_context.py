@@ -1,4 +1,4 @@
-# pytest: ollama, e2e, xfail
+# pytest: ollama, e2e
 
 from mellea import generative, start_session
 from mellea.backends import ModelOption
@@ -36,8 +36,12 @@ def give_feedback(essay: str) -> list[str]:
 
 
 if __name__ == "__main__":
+    # Thinking is disabled because reasoning tokens count against
+    # MAX_NEW_TOKENS: on a thinking-capable model such as the default Ollama
+    # model, the budget can run out mid-thought and leave no structured output.
     m = start_session(
-        ctx=ChatContext(), model_options={ModelOption.MAX_NEW_TOKENS: 256}
+        ctx=ChatContext(),
+        model_options={ModelOption.MAX_NEW_TOKENS: 256, ModelOption.THINKING: False},
     )
 
     text = """

@@ -41,6 +41,9 @@ class SamplingIterationPayload(MelleaBasePayload):
         strategy_name: Class name of the sampling strategy (e.g. `"RejectionSamplingStrategy"`).
         iteration: 1-based iteration number within the sampling loop. There is no guarantee that
             iteration will be monotonically increasing when concurrency is enabled.
+        sample_index: Optional 0-based index identifying the outer concurrent sample branch —
+            set by fan-out strategies such as majority voting; `None` for strategies without an
+            outer fan-out.
         action: The `Component` used for this attempt.
 
         result: The `ModelOutputThunk` produced by this attempt.
@@ -54,6 +57,7 @@ class SamplingIterationPayload(MelleaBasePayload):
     sampling_id: str = ""
     strategy_name: str = ""
     iteration: int = 0
+    sample_index: int | None = None
     action: Any = None
     result: Any = None
     validation_results: list[tuple[Any, Any]] = []
@@ -75,6 +79,9 @@ class SamplingRepairPayload(MelleaBasePayload):
         repair_action: The repaired `Component` to use for the next attempt.
         repair_context: The `Context` to use for the next attempt.
         repair_iteration: 1-based iteration at which the repair was triggered.
+        sample_index: Optional 0-based index identifying the outer concurrent sample branch —
+            set by fan-out strategies such as majority voting; `None` for strategies without an
+            outer fan-out.
     """
 
     sampling_id: str = ""
@@ -85,6 +92,7 @@ class SamplingRepairPayload(MelleaBasePayload):
     repair_action: Any = None
     repair_context: Any = None
     repair_iteration: int = 0
+    sample_index: int | None = None
 
 
 class SamplingLoopEndPayload(MelleaBasePayload):
@@ -97,11 +105,16 @@ class SamplingLoopEndPayload(MelleaBasePayload):
     Attributes:
         sampling_id: UUID correlating with the matching `sampling_loop_start`.
         strategy_name: Class name of the sampling strategy (e.g. `"RejectionSamplingStrategy"`).
-        success: `True` if at least one attempt passed all requirements.
+        success: `True` if the selected attempt passed all requirements. For
+            fan-out strategies such as Majority voting, the winning branch is
+            chosen by inter-branch agreement, so a branch that passed validation
+            may be outweighed by branches that did not. `success` therefore
+            reflects the *selected* branch only, not whether any branch passed.
         iterations_used: Total number of sampling iterations that completed. With concurrency
             enabled, this may be less than `loop_budget * concurrency_budget` if the strategy
             exits early after a successful result. `0` on the exception path, regardless of
-            how many iterations ran before the loop raised.
+            how many iterations ran before the loop raised. For fan-out strategies such as Majority voting,
+            these are from the selected branch.
         final_result: The selected `ModelOutputThunk` (best success or best failure).
         final_action: The `Component` that produced `final_result`.
 
@@ -109,9 +122,13 @@ class SamplingLoopEndPayload(MelleaBasePayload):
 
         failure_reason: Human-readable reason when `success` is `False`.
         exception: The exception raised by the loop, or `None` when it completed.
-        all_results: List of `ModelOutputThunk` from every iteration.
+        all_results: List of `ModelOutputThunk` from every iteration represented by the
+            returned sampling result. For fan-out strategies such as Majority voting, these are
+            from the selected branch.
         all_validations: Nested list — `all_validations[i]` is the list of
-            `(Requirement, ValidationResult)` tuples for iteration *i*.
+            `(Requirement, ValidationResult)` tuples for iteration *i*. For
+            fan-out strategies such as Majority voting, these are from the
+            selected branch.
     """
 
     sampling_id: str = ""

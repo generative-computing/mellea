@@ -1,0 +1,261 @@
+---
+title: "Configure model options"
+description: "Set temperature, seed, max tokens, system prompts, and other backend parameters at session level or per call."
+# diataxis: how-to
+---
+
+Most LLM APIs accept parameters such as temperature, max tokens, and seed. Mellea exposes
+these through the `ModelOption` enum, which works uniformly across all backends, and also
+lets you pass backend-native keys directly.
+
+**Prerequisites:** `pip install mellea` complete, a backend available (see
+[Installation](../getting-started/installation.md)).
+
+## The ModelOption enum
+
+Import `ModelOption` from `mellea.backends`. The enum provides cross-backend names
+for the most common parameters:
+
+```python
+import mellea
+from mellea.backends import ModelOption, model_ids
+from mellea.backends.ollama import OllamaModelBackend
+
+m = mellea.MelleaSession(
+    backend=OllamaModelBackend(
+        model_id=model_ids.IBM_GRANITE_4_HYBRID_SMALL,
+        model_options={ModelOption.SEED: 42},
+    )
+)
+
+answer = m.instruct(
+    "What is 2x2?",
+    model_options={
+        ModelOption.TEMPERATURE: 0.5,
+        ModelOption.MAX_NEW_TOKENS: 10,
+    },
+)
+print(str(answer))
+# Output will vary — LLM responses depend on model and temperature.
+```
+
+Options set on the backend apply to every call on that session. Options passed to a specific
+`m.*` call apply only to that call and take precedence over the session-level values.
+
+You can also pass backend-native key names directly — Mellea forwards any key it does not
+recognize to the underlying API unchanged. This means you can copy model option dicts from
+existing codebases without translation:
+
+```python
+answer = m.instruct(
+    "Summarize this in one sentence.",
+    model_options={
+        "temperature": 0.3,
+        "num_predict": 50,   # Ollama-native key
+    },
+)
+```
+
+## Precedence rules
+
+When the same option is set in multiple places, the following rules apply:
+
+1. A `ModelOption` key always takes precedence over its backend-native equivalent.
+2. Options passed to a `m.*` call override the corresponding session-level options for that
+   call only.
+
+```python
+# Backend initialised with these options
+backend_options = {
+    "seed": 1,
+    ModelOption.MAX_NEW_TOKENS: 100,
+    "temperature": 1.0,
+}
+
+# Options passed at call time
+call_options = {
+    "seed": 2,
+    ModelOption.SEED: 3,   # takes precedence over "seed": 2
+    "num_predict": 50,
+}
+
+# Options actually sent to the model for this call:
+# seed = 3  (ModelOption.SEED wins)
+# max_new_tokens = 100  (from backend; not overridden)
+# temperature = 1.0  (from backend; not overridden)
+# num_predict = 50  (new key from call)
+```
+
+## Pushing and popping model state
+
+Sessions support temporarily overriding model options for a series of calls, then restoring
+the original state:
+
+```python
+m = mellea.start_session()
+
+m.push_model_options({ModelOption.TEMPERATURE: 0.0, ModelOption.SEED: 99})
+
+# These calls use temperature=0.0, seed=99
+result1 = m.instruct("List three capitals of South America.")
+result2 = m.instruct("List three capitals of Europe.")
+
+m.pop_model_options()
+
+# Back to original session options
+result3 = m.instruct("Write a short poem.")
+```
+
+This is useful when you need deterministic output for a batch of calls within a larger,
+non-deterministic session.
+
+## Reference: all ModelOption keys
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `ModelOption.TEMPERATURE` | `float` | backend default | Sampling temperature. |
+| `ModelOption.MAX_NEW_TOKENS` | `int` | backend default ⚠️ | Maximum tokens to generate. Backend defaults vary widely — set this explicitly in production code. |
+| `ModelOption.SEED` | `int` | `None` | Random seed for reproducible output. |
+| `ModelOption.SYSTEM_PROMPT` | `str` | `None` | System prompt prepended to every call on the session. |
+| `ModelOption.STREAM` | `bool` | `False` | Enable streaming output. |
+| `ModelOption.STREAM_TIMEOUT` | `float \| None` | `120.0` | Timeout in seconds applied to every chunk, including time-to-first-token. Only applies to streaming responses; non-streaming calls are unaffected. If no chunk arrives within this window the stream aborts with a `TimeoutError`. Set to `None` to disable. Increase for slow local inference. |
+| `ModelOption.STOP_SEQUENCES` | `list[str]` | `None` | Strings that halt generation when produced by the model. |
+| `ModelOption.THINKING` | `bool \| str` | `None` | Enable or configure reasoning/thinking mode. See [Reasoning and thinking mode](#reasoning-and-thinking-mode) below. |
+| `ModelOption.CONTEXT_WINDOW` | `int` | backend default | Context window size override. |
+| `ModelOption.TOOLS` | `list[MelleaTool]` | `None` | Tools exposed to the model for tool calling. |
+| `ModelOption.TOOL_CHOICE` | `str` | `"auto"` | Tool selection strategy (`"none"`, `"auto"`, or a specific tool name). |
+
+Keys marked with a backend default are forwarded to the underlying API unchanged; the
+value the model sees depends on the backend's own defaults.
+
+> **Warning:** `MAX_NEW_TOKENS` backend defaults vary widely and some are very low — for
+> example vLLM defaults to 16 tokens, which will silently truncate most real responses.
+> Always set `ModelOption.MAX_NEW_TOKENS` explicitly in production code:
+>
+> ```python
+> m.instruct(
+>     "Summarise this document.",
+>     model_options={ModelOption.MAX_NEW_TOKENS: 1024},
+> )
+> ```
+>
+> A value of 512–2048 covers most chat and instruction use cases. For code generation
+> or long-form output, set a higher value to match your expected output length.
+
+## Streaming timeout
+
+By default Mellea waits up to 120 seconds for each chunk, including the first
+(time-to-first-token). If the backend stops sending without closing the connection
+the stream aborts with a `TimeoutError` rather than hanging indefinitely. This
+timeout only applies to streaming responses; non-streaming calls are unaffected.
+
+> **Note for slow or local backends:** The 120 s default covers time-to-first-token.
+> Large models on CPU, long prompts, or heavily loaded servers can take longer than
+> this before producing the first token. Use a higher value or `None` for those
+> deployments.
+
+```python
+from mellea.backends import ModelOption
+
+# Tighter bound for a known-fast remote endpoint
+mot = await m.ainstruct(
+    "Summarise this document.",
+    model_options={ModelOption.STREAM: True, ModelOption.STREAM_TIMEOUT: 10},
+)
+
+# Larger value for slow local inference (e.g. large model on CPU)
+mot = await m.ainstruct(
+    "Write a long analysis.",
+    model_options={ModelOption.STREAM: True, ModelOption.STREAM_TIMEOUT: 300},
+)
+
+# Disable entirely — original unbounded behaviour
+mot = await m.ainstruct(
+    "Write a long analysis.",
+    model_options={ModelOption.STREAM: True, ModelOption.STREAM_TIMEOUT: None},
+)
+```
+
+## Reasoning and thinking mode
+
+`ModelOption.THINKING` enables or configures a model's reasoning/thinking mode.
+Accepted values and their effect are backend-dependent:
+
+| Backend | `True` | `False` | `"low"` / `"medium"` / `"high"` |
+| ------- | ------ | ------- | -------------------------------- |
+| Native `OllamaModelBackend` | Enables thinking (Ollama `think=True`) | Disables thinking (`think=False`) | Passed through to Ollama's `think=` param, which handles string effort levels itself |
+| `OpenAIBackend` / LiteLLM (OpenAI-compatible) | Enables thinking (`reasoning_effort="medium"`, plus `chat_template_kwargs.enable_thinking=True` for vLLM-served templates) | Disables thinking on vLLM-served/OpenAI-compatible servers that honour `chat_template_kwargs`. **Real OpenAI reasoning models, and LiteLLM targets that aren't Ollama, deliberately never receive `reasoning_effort="none"`** (real OpenAI rejects that value) — there is no supported way to fully disable reasoning on them via `ModelOption.THINKING` | Sent as `reasoning_effort` verbatim — a top-level request parameter, independent of any chat template |
+| `LocalHFBackend` | Forwards to whichever chat-template variable is declared (`think`, `thinking`, or `enable_thinking`) | Same, `False` value | Forwarded verbatim as the chat template's own `reasoning_effort` variable when the template declares one. This is a different transport than the OpenAI backend's top-level parameter — it only takes effect if the served model's template exposes that variable |
+
+For Granite 4.2 specifically: the chat template only distinguishes `"low"`
+effort from everything else — `reasoning_effort == "low"` triggers genuine
+low-effort (short) reasoning, while `"medium"`/`"high"` are accepted but
+behave the same as `True`/omitted (full-length reasoning). This holds across
+all three backends, provided the serving runtime forwards the effort level
+into the chat template (Ollama and vLLM do). Granite defaults to thinking
+**on** when `ModelOption.THINKING` is not set at all.
+
+`LocalHFBackend` also parses Granite's `<think>...</think>` block out of the
+response, so `result.thinking` and `result.value` are populated separately —
+matching the other backends — rather than leaving the reasoning trace
+embedded raw in `result.value`. This split is skipped for streaming (`m serve`)
+calls, where the reasoning trace still arrives inline in `result.value`;
+incremental splitting for streaming is tracked separately in
+[#1604](https://github.com/generative-computing/mellea/issues/1604).
+
+```python
+import mellea
+from mellea.backends import ModelOption, model_ids
+from mellea.backends.ollama import OllamaModelBackend
+
+m = mellea.MelleaSession(
+    backend=OllamaModelBackend(model_id=model_ids.IBM_GRANITE_4_2_3B)
+)
+
+# Full reasoning (the default for Granite 4.2)
+answer = m.instruct("What is 17 * 24?", model_options={ModelOption.THINKING: True})
+print(answer.thinking)  # reasoning trace
+print(answer.value)     # final answer
+# Output will vary — reasoning traces are non-deterministic.
+
+# Short, low-effort reasoning — use when you need an answer within a small
+# token budget rather than an exhaustive trace
+answer = m.instruct("What is 17 * 24?", model_options={ModelOption.THINKING: "low"})
+
+# No reasoning at all
+answer = m.instruct("What is 17 * 24?", model_options={ModelOption.THINKING: False})
+```
+
+> **Full example:** [`docs/examples/thinking_mode.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/thinking_mode.py)
+
+If you're serving Granite 4.2 via vLLM, make sure your vLLM install picks up
+the model's latest reasoning-parser update (shipped in the model's Hugging
+Face files) — an older cached parser produces stale thinking behavior.
+
+For non-Granite thinking models served through an OpenAI-compatible endpoint
+(e.g. Qwen3 on vLLM), see
+[Empty `value` from a thinking-mode model](../integrations/openai.md#empty-value-from-a-thinking-mode-model)
+in the OpenAI integration guide.
+
+## System prompts
+
+Set a system prompt with `ModelOption.SYSTEM_PROMPT`. At session level it applies to all
+subsequent calls; at call level it applies only to that call.
+
+```python
+m = mellea.MelleaSession(
+    backend=OllamaModelBackend(
+        model_id=model_ids.IBM_GRANITE_4_HYBRID_MICRO,
+        model_options={
+            ModelOption.SYSTEM_PROMPT: "You are a concise technical assistant. Never use bullet points."
+        },
+    )
+)
+
+answer = m.instruct("Explain what a context manager is in Python.")
+```
+
+Using `ModelOption.SYSTEM_PROMPT` is recommended over constructing a system-role message
+manually. Some backend APIs do not serialize system-role messages correctly and expect the
+system prompt as a separate parameter — `ModelOption.SYSTEM_PROMPT` handles this correctly
+across all backends.

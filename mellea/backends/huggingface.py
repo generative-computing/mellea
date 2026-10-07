@@ -98,6 +98,7 @@ from .adapters import (
 )
 from .adapters._core import (
     Adapter as _AdapterCore,
+    AloraActivationError,
     IOContract,
     LocalFileBinding,
     PromptBinding,
@@ -108,9 +109,12 @@ from .adapters._core import (
 from .adapters.adapter import (
     AdapterInput,
     EmbeddedIntrinsicAdapter,
+    _alora_invocation_sequence_present,
     _composed_adapter_key,
     _discover_embedded_adapters,
+    _fire_invocation_complete,
 )
+from .adapters.catalog import AdapterType
 from .backend import FormatterBackend
 from .cache import Cache, SimpleLRUCache
 from .model_ids import ModelIdentifier
@@ -440,6 +444,155 @@ def _check_no_multimodal_blocks(action: Span | None, ctx: Context | None) -> Non
                 "LocalHFBackend does not support audio. "
                 "Remove audio content before passing messages to the Hugging Face backend."
             )
+
+
+def _alora_qualified_name_for_activation_check(
+    adapter: IntrinsicAdapter | EmbeddedIntrinsicAdapter | _AdapterCore,
+) -> str | None:
+    """Return `adapter`'s PEFT-loaded qualified name, iff it is a LocalFile/PEFT aLoRA.
+
+    `None` for anything the activation guard does not apply to: an
+    `EmbeddedIntrinsicAdapter` (activated by the chat template, not PEFT
+    `set_adapter`, so `peft_config` never carries it; whether that reality
+    needs its own check is still open), or a LoRA adapter (no
+    invocation sequence to check).
+
+    Returning a qualified name here is necessary but not sufficient for the
+    guard to actually see the adapter: the caller (`_generate_from_intrinsic`)
+    checks `peft_config` for it immediately, before the weights are
+    necessarily loaded. That is fine for the default composed-`Adapter` path
+    (`resolve_adapter()` calls `binding.prepare()`, and therefore
+    `load_peft_adapter`, at registration time, well before generation), but
+    the deprecated `IntrinsicAdapter` shim only loads inside
+    `_generate_intrinsic_with_adapter_scope`, which runs *after* this check
+    — so the guard silently no-ops on a shim adapter's first call. Not fixed
+    here: the shim is scheduled for removal (#1621), and
+    forcing an early load would mean triggering a Hub round trip from this
+    check rather than from generation.
+
+    Args:
+        adapter: The resolved adapter about to generate.
+
+    Returns:
+        str | None: The qualified name PEFT loaded this adapter's weights
+        under, or `None` if the activation guard does not apply.
+    """
+    if isinstance(adapter, EmbeddedIntrinsicAdapter):
+        return None
+    # `.identity.adapter_type` (a `Literal["lora", "alora"]` string), not
+    # `.adapter_type` (an `AdapterType` enum member only `IntrinsicAdapter`
+    # carries): every adapter shape this method accepts — the shim and the
+    # composed `_AdapterCore` alike — sets `.identity`, so checking it once
+    # here covers both without a shape-specific attribute read.
+    if adapter.identity.adapter_type != AdapterType.ALORA.value:
+        return None
+    if isinstance(adapter, IntrinsicAdapter):
+        return adapter.qualified_name
+    # Composed Adapter: LocalFile/PEFT reality only
+    # — an EmbeddedBinding has no qualified_name in this sense (see the
+    # docstring).
+    weights = adapter.weights
+    if not isinstance(weights, LocalFileBinding):
+        return None
+    return weights.qualified_name
+
+
+def _check_alora_activation(
+    *,
+    model: Any,
+    tokenizer: Any,
+    base_model_name: str,
+    warned_about: set[str],
+    capability_name: str,
+    qualified_name: str,
+    prompt_token_ids: torch.Tensor | Sequence[int],
+) -> None:
+    """Raise if an active aLoRA's declared invocation sequence is absent from the prompt.
+
+    An aLoRA only applies from the point its declared `alora_invocation_tokens`
+    sequence appears in the assembled prompt; PEFT gives up silently when it
+    is absent (`peft.tuners.lora.variants.calculate_alora_offsets`), so a
+    call can report success while the adapter contributed nothing.
+    This is the generation-time guard: it runs against the prompt
+    Mellea actually assembled, right before dispatch — before any model call
+    is made — and raises `AloraActivationError` on a mismatch every time it
+    is called, since each call's own output would otherwise be silently
+    wrong. It does not decide how to recover; that is the caller's job:
+    `_generate_from_intrinsic`'s own callers either let the error propagate
+    (a direct adapter-function call has no fallback) or catch it and fall
+    back to LLM-as-a-judge (`Requirement`'s automatic aLoRA routing, the same
+    way it already handles the adapter simply not being registered).
+
+    Also logs a warning the first time this fires for `qualified_name`
+    (`warned_about`-deduplicated) so the mismatch is visible in logs even on
+    a path that catches and swallows the exception.
+
+    A no-op if `qualified_name` was never loaded into `model`'s PEFT state
+    (nothing to check against) or if the loaded config declares no
+    `alora_invocation_tokens` (nothing to check for).
+
+    Args:
+        model: The backend's underlying Hugging Face model (carries PEFT's
+            `peft_config` once an adapter has been loaded).
+        tokenizer: The backend's tokenizer, used to decode the invocation
+            sequence for the warning message.
+        base_model_name: The backend's base model name, for the warning/error.
+        warned_about: The backend's warn-once set (`self._warned_about`);
+            mutated in place so the *log line* (not the exception) fires at
+            most once per adapter.
+        capability_name: Human-readable capability name, for the warning/error.
+        qualified_name: The adapter's PEFT-loaded qualified name.
+        prompt_token_ids: The assembled prompt's token ids
+            (`generate_input["input_tokens"]`); a `torch.Tensor` of shape
+            `[1, seq_len]` or a plain sequence of ints.
+
+    Raises:
+        AloraActivationError: `qualified_name`'s declared invocation sequence
+            is absent from `prompt_token_ids`.
+    """
+    peft_config = getattr(model, "peft_config", {})
+    cfg = peft_config.get(qualified_name) if peft_config else None
+    if cfg is None:
+        return
+    invocation_tokens = getattr(cfg, "alora_invocation_tokens", None)
+    if not invocation_tokens:
+        return
+
+    token_ids = prompt_token_ids
+    if isinstance(token_ids, torch.Tensor):
+        # `.reshape(-1)`, not `[0]`: Mellea's own path always produces a
+        # `[1, seq_len]` batch tensor, but PEFT itself accepts a bare 1-D
+        # `input_ids` and unsqueezes it (`calculate_alora_offsets`) — `[0]`
+        # on that shape would index a single int, not a row, and `.tolist()`
+        # on it would then raise inside this best-effort check.
+        token_ids = token_ids.reshape(-1).tolist()
+    else:
+        token_ids = list(token_ids)
+
+    if _alora_invocation_sequence_present(token_ids, invocation_tokens):
+        return
+
+    warn_key = f"alora_no_activation_{qualified_name}"
+    if warn_key not in warned_about:
+        warned_about.add(warn_key)
+        try:
+            decoded = tokenizer.decode(invocation_tokens)
+        except Exception:
+            decoded = repr(invocation_tokens)
+        MelleaLogger.get_logger().warning(
+            f"aLoRA {capability_name!r} (base model {base_model_name!r}) never "
+            f"activates for calls like this one: its declared invocation "
+            f"sequence {decoded!r} ({invocation_tokens!r}) is absent from the "
+            "assembled prompt, so PEFT never switches the adapter on. Skipping "
+            "generation for this call rather than running it against the base "
+            "model and returning a fabricated result."
+        )
+    raise AloraActivationError(
+        capability_name=capability_name,
+        base_model_name=base_model_name,
+        qualified_name=qualified_name,
+        invocation_tokens=invocation_tokens,
+    )
 
 
 class LocalHFBackend(FormatterBackend, AdapterMixin):
@@ -777,13 +930,33 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
                 if reroute_to_alora:
                     # Keep the alora requirement handling separate for now.
-                    mot = await self._generate_from_intrinsic(
-                        alora_action,
-                        ctx,
-                        model_options=model_opts,
-                        tool_calls=tool_calls,
-                    )
-                    return mot, ctx.add(alora_action).add(mot)
+                    try:
+                        mot = await self._generate_from_intrinsic(
+                            alora_action,
+                            ctx,
+                            model_options=model_opts,
+                            tool_calls=tool_calls,
+                        )
+                    except AloraActivationError as exc:
+                        # The adapter was loaded and selected, but its own
+                        # generation-time guard has just proven it cannot
+                        # activate for this prompt (before any model call ran) —
+                        # treat that exactly like the adapter never having been
+                        # registered at all (the `alora_req_adapter is None`
+                        # branch above), not like a caller-input error. This
+                        # applies to an explicit `ALoraRequirement` too, same as
+                        # that branch: the empty-context case a few lines up is
+                        # the only one where an explicit opt-in raises instead
+                        # of falling back.
+                        warn_key = f"alora_activation_failed_{exc.qualified_name}"
+                        if warn_key not in self._warned_about:
+                            self._warned_about.add(warn_key)
+                            MelleaLogger.get_logger().warning(
+                                f"not using the {adapter_name} adapter for this call: "
+                                f"{exc}; falling back to LLM-as-a-judge instead."
+                            )
+                    else:
+                        return mot, ctx.add(alora_action).add(mot)
 
             elif isinstance(action, Intrinsic):
                 mot = await self._generate_from_intrinsic(
@@ -1186,6 +1359,9 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 `EmbeddedIntrinsicAdapter`'s `weights` is not an
                 `EmbeddedBinding`; or if a composed `Adapter`'s `weights` is
                 an unsupported binding type.
+            AloraActivationError: If the resolved adapter is an aLoRA whose
+                declared activation sequence is absent from the assembled
+                prompt.
         """
         if not ctx.is_chat_context:
             raise Exception("Does not yet support non-chat contexts.")
@@ -1305,6 +1481,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 f"got {type(adapter.weights).__name__}. Activation cannot proceed."
             )
         adapter_weights = adapter.weights
+        adapter_is_embedded = isinstance(adapter_weights, EmbeddedBinding)
         if isinstance(adapter_weights, EmbeddedBinding):
             extra_body = rewritten_request.setdefault("extra_body", {})
             if not isinstance(extra_body, dict):
@@ -1326,6 +1503,85 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 ll_tokenizer=self._llguidance_tokenizer,
             )
         )
+
+        # Generation-time activation guard: raises AloraActivationError
+        # before any model call if `adapter` (already committed to by the
+        # resolve-time rung / reroute decision) cannot activate for this
+        # prompt — see `_check_alora_activation`'s docstring for who catches
+        # it and who lets it propagate. Skipped for embedded adapters (a
+        # different reality; activation happens in the chat template, not
+        # through PEFT's `peft_config`).
+        if not adapter_is_embedded:
+            alora_qualified_name = _alora_qualified_name_for_activation_check(adapter)
+            if alora_qualified_name is not None:
+                # getattr, not direct attribute access, for both `base_model_name`
+                # and `_warned_about`: every real backend sets both
+                # (`base_model_name` is an abstract property every concrete
+                # backend implements; `FormatterBackend.__init__` sets
+                # `_warned_about`), but a lightweight test double built via
+                # `SimpleNamespace`/`__new__` (bypassing `__init__`) may not —
+                # falling back degrades only that double's warning message/
+                # dedup, never a real backend's. `is None`, not `or set()`: an
+                # empty (but real) `set()` is falsy, and `or` would silently
+                # discard it for a throwaway on every backend's common case,
+                # defeating warn-once dedup entirely.
+                warned_about = getattr(self, "_warned_about", None)
+                if warned_about is None:
+                    warned_about = set()
+                try:
+                    _check_alora_activation(
+                        model=self._model,
+                        tokenizer=self._tokenizer,
+                        base_model_name=getattr(self, "base_model_name", "<unknown>"),
+                        warned_about=warned_about,
+                        capability_name=adapter_name,
+                        qualified_name=alora_qualified_name,
+                        prompt_token_ids=generate_input["input_tokens"],
+                    )
+                except AloraActivationError as exc:
+                    # A guard-raised abort never enters `adapter_scope` (that
+                    # only wraps `generate_func` below), so without this the
+                    # invocation never fires `adapter_function_invocation_
+                    # complete` at all — an operator watching those metrics
+                    # would see the adapter simply stop being invoked, with no
+                    # error signal, for exactly the scenario this guard exists
+                    # to catch. Mirrors `adapter_scope`'s own
+                    # revision/binding_type derivation (`adapter.py`) so the
+                    # two emit consistent fields for the same adapter. The
+                    # legacy shim's own `weights` is an inert placeholder, so
+                    # report what its per-call `_IntrinsicPeftBinding` would.
+                    revision: str | None
+                    binding_type = adapter.weights.binding_type
+                    if isinstance(adapter, IntrinsicAdapter):
+                        revision = adapter.intrinsic_metadata.revision
+                        binding_type = _IntrinsicPeftBinding.binding_type
+                    elif isinstance(adapter.weights, LocalFileBinding):
+                        try:
+                            revision = adapter.weights.resolved_revision()
+                        except Exception:
+                            revision = adapter.weights.revision
+                    else:
+                        revision = getattr(adapter.weights, "revision", None)
+                    # Matches `adapter_scope`'s own finally block: a
+                    # hook-dispatch failure here must not replace or mask the
+                    # real `AloraActivationError` about to propagate.
+                    try:
+                        _fire_invocation_complete(
+                            name=adapter_name,
+                            revision=revision,
+                            binding_type=binding_type,
+                            adapter_type=adapter.identity.adapter_type,
+                            outcome="error",
+                            error=exc,
+                        )
+                    except Exception:
+                        MelleaLogger.get_logger().warning(
+                            "adapter_function_invocation_complete hook dispatch "
+                            f"failed for {adapter_name!r}; ignoring so it doesn't "
+                            "mask the real AloraActivationError.",
+                            exc_info=True,
+                        )
+                    raise
 
         # Apply remaining user model options directly to generate_input,
         # overwriting any values set by the util function or io.yaml defaults.
@@ -1362,7 +1618,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
             # Two load-bearing assumptions: (1) __getattr__ falls through for attributes
             # accessed by generate_with_transformers (model.device, model.vocab_size,
-            # model.generation_config). (2) chat_completion_request_to_transformers_inputs
+            # model.generation_config, and for aLoRA activation model.peft_config,
+            # model.active_adapters, model.modules()). (2) chat_completion_request_to_transformers_inputs
             # always sets return_dict_in_generate=True, so .generate() always returns a
             # GenerateDecoderOnlyOutput — if that ever changes, the cell stays None and
             # logits silently won't be populated.
@@ -1819,6 +2076,10 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             # Set model/provider early so they are available in the error path
             output.generation.model = self._model_id
             output.generation.provider = self._provider
+            (
+                output.generation.prompt_template,
+                output.generation.prompt_template_variables,
+            ) = self.formatter.prompt_template_for(action)
 
             try:
                 # To support lazy computation, will need to remove this create_task and store just the unexecuted coroutine.
@@ -2011,6 +2272,10 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             # Set model/provider early so they are available in the error path
             output.generation.model = self._model_id
             output.generation.provider = self._provider
+            (
+                output.generation.prompt_template,
+                output.generation.prompt_template_variables,
+            ) = self.formatter.prompt_template_for(action)
 
             try:
                 # To support lazy computation, will need to remove this create_task and store just the unexecuted coroutine.

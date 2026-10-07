@@ -4,11 +4,11 @@
 """Unit tests for the narrowed AdapterMixin verb contract (Epic #929 Phase 2, issue #1140).
 
 Verifies that:
-  - the reality-specific verbs (`load_peft_adapter`, `unload_peft_adapter`,
+  - the optional adapter verbs (`load_peft_adapter`, `unload_peft_adapter`,
     `remove_adapter`, `activate_peft_adapter`, `deactivate_peft_adapter`)
     raise `NotImplementedError` by default on the mixin
-  - each concrete backend overrides only the verb(s) matching its own adapter
-    reality, leaving the others on the default (raising) implementation
+  - each concrete backend overrides only the verbs it supports, leaving the
+    others on the default (raising) implementation
 
 Embedded/Granite Switch activation is not a mixin verb — it lives on
 `EmbeddedBinding.apply_activation` (issue #1142); see test_embedded_binding.py.
@@ -50,12 +50,11 @@ def test_hf_backend_overrides_only_peft_verbs():
     assert "deactivate_peft_adapter" in vars(LocalHFBackend)
 
 
-def test_openai_backend_overrides_no_reality_specific_verbs():
-    """OpenAIBackend (Embedded/Granite Switch reality) activates through the
-    binding, not a mixin verb, so it overrides none of the PEFT verbs."""
+def test_openai_backend_overrides_only_remove_adapter():
+    """OpenAIBackend supports deregistration but activates through the binding."""
     assert "load_peft_adapter" not in vars(OpenAIBackend)
     assert "unload_peft_adapter" not in vars(OpenAIBackend)
-    assert "remove_adapter" not in vars(OpenAIBackend)
+    assert "remove_adapter" in vars(OpenAIBackend)
     assert "activate_peft_adapter" not in vars(OpenAIBackend)
     assert "deactivate_peft_adapter" not in vars(OpenAIBackend)
 

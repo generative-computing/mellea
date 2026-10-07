@@ -199,6 +199,75 @@ async def test_post_call_finishes_span_with_usage_attrs(
 
 
 @pytest.mark.asyncio
+async def test_post_call_emits_prompt_template_attrs(
+    backend_plugin, enabled_tracing, monkeypatch
+):
+    """`llm.prompt_template.{template,variables}` populated from `mot.generation` in post_call."""
+    monkeypatch.setenv("MELLEA_TRACES_CONTENT", "true")
+
+    fake_span = MagicMock()
+    fake_tracer = MagicMock()
+    fake_tracer.start_span.return_value = fake_span
+
+    pre = GenerationPreCallPayload(action=None, context=None, generation_id="pt-gid")
+    with patch("mellea.telemetry.tracing.get_backend_tracer", return_value=fake_tracer):
+        await backend_plugin.on_pre_call(pre, {})
+
+    mot = ModelOutputThunk("hi")
+    mot.generation = GenerationMetadata(
+        model="gpt-4o",
+        provider="openai",
+        prompt_template="Write about {{topic}}.",
+        prompt_template_variables={"topic": "LLMs"},
+    )
+    post = GenerationPostCallPayload(
+        prompt="p", model_output=mot, latency_ms=1.0, generation_id="pt-gid"
+    )
+    await backend_plugin.on_post_call(post, {})
+
+    attrs = _attrs(fake_span)
+    assert attrs["llm.prompt_template.template"] == "Write about {{topic}}."
+    assert attrs["llm.prompt_template.variables"] == '{"topic": "LLMs"}'
+
+
+@pytest.mark.asyncio
+async def test_post_call_gates_variables_when_content_disabled(
+    backend_plugin, enabled_tracing, monkeypatch
+):
+    """Variables are withheld (but the template is still emitted) when content capture is off."""
+    monkeypatch.delenv("MELLEA_TRACES_CONTENT", raising=False)
+    monkeypatch.delenv(
+        "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT", raising=False
+    )
+
+    fake_span = MagicMock()
+    fake_tracer = MagicMock()
+    fake_tracer.start_span.return_value = fake_span
+
+    pre = GenerationPreCallPayload(
+        action=None, context=None, generation_id="pt-gid-off"
+    )
+    with patch("mellea.telemetry.tracing.get_backend_tracer", return_value=fake_tracer):
+        await backend_plugin.on_pre_call(pre, {})
+
+    mot = ModelOutputThunk("hi")
+    mot.generation = GenerationMetadata(
+        model="gpt-4o",
+        provider="openai",
+        prompt_template="Write about {{topic}}.",
+        prompt_template_variables={"topic": "LLMs"},
+    )
+    post = GenerationPostCallPayload(
+        prompt="p", model_output=mot, latency_ms=1.0, generation_id="pt-gid-off"
+    )
+    await backend_plugin.on_post_call(post, {})
+
+    attrs = _attrs(fake_span)
+    assert attrs["llm.prompt_template.template"] == "Write about {{topic}}."
+    assert "llm.prompt_template.variables" not in attrs
+
+
+@pytest.mark.asyncio
 async def test_error_finishes_span_with_error_status(backend_plugin, enabled_tracing):
     fake_span = MagicMock()
     fake_tracer = MagicMock()
@@ -210,7 +279,9 @@ async def test_error_finishes_span_with_error_status(backend_plugin, enabled_tra
 
     err = ValueError("rate limit")
     mot = ModelOutputThunk(None)
-    mot.generation = GenerationMetadata(model="gpt-4o", provider="openai")
+    mot.generation = GenerationMetadata(
+        model="gpt-4o", provider="openai", prompt_template="Write about {{topic}}."
+    )
     err_payload = GenerationErrorPayload(
         exception=err, model_output=mot, generation_id="gid-err"
     )
@@ -221,6 +292,7 @@ async def test_error_finishes_span_with_error_status(backend_plugin, enabled_tra
     fake_span.end.assert_called_once()
     attrs = _attrs(fake_span)
     assert attrs["error.type"] == "ValueError"
+    assert attrs["llm.prompt_template.template"] == "Write about {{topic}}."
     assert "gid-err" not in tracing._in_flight_spans
 
 
@@ -1499,6 +1571,134 @@ async def test_sampling_repair_records_span_event(sampling_plugin, enabled_traci
     assert name == "repair"
     assert attrs["mellea.sampling.repair_type"] == "rejection"
     assert attrs["mellea.validation.failed_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_sampling_iteration_includes_sample_index_when_set(
+    sampling_plugin, enabled_tracing
+):
+    from mellea.plugins.hooks.sampling import (
+        SamplingIterationPayload,
+        SamplingLoopStartPayload,
+    )
+
+    fake_span = MagicMock()
+    fake_tracer = MagicMock()
+    fake_tracer.start_span.return_value = fake_span
+
+    start = SamplingLoopStartPayload(sampling_id="sid-mv-1", loop_budget=2)
+    iteration = SamplingIterationPayload(
+        sampling_id="sid-mv-1",
+        iteration=1,
+        sample_index=2,
+        all_validations_passed=False,
+        valid_count=0,
+        total_count=1,
+    )
+    with patch(
+        "mellea.telemetry.tracing.get_application_tracer", return_value=fake_tracer
+    ):
+        await sampling_plugin.on_loop_start(start, {})
+        await sampling_plugin.on_iteration(iteration, {})
+
+    name, attrs = fake_span.add_event.call_args.args
+    assert name == "iteration"
+    assert attrs["mellea.sampling.sample_index"] == 2
+
+
+@pytest.mark.asyncio
+async def test_sampling_iteration_omits_sample_index_when_none(
+    sampling_plugin, enabled_tracing
+):
+    from mellea.plugins.hooks.sampling import (
+        SamplingIterationPayload,
+        SamplingLoopStartPayload,
+    )
+
+    fake_span = MagicMock()
+    fake_tracer = MagicMock()
+    fake_tracer.start_span.return_value = fake_span
+
+    start = SamplingLoopStartPayload(sampling_id="sid-mv-2", loop_budget=1)
+    iteration = SamplingIterationPayload(
+        sampling_id="sid-mv-2",
+        iteration=1,
+        all_validations_passed=True,
+        valid_count=1,
+        total_count=1,
+    )
+    with patch(
+        "mellea.telemetry.tracing.get_application_tracer", return_value=fake_tracer
+    ):
+        await sampling_plugin.on_loop_start(start, {})
+        await sampling_plugin.on_iteration(iteration, {})
+
+    name, attrs = fake_span.add_event.call_args.args
+    assert name == "iteration"
+    assert "mellea.sampling.sample_index" not in attrs
+
+
+@pytest.mark.asyncio
+async def test_sampling_repair_includes_sample_index_when_set(
+    sampling_plugin, enabled_tracing
+):
+    from mellea.plugins.hooks.sampling import (
+        SamplingLoopStartPayload,
+        SamplingRepairPayload,
+    )
+
+    fake_span = MagicMock()
+    fake_tracer = MagicMock()
+    fake_tracer.start_span.return_value = fake_span
+
+    start = SamplingLoopStartPayload(sampling_id="sid-mv-3", loop_budget=2)
+    repair = SamplingRepairPayload(
+        sampling_id="sid-mv-3",
+        repair_type="rejection",
+        repair_iteration=1,
+        sample_index=1,
+        failed_validations=[(object(), object())],
+    )
+    with patch(
+        "mellea.telemetry.tracing.get_application_tracer", return_value=fake_tracer
+    ):
+        await sampling_plugin.on_loop_start(start, {})
+        await sampling_plugin.on_repair(repair, {})
+
+    name, attrs = fake_span.add_event.call_args.args
+    assert name == "repair"
+    assert attrs["mellea.sampling.sample_index"] == 1
+
+
+@pytest.mark.asyncio
+async def test_sampling_repair_omits_sample_index_when_none(
+    sampling_plugin, enabled_tracing
+):
+    from mellea.plugins.hooks.sampling import (
+        SamplingLoopStartPayload,
+        SamplingRepairPayload,
+    )
+
+    fake_span = MagicMock()
+    fake_tracer = MagicMock()
+    fake_tracer.start_span.return_value = fake_span
+
+    start = SamplingLoopStartPayload(sampling_id="sid-mv-4", loop_budget=2)
+    repair = SamplingRepairPayload(
+        sampling_id="sid-mv-4",
+        repair_type="rejection",
+        repair_iteration=1,
+        failed_validations=[(object(), object())],
+    )
+    with patch(
+        "mellea.telemetry.tracing.get_application_tracer", return_value=fake_tracer
+    ):
+        await sampling_plugin.on_loop_start(start, {})
+        await sampling_plugin.on_repair(repair, {})
+
+    name, attrs = fake_span.add_event.call_args.args
+    assert name == "repair"
+    assert "mellea.sampling.sample_index" not in attrs
 
 
 @pytest.mark.asyncio

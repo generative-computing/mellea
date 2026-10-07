@@ -1,0 +1,328 @@
+---
+title: "mellea.helpers.openai_compatible_helpers"
+sidebar_label: "mellea.helpers.openai_compatible_helpers"
+description: "A file for helper functions that deal with OpenAI API compatible helpers."
+---
+
+A file for helper functions that deal with OpenAI API compatible helpers.
+
+
+
+
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `merge_provider_fields` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/helpers/openai_compatible_helpers.py#L38" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#merge_provider_fields}
+
+```python
+merge_provider_fields(base: dict[str, Any], provider_fields: dict[str, dict[str, Any]] | None, provider: str) -> dict[str, Any]
+```
+
+
+Merge author-declared `provider_fields` into a wire message dict.
+
+A key matches `provider` iff it is `"*"`, equals `provider` exactly, or is
+`"openai"` and `provider` is in `OPENAI_COMPATIBLE_WIRE_PROVIDERS`. Fields from
+every matching key are merged into `base`, but only for keys `base` did not
+already set — Mellea's known fields always win, and a dropped colliding key is
+debug-logged. `"*"` always matches, so its presence never triggers the mismatch
+error.
+
+Merged values are deep-copied on the way in, so the wire dict never aliases the
+source `provider_fields`. Mutating a nested value on the originating [`Message`](../stdlib/components/chat#class-message)
+after serialization (or vice versa) cannot leak across the boundary.
+
+Whether an unmatched-but-declared field actually reaches the model depends on
+the backend SDK, not this function. This helper only raises when a `provider`
+key names a target the request did not hit (see `Raises`); a field that *does*
+match but that the provider does not recognize is left in the wire dict and
+handled downstream. Ollama and HuggingFace re-validate messages through their
+own schemas and silently drop unknown keys (Ollama via pydantic's default
+`extra="ignore"`; HuggingFace via `apply_chat_template`), so on those paths an
+unrecognized field is dropped rather than surfaced as an error. Only providers
+whose SDK rejects unknown keys will raise, and that error originates in the SDK.
+
+**Args:**
+- `base`: The wire message dict built from Mellea's known fields; mutated and
+returned.
+- `provider_fields`: The author's provider-keyed extra fields, or `None`. Must
+be a `dict` mapping each provider target to a `dict` of field name to
+value.
+- `provider`: The provider string of the backend performing serialization.
+
+**Returns:**
+- `base`, with fields from every matching provider key merged in.
+
+**Raises:**
+- `ValueError`: If `provider_fields` is non-empty, contains no `"*"`, and no key
+matches `provider` — the component targeted a backend it did not hit.
+- `TypeError`: If `provider_fields` itself is not a `dict`, or a matching value
+within it is not a `dict` — each level must map keys to their values so
+the merge fails with a named error rather than a bare `AttributeError`.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `extract_model_tool_requests` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/helpers/openai_compatible_helpers.py#L162" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#extract_model_tool_requests}
+
+```python
+extract_model_tool_requests(tools: dict[str, AbstractMelleaTool], response: dict[str, Any]) -> list[ModelToolCall] | None
+```
+
+
+Extract tool calls from the dict representation of an OpenAI-like chat response object.
+
+**Args:**
+- `tools`: Mapping of tool name to `AbstractMelleaTool` for lookup.
+- `response`: Dict representation of an OpenAI-compatible chat completion message
+(must contain a `"message"` key).
+
+**Returns:**
+- List of [`ModelToolCall`](../core/base#class-modeltoolcall) for each requested tool call (order preserved),
+- or `None` if no tool calls were found.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `chat_completion_delta_merge` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/helpers/openai_compatible_helpers.py#L228" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#chat_completion_delta_merge}
+
+```python
+chat_completion_delta_merge(chunks: list[dict], force_all_tool_calls_separate: bool = False) -> dict
+```
+
+
+Merge a list of deltas from `ChatCompletionChunk`s into a single dict representing the `ChatCompletion` choice.
+
+**Args:**
+- `chunks`: The list of dicts that represent the message deltas.
+- `force_all_tool_calls_separate`: If `True`, tool calls in separate message
+deltas will not be merged even if their index values are the same. Use
+when providers do not return the correct index value for tool calls; all
+tool calls must then be fully populated in a single delta.
+
+**Returns:**
+- A single merged dict representing the assembled `ChatCompletion` choice,
+- with `finish_reason`, `index`, and a `message` sub-dict containing
+- `content`, `role`, and `tool_calls`.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `should_replay_reasoning` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/helpers/openai_compatible_helpers.py#L322" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#should_replay_reasoning}
+
+```python
+should_replay_reasoning(messages: list[Message], provider: str | None) -> list[bool]
+```
+
+
+Decide, per message, whether its reasoning trace should be replayed to the provider.
+
+Implements the cross-provider consensus rule from issue #1201: an assistant
+message's reasoning is round-tripped only when that turn issued a tool call —
+detected by the message's own `tool_calls` field — and stripped on plain
+follow-up turns. Keying off `tool_calls` rather than a trailing `tool`-role
+message means reasoning is still replayed for a turn that requested a tool
+call even if the tool was never executed. Non-assistant messages and
+assistant messages without reasoning always return `False`.
+
+**Args:**
+- `messages`: The conversation in order, as it will be serialised.
+- `provider`: The backend provider name (e.g. `"openai"`, `"ollama"`).
+Currently unused — every provider follows the consensus rule above.
+It is a reserved hook for a provider-specific deviation (e.g. a model
+that must replay reasoning on plain turns, or must not after a tool
+call); add a keyed branch here once such a case is verified live.
+
+**Returns:**
+- A list of booleans, one per message in `messages`, indicating whether that
+- message's reasoning should be included in the serialised payload.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `prefetch_audio_urls` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/helpers/openai_compatible_helpers.py#L358" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#prefetch_audio_urls}
+
+```python
+prefetch_audio_urls(messages: list[Message]) -> None
+```
+
+
+Warm the audio download cache for any [`AudioUrlBlock`](../core/base#class-audiourlblock) in `messages`.
+
+No provider accepts audio by URL, so `message_to_openai_message` resolves such
+blocks to inline base64. That resolution is blocking, and the serializer is sync;
+awaiting this first moves the fetch onto a worker thread so the event loop is not
+stalled, leaving the serializer's call a cache hit. Mirrors how the Ollama backend
+offloads [`ImageUrlBlock`](../core/base#class-imageurlblock) downloads with `asyncio.to_thread`.
+
+Safe to call when there is nothing to fetch, and safe to skip — the serializer still
+produces correct output either way, just with a blocking download.
+
+**Args:**
+- `messages`: The messages about to be serialised.
+
+**Raises:**
+- `ValueError`: If a URL cannot be downloaded or exceeds the size cap.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `message_to_openai_message` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/helpers/openai_compatible_helpers.py#L386" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#message_to_openai_message}
+
+```python
+message_to_openai_message(msg: Message, formatter: Formatter | None = None) -> dict
+```
+
+
+Serialise a Mellea [`Message`](../stdlib/components/chat#class-message) to the format required by OpenAI-compatible API providers.
+
+**Args:**
+- `msg`: The [`Message`](../stdlib/components/chat#class-message) object to serialise.
+- `formatter`: Optional formatter used to render the message content (including
+documents) through the template system. When `None`, uses the raw
+`msg.content` string without document rendering.
+- `replay_reasoning`: When `True` and `msg.thinking` is a non-empty string,
+the reasoning trace is emitted under the `"reasoning_content"` key so
+the provider receives the model's prior reasoning. Defaults to `False`
+(reasoning is stripped), preserving the historical behaviour; callers
+decide per-turn via their replay policy (see `should_replay_reasoning`).
+- `provider`: The calling backend's provider string, used to match the message's
+`provider_fields` declaration. Defaults to `"openai"`; OpenAI-compatible
+callers pass their own provider (`"litellm"`, `"watsonx"`, `"huggingface"`)
+so an `"openai"`-family declaration still reaches the wire.
+
+**Returns:**
+- A dict with `"role"` and `"content"` fields. When the message carries
+- images or audio, `"content"` is a list of content-part dicts; otherwise
+- is a plain string. For tool-only assistant turns, `"content"` is `None`
+- and `"tool_calls"` carries the structured call list. When content is
+- present alongside tool calls, both keys are included. For a tool-result
+- turn whose message carries a provider-supplied `tool_call_id` (a
+- [`ToolMessage`](../stdlib/components/chat#class-toolmessage), which forwards it from its [`ModelToolCall`](../core/base#class-modeltoolcall), or a plain
+- [`Message`](../stdlib/components/chat#class-message) that declared it directly), the dict also carries
+- `"tool_call_id"` (matching the assistant tool call), as spec-strict
+- OpenAI-compatible providers require on `role: "tool"` messages. When
+- `replay_reasoning` is `True` and reasoning is present, the dict also
+- carries a `"reasoning_content"` field.
+
+An [`AudioUrlBlock`](../core/base#class-audiourlblock) is resolved to inline base64 here, because the OpenAI Chat
+Completions audio schema has no audio-by-URL content part. That resolution is
+blocking; callers should `await prefetch_audio_urls` first so it is a cache hit.
+
+**Raises:**
+- `ValueError`: If an [`AudioUrlBlock`](../core/base#class-audiourlblock)'s audio cannot be downloaded or exceeds the
+size cap (see `AudioUrlBlock.resolve_base64`).
+- `ValueError`: If the message's `provider_fields` names a target that does not
+match `provider` and includes no `"*"` (see `merge_provider_fields`).
+- `TypeError`: If `provider_fields` is not a `dict`, or a matching value within
+it is not a `dict` (see `merge_provider_fields`).
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `messages_to_docs` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/helpers/openai_compatible_helpers.py#L515" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#messages_to_docs}
+
+```python
+messages_to_docs(msgs: list[Message]) -> list[dict[str, str]]
+```
+
+
+Extract all [`Document`](../stdlib/components/docs/document#class-document) objects from a list of [`Message`](../stdlib/components/chat#class-message) objects.
+
+**Args:**
+- `msgs`: List of [`Message`](../stdlib/components/chat#class-message) objects whose `_docs` attributes are inspected.
+
+**Returns:**
+- A list of dicts, each with a `"text"` key and optional `"title"` and
+- `"doc_id"` keys, suitable for passing to an OpenAI-compatible RAG API.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `build_completion_usage` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/helpers/openai_compatible_helpers.py#L541" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#build_completion_usage}
+
+```python
+build_completion_usage(output: ModelOutputThunk) -> CompletionUsage | None
+```
+
+
+Build a normalized usage object from a model output, if available.
+
+**Args:**
+- `output`: Model output object whose `generation.usage` mapping contains
+token counts.
+
+**Returns:**
+- A `CompletionUsage` object when usage metadata is present on the
+- output, otherwise `None`.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `has_tool_calls` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/helpers/openai_compatible_helpers.py#L567" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#has_tool_calls}
+
+```python
+has_tool_calls(output: ModelOutputThunk) -> bool
+```
+
+
+Check if a model output has tool calls.
+
+**Args:**
+- `output`: Model output thunk that may expose a `tool_calls` mapping.
+
+**Returns:**
+- `True` if the output has non-empty tool calls, `False` otherwise.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `build_tool_calls` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/helpers/openai_compatible_helpers.py#L584" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#build_tool_calls}
+
+```python
+build_tool_calls(output: ModelOutputThunk) -> list[ToolCallDict] | None
+```
+
+
+Build OpenAI-compatible tool calls from a model output, if available.
+
+**Args:**
+- `output`: Model output thunk that may expose a `tool_calls` mapping.
+
+**Returns:**
+- List of `ToolCallDict` objects when tool calls are present,
+- otherwise `None`.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `ToolCallFunction` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/helpers/openai_compatible_helpers.py#L134" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#class-toolcallfunction}
+
+
+Function details in a tool call.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `ToolCallDict` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/helpers/openai_compatible_helpers.py#L141" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#class-toolcalldict}
+
+
+OpenAI-compatible tool call dictionary with ID and function.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `CompletionUsage` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.8.0/mellea/helpers/openai_compatible_helpers.py#L149" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#class-completionusage}
+
+
+Token usage statistics for a completion request.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
