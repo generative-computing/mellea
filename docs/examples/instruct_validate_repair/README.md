@@ -4,7 +4,7 @@ This directory demonstrates Mellea's core instruct-validate-repair paradigm for 
 
 ## Files
 
-### 101_email.py
+### [101_email.py](./101_email.py)
 The simplest example - using `m.instruct()` to generate an email.
 
 **Key Features:**
@@ -12,7 +12,7 @@ The simplest example - using `m.instruct()` to generate an email.
 - Simple instruction without requirements
 - Accessing the last prompt with `m.last_prompt()`
 
-### 101_email_with_requirements.py
+### [101_email_with_requirements.py](./101_email_with_requirements.py)
 Adds requirements to constrain the output.
 
 **Key Features:**
@@ -20,7 +20,7 @@ Adds requirements to constrain the output.
 - Automatic validation and repair
 - Ensuring output meets specified criteria
 
-### 101_email_with_validate.py
+### [101_email_with_validate.py](./101_email_with_validate.py)
 Explicitly demonstrates the validation step.
 
 **Key Features:**
@@ -28,10 +28,10 @@ Explicitly demonstrates the validation step.
 - Using `m.validate()` to check requirements
 - Understanding validation results
 
-### 101_email_comparison.py
+### [101_email_comparison.py](./101_email_comparison.py)
 Compares outputs with and without requirements.
 
-### advanced_email_with_validate_function.py
+### [advanced_email_with_validate_function.py](./advanced_email_with_validate_function.py)
 Shows how to use custom validation functions for complex requirements.
 
 **Key Features:**
@@ -39,7 +39,7 @@ Shows how to use custom validation functions for complex requirements.
 - Using `simple_validate()` helper
 - Combining multiple validation strategies
 
-### qiskit_code_validation/qiskit_code_validation.py
+### [qiskit_code_validation/qiskit_code_validation.py](./qiskit_code_validation/qiskit_code_validation.py)
 Advanced example demonstrating IVR pattern for Qiskit code generation with external validation.
 
 **Key Features:**
@@ -50,7 +50,7 @@ Advanced example demonstrating IVR pattern for Qiskit code generation with exter
 
 **See:** [qiskit_code_validation/README.md](qiskit_code_validation/README.md) for full documentation and example prompts.
 
-### multiturn_strategy_example.py
+### [multiturn_strategy_example.py](./multiturn_strategy_example.py)
 Demonstrates MultiTurnStrategy for conversational repair with validation feedback.
 
 **Key Features:**

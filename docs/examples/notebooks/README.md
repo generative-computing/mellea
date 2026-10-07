@@ -4,40 +4,40 @@ This directory contains interactive Jupyter notebooks demonstrating various Mell
 
 ## Notebooks
 
-### example.ipynb
+### [example.ipynb](./example.ipynb)
 General introduction to Mellea with basic examples.
 
-### compositionality_with_generative_stubs.ipynb
+### [compositionality_with_generative_stubs.ipynb](./compositionality_with_generative_stubs.ipynb)
 Interactive tutorial on composing generative functions.
 
-### context_example.ipynb
+### [context_example.ipynb](./context_example.ipynb)
 Working with contexts and context management.
 
-### document_mobject.ipynb
+### [document_mobject.ipynb](./document_mobject.ipynb)
 Using document MObjects for text processing.
 
-### georgia_tech.ipynb
+### [georgia_tech.ipynb](./georgia_tech.ipynb)
 Domain-specific example (possibly academic/research use case).
 
-### instruct_validate_repair.ipynb
+### [instruct_validate_repair.ipynb](./instruct_validate_repair.ipynb)
 Interactive walkthrough of the instruct-validate-repair paradigm.
 
-### m_serve_example.ipynb
+### [m_serve_example.ipynb](./m_serve_example.ipynb)
 Deploying Mellea programs as services.
 
-### mcp_example.ipynb
+### [mcp_example.ipynb](./mcp_example.ipynb)
 Model Context Protocol integration examples.
 
-### model_options_example.ipynb
+### [model_options_example.ipynb](./model_options_example.ipynb)
 Configuring model options and parameters.
 
-### sentiment_classifier.ipynb
+### [sentiment_classifier.ipynb](./sentiment_classifier.ipynb)
 Building a sentiment classification system.
 
-### simple_email.ipynb
+### [simple_email.ipynb](./simple_email.ipynb)
 Email generation with requirements.
 
-### table_mobject.ipynb
+### [table_mobject.ipynb](./table_mobject.ipynb)
 Working with table data structures.
 
 ## Running the Notebooks

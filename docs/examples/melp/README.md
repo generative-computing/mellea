@@ -4,19 +4,19 @@ This directory contains examples of MELP - an experimental lazy evaluation syste
 
 ## Files
 
-### simple_example.py
+### [simple_example.py](./simple_example.py)
 Basic introduction to MELP's lazy evaluation concepts.
 
-### lazy.py
+### [lazy.py](./lazy.py)
 Core lazy evaluation patterns and primitives.
 
-### lazy_fib.py
+### [lazy_fib.py](./lazy_fib.py)
 Demonstrates lazy evaluation with Fibonacci sequence generation.
 
-### lazy_fib_sample.py
+### [lazy_fib_sample.py](./lazy_fib_sample.py)
 Sampling and evaluation strategies with lazy computations.
 
-### states.py
+### [states.py](./states.py)
 State management in lazy evaluation contexts.
 
 ## Concepts Demonstrated

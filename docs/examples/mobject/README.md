@@ -4,7 +4,7 @@ This directory contains examples of using MObjects (Mellea Objects) - structured
 
 ## Files
 
-### table.py
+### [table.py](./table.py)
 Demonstrates using table MObjects for structured data manipulation.
 
 **Key Features:**
