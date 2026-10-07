@@ -815,7 +815,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 reasoning_params["reasoning_effort"] = "medium"
             elif self._server_type != _ServerType.OPENAI:
                 reasoning_params["reasoning_effort"] = "none"
-        else:
+        elif thinking != "none" or self._server_type != _ServerType.OPENAI:
             reasoning_params["reasoning_effort"] = thinking
         return reasoning_params
 
