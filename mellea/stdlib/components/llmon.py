@@ -154,15 +154,20 @@ def is_llmon(text: str) -> bool:
     return _OPEN_TAG in text
 
 
-def encode_llmon_input(instruction: str, data: str | None = None) -> str:
-    """Encode an instruction (and optional data) as a Machine-LLMON input object.
+def encode_llmon_input(
+    instruction: str,
+    data: str | dict[str, str] | None = None,
+    requirements: list[str] | None = None,
+) -> str:
+    """Encode an instruction (and optional data/requirements) as a Machine-LLMON input object.
 
     Produces the structured input an LLMON-trained model reads: an object with an
-    `instr` member carrying the instruction and, when `data` is given, a `data`
-    member carrying the content the instruction operates on. This is the
-    out-direction counterpart to `parse_llmon_reply` — it builds what Mellea
-    *sends*, so the model receives explicit instruction/data boundaries rather
-    than having to infer them from a plain prompt.
+    `instr` member carrying the instruction, a `data` member (when `data` is given)
+    carrying the content the instruction operates on, and a `req` member (when
+    `requirements` is non-empty) carrying the constraints the output must satisfy.
+    This is the out-direction counterpart to `parse_llmon_reply` — it builds what
+    Mellea *sends*, so the model receives explicit instruction/data/requirement
+    boundaries rather than having to infer them from a plain prompt.
 
     The returned string is Machine LLMON (special tokens), not Human (backslash)
     LLMON, since Machine LLMON is what is sent to the model. The encoding is
@@ -172,21 +177,31 @@ def encode_llmon_input(instruction: str, data: str | None = None) -> str:
     Args:
         instruction: The rendered instruction text.
         data: Optional content the instruction operates on (e.g. the text to
-            summarise). Omitted from the object when `None`.
+            summarise). A single string is encoded as a scalar `data` member; a
+            `dict` of named documents is encoded as a nested keyed `data` object
+            (one member per key), mirroring the base `Instruction`'s `[key] =
+            value` grounding rendering so the model keeps the document labels.
+            Omitted from the object when `None`.
+        requirements: Optional constraints the output must satisfy, encoded as a
+            `req` list member. Omitted from the object when `None` or empty, so the
+            no-requirements encoding is byte-identical to the two-argument form.
 
     Returns:
         A compact Machine-LLMON object string, e.g.
         `<|open|>object<|close|><|open|>instr<|close|>…<|open_end|>instr<|close|>…`.
     """
-    obj: dict[str, str] = {"instr": instruction}
+    obj: dict[str, object] = {"instr": instruction}
     if data is not None:
         obj["data"] = data
+    if requirements:
+        obj["req"] = requirements
     # Pre-stringified plain-`str` values, so the default `with_mellea=False` is
     # correct here. The library's `with_mellea=True` only changes which *input*
     # types the converter accepts — it lets a dict value be a Mellea `CBlock`
     # (unwrapping `.value`) instead of raising `TypeError` — and the encoded output
-    # is byte-identical either way. Passing plain strings keeps this helper a pure
-    # `(str, str | None) -> str` with no `llmon → mellea.core` back-import.
+    # is byte-identical either way. Passing plain strings/dicts keeps this helper a
+    # pure `(str, str | dict | None, list[str] | None) -> str` with no
+    # `llmon → mellea.core` back-import.
     converter = LLMONConverters(converting_to_json=False)
     return converter.json_dict_to_llmon_str(obj, compact=True)
 

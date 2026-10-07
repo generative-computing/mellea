@@ -189,6 +189,43 @@ class TestEncodeLLMONInput:
         assert "Summarize" in encoded
         assert "loved it, slow shipping" in encoded
 
+    def test_requirements_encoded_as_req_member(self):
+        encoded = encode_llmon_input(
+            "Summarize", requirements=["one sentence", "mention both aspects"]
+        )
+        assert is_llmon(encoded)
+        # Requirements appear in a dedicated `req` list member.
+        assert "req<|close|>" in encoded
+        assert "one sentence" in encoded
+        assert "mention both aspects" in encoded
+
+    def test_empty_requirements_omit_req_member(self):
+        # None and [] both yield the two-argument encoding, byte-identical to the
+        # no-requirements form — so adding the parameter never changes old callers.
+        baseline = encode_llmon_input("Summarize")
+        assert encode_llmon_input("Summarize", requirements=None) == baseline
+        assert encode_llmon_input("Summarize", requirements=[]) == baseline
+        assert "req<|close|>" not in baseline
+
+    def test_dict_data_encodes_keyed_object(self):
+        # A dict of named documents becomes a nested keyed `data` object, with
+        # every document present and labelled by its key.
+        encoded = encode_llmon_input(
+            "Summarize", data={"doc1": "alpha text", "doc2": "beta text"}
+        )
+        assert is_llmon(encoded)
+        assert "data<|.|>doc1" in encoded
+        assert "data<|.|>doc2" in encoded
+        assert "alpha text" in encoded
+        assert "beta text" in encoded
+
+    def test_single_string_data_stays_scalar(self):
+        # A plain string stays a scalar `data` member — no nested object — so the
+        # existing single-document shape is preserved.
+        encoded = encode_llmon_input("Summarize", data="only text")
+        assert "data<|.|>" not in encoded
+        assert "only text" in encoded
+
 
 class TestLLMONizeInput:
     """`llmonize_input=True` sends a Machine-LLMON object instead of plain prose."""
@@ -208,6 +245,99 @@ class TestLLMONizeInput:
         assert is_llmon(content)
         assert parse_llmon_reply(content) == "Summarize this."
         assert tr.role == "user"
+
+    def test_llmonize_input_encodes_requirements(self):
+        # Requirements must reach the wire in llmonized mode: the model is told the
+        # same constraints the sampling strategy validates against. (Regression:
+        # the llmonized path previously dropped requirements entirely, so the model
+        # was graded on a rubric it never saw — see LLMON-SANITIZATION.md.)
+        instr = LLMONInstruction(
+            "Summarize this.",
+            requirements=["must be one sentence"],
+            llmonize_input=True,
+        )
+        content = str(instr.format_for_llm().args["content"])
+        assert "req<|close|>" in content
+        assert "must be one sentence" in content
+
+    def test_llmonize_input_excludes_check_only_requirements(self):
+        # Mirrors the base Instruction prompt filter: a check_only requirement is
+        # validation-only and must not be shown to the model.
+        from mellea.core.requirement import Requirement
+
+        instr = LLMONInstruction(
+            "Do it.",
+            requirements=[
+                Requirement("internal grading note", check_only=True),
+                "show this to the model",
+            ],
+            llmonize_input=True,
+        )
+        content = str(instr.format_for_llm().args["content"])
+        assert "internal grading note" not in content
+        assert "show this to the model" in content
+
+    def test_llmonize_input_encodes_single_grounding_doc_as_scalar(self):
+        instr = LLMONInstruction(
+            "Summarize the document.",
+            grounding_context={"doc1": "alpha text"},
+            llmonize_input=True,
+        )
+        content = str(instr.format_for_llm().args["content"])
+        assert "alpha text" in content
+        # One document is a scalar data member, not a nested keyed object.
+        assert "data<|.|>" not in content
+
+    def test_llmonize_input_encodes_all_grounding_docs(self):
+        # All grounding documents must reach the wire, keyed by name. (Regression:
+        # the llmonized path previously encoded a document only when exactly one was
+        # present and silently fell back to prose for several — dropping them from
+        # the LLMON object — see LLMON-SANITIZATION.md.)
+        instr = LLMONInstruction(
+            "Summarize the documents.",
+            grounding_context={
+                "doc1": "alpha text",
+                "doc2": "beta text",
+                "doc3": "gamma text",
+            },
+            llmonize_input=True,
+        )
+        content = str(instr.format_for_llm().args["content"])
+        assert "alpha text" in content
+        assert "beta text" in content
+        assert "gamma text" in content
+        # Several documents are a keyed object, one member per grounding key.
+        assert "data<|.|>doc1" in content
+        assert "data<|.|>doc2" in content
+        assert "data<|.|>doc3" in content
+
+    def test_llmonize_input_encodes_requirements_and_multiple_docs_together(self):
+        # The full llmonized object: instruction + requirements (req list) + several
+        # grounding documents (keyed data object), all present in one valid
+        # Machine-LLMON object. Exercises the three members at once, since the
+        # per-member tests cover them in isolation.
+        instr = LLMONInstruction(
+            "Summarize the documents.",
+            requirements=["one sentence", "mention every review"],
+            grounding_context={"review_a": "loved it", "review_b": "shipping slow"},
+            llmonize_input=True,
+        )
+        content = str(instr.format_for_llm().args["content"])
+        # Valid LLMON overall. (Not round-tripped through parse_llmon_reply: that is
+        # a *reply* parser for extracting an assistant answer, not an input-object
+        # reader — a multi-member input object is not a reply shape, so it correctly
+        # falls back to raw text. The instruction itself is still present below.)
+        assert is_llmon(content)
+        assert "Summarize the documents." in content
+        # Requirements present as a req list.
+        assert "req<|close|>" in content
+        assert "one sentence" in content
+        assert "mention every review" in content
+        # Both documents present as keyed data members.
+        assert "data<|.|>review_a" in content
+        assert "data<|.|>review_b" in content
+        assert "loved it" in content
+        assert "shipping slow" in content
 
     def test_llmonize_input_renders_through_formatter(self):
         # The pre-encoded Machine-LLMON string must render verbatim via the shared

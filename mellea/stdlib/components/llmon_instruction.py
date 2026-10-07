@@ -197,12 +197,19 @@ class LLMONInstruction(Instruction):
         """Render the instruction, encoding it as a Machine-LLMON object when enabled.
 
         When `llmonize_input` is `False` (default) this defers to `Instruction`'s
-        normal prose rendering. When `True`, the instruction's description — and a
-        single grounding document, if exactly one is present, as the `data`
-        member — is encoded via `encode_llmon_input` into a Machine-LLMON object.
-        The pre-encoded string is emitted verbatim through the shared `Message`
-        template (`template_order=["*", "Message"]`), so no `LLMONInstruction`
-        template file is needed.
+        normal prose rendering. When `True`, the instruction's description, its
+        requirements, and all grounding documents (as the `data` member — a scalar
+        for one document, a keyed object for several) are encoded via
+        `encode_llmon_input` into a Machine-LLMON object. The pre-encoded string is
+        emitted verbatim through the shared `Message` template
+        (`template_order=["*", "Message"]`), so no `LLMONInstruction` template file
+        is needed.
+
+        Requirements are included as the `req` member, mirroring the base
+        `Instruction`'s prompt rendering: a requirement with no description, or one
+        marked `check_only`, is validation-only and never shown to the model, so it
+        is excluded here too. This keeps the model told exactly the same
+        constraints it is validated against.
 
         Returns:
             The parent `TemplateRepresentation` (plain mode), or one whose content
@@ -212,17 +219,29 @@ class LLMONInstruction(Instruction):
             return super().format_for_llm()
 
         instruction = str(self._description) if self._description is not None else ""
-        # Use the sole grounding document as the data member when there is exactly
-        # one; with none or several, the mapping is ambiguous, so encode the
-        # instruction alone and leave the context to the parent prose path.
-        data: str | None = None
+        # Encode all grounding documents as the `data` member: a single doc is a
+        # scalar string, several are a keyed object (one member per grounding key),
+        # mirroring the base Instruction's `[key] = value` rendering so no document
+        # is dropped and the model keeps the labels. None leaves `data` absent.
+        data: str | dict[str, str] | None = None
         if len(self._grounding_context) == 1:
             (doc,) = self._grounding_context.values()
             data = str(doc)
+        elif len(self._grounding_context) > 1:
+            data = {k: str(v) for k, v in self._grounding_context.items()}
+
+        # Same filter the base Instruction applies when rendering requirements into
+        # the prompt: skip empty-description and check_only requirements so the
+        # model is told exactly the requirements the strategy validates against.
+        requirements = [
+            r.description
+            for r in self._requirements
+            if r.description is not None and r.description != "" and not r.check_only
+        ]
 
         return TemplateRepresentation(
             obj=self,
-            args={"content": encode_llmon_input(instruction, data)},
+            args={"content": encode_llmon_input(instruction, data, requirements)},
             template_order=["*", "Message"],
             role="user",
         )
