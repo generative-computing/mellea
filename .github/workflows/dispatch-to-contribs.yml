@@ -29,9 +29,11 @@ jobs:
       - name: Resolve version
         if: env.SKIP != 'true'
         id: version
+        env:
+          INPUT_VERSION: ${{ github.event.inputs.version }}
         run: |
-          if [ -n "${{ github.event.inputs.version }}" ]; then
-            VERSION="${{ github.event.inputs.version }}"
+          if [ -n "${INPUT_VERSION}" ]; then
+            VERSION="${INPUT_VERSION}"
           else
             VERSION="${GITHUB_REF#refs/tags/v}"
           fi
@@ -53,8 +55,9 @@ jobs:
         if: env.SKIP != 'true'
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
           gh api repos/generative-computing/mellea-contribs/dispatches \
             --method POST \
             --field event_type=mellea-released \
-            --field 'client_payload[version]=${{ steps.version.outputs.version }}'
+            --field "client_payload[version]=${VERSION}"
