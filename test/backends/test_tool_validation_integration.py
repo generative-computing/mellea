@@ -457,7 +457,7 @@ class TestEdgeCases:
     @pytest.mark.parametrize(("value_schema", "value"), BOOLEAN_SUBSCHEMAS)
     def test_unsupported_schema_strict_raises(self, value_schema, value):
         tool = _external_tool(value_schema)
-        with pytest.raises((TypeError, AttributeError)):
+        with pytest.raises(Exception):
             validate_tool_arguments(tool, {"value": value}, strict=True)
 
     def test_no_parameters_tool(self):

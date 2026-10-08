@@ -163,6 +163,15 @@ def counts_tool(counts: dict[str, int]) -> int:
     return sum(counts.values())
 
 
+def optional_counts_tool(counts: dict[str, int] | None = None) -> int:
+    """Total some counts, if given.
+
+    Args:
+        counts: counts by name
+    """
+    return sum((counts or {}).values())
+
+
 def bounded_tool(score: Annotated[int, Field(ge=0, le=10)]) -> int:
     """Record a score.
 
@@ -299,6 +308,12 @@ class TestElementTypesInSchema:
         assert prop["type"] == "object"
         assert prop["additionalProperties"] == {"type": "integer"}
 
+    def test_optional_dict_value_type_taken_from_branch(self):
+        prop = _prop(optional_counts_tool, "counts")
+        assert prop["type"] == "object"
+        assert prop["additionalProperties"] == {"type": "integer"}
+        assert "counts" not in _required(optional_counts_tool)
+
     def test_any_list_keeps_unconstrained_items(self):
         assert _prop(any_list_tool, "values")["items"] == {}
 
@@ -404,6 +419,17 @@ class TestListValidation:
         tool = MelleaTool.from_callable(optional_ints_tool)
         validated = validate_tool_arguments(tool, {"nums": None}, strict=True)
         assert validated == {"nums": None}
+
+    def test_optional_dict_int(self):
+        tool = MelleaTool.from_callable(optional_counts_tool)
+        validated = validate_tool_arguments(tool, {"counts": {"a": 1}}, strict=True)
+        assert validated == {"counts": {"a": 1}}
+        assert type(validated["counts"]["a"]) is int
+
+    def test_optional_dict_int_none(self):
+        tool = MelleaTool.from_callable(optional_counts_tool)
+        validated = validate_tool_arguments(tool, {"counts": None}, strict=True)
+        assert validated == {"counts": None}
 
     @pytest.mark.parametrize(
         ("func", "args"),
