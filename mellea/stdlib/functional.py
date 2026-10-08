@@ -363,8 +363,8 @@ def instruct(
         images: A list of images to be used in the instruction or None if none.
         audio: A list of audio blocks to be used in the instruction or None if none.
         allow_context_type_change: if True, permits the returned context to be a different `Context` subtype than `context`. By default (False), a differing type raises `ContextTypeMismatchError`.
-        instruction_cls: The `Instruction` subclass to construct for this call. Defaults to `Instruction`. Pass an LLMON-aware subclass (e.g. `LLMONInstruction`) to parse the reply back into a Component.
-        instruction_kwargs: Extra keyword arguments splatted into `instruction_cls(...)`, for options a subclass adds beyond the standard ones (e.g. `{"llmonize_input": True}` for `LLMONInstruction`). Ignored by the base `Instruction` since it accepts none.
+        instruction_cls: The `Instruction` subclass to construct for this call. Defaults to `Instruction`. Pass `LLMONInstruction` to opt into LLMON hard-mode output grammar; the LLMON reply-parse and input-encode are automatic for an LLMON model regardless of the class used.
+        instruction_kwargs: Extra keyword arguments splatted into `instruction_cls(...)`, for options a subclass adds beyond the standard ones (e.g. `{"constrain_output": True}` for `LLMONInstruction`). Ignored by the base `Instruction` since it accepts none.
 
     Raises:
         ContextTypeMismatchError: if the returned context type differs from the input context type and `allow_context_type_change` is `False`.
@@ -1482,8 +1482,8 @@ async def ainstruct(
         audio: A list of audio blocks to be used in the instruction or None if none.
         allow_context_type_change: if True, permits the returned context to be a different `Context` subtype than `context`. By default (False), a differing type raises `ContextTypeMismatchError`.
         await_result: if False and strategy is None, returns uncomputed ModelOutputThunk for streaming. If True or strategy is not None, awaits and returns ComputedModelOutputThunk. Default is False.
-        instruction_cls: The `Instruction` subclass to construct for this call. Defaults to `Instruction`. Pass an LLMON-aware subclass (e.g. `LLMONInstruction`) to parse the reply back into a Component.
-        instruction_kwargs: Extra keyword arguments splatted into `instruction_cls(...)`, for options a subclass adds beyond the standard ones (e.g. `{"llmonize_input": True}` for `LLMONInstruction`). Ignored by the base `Instruction` since it accepts none.
+        instruction_cls: The `Instruction` subclass to construct for this call. Defaults to `Instruction`. Pass `LLMONInstruction` to opt into LLMON hard-mode output grammar; the LLMON reply-parse and input-encode are automatic for an LLMON model regardless of the class used.
+        instruction_kwargs: Extra keyword arguments splatted into `instruction_cls(...)`, for options a subclass adds beyond the standard ones (e.g. `{"constrain_output": True}` for `LLMONInstruction`). Ignored by the base `Instruction` since it accepts none.
 
     Returns:
         A (ModelOutputThunk, Context) if `return_sampling_results` is `False`, else returns a `SamplingResult`.

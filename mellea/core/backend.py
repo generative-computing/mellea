@@ -140,8 +140,37 @@ class Backend(abc.ABC):
 
         Returns:
             a tuple of (ModelOutputThunk, Context) where the Context is the new context after the generation has been completed.
+
+        Raises:
+            ValueError: If the served model is an LLMON model (see
+                `llmon_models.is_llmon_model`) and `format` is not `None`. LLMON has
+                its own grammar, so a Pydantic `format=` is contradictory; use an
+                `LLMONInstruction` with `constrain_output=True` for LLMON-shaped
+                constrained output instead.
         """
         generation_id = str(uuid.uuid4())
+
+        # --- inbound-to-model LLMON encode ---
+        # When the served model speaks LLMON, encode an Instruction action into
+        # Machine LLMON here, in the one shared chokepoint, so every backend gets
+        # the behavior without per-backend code. `is_llmon_model` is dependency-free
+        # (no `llmon` extra to import); the encode helper and `Instruction` are
+        # imported lazily to avoid a core→stdlib cycle and to defer the extra until
+        # a model has matched.
+        from ..stdlib.components.llmon_models import is_llmon_model
+
+        if is_llmon_model(self._model_id):
+            from ..stdlib.components.instruction import Instruction
+
+            if format is not None:
+                raise ValueError(
+                    "format= is not supported against an LLMON model: LLMON has its "
+                    "own grammar, so constraining to a Pydantic schema is "
+                    "contradictory. Use LLMONInstruction(constrain_output=True) for "
+                    "LLMON-shaped constrained output instead."
+                )
+            if isinstance(action, Instruction):
+                action = _llmon_encoded(action)
 
         # --- generation_pre_call hook ---
         if has_plugins(HookType.GENERATION_PRE_CALL):
@@ -398,6 +427,59 @@ class Backend(abc.ABC):
                 f"generate_from_chat_context awaited on {len(_to_compute)} uncomputed mots."
             )
         await asyncio.gather(*coroutines)
+
+
+# Cache of per-origin-class LLMON-encoding subclasses, so repeated calls (e.g. each
+# rejection-sampling attempt) reuse one dynamic class rather than minting a new one.
+_LLMON_ENCODED_CLASSES: dict[type, type] = {}
+
+
+def _llmon_encoded(action: Any) -> Any:
+    """Return an LLMON-encoding view of an `Instruction` without mutating it.
+
+    Produces a deep copy of `action` whose only behavioral change is that
+    `format_for_llm` emits the instruction encoded as a Machine-LLMON object (via
+    `encode_instruction_for_llmon`) through the shared `Message` template. Every
+    other field and method — including `output_grammar`, so an
+    `LLMONInstruction(constrain_output=True)` keeps its hard-mode grammar — is
+    inherited unchanged, because the copy's class is a subclass of the original
+    action's class (`__class__` reassignment, the same pattern
+    `ComputedModelOutputThunk` uses).
+
+    Args:
+        action: The `Instruction` (or subclass) to encode. Never mutated.
+
+    Returns:
+        A deep copy of `action` that renders itself as Machine LLMON.
+    """
+    from copy import deepcopy
+
+    from ..stdlib.components.llmon import encode_instruction_for_llmon
+
+    origin = type(action)
+    encoded_cls = _LLMON_ENCODED_CLASSES.get(origin)
+    if encoded_cls is None:
+        from .base import TemplateRepresentation
+
+        def format_for_llm(self: Any) -> "TemplateRepresentation":
+            """Render this instruction as a Machine-LLMON object."""
+            return TemplateRepresentation(
+                obj=self,
+                args={"content": encode_instruction_for_llmon(self)},
+                template_order=["*", "Message"],
+                role="user",
+            )
+
+        encoded_cls = type(
+            f"_LLMONEncoded_{origin.__name__}",
+            (origin,),
+            {"format_for_llm": format_for_llm},
+        )
+        _LLMON_ENCODED_CLASSES[origin] = encoded_cls
+
+    wrapped = deepcopy(action)
+    wrapped.__class__ = encoded_cls
+    return wrapped
 
 
 def generate_walk(c: Span) -> list[ModelOutputThunk]:

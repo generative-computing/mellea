@@ -10,30 +10,41 @@ the *input* is deployment-dependent — the tested `llmon95:latest` Ollama model
 a passthrough chat template and relies on the weights, so Mellea owns both
 directions if structured input is wanted. See `LLMON-SUMMARY.md`.
 
-This module provides three primitives:
+Both directions are driven automatically by the served model id (see
+`llmon_models.is_llmon_model`): the backend chokepoint
+(`Backend.generate_from_context`) encodes input, and the parse seam
+(`ModelOutputThunk._set_parsed_repr`) strips the reply. Both import this module
+lazily, only once a model has matched, so `mellea.core` never requires the `llmon`
+extra. This module provides the primitives:
 
 - `parse_llmon_reply` (reply-in): detects the Machine-LLMON open token and, if
   present, extracts the assistant block's plain text; otherwise returns the reply
   unchanged. Robust to the partial/garbled fragments a served model returns. This
-  is what `LLMONInstruction._parse` delegates to.
-- `encode_llmon_input` (out-direction): encodes an instruction (and optional data)
-  into a Machine-LLMON `instr`/`data` object, the structured input the model was
-  trained to read. This is what `LLMONInstruction.format_for_llm` uses when
-  `llmonize_input=True`.
+  is what the parse seam delegates to for an LLMON model.
+- `encode_llmon_input` (out-direction): encodes an instruction (and optional
+  data/requirements) into a Machine-LLMON `instr`/`data`/`req` object, the
+  structured input the model was trained to read.
+- `encode_instruction_for_llmon` (out-direction): maps a Mellea `Instruction`'s
+  fields onto `encode_llmon_input`. This is what the backend chokepoint calls to
+  LLMONize an instruction for an LLMON model.
 - `llmon_grammar` (hard mode): returns a GBNF grammar for the Machine-LLMON reply
   object, for constrained decoding. This is what `LLMONInstruction.output_grammar`
   returns when `constrain_output=True`, so a grammar-aware backend (the HuggingFace
   llguidance path; vLLM via `guided_grammar`) can mask generation to valid LLMON.
 
-The first two delegate the token/grammar work to the `llmon` library; the grammar
-is built from the library's Machine-LLMON terminal constants. The `llmon` library
-is an optional dependency installed via `pip install "mellea[llmon]"`.
+These delegate the token/grammar work to the `llmon` library; the grammar is built
+from the library's Machine-LLMON terminal constants. The `llmon` library is an
+optional dependency installed via `pip install "mellea[llmon]"`.
 """
 
 from __future__ import annotations
 
 import json
 import re
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .instruction import Instruction
 
 try:
     from lang.common import common as _llmon_common
@@ -204,6 +215,60 @@ def encode_llmon_input(
     # `llmon → mellea.core` back-import.
     converter = LLMONConverters(converting_to_json=False)
     return converter.json_dict_to_llmon_str(obj, compact=True)
+
+
+def encode_instruction_for_llmon(instruction: Instruction) -> str:
+    """Encode a Mellea `Instruction` as a Machine-LLMON input object.
+
+    Pulls the fields an LLMON model should receive off an `Instruction` and
+    delegates to `encode_llmon_input`. This is the single place that knows how an
+    `Instruction` maps onto the LLMON `instr`/`data`/`req` object; the backend
+    chokepoint calls it (lazily, so `mellea.core` need not import the `llmon`
+    extra) when the served model is an LLMON model.
+
+    Mapping:
+
+    - `instr` is the instruction description. Any pending `_repair_string` (the
+      rejection-sampling repair feedback the base `Instruction` template renders
+      into its prose prompt) is appended to the instruction text, so repair is not
+      silently dropped on an LLMON model.
+    - `data` is the grounding context: the sole document's text when exactly one is
+      present, or a `{label: text}` dict when several are, mirroring the base
+      `Instruction`'s keyed grounding rendering. Omitted when there is none.
+    - `req` is the requirement descriptions, filtered the same way the base
+      `Instruction` template filters them (non-empty, not `check_only`).
+
+    Args:
+        instruction: The instruction to encode. Field access is duck-typed, so any
+            `Instruction` subclass works.
+
+    Returns:
+        A compact Machine-LLMON object string ready to send to an LLMON model.
+    """
+    description = (
+        str(instruction._description) if instruction._description is not None else ""
+    )
+    repair = getattr(instruction, "_repair_string", None)
+    if repair:
+        # The base Instruction template renders repair feedback into the prose
+        # prompt; fold it into `instr` so an LLMON model sees it too.
+        description = f"{description}\n\n{repair}"
+
+    data: str | dict[str, str] | None = None
+    grounding = instruction._grounding_context
+    if len(grounding) == 1:
+        (doc,) = grounding.values()
+        data = str(doc)
+    elif len(grounding) > 1:
+        data = {key: str(doc) for key, doc in grounding.items()}
+
+    requirements = [
+        r.description
+        for r in instruction._requirements
+        if r.description is not None and r.description != "" and not r.check_only
+    ]
+
+    return encode_llmon_input(description, data, requirements or None)
 
 
 def parse_llmon_reply(text: str) -> str:

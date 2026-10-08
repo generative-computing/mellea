@@ -4,11 +4,14 @@
 """E2E round-trip against a served LLMON-trained model over chat-completions.
 
 An LLMON model's behavior lives in its fine-tuned weights, not a server chat
-template, so Mellea drives it through the ordinary OpenAI-compatible chat backend
-and lets `LLMONInstruction` own the LLMON work (robust reply parsing on the way
-back, optional Machine-LLMON encoding on the way out). This exercises that full
-served path end-to-end — the thing the unit tests in `test_llmon_instruction.py`
-deliberately do not cover.
+template, so Mellea drives it through the ordinary OpenAI-compatible chat backend.
+The LLMON work is now **automatic and model-driven**: because the served model id
+is in the allowlist (`llmon_models.is_llmon_model`), a plain `m.instruct(prompt)`
+is encoded into Machine LLMON on the way out (in `Backend.generate_from_context`)
+and the reply is stripped back to plain text on the way in (in
+`ModelOutputThunk._set_parsed_repr`) — no `instruction_cls` or per-call flag. This
+exercises that full served path end-to-end — the thing the unit tests in
+`test_llmon_instruction.py` deliberately do not cover.
 
 Gating (all three must pass, else the module skips cleanly):
 
@@ -35,7 +38,6 @@ import requests
 import mellea
 from mellea.backends.openai import OpenAIBackend
 from mellea.core import SamplingResult
-from mellea.stdlib.components.llmon_instruction import LLMONInstruction, LLMONResult
 
 # Served endpoint + model. The model id is a placeholder sentinel until a real
 # LLMON model is wired into CI: `_is_placeholder` below gates the module off while
@@ -90,49 +92,27 @@ def llmon_session() -> mellea.MelleaSession:
     )
 
 
-def test_served_instruct_round_trip_returns_plain_text(llmon_session):
-    """`m.instruct` with `instruction_cls=LLMONInstruction` yields plain text.
+def _print_round_trip(
+    title: str, model_id: str, prompt: str, user_variables: dict, thunk, parsed
+) -> None:
+    """Print one LLMON round-trip so `pytest -s` shows what crossed the wire.
 
-    Runs with `llmonize_input=True`, so `format_for_llm` encodes the instruction
-    into a Machine-LLMON `instr`/`data` object before it is sent — the wire input
-    is LLMON markup, not plain prose. Whether the model replies with raw
-    Machine-LLMON or already-detokenized prose, `LLMONInstruction._parse` must
-    still land on an `LLMONResult` whose string value is plain text with no LLMON
-    markup.
+    Shows the prompt template + user vars the test supplied, the exact chat
+    payload Mellea actually sent (`generate_log.prompt` — the rendered messages,
+    LLMON-encoded when `llmonize_input=True`), the raw bytes the model emitted
+    (possibly Machine LLMON), and the plain text LLMON parsing extracted. Values
+    are printed directly (not `repr`'d) so embedded newlines render as newlines.
     """
-    prompt = "Summarise this customer feedback in one sentence: {{text}}"
-    user_variables = {"text": "loved the product, but shipping was very slow"}
-
-    result = llmon_session.instruct(
-        prompt,
-        requirements=[
-            "The summary must be a single sentence.",
-            "Include both positive and negative aspects if both are present.",
-        ],
-        user_variables=user_variables,
-        instruction_cls=LLMONInstruction,
-        # Encode the input as Machine LLMON on the way out (opt-in; default False).
-        instruction_kwargs={"llmonize_input": True},
-    )
-
-    thunk = result.result if isinstance(result, SamplingResult) else result
-    parsed = thunk.parsed_repr
-
-    # Print the round-trip so `pytest -s` shows what Mellea and LLMON exchanged:
-    # the prompt template + user vars the test supplied, the exact chat payload
-    # Mellea actually sent on the wire (`generate_log.prompt` — here the
-    # LLMON-encoded messages, since llmonize_input=True), the raw bytes the model
-    # emitted (possibly Machine LLMON), and the plain text LLMON parsing extracted.
     wire_messages = thunk._generate_log.prompt if thunk._generate_log else None
 
     print("\n" + "=" * 72)
-    print("LLMON ROUND-TRIP")
+    print(title)
     print("=" * 72)
-    print(f"MODEL:            {_LLMON_MODEL_ID}  @  {_LLMON_BASE_URL}")
+    print(f"MODEL:            {model_id}  @  {_LLMON_BASE_URL}")
     print(f"PROMPT TEMPLATE:  {prompt}")
     print(f"USER VARIABLES:   {user_variables}")
     print("-" * 72)
-    print("WIRE INPUT (generate_log.prompt — LLMON-encoded messages sent to model):")
+    print("WIRE INPUT (generate_log.prompt — messages sent to model):")
     if isinstance(wire_messages, list):
         for i, msg in enumerate(wire_messages):
             role = msg.get("role", "?") if isinstance(msg, dict) else "?"
@@ -145,11 +125,44 @@ def test_served_instruct_round_trip_returns_plain_text(llmon_session):
     print("RAW MODEL OUTPUT (thunk.value, pre-parse):")
     print(thunk.value)
     print("-" * 72)
-    print("PARSED RESULT (LLMONResult, str()):")
+    print("PARSED RESULT (parsed_repr, str()):")
     print(str(parsed))
     print("=" * 72)
 
-    assert isinstance(parsed, LLMONResult)
+
+def test_served_instruct_round_trip_returns_plain_text(llmon_session):
+    """A plain `m.instruct` against an LLMON model auto-strips to plain text.
+
+    No `instruction_cls`, no flags: because the served model is in the allowlist,
+    the instruction is auto-encoded into Machine LLMON on the way out and the reply
+    is auto-stripped on the way in. Whether the model replies with raw Machine
+    LLMON or already-detokenized prose, `parsed_repr` must be a plain `str` with no
+    LLMON markup.
+    """
+    prompt = "Summarise this customer feedback in one sentence: {{text}}"
+    user_variables = {"text": "loved the product, but shipping was very slow"}
+
+    result = llmon_session.instruct(
+        prompt,
+        requirements=[
+            "The summary must be a single sentence.",
+            "Include both positive and negative aspects if both are present.",
+        ],
+        user_variables=user_variables,
+    )
+
+    thunk = result.result if isinstance(result, SamplingResult) else result
+    parsed = thunk.parsed_repr
+
+    _print_round_trip(
+        "LLMON MODEL — automatic encode + strip",
+        _LLMON_MODEL_ID,
+        prompt,
+        user_variables,
+        thunk,
+        parsed,
+    )
+
     text = str(parsed)
     assert text  # non-empty answer
     # The parsed value is always plain text — never raw LLMON markup.

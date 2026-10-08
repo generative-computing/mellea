@@ -1,14 +1,18 @@
 # Copyright IBM Corp. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Unit tests for the library-backed LLMON reply round-trip.
+"""Unit tests for the automatic, model-driven LLMON round-trip.
 
-`LLMONInstruction` is an opt-in `Instruction` for talking to an LLMON model
-(arXiv:2603.22519) served behind a chat-completions endpoint: the server owns
-serialization, so on the way in Mellea sends a plain message and on the way back
-`_parse` runs `parse_llmon_reply` to strip any raw Machine-LLMON markup. These
-tests cover the reply helper and the component's `_parse`/`format=` contract; the
-served endpoint itself is exercised by the e2e example, not here.
+For a served model in the LLMON allowlist (`llmon_models.is_llmon_model`), Mellea
+encodes an `Instruction` into Machine LLMON in the shared backend chokepoint and
+strips any Machine LLMON out of the reply in `ModelOutputThunk._set_parsed_repr` —
+no `LLMONInstruction` or per-call flag needed. `LLMONInstruction` remains only to
+opt into hard-mode output grammar via `constrain_output`.
+
+These tests cover the reply/encode helpers, the allowlist, the encode helper
+`encode_instruction_for_llmon`, and the `LLMONInstruction` grammar/`format=`
+contract. The two core seams and the served endpoint are exercised by the e2e
+example and the backend/base unit tests.
 """
 
 import pytest
@@ -17,13 +21,16 @@ import pytest
 # whole module when the `llmon` library (import root `lang`) is absent.
 pytest.importorskip("lang.json.llmon_converters")
 
+from mellea.stdlib.components.instruction import Instruction
 from mellea.stdlib.components.llmon import (
+    encode_instruction_for_llmon,
     encode_llmon_input,
     is_llmon,
     llmon_grammar,
     parse_llmon_reply,
 )
-from mellea.stdlib.components.llmon_instruction import LLMONInstruction, LLMONResult
+from mellea.stdlib.components.llmon_instruction import LLMONInstruction
+from mellea.stdlib.components.llmon_models import is_llmon_model
 
 # A raw Machine-LLMON assistant block, as a server that returns un-detokenized
 # tokens would send it: `<|open|>assistant<|:|>ID<|close|> TEXT <|open_end|>...`.
@@ -33,11 +40,17 @@ _ASSISTANT_BLOCK = (
 )
 
 
-class _FakeThunk:
-    """Minimal stand-in for a computed `ModelOutputThunk` (only `.value` used)."""
+class TestIsLLMONModel:
+    """The allowlist is dependency-free and gates both seams by resolved model id."""
 
-    def __init__(self, value: str | None) -> None:
-        self.value = value
+    def test_known_model_matches(self):
+        assert is_llmon_model("llmon95:latest") is True
+
+    def test_none_is_not_a_match(self):
+        assert is_llmon_model(None) is False
+
+    def test_arbitrary_model_is_not_a_match(self):
+        assert is_llmon_model("granite4.2:3b") is False
 
 
 class TestParseLLMONReply:
@@ -120,46 +133,6 @@ class TestLenientFallback:
         assert parse_llmon_reply(fragment) == fragment
 
 
-class TestParseBack:
-    """`_parse` turns a llmonized reply into an `LLMONResult` component."""
-
-    def test_parses_assistant_block(self):
-        instr = LLMONInstruction("Task.")
-        result = instr._parse(_FakeThunk(_ASSISTANT_BLOCK))
-        assert isinstance(result, LLMONResult)
-        assert str(result) == "the answer"
-
-    def test_non_llmon_reply_falls_back_to_text(self):
-        instr = LLMONInstruction("Task.")
-        result = instr._parse(_FakeThunk("plain text answer"))
-        assert isinstance(result, LLMONResult)
-        assert str(result) == "plain text answer"
-
-    def test_none_value_is_empty(self):
-        instr = LLMONInstruction("Task.")
-        result = instr._parse(_FakeThunk(None))
-        assert str(result) == ""
-
-    def test_result_format_for_llm_is_assistant_role(self):
-        instr = LLMONInstruction("Task.")
-        result = instr._parse(_FakeThunk("hi"))
-        tr = result.format_for_llm()
-        assert tr.role == "assistant"
-        assert tr.args["content"] == "hi"
-
-    def test_result_renders_through_template_formatter(self):
-        # Regression: an LLMONResult must render through the real formatter without
-        # raising "could not find template candidate". The requirement-validation
-        # path re-renders a judged output's parsed_repr, so a missing template
-        # there crashed every requirements=[...] round-trip. The result falls back
-        # to the shared Message template, which emits the content verbatim.
-        from mellea.formatters.template_formatter import TemplateFormatter
-
-        result = LLMONInstruction("Task.")._parse(_FakeThunk("the clean answer"))
-        rendered = TemplateFormatter(model_id="default").print(result)
-        assert rendered == "the clean answer"
-
-
 class TestFormatRejection:
     """LLMON mode rejects a Pydantic `format` (LLMON has its own grammar)."""
 
@@ -227,127 +200,123 @@ class TestEncodeLLMONInput:
         assert "only text" in encoded
 
 
-class TestLLMONizeInput:
-    """`llmonize_input=True` sends a Machine-LLMON object instead of plain prose."""
+class TestEncodeInstructionForLLMON:
+    """`encode_instruction_for_llmon` maps an `Instruction`'s fields onto the encoder.
 
-    def test_default_is_plain_prose(self):
-        # Without the flag, format_for_llm defers to Instruction's prose rendering
-        # (template_order includes "Instruction"), not a llmonized object.
-        instr = LLMONInstruction("Summarize this.")
-        tr = instr.format_for_llm()
-        assert "Instruction" in (tr.template_order or [])
-        assert "content" not in tr.args  # prose path uses description/requirements
+    This is what the backend chokepoint calls to LLMONize an instruction for an
+    LLMON model; it replaces the old `LLMONInstruction(llmonize_input=True)` path.
+    """
 
-    def test_llmonize_input_encodes_instruction(self):
-        instr = LLMONInstruction("Summarize this.", llmonize_input=True)
-        tr = instr.format_for_llm()
-        content = tr.args["content"]
+    def test_instruction_only(self):
+        content = encode_instruction_for_llmon(Instruction("Summarize this."))
         assert is_llmon(content)
         assert parse_llmon_reply(content) == "Summarize this."
-        assert tr.role == "user"
 
-    def test_llmonize_input_encodes_requirements(self):
-        # Requirements must reach the wire in llmonized mode: the model is told the
-        # same constraints the sampling strategy validates against. (Regression:
-        # the llmonized path previously dropped requirements entirely, so the model
-        # was graded on a rubric it never saw — see LLMON-SANITIZATION.md.)
-        instr = LLMONInstruction(
-            "Summarize this.",
-            requirements=["must be one sentence"],
-            llmonize_input=True,
+    def test_requirements_encoded(self):
+        # Requirements must reach the wire: the model is told the same constraints
+        # the sampling strategy validates against.
+        content = encode_instruction_for_llmon(
+            Instruction("Summarize this.", requirements=["must be one sentence"])
         )
-        content = str(instr.format_for_llm().args["content"])
         assert "req<|close|>" in content
         assert "must be one sentence" in content
 
-    def test_llmonize_input_excludes_check_only_requirements(self):
+    def test_check_only_requirements_excluded(self):
         # Mirrors the base Instruction prompt filter: a check_only requirement is
         # validation-only and must not be shown to the model.
         from mellea.core.requirement import Requirement
 
-        instr = LLMONInstruction(
-            "Do it.",
-            requirements=[
-                Requirement("internal grading note", check_only=True),
-                "show this to the model",
-            ],
-            llmonize_input=True,
+        content = encode_instruction_for_llmon(
+            Instruction(
+                "Do it.",
+                requirements=[
+                    Requirement("internal grading note", check_only=True),
+                    "show this to the model",
+                ],
+            )
         )
-        content = str(instr.format_for_llm().args["content"])
         assert "internal grading note" not in content
         assert "show this to the model" in content
 
-    def test_llmonize_input_encodes_single_grounding_doc_as_scalar(self):
-        instr = LLMONInstruction(
-            "Summarize the document.",
-            grounding_context={"doc1": "alpha text"},
-            llmonize_input=True,
+    def test_single_grounding_doc_is_scalar(self):
+        content = encode_instruction_for_llmon(
+            Instruction(
+                "Summarize the document.", grounding_context={"doc1": "alpha text"}
+            )
         )
-        content = str(instr.format_for_llm().args["content"])
         assert "alpha text" in content
         # One document is a scalar data member, not a nested keyed object.
         assert "data<|.|>" not in content
 
-    def test_llmonize_input_encodes_all_grounding_docs(self):
-        # All grounding documents must reach the wire, keyed by name. (Regression:
-        # the llmonized path previously encoded a document only when exactly one was
-        # present and silently fell back to prose for several — dropping them from
-        # the LLMON object — see LLMON-SANITIZATION.md.)
-        instr = LLMONInstruction(
-            "Summarize the documents.",
-            grounding_context={
-                "doc1": "alpha text",
-                "doc2": "beta text",
-                "doc3": "gamma text",
-            },
-            llmonize_input=True,
+    def test_multiple_grounding_docs_are_keyed(self):
+        # All grounding documents must reach the wire, keyed by name.
+        content = encode_instruction_for_llmon(
+            Instruction(
+                "Summarize the documents.",
+                grounding_context={
+                    "doc1": "alpha text",
+                    "doc2": "beta text",
+                    "doc3": "gamma text",
+                },
+            )
         )
-        content = str(instr.format_for_llm().args["content"])
-        assert "alpha text" in content
-        assert "beta text" in content
-        assert "gamma text" in content
-        # Several documents are a keyed object, one member per grounding key.
         assert "data<|.|>doc1" in content
         assert "data<|.|>doc2" in content
         assert "data<|.|>doc3" in content
+        assert "alpha text" in content
+        assert "beta text" in content
+        assert "gamma text" in content
 
-    def test_llmonize_input_encodes_requirements_and_multiple_docs_together(self):
-        # The full llmonized object: instruction + requirements (req list) + several
-        # grounding documents (keyed data object), all present in one valid
-        # Machine-LLMON object. Exercises the three members at once, since the
-        # per-member tests cover them in isolation.
-        instr = LLMONInstruction(
-            "Summarize the documents.",
-            requirements=["one sentence", "mention every review"],
-            grounding_context={"review_a": "loved it", "review_b": "shipping slow"},
-            llmonize_input=True,
+    def test_repair_string_folded_into_instruction(self):
+        # Rejection-sampling repair feedback must reach an LLMON model, not be
+        # silently dropped. `copy_and_repair` sets `_repair_string`.
+        repaired = Instruction("Summarize this.").copy_and_repair(
+            "Your last answer was too long; use one sentence."
         )
-        content = str(instr.format_for_llm().args["content"])
-        # Valid LLMON overall. (Not round-tripped through parse_llmon_reply: that is
-        # a *reply* parser for extracting an assistant answer, not an input-object
-        # reader — a multi-member input object is not a reply shape, so it correctly
-        # falls back to raw text. The instruction itself is still present below.)
-        assert is_llmon(content)
-        assert "Summarize the documents." in content
-        # Requirements present as a req list.
-        assert "req<|close|>" in content
-        assert "one sentence" in content
-        assert "mention every review" in content
-        # Both documents present as keyed data members.
-        assert "data<|.|>review_a" in content
-        assert "data<|.|>review_b" in content
-        assert "loved it" in content
-        assert "shipping slow" in content
+        content = encode_instruction_for_llmon(repaired)
+        assert "too long" in content
 
-    def test_llmonize_input_renders_through_formatter(self):
+    def test_renders_through_formatter(self):
         # The pre-encoded Machine-LLMON string must render verbatim via the shared
-        # Message template, with no LLMONInstruction.jinja2.
+        # Message template emitted by the backend's encoding view.
+        from mellea.core.backend import _llmon_encoded
         from mellea.formatters.template_formatter import TemplateFormatter
 
-        instr = LLMONInstruction("Summarize this.", llmonize_input=True)
-        rendered = TemplateFormatter(model_id="default").print(instr)
+        wrapped = _llmon_encoded(Instruction("Summarize this."))
+        rendered = TemplateFormatter(model_id="default").print(wrapped)
         assert is_llmon(rendered)
         assert parse_llmon_reply(rendered) == "Summarize this."
+
+
+class TestLLMONEncodedView:
+    """The backend's `_llmon_encoded` view renders LLMON without mutating the action."""
+
+    def test_does_not_mutate_original(self):
+        from mellea.core.backend import _llmon_encoded
+
+        original = Instruction("Summarize this.")
+        wrapped = _llmon_encoded(original)
+        assert wrapped is not original
+        # The original still renders through the normal Instruction prose template.
+        assert "Instruction" in (original.format_for_llm().template_order or [])
+
+    def test_view_renders_machine_llmon(self):
+        from mellea.core.backend import _llmon_encoded
+
+        tr = _llmon_encoded(Instruction("Summarize this.")).format_for_llm()
+        assert is_llmon(tr.args["content"])
+        assert tr.role == "user"
+
+    def test_view_preserves_output_grammar(self):
+        # Risk E: wrapping an LLMONInstruction(constrain_output=True) must not drop
+        # the hard-mode grammar hook. The view subclasses the origin class, so
+        # output_grammar is inherited.
+        from mellea.core.backend import _llmon_encoded
+
+        wrapped = _llmon_encoded(LLMONInstruction("Task.", constrain_output=True))
+        spec = wrapped.output_grammar()
+        assert spec is not None
+        assert spec == (llmon_grammar(), "gbnf")
 
 
 class TestLLMONGrammar:
@@ -401,10 +370,3 @@ class TestConstrainOutput:
         grammar_text, syntax = spec
         assert syntax == "gbnf"
         assert grammar_text == llmon_grammar()
-
-    def test_orthogonal_to_llmonize_input(self):
-        # The two flags are independent and may be combined.
-        instr = LLMONInstruction("Task.", llmonize_input=True, constrain_output=True)
-        assert instr._llmonize_input is True
-        assert instr._constrain_output is True
-        assert instr.output_grammar() is not None

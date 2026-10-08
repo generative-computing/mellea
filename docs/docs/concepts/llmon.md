@@ -1,6 +1,6 @@
 ---
 title: "LLMON (LLM Object Notation)"
-description: "How Mellea talks to an LLMON-trained model over a chat-completions endpoint: LLMONInstruction parses the reply back to plain text and can optionally encode structured input, with no new backend."
+description: "How Mellea talks to an LLMON-trained model over a chat-completions endpoint: input encoding and reply parsing happen automatically, gated by the served model id, with no new backend."
 # diataxis: explanation
 sidebar_label: "LLMON"
 ---
@@ -23,13 +23,27 @@ LLMONizes **in the weights**. Its chat template is a bare passthrough
 (`{{ .Prompt }}`) with no system prompt and no `chat_template` in the GGUF
 metadata: the server adds no LLMON structure at all. The model nonetheless emits
 Machine LLMON in its replies and will infer `instr`/`exec`/`data` structure even
-from a plain prompt. (An earlier version of this page claimed the server owns
-serialization; that is false for this deployment and has been corrected.)
+from a plain prompt.
 
 The practical consequence: Mellea's ordinary chat backends suffice (no new
-backend, no formatter swap), and `LLMONInstruction` owns whatever LLMON work is
-wanted on the Mellea side — always parsing the reply, and optionally encoding the
-input.
+backend, no formatter swap), and Mellea owns the LLMON work on the client side.
+
+## Automatic, model-driven round-trip
+
+The LLMON round-trip is **automatic** and keyed off the served model id. An
+allowlist (`mellea.stdlib.components.llmon_models.is_llmon_model`, seeded with
+`llmon95:latest`) gates two core seams:
+
+- **Inbound to the model (encode):** `Backend.generate_from_context` — the one
+  shared chokepoint every backend funnels through — encodes an `Instruction` into
+  a Machine-LLMON `instr`/`data`/`req` object before it is sent, so the model
+  receives explicit instruction/data/requirement boundaries.
+- **Outbound from the model (strip):** `ModelOutputThunk._set_parsed_repr` strips
+  any raw Machine LLMON out of the reply, so the thunk's `parsed_repr` is always
+  plain text — never markup.
+
+So a plain `m.instruct(prompt)` against an allowlisted model does the right thing
+with no subclass and no per-call flag:
 
 ```python
 from mellea.backends.openai import OpenAIBackend
@@ -42,28 +56,20 @@ m = MelleaSession(
         api_key="EMPTY",
     )
 )
-answer = m.instruct("Summarise this feedback in one sentence: {{text}}",
-                    user_variables={"text": "loved it, shipping slow"})
-```
-
-## `LLMONInstruction` — reply parsing and optional input encoding
-
-Opt in via `instruction_cls`. The returned value is always **plain text** — an
-`LLMONResult` holding the detokenized answer, never LLMON markup:
-
-```python
-from mellea.stdlib.components.llmon_instruction import LLMONInstruction
-
 result = m.instruct(
     "Summarise this feedback in one sentence: {{text}}",
     user_variables={"text": "loved it, shipping slow"},
-    instruction_cls=LLMONInstruction,
 )
+# result's thunk carries the detokenized plain text in parsed_repr.
 ```
 
-### Reply-in (always on)
+A model that is **not** in the allowlist is a pure passthrough: the input is sent
+as ordinary prose and the reply is not run through the LLMON stripper, exactly like
+any other instruct.
 
-`_parse` runs `parse_llmon_reply` on the reply text:
+### Reply parsing details
+
+The strip delegates to `parse_llmon_reply`:
 
 - If the reply contains the Machine-LLMON open token, the assistant block's text
   is extracted and returned as plain prose. The parser is robust to the
@@ -72,33 +78,28 @@ result = m.instruct(
   preamble): it falls back to scanning for the last well-formed assistant block.
 - If the reply is already plain prose, it is returned unchanged.
 
-### Out-direction (opt-in via `llmonize_input=True`)
+Only `parsed_repr` holds the stripped text; the thunk's raw `value` is preserved as
+the original record.
 
-By default the instruction is sent as plain prose — which round-trips, since the
-model infers structure from its weights. Setting `llmonize_input=True` instead
-encodes the instruction (and a single grounding document, when exactly one is
-present, as the `data` member) into a Machine-LLMON `instr`/`data` object, giving
-the model explicit instruction/data boundaries:
+### Input encoding details
 
-```python
-instr = LLMONInstruction("Summarise this feedback.", llmonize_input=True)
-# format_for_llm() now emits:
-#   <|open|>object<|close|><|open|>instr<|close|>Summarise this feedback.…
-```
+The encode delegates to `encode_instruction_for_llmon`, which maps the
+instruction's fields onto a Machine-LLMON object: the description becomes `instr`;
+grounding context becomes `data` (a scalar for a single document, a keyed object
+for several); and the requirement descriptions become a `req` list. Any pending
+rejection-sampling repair feedback is folded into `instr`, so repair is not dropped
+on an LLMON model.
 
-Whether structured input improves a given model's behavior is deployment-dependent
-— it is off by default so the plain path is unchanged.
+## Hard-mode output grammar (`LLMONInstruction`)
 
-### Constrained decoding (soft vs. hard, opt-in via `constrain_output=True`)
-
-By default generation is **soft**: the model is prompted but not enforced. Setting
-`constrain_output=True` is **hard** mode — `output_grammar()` returns the LLMON
-reply-object grammar (`llmon_grammar()`), which a grammar-aware backend uses to
-mask decoding to valid Machine LLMON:
+The automatic encode/strip need no subclass. `LLMONInstruction` remains only to opt
+into **hard-mode** constrained decoding: `constrain_output=True` makes
+`output_grammar()` return the LLMON reply-object grammar (`llmon_grammar()`), which
+a grammar-aware backend uses to mask decoding to valid Machine LLMON. The automatic
+encode still applies (an `LLMONInstruction` is an `Instruction`), so grammar and
+encode compose.
 
 ```python
-instr = LLMONInstruction("Summarise this feedback.", constrain_output=True)
-# or through the normal API:
 m.instruct(
     "Summarise this feedback: {{text}}",
     user_variables={"text": "loved it, shipping slow"},
@@ -119,13 +120,12 @@ Enforcement needs a backend with a grammar hook:
   structured output. The tested `llmon95:latest` is on Ollama, so hard mode cannot
   be enforced against that specific model.
 
-`constrain_output` is orthogonal to `llmonize_input` and may be combined.
+### `format=` is rejected against an LLMON model
 
-### `format=` is rejected
-
-`LLMONInstruction` rejects `format=`: LLMON has its own grammar, so constraining
-the same generation to a Pydantic schema is contradictory. Use `constrain_output`
-(above) for grammar enforcement instead.
+LLMON has its own grammar, so constraining the same generation to a Pydantic schema
+is contradictory. Supplying `format=` against an allowlisted model raises
+`ValueError` at the backend chokepoint, and `LLMONInstruction` rejects `format=` in
+its constructor. Use `constrain_output` (above) for grammar enforcement instead.
 
 ## The `llmon` library dependency
 
@@ -136,17 +136,18 @@ The grammar work is delegated to the sanctioned `llmon` converter library
 pip install "mellea[llmon]"
 ```
 
-The primitives in `mellea.stdlib.components.llmon` are
-`parse_llmon_reply(text: str) -> str` (reply-in),
-`encode_llmon_input(instruction: str, data: str | None) -> str` (out-direction),
-and `llmon_grammar() -> str` (the GBNF grammar for hard mode). All are built from
-the Machine-LLMON terminals in `lang.common.common` /
+The allowlist module `mellea.stdlib.components.llmon_models` is deliberately
+dependency-free so the core seams can gate on the model id without the extra
+installed; the encode/parse primitives in `mellea.stdlib.components.llmon`
+(`parse_llmon_reply`, `encode_llmon_input`, `encode_instruction_for_llmon`,
+`llmon_grammar`) are imported lazily, only once an allowlisted model has matched.
+All are built from the Machine-LLMON terminals in `lang.common.common` /
 `lang.json.llmon_converters.LLMONConverters`.
 
 ## Related
 
 - [Requirements System](requirements-system.md) — a `requirements=[...]` instruct
-  validates each requirement; `LLMONResult` renders back through the shared message
-  template so validation sees the plain text, not raw tokens.
+  validates each requirement; the judge sees the thunk's `parsed_repr` (the
+  detokenized plain text for an LLMON model), not raw tokens.
 - [Context and Sessions](context-and-sessions.md) — how `m.instruct` reaches the
   backend that carries the message to the LLMON model.

@@ -1665,15 +1665,36 @@ class ModelOutputThunk(Generic[S]):
     def _set_parsed_repr(self) -> None:
         """Compute `parsed_repr` from the originating action once the thunk is computed.
 
-        Dispatches on the originating `action`: a `Component` action parses via its
-        own `_parse`; a `ModelOutputThunk` action (a computed thunk reused as the
-        next incoming turn) is re-parsed through `Message._parse` so its role,
-        tool calls, and reasoning survive the round-trip rather than degrading to a
-        raw string; a `CBlock` action keeps its raw string value.
+        For an LLMON model (gated on `generation.model` via
+        `llmon_models.is_llmon_model`) a pre-match short-circuit strips any raw
+        Machine LLMON out of `value` with `parse_llmon_reply` and sets `parsed_repr`
+        to that plain `str`, regardless of action type. This is the outbound-from-model
+        half of the automatic LLMON round-trip; it intentionally skips the per-action
+        recovery below (an LLMON model's reply is detokenized text, not a tool/role
+        turn to reconstruct). `value` itself is left as the raw record.
+
+        Otherwise it dispatches on the originating `action`: a `Component` action
+        parses via its own `_parse`; a `ModelOutputThunk` action (a computed thunk
+        reused as the next incoming turn) is re-parsed through `Message._parse` so
+        its role, tool calls, and reasoning survive the round-trip rather than
+        degrading to a raw string; a `CBlock` action keeps its raw string value.
 
         Raises:
             ValueError: If the thunk has no originating action set.
         """
+        # Outbound-from-model LLMON strip. `is_llmon_model` lives in a
+        # dependency-free module (no `llmon` extra needed to import it), but
+        # `parse_llmon_reply` needs the extra — so both are imported lazily here to
+        # avoid a core→stdlib import cycle, and the heavy one only once a model has
+        # matched (an allowlisted model implies the extra is installed).
+        from ..stdlib.components.llmon_models import is_llmon_model
+
+        if is_llmon_model(self.generation.model) and self.value is not None:
+            from ..stdlib.components.llmon import parse_llmon_reply
+
+            self.parsed_repr = parse_llmon_reply(self.value)  # type: ignore[assignment]
+            return
+
         match self._call.action:
             case Component():
                 self.parsed_repr = self._call.action._parse(self)

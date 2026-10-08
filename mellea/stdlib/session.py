@@ -942,8 +942,8 @@ class MelleaSession(Generic[ContextT]):
             tool_calls: If true, tool calling is enabled.
             images: A list of images to be used in the instruction or None if none.
             audio: A list of audio blocks to be used in the instruction or None if none.
-            instruction_cls: The `Instruction` subclass to construct for this call. Defaults to `Instruction`. Pass an LLMON-aware subclass (e.g. `LLMONInstruction`) to parse the reply back into a Component.
-            instruction_kwargs: Extra keyword arguments splatted into `instruction_cls(...)`, for options a subclass adds beyond the standard ones (e.g. `{"llmonize_input": True}` for `LLMONInstruction`). Ignored by the base `Instruction` since it accepts none.
+            instruction_cls: The `Instruction` subclass to construct for this call. Defaults to `Instruction`. Pass `LLMONInstruction` to opt into LLMON hard-mode output grammar; the LLMON reply-parse and input-encode are automatic for an LLMON model regardless of the class used.
+            instruction_kwargs: Extra keyword arguments splatted into `instruction_cls(...)`, for options a subclass adds beyond the standard ones (e.g. `{"constrain_output": True}` for `LLMONInstruction`). Ignored by the base `Instruction` since it accepts none.
 
         Returns:
             A `ModelOutputThunk` if `return_sampling_results` is `False`,
@@ -1395,8 +1395,8 @@ class MelleaSession(Generic[ContextT]):
             images: A list of images to be used in the instruction or None if none.
             audio: A list of audio blocks to be used in the instruction or None if none.
             await_result: if False and strategy is None, returns uncomputed ModelOutputThunk for streaming. Default is False.
-            instruction_cls: The `Instruction` subclass to construct for this call. Defaults to `Instruction`. Pass an LLMON-aware subclass (e.g. `LLMONInstruction`) to parse the reply back into a Component.
-            instruction_kwargs: Extra keyword arguments splatted into `instruction_cls(...)`, for options a subclass adds beyond the standard ones (e.g. `{"llmonize_input": True}` for `LLMONInstruction`). Ignored by the base `Instruction` since it accepts none.
+            instruction_cls: The `Instruction` subclass to construct for this call. Defaults to `Instruction`. Pass `LLMONInstruction` to opt into LLMON hard-mode output grammar; the LLMON reply-parse and input-encode are automatic for an LLMON model regardless of the class used.
+            instruction_kwargs: Extra keyword arguments splatted into `instruction_cls(...)`, for options a subclass adds beyond the standard ones (e.g. `{"constrain_output": True}` for `LLMONInstruction`). Ignored by the base `Instruction` since it accepts none.
 
         Returns:
             A `ComputedModelOutputThunk` if `strategy` is `None` and `await_results` is `False`,
