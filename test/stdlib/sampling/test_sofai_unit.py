@@ -169,5 +169,70 @@ def test_select_best_attempt_single():
     assert SOFAISamplingStrategy._select_best_attempt(val) == 0
 
 
+# --- repair() / S2 feedback (issue #1497) ---
+
+
+def test_repair_includes_description_when_reason_is_generic():
+    """A generic validator reason must not suppress the requirement description."""
+    from mellea.stdlib.context import ChatContext
+
+    req = Requirement(description="Response must be fewer than 100 words")
+    past_val = [
+        [(req, ValidationResult(result=False, reason="Requirement not satisfied."))]
+    ]
+    action, _ = SOFAISamplingStrategy.repair(
+        ChatContext(), ChatContext(), [], [], past_val
+    )
+    assert isinstance(action, Message)
+    assert "Response must be fewer than 100 words" in action.content
+    assert "Requirement not satisfied." not in action.content
+
+
+def test_repair_appends_meaningful_reason_as_detail():
+    """A meaningful validator reason is appended alongside the description."""
+    from mellea.stdlib.context import ChatContext
+
+    req = Requirement(description="Response must be fewer than 100 words")
+    past_val = [
+        [(req, ValidationResult(result=False, reason="The response was 150 words."))]
+    ]
+    action, _ = SOFAISamplingStrategy.repair(
+        ChatContext(), ChatContext(), [], [], past_val
+    )
+    assert isinstance(action, Message)
+    assert "Response must be fewer than 100 words" in action.content
+    assert "(detail: The response was 150 words.)" in action.content
+
+
+def test_s2_best_attempt_feedback_includes_description_when_reason_is_generic():
+    """The S2 best-attempt prompt keeps the description under a generic reason."""
+    from unittest.mock import MagicMock
+
+    from mellea.core import Backend, ComputedModelOutputThunk, ModelOutputThunk
+    from mellea.stdlib.context import ChatContext
+
+    strategy = SOFAISamplingStrategy(MagicMock(spec=Backend), MagicMock(spec=Backend))
+    req = Requirement(description="State the opening time.")
+    scores = [
+        [(req, ValidationResult(result=False, reason="Requirement not satisfied."))]
+    ]
+    results = [
+        ComputedModelOutputThunk(ModelOutputThunk(value="The museum opens at 9am."))
+    ]
+    action, _ = strategy._prepare_s2_context(
+        "best_attempt",
+        Message("user", "State the museum's opening time."),
+        ChatContext(),
+        ChatContext(),
+        Message("user", "prior"),
+        results,
+        scores,
+        1,
+    )
+    assert isinstance(action, Message)
+    assert "State the opening time." in action.content
+    assert "Requirement not satisfied." not in action.content
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

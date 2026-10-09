@@ -41,6 +41,13 @@ from ...stdlib import functional as mfuncs
 from ..components import Message
 from ..context import ChatContext
 
+# Validator reasons that carry no signal beyond the pass/fail verdict. When a
+# failed validation carries one of these, the repair feedback must still include
+# the requirement description, or the retry turn has no constraint context (#1497).
+_GENERIC_VALIDATION_REASONS = frozenset(
+    {"Requirement not satisfied.", "Requirement satisfied."}
+)
+
 
 class SOFAISamplingStrategy(SamplingStrategy):
     """SOFAI (Slow and Fast AI) two-solver sampling strategy.
@@ -147,12 +154,14 @@ class SOFAISamplingStrategy(SamplingStrategy):
         # Build targeted feedback from validation reasons
         feedback_lines = []
         for req, val_result in failed_items:
-            if val_result.reason:
-                # Use detailed feedback from validator
-                feedback_lines.append(f"* {val_result.reason}")
-            else:
-                # Fallback to requirement description
-                feedback_lines.append(f"* {req.description}")
+            # The requirement description always reaches the model; a generic
+            # validator reason carries no signal and must not suppress it (#1497).
+            feedback_lines.append(f"* {req.description}")
+            if (
+                val_result.reason
+                and val_result.reason not in _GENERIC_VALIDATION_REASONS
+            ):
+                feedback_lines.append(f"  (detail: {val_result.reason})")
 
         repair_message = (
             "The previous attempt failed. Please fix the following issues:\n"
@@ -488,9 +497,14 @@ class SOFAISamplingStrategy(SamplingStrategy):
             ]
             feedback_lines = []
             for req, val in failed_reqs:
-                feedback_lines.append(
-                    f"  - {val.reason if val.reason else req.description}"
+                # Mirror repair(): the description is never suppressed by a
+                # generic reason (#1497).
+                detail = (
+                    f" (detail: {val.reason})"
+                    if val.reason and val.reason not in _GENERIC_VALIDATION_REASONS
+                    else ""
                 )
+                feedback_lines.append(f"  - {req.description}{detail}")
 
             # Extract original problem statement from original_action
             original_prompt = self._extract_action_prompt(original_action)
