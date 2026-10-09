@@ -127,7 +127,7 @@ class TestSOFAIRepair:
         assert isinstance(next_action, Message)
         assert next_action.role == "user"
         assert "Output was too casual" in next_action.content
-        assert "Be formal" not in next_action.content  # Uses reason, not description
+        assert "Be formal" in next_action.content  # Description always included (#1497)
         assert returned_ctx is new_ctx
 
     def test_repair_uses_description_when_no_reason(self):
