@@ -39,23 +39,23 @@ pre-built by IBM, Mellea includes a list of models in `model_id`.
 
 ## Files
 
-### answerability_local_hf.py
+### [answerability_local_hf.py](./answerability_local_hf.py)
 
 Demonstrates `rag.check_answerability()` against a local Granite Switch
 checkpoint using `LocalHFBackend(load_embedded_adapters=True)`.
 
-### answerability_openai.py
+### [answerability_openai.py](./answerability_openai.py)
 
 Demonstrates `rag.check_answerability()` using `OpenAIBackend` with
 `load_embedded_adapters=True` — the simplest way to use adapter functions with Granite
 Switch.
 
-### hallucination_detection_openai.py
+### [hallucination_detection_openai.py](./hallucination_detection_openai.py)
 
 Demonstrates `rag.flag_hallucinated_content()` using `OpenAIBackend` with
 `load_embedded_adapters=True`.
 
-### manual_adapter_loading.py
+### [manual_adapter_loading.py](./manual_adapter_loading.py)
 
 Shows how to manually load embedded adapters using
 `backend.register_embedded_adapter_model(intrinsic_name=...)`. Useful when
@@ -69,5 +69,5 @@ registration.
 ## Related
 
 - [`../intrinsics/`](../intrinsics/) — runtime LoRA/aLoRA adapter functions
-- [Adapter Functions Documentation](../../docs/docs/advanced/intrinsics.md)
+- [Adapter Functions Documentation](../../docs/advanced/intrinsics.md)
 - [Official Granite Switch Documentation](https://github.com/generative-computing/granite-switch)

@@ -4,7 +4,7 @@ This directory contains examples demonstrating the `@generative` decorator for c
 
 ## Files
 
-### generative_stubs.py
+### [generative_stubs.py](./generative_stubs.py)
 Basic introduction to generative stubs with sentiment classification and text summarization.
 
 **Key Features:**
@@ -13,19 +13,19 @@ Basic introduction to generative stubs with sentiment classification and text su
 - Docstrings as prompts for the LLM
 - Simple function composition
 
-### generate_with_context.py
+### [generate_with_context.py](./generate_with_context.py)
 Shows how to use generative stubs with custom context and grounding information.
 
-### generative_gsm8k.py
+### [generative_gsm8k.py](./generative_gsm8k.py)
 Demonstrates using generative stubs for mathematical reasoning tasks (GSM8K dataset).
 
-### generative_stubs_with_requirements.py
+### [generative_stubs_with_requirements.py](./generative_stubs_with_requirements.py)
 Combines generative stubs with requirements for validated outputs.
 
-### investment_advice.py
+### [investment_advice.py](./investment_advice.py)
 A more complex example using generative stubs for financial analysis.
 
-### inter_module_composition/
+### [inter_module_composition/](inter_module_composition/)
 Subdirectory with examples of composing multiple generative functions together.
 
 ## Concepts Demonstrated

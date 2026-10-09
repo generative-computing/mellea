@@ -4,7 +4,7 @@ This directory contains examples demonstrating how to work with Mellea's context
 
 ## Files
 
-### contexts_with_sampling.py
+### [contexts_with_sampling.py](./contexts_with_sampling.py)
 
 Shows how to retrieve and inspect context information when using sampling strategies and validation.
 
@@ -22,19 +22,19 @@ Shows how to retrieve and inspect context information when using sampling strate
 python docs/examples/context/contexts_with_sampling.py
 ```
 
-### window_compactor.py
+### [window_compactor.py](./window_compactor.py)
 
 `WindowCompactor` — opt-in by passing `compactor=` (or the `window_size=` sugar). Demonstrates system-prefix pinning, `pin_system_and_initial_user`, `pin_nothing` (pure last-N), and `size=0` to clear the body.
 
-### threshold_compactor.py
+### [threshold_compactor.py](./threshold_compactor.py)
 
 `ThresholdCompactor` — gate an inner compactor on the conversation's cumulative token size. The reading is taken from the most recent `ModelOutputThunk`'s `total_tokens`, which for a chat backend equals `prompt_tokens` (full conversation history sent to the model) + `completion_tokens` (reply). The gate fires once the running conversation size crosses the threshold; once compaction shrinks the context, the next call produces a smaller reading and the gate closes again.
 
-### custom_compactor.py
+### [custom_compactor.py](./custom_compactor.py)
 
 Implement the `Compactor` protocol with a plain class (no inheritance). Shows Pattern 1 (wired into `ChatContext`) and Pattern 2 (manual `compact()` call).
 
-### react_compaction.py
+### [react_compaction.py](./react_compaction.py)
 
 Compose the ReACT loop with a sync `Compactor`. Two integration points:
 

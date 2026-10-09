@@ -6,7 +6,7 @@ and code generation tasks like plotting.
 
 ## Files
 
-### code_generation_and_execution_bash.py
+### [code_generation_and_execution_bash.py](./code_generation_and_execution_bash.py)
 
 Demonstrates Python code generation with `bash_executor` for CLI data processing tasks.
 Uses `python_tool` for safe code execution and shows how to orchestrate multiple bash
@@ -117,7 +117,7 @@ logs/app_2.log: contains 2 WARN entries
 logs/app_3.log: contains 2 WARN entries
 ```
 
-### code_generation_and_execution.py
+### [code_generation_and_execution.py](./code_generation_and_execution.py)
 
 Demonstrates the complete pipeline of code generation, data extraction, and graph
 visualization. **NOTE: The default tier is `"static"` (no execution). This example uses
@@ -177,7 +177,7 @@ uv run python docs/examples/requirements/code_generation_and_execution.py \
 5. Code execution runs in subprocess with output capture
 6. Graph saved as PNG using headless matplotlib (Agg backend)
 
-### matplotlib_plotting.py
+### [matplotlib_plotting.py](./matplotlib_plotting.py)
 
 Demonstrates how to use matplotlib-specific requirements to validate code that
 generates plots.

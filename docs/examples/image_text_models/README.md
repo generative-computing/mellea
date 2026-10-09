@@ -4,7 +4,7 @@ This directory contains examples for working with vision-language models that ca
 
 ## Files
 
-### vision_ollama_chat.py
+### [vision_ollama_chat.py](./vision_ollama_chat.py)
 Demonstrates using vision models through Ollama backend with chat interface.
 
 **Key Features:**
@@ -12,10 +12,10 @@ Demonstrates using vision models through Ollama backend with chat interface.
 - Using vision models for image understanding
 - Chat-based interaction with images
 
-### vision_openai_examples.py
+### [vision_openai_examples.py](./vision_openai_examples.py)
 Shows how to use OpenAI-compatible vision models (including local VLLM servers).
 
-### vision_litellm_backend.py
+### [vision_litellm_backend.py](./vision_litellm_backend.py)
 Examples using LiteLLM backend for vision model access.
 
 ## Supporting Files

@@ -7,7 +7,7 @@ This directory contains examples of using tool calling (function calling) with M
 
 ## Files
 
-### interpreter_example.py
+### [interpreter_example.py](./interpreter_example.py)
 
 Comprehensive examples of using the code interpreter tool with LLMs.
 
@@ -18,7 +18,7 @@ Comprehensive examples of using the code interpreter tool with LLMs.
 - Validating tool arguments
 - Explicit tier selection for local execution
 
-### smolagents_example.py
+### [smolagents_example.py](./smolagents_example.py)
 Shows how to use pre-built tools from Hugging Face's smolagents library.
 
 **Key Features:**
@@ -28,7 +28,7 @@ Shows how to use pre-built tools from Hugging Face's smolagents library.
 - Converting to Mellea tools with `MelleaTool.from_smolagents()`
 - Using tools from the Hugging Face ecosystem
 
-### python_tool_example.py
+### [python_tool_example.py](./python_tool_example.py)
 
 Demonstrates creating and using custom Python tools with Mellea.
 
@@ -38,7 +38,7 @@ Demonstrates creating and using custom Python tools with Mellea.
 - Tool registration and discovery
 - Integrating custom tools with LLM calls
 
-### tool_decorator_example.py
+### [tool_decorator_example.py](./tool_decorator_example.py)
 
 Shows how to use the `@tool` decorator for tool definition.
 

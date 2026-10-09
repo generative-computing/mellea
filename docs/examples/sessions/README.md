@@ -4,7 +4,7 @@ This directory contains examples of creating and customizing Mellea sessions.
 
 ## Files
 
-### creating_a_new_type_of_session.py
+### [creating_a_new_type_of_session.py](./creating_a_new_type_of_session.py)
 Demonstrates how to create custom session types with specialized behavior.
 
 **Key Features:**

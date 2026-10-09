@@ -4,7 +4,7 @@ This directory contains helper functions and utilities used across multiple exam
 
 ## Files
 
-### helpers.py
+### [helpers.py](./helpers.py)
 Common utility functions used by example scripts.
 
 **Key Functions:**
