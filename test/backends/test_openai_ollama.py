@@ -384,6 +384,57 @@ async def test_reasoning_effort_conditional_passing(gh_run: int) -> None:
     await backend.aclose()
 
 
+async def test_reasoning_effort_none_omitted_for_real_openai() -> None:
+    """#270: a non-reasoning OpenAI model (e.g. gpt-4o) rejects `reasoning_effort`
+    outright, so `reasoning_effort="none"` must not be sent to a real OpenAI
+    server — mirroring the existing bool-False case, which already skips it there.
+    A non-"none" string (an explicit reasoning-effort level for a model that does
+    support it) must still pass through unchanged.
+    """
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    backend = OpenAIBackend(
+        model_id="gpt-4o", api_key="test-api-key", base_url="https://api.openai.com/v1"
+    )
+
+    ctx = ChatContext()
+    ctx = ctx.add(CBlock(value="Test"))
+
+    mock_response = MagicMock()
+    mock_response.choices = [MagicMock()]
+    mock_response.choices[0].message = MagicMock()
+    mock_response.choices[0].message.content = "Response"
+    mock_response.choices[0].message.role = "assistant"
+
+    with patch.object(
+        backend._async_client.chat.completions, "create", new_callable=AsyncMock
+    ) as mock_create:
+        mock_create.return_value = mock_response
+        await backend.generate_from_chat_context(
+            CBlock(value="Hi"), ctx, model_options={"reasoning_effort": "none"}
+        )
+        call_kwargs = mock_create.call_args.kwargs
+        assert "reasoning_effort" not in call_kwargs, (
+            "a real OpenAI server 400s on reasoning_effort for a non-reasoning "
+            "model regardless of value, so 'none' must be omitted rather than sent"
+        )
+
+    with patch.object(
+        backend._async_client.chat.completions, "create", new_callable=AsyncMock
+    ) as mock_create:
+        mock_create.return_value = mock_response
+        await backend.generate_from_chat_context(
+            CBlock(value="Hi"), ctx, model_options={"reasoning_effort": "medium"}
+        )
+        call_kwargs = mock_create.call_args.kwargs
+        assert call_kwargs.get("reasoning_effort") == "medium", (
+            "an explicit non-'none' level must still pass through to real OpenAI "
+            "(e.g. a genuine reasoning model)"
+        )
+
+    await backend.aclose()
+
+
 def test_api_key_and_base_url_from_parameters() -> None:
     """Test that API key and base URL can be set via parameters."""
     backend = OpenAIBackend(
