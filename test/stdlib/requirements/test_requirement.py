@@ -1,6 +1,7 @@
 # Copyright IBM Corp. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+import asyncio
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -95,6 +96,24 @@ async def test_validate_awaits_async_validation_fn():
     )
     assert not result.as_bool()
     assert result.reason == "Requirement not satisfied."
+
+
+async def test_validate_awaits_non_coroutine_awaitable_validation_fn():
+    """A validation_fn returning a Future (an awaitable, not a coroutine) is awaited."""
+
+    def future_validator(_ctx):
+        fut = asyncio.get_running_loop().create_future()
+        fut.set_result(ValidationResult(False, reason="from future"))
+        return fut
+
+    requirement = Requirement(description="must fail", validation_fn=future_validator)
+    result = await requirement.validate(None, ctx)
+
+    assert isinstance(result, ValidationResult), (
+        f"expected a ValidationResult, got {type(result)}"
+    )
+    assert not result.as_bool()
+    assert result.reason == "from future"
 
 
 async def test_validate_returns_sync_validation_fn_result_unchanged():

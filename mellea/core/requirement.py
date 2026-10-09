@@ -13,8 +13,9 @@ Helper factories such as `default_output_to_bool` make it easy to build requirem
 without boilerplate.
 """
 
+import inspect
 import re
-from collections.abc import Callable, Coroutine
+from collections.abc import Awaitable, Callable
 from copy import copy
 from dataclasses import dataclass
 from typing import Literal, final
@@ -290,8 +291,9 @@ class Requirement(Component[str]):
     Args:
         description (str | None): A natural-language description of the requirement. Sometimes included in
             `Instruction` prompts; use `check_only=True` to suppress this.
-        validation_fn (Callable[[Context], ValidationResult] | None): If provided, this function is executed
-            instead of LLM-as-a-Judge. The `bool()` of its return value defines pass/fail.
+        validation_fn (Callable[[Context], ValidationResult | Awaitable[ValidationResult]] | None): If provided, this function is executed
+            instead of LLM-as-a-Judge. May be sync or async (an awaitable result is awaited by
+            `validate`). The `bool()` of its return value defines pass/fail.
         output_to_bool (Callable[[CBlock | ModelOutputThunk | str], bool] | None): Translates LLM-as-a-Judge output to a boolean.
             Defaults to a "yes"-detection heuristic. May raise if the output does not match
             the expected format — see `validate` for details.
@@ -305,7 +307,7 @@ class Requirement(Component[str]):
         description (str | None): A natural-language description of the requirement.
         output_to_bool (Callable[[CBlock | ModelOutputThunk | str], bool] | None): Function used to convert LLM-as-a-Judge
             output into a boolean pass/fail result.
-        validation_fn (Callable[[Context], ValidationResult] | None): Optional custom validation
+        validation_fn (Callable[[Context], ValidationResult | Awaitable[ValidationResult]] | None): Optional custom validation
             function that bypasses the LLM-as-a-Judge strategy entirely.
         check_only (bool): When `True`, the requirement description is excluded from `Instruction`
             prompts to avoid influencing model output.
@@ -315,7 +317,10 @@ class Requirement(Component[str]):
     def __init__(
         self,
         description: str | None = None,
-        validation_fn: Callable[[Context], ValidationResult] | None = None,
+        validation_fn: Callable[
+            [Context], ValidationResult | Awaitable[ValidationResult]
+        ]
+        | None = None,
         *,
         output_to_bool: Callable[[CBlock | ModelOutputThunk | str], bool]
         | None = default_output_to_bool,
@@ -404,7 +409,7 @@ class Requirement(Component[str]):
             # into a ValidationResult instead of a truthy coroutine that fails
             # every downstream check open (#1728).
             raw = self.validation_fn(ctx)
-            if isinstance(raw, Coroutine):
+            if inspect.isawaitable(raw):
                 raw = await raw
             return raw
         else:
