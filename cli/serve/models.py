@@ -4,18 +4,38 @@
 # Re-exported so callers can import from cli.serve.models instead of mellea.serve.models
 __all__ = [
     "ChatMessage",
+    "ContextManagementConfig",
     "ImageUrlContent",
     "InputAudioContent",
     "InputAudioData",
+    "InputContent",
     "MessageContent",
+    "OutputTextContent",
+    "PromptCacheOptions",
+    "Response",
+    "ResponseError",
+    "ResponseFunctionCall",
+    "ResponseInputItem",
+    "ResponseOutputItem",
+    "ResponseOutputMessage",
+    "ResponseRequest",
+    "ResponseTool",
+    "ResponseUsage",
     "TextContent",
 ]
 
-from typing import Any, Literal
+from typing import Any, Literal, Union
 
 from pydantic import BaseModel, Field, RootModel, model_validator
 
-from mellea.helpers.openai_compatible_helpers import CompletionUsage
+from mellea.helpers.openai_compatible_helpers import (
+    CompletionUsage,
+    OutputTextContent,
+    ResponseFunctionCall,
+    ResponseOutputItem,
+    ResponseOutputMessage,
+    ResponseUsage,
+)
 from mellea.serve.models import (
     ChatMessage,
     ImageUrlContent,
@@ -332,3 +352,140 @@ class OpenAIErrorResponse(BaseModel):
 
     error: OpenAIError
     """The error object."""
+
+
+# ---------------------------------------------------------------------------
+# Responses API models
+# ---------------------------------------------------------------------------
+
+
+class InputContent(BaseModel):
+    """Content part in a Responses API input item."""
+
+    type: Literal["input_text", "input_image", "input_file"]
+    text: str | None = None
+    image_url: str | None = None
+    file_id: str | None = None
+
+
+class ResponseInputItem(BaseModel):
+    """A single input message for the Responses API."""
+
+    role: Literal["user", "assistant", "developer", "system", "tool"]
+    content: str | list[InputContent] | None = None
+    tool_call_id: str | None = None
+    tool_calls: list[Any] | None = None
+
+
+class ResponseTool(BaseModel):
+    """Tool declaration accepted by the Responses API.
+
+    Only `type: "function"` is currently supported by m serve. The other
+    types (`web_search`, `file_search`, `mcp`, `code_interpreter`)
+    are accepted by the schema so that requests are parsed and rejected with
+    a clear 400 error rather than a Pydantic validation failure.
+    """
+
+    type: Literal["function", "web_search", "file_search", "mcp", "code_interpreter"]
+    function: FunctionDefinition | None = None
+
+
+class ContextManagementConfig(BaseModel):
+    """Context compaction configuration."""
+
+    compact_threshold: float | None = None
+    strategy: Literal["auto", "manual"] | None = None
+
+
+class PromptCacheOptions(BaseModel):
+    """Prompt caching settings."""
+
+    enabled: bool | None = None
+    breakpoint: str | None = None
+
+
+class ResponseRequest(BaseModel):
+    """Request body for POST /v1/responses."""
+
+    model_config = {"extra": "allow"}
+
+    model: str
+    """Model to use (e.g. gpt-5.6, o1)."""
+
+    input: str | list[ResponseInputItem]
+    """Text, image, or file inputs."""
+
+    instructions: str | list[ResponseInputItem] | None = None
+    """System/developer context for the response."""
+
+    tools: list[ResponseTool] | None = None
+    tool_choice: Literal["none", "auto", "required"] | dict[str, Any] | None = None
+    max_output_tokens: int | None = None
+    temperature: float | None = Field(default=1.0, ge=0, le=2)
+    top_p: float | None = Field(default=1.0, ge=0, le=1)
+    stream: bool | None = False
+    store: bool | None = True
+    conversation: str | None = None
+    previous_response_id: str | None = None
+    background: bool | None = False
+    include: list[str] | None = None
+    parallel_tool_calls: bool | None = True
+    context_management: ContextManagementConfig | None = None
+    prompt_cache_options: PromptCacheOptions | None = None
+    format: ResponseFormat | None = None
+    """Response format configuration for structured outputs.
+
+    Configuring `{ "type": "json_schema" }` enables Structured Outputs,
+    which ensures the model will match your supplied JSON schema.
+    The default format is `{ "type": "text" }`.
+    """
+
+    extra: dict[str, Any] = Field(default_factory=dict)
+
+
+class ResponseError(BaseModel):
+    """Error object embedded in a failed Responses API response."""
+
+    code: str
+    message: str
+    param: str | None = None
+
+
+class Response(BaseModel):
+    """A completed response from POST /v1/responses."""
+
+    id: str
+    """Unique response identifier (resp_…)."""
+
+    created_at: int
+    """Unix timestamp of when the response was created."""
+
+    expires_at: int | None = None
+    """Unix timestamp after which this response is no longer retrievable.
+
+    Set to `created_at + TTL` when `store=True` (the default); `None`
+    when `store=False` because the response is never persisted and cannot
+    be retrieved via `GET /v1/responses/{id}`. The TTL is controlled by
+    the `--response-ttl` server flag (default: 1800 seconds / 30 minutes).
+    """
+
+    model: str
+    """Model used to generate the response."""
+
+    status: Literal["completed", "failed", "in_progress", "incomplete"]
+    output: list[ResponseOutputMessage | ResponseFunctionCall | ResponseOutputItem]
+    """Typed output items (messages, function calls, etc.).
+
+    Uses a Union type to ensure Pydantic serializes subclass-specific fields
+    (e.g., `content` and `role` for messages, `name` and `arguments`
+    for function calls) rather than stripping them to the base class schema.
+    """
+
+    output_text: str
+    """Convenience field: concatenated text from all output message items."""
+
+    error: ResponseError | None = None
+    incomplete_details: dict[str, Any] | None = None
+    usage: ResponseUsage
+    conversation: str | None = None
+    previous_response_id: str | None = None

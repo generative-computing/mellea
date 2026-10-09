@@ -4,9 +4,9 @@ description: "Run a Mellea program as an OpenAI-compatible chat endpoint with m 
 # diataxis: how-to
 ---
 
-`m serve` runs any Mellea program as an OpenAI-compatible chat endpoint. This lets
+`m serve` runs any Mellea program as an OpenAI-compatible server. This lets
 any LLM client — LangChain, the OpenAI SDK, `curl` — call your Mellea program as if
-it were a model.
+it were a model. Both the Chat Completions API and the Responses API are supported.
 
 **Prerequisites:** `pip install "mellea[server]"`.
 
@@ -75,7 +75,8 @@ m serve path/to/your_program.py
 
 The server starts on port 8000 by default and exposes:
 
-- `POST /v1/chat/completions` — OpenAI-compatible chat completions endpoint
+- `POST /v1/chat/completions` — OpenAI Chat Completions API
+- `POST /v1/responses` — OpenAI Responses API
 - `GET /health` — health check
 
 To see all options:
@@ -86,12 +87,18 @@ m serve --help
 
 ## Calling the served endpoint
 
+Both endpoints are served by the same `serve()` function. The Responses API
+input is converted to `ChatMessage` format before being passed to `serve()`,
+so no changes to your program are needed.
+
+### Chat Completions
+
 Any OpenAI-compatible client works. Using `curl`:
 
 ```bash
 curl http://localhost:8000/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -d '{"messages": [{"role": "user", "content": "Summarize this in one sentence."}]}'
+  -d '{"model": "mellea", "messages": [{"role": "user", "content": "Summarize this in one sentence."}]}'
 ```
 
 Using the OpenAI Python SDK:
@@ -108,6 +115,42 @@ print(response.choices[0].message.content)
 ```
 
 **Full example:** [`docs/examples/m_serve/simple/m_serve_example_simple.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/m_serve/simple/m_serve_example_simple.py)
+
+### Responses API
+
+Using `curl`:
+
+```bash
+curl http://localhost:8000/v1/responses \
+  -H "Content-Type: application/json" \
+  -d '{"model": "mellea", "input": "Summarize this in one sentence."}'
+```
+
+Using the OpenAI Python SDK:
+
+```python
+from openai import OpenAI
+
+client = OpenAI(base_url="http://localhost:8000/v1", api_key="unused")
+response = client.responses.create(
+    model="mellea",
+    input="Summarize this in one sentence.",
+)
+print(response.output_text)
+```
+
+Streaming with semantic events:
+
+```python
+stream = client.responses.create(
+    model="mellea",
+    input="Tell me a story.",
+    stream=True,
+)
+for event in stream:
+    if event.type == "response.output_text.delta":
+        print(event.delta, end="", flush=True)
+```
 
 ---
 

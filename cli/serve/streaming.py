@@ -3,6 +3,8 @@
 
 """Streaming utilities for OpenAI-compatible server responses."""
 
+import json
+import uuid
 from collections.abc import AsyncGenerator
 from typing import Literal
 
@@ -10,6 +12,8 @@ from mellea.core.base import ModelOutputThunk
 from mellea.core.utils import MelleaLogger
 from mellea.helpers.openai_compatible_helpers import (
     build_completion_usage,
+    build_response_output_items,
+    build_response_usage,
     build_tool_calls,
 )
 
@@ -20,6 +24,8 @@ from .models import (
     ChatCompletionMessageToolCallDelta,
     OpenAIError,
     OpenAIErrorResponse,
+    Response,
+    ResponseUsage,
     StreamOptions,
 )
 from .utils import extract_finish_reason
@@ -169,3 +175,157 @@ async def stream_chat_completion_chunks(
         )
         yield f"data: {error_response.model_dump_json()}\n\n"
         yield "data: [DONE]\n\n"
+
+
+async def stream_response_chunks(
+    output,
+    response_id: str,
+    model: str,
+    created: int,
+    conversation: str | None = None,
+    include: list[str] | None = None,
+    store: bool = True,
+    ttl: int = 1800,
+    previous_response_id: str | None = None,
+) -> AsyncGenerator[str, None]:
+    """Generate Responses API SSE events with semantic event names.
+
+    Emits the following event sequence:
+
+    - `response.created` — initial in-progress envelope
+    - `response.in_progress` — signals streaming has started
+    - `response.output_text.delta` — one per streamed token (or one for pre-computed)
+    - `response.output_text.done` — full accumulated text
+    - `response.function_call_arguments.delta` — one per tool call argument payload (if any)
+    - `response.function_call_arguments.done` — one per tool call (if any)
+    - `response.completed` — full `Response` object matching the non-streaming shape
+
+    On error, emits `response.failed` instead of the completion event.
+
+    Args:
+        output: The model output thunk to stream.
+        response_id: Unique response identifier (`resp_…`).
+        model: Model name to include in event payloads.
+        created: Unix timestamp of when the response was created.
+        conversation: Optional conversation ID to echo back in events.
+        include: Reserved for future use. The `response.completed` event
+            always carries the full `Response` object including usage.
+            Defaults to `None`.
+        store: Whether the response is being stored server-side. Controls
+            `expires_at` in the completed envelope.
+        ttl: Response TTL in seconds. Used to compute `expires_at`.
+        previous_response_id: Echoed back in the completed envelope.
+    """
+    try:
+        # Build the initial in-progress response object
+        in_progress_response = {
+            "id": response_id,
+            "created_at": created,
+            "model": model,
+            "status": "in_progress",
+            "output": [],
+            "output_text": "",
+            "usage": None,
+            "conversation": conversation,
+            "previous_response_id": previous_response_id,
+        }
+
+        sequence_number = 0
+
+        # response.created event - OpenAI SDK format
+        yield (
+            f"event: response.created\n"
+            f"data: {json.dumps({'type': 'response.created', 'sequence_number': sequence_number, 'response': in_progress_response})}\n\n"
+        )
+        sequence_number += 1
+
+        # response.in_progress event - OpenAI SDK format
+        yield (
+            f"event: response.in_progress\n"
+            f"data: {json.dumps({'type': 'response.in_progress', 'sequence_number': sequence_number, 'response': {'id': response_id, 'status': 'in_progress'}})}\n\n"
+        )
+        sequence_number += 1
+
+        accumulated_text = ""
+        output_index = 0
+        content_index = 0
+        # Generate a message item ID for the output_text events
+        item_id = f"msg_{uuid.uuid4().hex[:24]}"
+
+        if output.is_computed():
+            text = output.value or ""
+            accumulated_text = text
+            # For pre-computed output, emit delta + done
+            yield (
+                f"event: response.output_text.delta\n"
+                f"data: {json.dumps({'type': 'response.output_text.delta', 'sequence_number': sequence_number, 'output_index': output_index, 'content_index': content_index, 'item_id': item_id, 'delta': text})}\n\n"
+            )
+            sequence_number += 1
+            yield (
+                f"event: response.output_text.done\n"
+                f"data: {json.dumps({'type': 'response.output_text.done', 'sequence_number': sequence_number, 'output_index': output_index, 'content_index': content_index, 'item_id': item_id, 'text': text})}\n\n"
+            )
+            sequence_number += 1
+        else:
+            while not output.is_computed():
+                delta = await output.astream()
+                if delta:
+                    accumulated_text += delta
+                    yield (
+                        f"event: response.output_text.delta\n"
+                        f"data: {json.dumps({'type': 'response.output_text.delta', 'sequence_number': sequence_number, 'output_index': output_index, 'content_index': content_index, 'item_id': item_id, 'delta': delta})}\n\n"
+                    )
+                    sequence_number += 1
+
+            yield (
+                f"event: response.output_text.done\n"
+                f"data: {json.dumps({'type': 'response.output_text.done', 'sequence_number': sequence_number, 'output_index': output_index, 'content_index': content_index, 'item_id': item_id, 'text': accumulated_text})}\n\n"
+            )
+            sequence_number += 1
+
+        tool_calls = build_tool_calls(output)
+        if tool_calls:
+            # output_index for tool calls: starts at 0 if no text, 1 if text exists
+            start_index = 1 if accumulated_text else 0
+            for idx, tool_call in enumerate(tool_calls, start=start_index):
+                output_index = idx
+                arguments = tool_call["function"]["arguments"]
+                # Emit a single delta carrying the full arguments string.
+                # The backend doesn't stream arguments incrementally, so one
+                # delta with the complete payload is spec-conformant.
+                yield (
+                    f"event: response.function_call_arguments.delta\n"
+                    f"data: {json.dumps({'id': response_id, 'output_index': output_index, 'call_id': tool_call['id'], 'delta': arguments})}\n\n"
+                )
+                yield (
+                    f"event: response.function_call_arguments.done\n"
+                    f"data: {json.dumps({'id': response_id, 'output_index': output_index, 'call_id': tool_call['id'], 'name': tool_call['function']['name'], 'arguments': arguments})}\n\n"
+                )
+
+        usage = build_response_usage(output) or ResponseUsage(
+            input_tokens=0, output_tokens=0, total_tokens=0
+        )
+        output_items = build_response_output_items(output, tool_calls)
+        completed_response = Response(
+            id=response_id,
+            created_at=created,
+            expires_at=created + ttl if store else None,
+            model=model,
+            status="completed",
+            output=output_items,
+            output_text=accumulated_text,
+            usage=usage,
+            conversation=conversation,
+            previous_response_id=previous_response_id,
+        )
+        yield (
+            f"event: response.completed\n"
+            f"data: {json.dumps({'type': 'response.completed', 'sequence_number': sequence_number, 'response': completed_response.model_dump()})}\n\n"
+        )
+
+    except Exception as e:
+        MelleaLogger.get_logger().exception("Streaming error in responses endpoint")
+        yield (
+            f"event: response.failed\n"
+            f"data: {json.dumps({'id': response_id, 'status': 'failed', 'error': {'message': str(e), 'code': 'streaming_error'}})}\n\n"
+        )
