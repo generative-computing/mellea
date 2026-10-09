@@ -14,7 +14,7 @@ without boilerplate.
 """
 
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Coroutine
 from copy import copy
 from dataclasses import dataclass
 from typing import Literal, final
@@ -376,8 +376,9 @@ class Requirement(Component[str]):
     ) -> ValidationResult:
         """Chooses the appropriate validation strategy and applies it to the given context.
 
-        Uses `validation_fn` if one was provided, otherwise falls back to LLM-as-a-Judge
-        by generating a judgement response with the backend.
+        Uses `validation_fn` if one was provided (awaiting it first when it is async),
+        otherwise falls back to LLM-as-a-Judge by generating a judgement response with
+        the backend.
 
         Args:
             backend (Backend): The inference backend used when the LLM-as-a-Judge strategy is selected.
@@ -398,8 +399,14 @@ class Requirement(Component[str]):
                 is `None`, or if the context has no `ModelOutputThunk` as its last output.
         """
         if self.validation_fn is not None:
-            # Python validation strategy
-            return self.validation_fn(ctx)
+            # Python validation strategy. Async validators (e.g. SOFAI's judge
+            # wrapping) hand back a coroutine; awaiting it here is what turns it
+            # into a ValidationResult instead of a truthy coroutine that fails
+            # every downstream check open (#1728).
+            raw = self.validation_fn(ctx)
+            if isinstance(raw, Coroutine):
+                raw = await raw
+            return raw
         else:
             # LLMaJ validation strategy. This includes aLoRA because the backend generate call will appropriately dispatch.
             assert self.output_to_bool is not None
