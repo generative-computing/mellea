@@ -2,11 +2,22 @@
 """Helper functions for Qiskit code validation.
 
 This module provides utilities for extracting code from markdown and validating
-Qiskit code against migration rules using the flake8-qiskit-migration plugin.
+Qiskit code against migration rules using the flake8-qiskit-migration plugin,
+against a benchmark problem's test suite, and against LintQ.
 """
 
 import ast
+import builtins
+import ctypes
+import json
+import os
 import re
+import subprocess
+import tempfile
+import threading
+import traceback
+from collections.abc import Iterator
+from typing import Any
 
 try:
     from flake8_qiskit_migration.plugin import Plugin
@@ -108,3 +119,136 @@ def validate_input_code(prompt: str) -> tuple[bool, str]:
         return False, error_msg
 
     return True, ""
+
+
+class _Timeout(BaseException):
+    """Raised into the validating thread when the code runs too long.
+
+    A `BaseException`, unlike `TimeoutError`, so generated code that catches
+    `Exception` cannot swallow it.
+    """
+
+
+# Builtins the executed code does not get: they could escape or stall the check
+# (defense in depth, not a sandbox).
+_SAFE_BUILTINS = {
+    k: v
+    for k, v in vars(builtins).items()
+    if k not in {"exec", "eval", "compile", "breakpoint", "input"}
+}
+
+
+def validate_correctness(problem: dict[str, Any], code: str) -> tuple[bool, str]:
+    """Run `code` against a benchmark problem's own test suite.
+
+    Adapted from the Qiskit HumanEval test harness (Copyright IBM, Apache-2.0).
+    Supports Qiskit HumanEval (`check(candidate)`) and QuantumKatas
+    (`test_<entry_point>()`). Warning: this `exec()`s untrusted code; it is not a sandbox.
+
+    Args:
+        problem: Problem dict with `prompt`, `test` and `entry_point` keys
+        code: Candidate solution
+
+    Returns:
+        Tuple of (is_valid, error_message)
+    """
+    # Code-stub prompts are prepended; natural-language prompts (QHE hard) are not.
+    prompt = problem["prompt"]
+    is_stub = prompt.lstrip().startswith(("from ", "import ", "def ", "#"))
+    entry = problem["entry_point"]
+    program = f"{prompt if is_stub else ''}\n{code}\n{problem['test']}"
+
+    # Call the test function the test code defines, so a candidate that defines its
+    # own `check()` cannot stand in for the real test.
+    test_fns = {
+        node.name
+        for node in ast.parse(problem["test"]).body
+        if isinstance(node, ast.FunctionDef)
+    }
+    test_name = "check" if "check" in test_fns else f"test_{entry}"
+    if test_name not in test_fns:
+        return False, f"No check() or test_{entry}() in the test code"
+
+    # Mellea validates on a worker thread, so the timeout is raised via the C API.
+    tid = ctypes.c_ulong(threading.get_ident())
+    timer = threading.Timer(
+        30,
+        ctypes.pythonapi.PyThreadState_SetAsyncExc,
+        (tid, ctypes.py_object(_Timeout)),
+    )
+    cwd = os.getcwd()
+    os.environ["MPLBACKEND"] = "Agg"
+    with tempfile.TemporaryDirectory() as tmp:
+        os.chdir(tmp)  # some tasks write files
+        timer.start()
+        try:
+            ns: dict[str, Any] = {"__builtins__": _SAFE_BUILTINS}
+            exec(program, ns)
+            if entry not in ns:
+                return False, f"Entry point `{entry}` not defined"
+            if test_name == "check":
+                ns["check"](ns[entry])
+            else:
+                ns[test_name]()
+            return True, ""
+        except _Timeout:
+            print("Validation failed: Execution timed out after 30s")
+            return False, "Execution timed out after 30s"
+        except SystemExit as e:
+            # Not an Exception: left uncaught, it would stop the repair loop.
+            print(f"Validation failed: the code called sys.exit({e.code!r})")
+            return False, f"The code called sys.exit({e.code!r}) instead of returning"
+        except AssertionError as e:
+            print(f"Validation failed: Test assertion failed: {e}")
+            return False, f"Test assertion failed: {e}"
+        except Exception as e:
+            print(f"{type(e).__name__}: {e}\n{traceback.format_exc()}")
+            return False, f"{type(e).__name__}: {e}\n{traceback.format_exc()}"
+        finally:
+            timer.cancel()
+            os.chdir(cwd)
+
+
+def validate_lintq(code: str) -> tuple[bool, str]:
+    """Run the LintQ CodeQL queries over `code`.
+
+    Requires the `codeql` CLI and `LINTQ_DIR` pointing at a LintQ checkout (see README.md).
+
+    Args:
+        code: Python source to analyse
+
+    Returns:
+        Tuple of (is_valid, error_message), one `[rule-id] message` line per finding
+    """
+    lintq = os.environ["LINTQ_DIR"]
+    with tempfile.TemporaryDirectory() as tmp:
+        os.makedirs(f"{tmp}/src")
+        with open(f"{tmp}/src/candidate.py", "w") as f:
+            f.write(code)
+        for cmd in (
+            [
+                "database",
+                "create",
+                f"{tmp}/db",
+                "--language=python",
+                f"--source-root={tmp}/src",
+            ],
+            [
+                "database",
+                "analyze",
+                f"{tmp}/db",
+                f"{lintq}/LintQ-all.qls",
+                "--format=sarifv2.1.0",
+                f"--output={tmp}/out.sarif",
+                f"--additional-packs={lintq}/qlint/codeql/src:{lintq}/qlint/codeql/lib",
+            ],
+        ):
+            subprocess.run(["codeql", *cmd], check=True, capture_output=True)
+        with open(f"{tmp}/out.sarif") as f:
+            results = [r for run in json.load(f)["runs"] for r in run["results"]]
+
+    if not results:
+        return True, ""
+    findings = "\n".join(f"[{r['ruleId']}] {r['message']['text']}" for r in results)
+    print(f"Validation failed: LintQ warnings:\n{findings}")
+    return False, f"LintQ warnings:\n{findings}"
