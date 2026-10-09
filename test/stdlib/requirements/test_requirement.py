@@ -1,13 +1,19 @@
 # Copyright IBM Corp. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+import asyncio
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from mellea.backends.adapters import AdapterSchemaMismatchError, AdapterType
-from mellea.core import ModelOutputThunk, Requirement, TemplateRepresentation
+from mellea.core import (
+    ModelOutputThunk,
+    Requirement,
+    TemplateRepresentation,
+    ValidationResult,
+)
 from mellea.formatters.template_formatter import TemplateFormatter
 from mellea.stdlib.components import Message
 from mellea.stdlib.context import ChatContext
@@ -69,6 +75,58 @@ def test_simple_validate_bool_string():
         "validation result should be False given the lambda func passed to simple_validate"
     )
     assert val_result.reason == "dynamic reason"
+
+
+async def test_validate_awaits_async_validation_fn():
+    """An async validation_fn is awaited, not handed through as a live coroutine.
+
+    SOFAI's judge_backend wraps validation as an async fn; returning its
+    coroutine un-awaited made every truthiness check pass vacuously because
+    bool(coroutine) is True (#1728).
+    """
+
+    async def async_validator(ctx):
+        return ValidationResult(False, reason="Requirement not satisfied.")
+
+    requirement = Requirement(description="must fail", validation_fn=async_validator)
+    result = await requirement.validate(None, ctx)
+
+    assert isinstance(result, ValidationResult), (
+        f"expected a ValidationResult, got {type(result)}"
+    )
+    assert not result.as_bool()
+    assert result.reason == "Requirement not satisfied."
+
+
+async def test_validate_awaits_non_coroutine_awaitable_validation_fn():
+    """A validation_fn returning a Future (an awaitable, not a coroutine) is awaited."""
+
+    def future_validator(_ctx):
+        fut = asyncio.get_running_loop().create_future()
+        fut.set_result(ValidationResult(False, reason="from future"))
+        return fut
+
+    requirement = Requirement(description="must fail", validation_fn=future_validator)
+    result = await requirement.validate(None, ctx)
+
+    assert isinstance(result, ValidationResult), (
+        f"expected a ValidationResult, got {type(result)}"
+    )
+    assert not result.as_bool()
+    assert result.reason == "from future"
+
+
+async def test_validate_returns_sync_validation_fn_result_unchanged():
+    """A sync validation_fn keeps flowing through validate unchanged."""
+    requirement = Requirement(
+        description="must fail",
+        validation_fn=lambda _ctx: ValidationResult(False, reason="static reason"),
+    )
+    result = await requirement.validate(None, ctx)
+
+    assert isinstance(result, ValidationResult)
+    assert not result.as_bool()
+    assert result.reason == "static reason"
 
 
 def test_simple_validate_invalid():

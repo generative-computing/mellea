@@ -6,10 +6,13 @@
 Covers _extract_action_prompt, _parse_judgment, _extract_feedback, _select_best_attempt.
 """
 
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 
-from mellea.core import Requirement, TemplateRepresentation, ValidationResult
+from mellea.core import Backend, Requirement, ValidationResult
 from mellea.stdlib.components import Instruction, Message
+from mellea.stdlib.context import ChatContext
 from mellea.stdlib.sampling.sofai import SOFAISamplingStrategy
 
 # --- _parse_judgment ---
@@ -17,6 +20,37 @@ from mellea.stdlib.sampling.sofai import SOFAISamplingStrategy
 
 def test_parse_judgment_yes():
     assert SOFAISamplingStrategy._parse_judgment("Yes") is True
+
+
+async def test_judge_wrapped_requirement_returns_real_validation_result():
+    """The judge wrapping survives Requirement.validate instead of leaking a coroutine.
+
+    _create_judge_validate_function produces an async validation_fn; before the
+    fix, Requirement.validate returned its coroutine un-awaited, so the S1/S2
+    success checks read bool(coroutine) == True and every judge-backed run
+    passed vacuously (#1728).
+    """
+    judge_verdict = ValidationResult(False, reason="Requirement not satisfied.")
+    strategy = SOFAISamplingStrategy(
+        MagicMock(spec=Backend),
+        MagicMock(spec=Backend),
+        judge_backend=MagicMock(spec=Backend),
+    )
+    original = Requirement(description="must contain xylophone")
+
+    with patch.object(
+        SOFAISamplingStrategy,
+        "_validate_with_judge_backend",
+        new=AsyncMock(return_value=judge_verdict),
+    ):
+        wrapped = strategy._prepare_requirements_for_validation([original])[0]
+        result = await wrapped.validate(None, ChatContext())
+
+    assert isinstance(result, ValidationResult), (
+        f"expected a ValidationResult, got {type(result)}"
+    )
+    assert not result.as_bool()
+    assert result.reason == "Requirement not satisfied."
 
 
 def test_parse_judgment_yes_with_explanation():
