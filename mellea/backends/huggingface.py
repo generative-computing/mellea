@@ -1641,7 +1641,9 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                     await _fire_embedded_invocation_complete(
                         identity=embedded_identity, outcome="schema_error", error=e
                     )
-                raise Exception(f"Intrinsic did not return a JSON: {chunk}") from e
+                raise ValueError(
+                    f"Intrinsic did not return a JSON: {chunk.choices[0].message.content}"
+                ) from e
             except Exception as e:
                 if embedded_identity is not None:
                     await _fire_embedded_invocation_complete(

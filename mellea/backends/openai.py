@@ -1258,7 +1258,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 await _fire_embedded_invocation_complete(
                     identity=identity, outcome="schema_error", error=e
                 )
-                raise Exception(
+                raise ValueError(
                     f"Intrinsic did not return a JSON: "
                     f"{chunk.choices[0].message.content}"
                 ) from e
