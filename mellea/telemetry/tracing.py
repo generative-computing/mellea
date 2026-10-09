@@ -779,6 +779,8 @@ def start_streaming_span(
     has_requirements: bool | None,
     requirement_count: int | None,
     chunking_strategy: str | None,
+    strategy_type: str | None = None,
+    loop_budget: int | None = None,
     attach_context: bool = True,
 ) -> Span | None:
     """Open the `stream` span for one streaming run.
@@ -788,6 +790,10 @@ def start_streaming_span(
         has_requirements: Whether requirements were supplied.
         requirement_count: Number of requirements supplied.
         chunking_strategy: ChunkingStrategy class name.
+        strategy_type: Sampling strategy class name, or `None` when the run has
+            no strategy.
+        loop_budget: Maximum attempts the strategy may run, or `None` when the
+            run has no strategy.
         attach_context: Whether to attach the span as the ambient OTel context.
 
     Returns:
@@ -800,6 +806,8 @@ def start_streaming_span(
             "mellea.streaming.has_requirements": has_requirements,
             "mellea.streaming.requirement_count": requirement_count,
             "mellea.streaming.chunking_strategy": chunking_strategy,
+            "mellea.streaming.strategy_type": strategy_type,
+            "mellea.streaming.loop_budget": loop_budget,
         },
         attach_context=attach_context,
     )
@@ -832,6 +840,7 @@ def finish_streaming_span(
     model: str | None = None,
     provider: str | None = None,
     full_text_length: int | None = None,
+    iterations_used: int | None = None,
 ) -> None:
     """End the `stream` span, recording its outcome.
 
@@ -848,9 +857,11 @@ def finish_streaming_span(
         model: Model identifier, when known.
         provider: Provider name, when known.
         full_text_length: Length of the validated-and-emitted text at stream exit.
+        iterations_used: Number of attempts the run made (`1` without a strategy).
     """
     extra_attributes = {
         "mellea.streaming.full_text_length": full_text_length,
+        "mellea.streaming.iterations_used": iterations_used,
         "gen_ai.request.model": model,
         "gen_ai.provider.name": normalize_provider_name(provider),
     }

@@ -11,6 +11,10 @@ A sampling strategy controls what happens after the first generation: whether to
 retry on failure, how to repair output, and whether to escalate to a more powerful
 model. You pass a strategy to `instruct()` via the `strategy` parameter.
 
+> **Streaming:** a strategy also drives retry/repair under `stream()`, not only
+> `instruct()` — see
+> [Retrying with a sampling strategy](../how-to/use-async-and-streaming.md#retrying-with-a-sampling-strategy).
+
 ## Rejection sampling
 
 `RejectionSamplingStrategy` is the default. It generates once, validates all

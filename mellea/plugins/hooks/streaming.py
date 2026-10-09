@@ -20,12 +20,18 @@ class StreamingStartPayload(MelleaBasePayload):
             `Requirement` to validate against.
         requirement_count: Number of `Requirement` instances supplied.
         chunking_strategy: Class name of the resolved `ChunkingStrategy`.
+        strategy_name: Class name of the sampling `strategy` driving retry/repair,
+            or `None` when the run has no strategy.
+        loop_budget: Maximum attempts the strategy may run, or `None` when the run
+            has no strategy.
     """
 
     streaming_id: str = ""
     has_requirements: bool = False
     requirement_count: int = 0
     chunking_strategy: str = ""
+    strategy_name: str | None = None
+    loop_budget: int | None = None
 
 
 class StreamingEventPayload(MelleaBasePayload):
@@ -37,11 +43,15 @@ class StreamingEventPayload(MelleaBasePayload):
         requirements: For a `QuickCheckEvent`, the active `Requirement` instances
             corresponding to the event's results, in the same order; empty for
             other event types.
+        strategy_name: For a `RetryEvent`, the class name of the sampling
+            `strategy` driving the retry (so a subscriber can attribute the
+            attempt); `None` for other event types.
     """
 
     streaming_id: str = ""
     event: Any = None
     requirements: list[Any] = []
+    strategy_name: str | None = None
 
 
 class StreamingEndPayload(MelleaBasePayload):
@@ -61,6 +71,12 @@ class StreamingEndPayload(MelleaBasePayload):
         model: Model identifier from the underlying generation, when known.
         provider: Provider name from the underlying generation, when known.
         full_text_length: Length of the accumulated text at orchestrator exit.
+        attempts_used: Number of attempts the run made (`1` without a strategy).
+        strategy_name: Class name of the sampling `strategy` driving retry/repair,
+            or `None` when the run has no strategy.
+        sampling_success: `True` when a sampling strategy drove the run and the
+            selected attempt passed all requirements; `None` when the run has no
+            strategy.
     """
 
     streaming_id: str = ""
@@ -70,3 +86,6 @@ class StreamingEndPayload(MelleaBasePayload):
     model: str | None = None
     provider: str | None = None
     full_text_length: int = 0
+    attempts_used: int = 1
+    strategy_name: str | None = None
+    sampling_success: bool | None = None
