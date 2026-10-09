@@ -504,6 +504,13 @@ async def test_result_processor_applied():
     assert 0.9 < score < 0.95
 
 
+async def test_malformed_output_raises_documented_valueerror():
+    """Non-JSON output re-raises as the ValueError the intrinsic docstrings document."""
+    backend = _make_backend_with_adapter(_SIMPLE_CONFIG)
+    with pytest.raises(ValueError, match="did not return a JSON"):
+        await _run_intrinsic(backend, _simple_chat_response(content="not json"))
+
+
 async def test_io_yaml_parameters_forwarded():
     """io.yaml max_completion_tokens and temperature reach Ollama's options."""
     backend = _make_backend_with_adapter(_SIMPLE_CONFIG)
