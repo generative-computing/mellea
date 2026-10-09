@@ -4,14 +4,13 @@
 """E2E round-trip against a served LLMON-trained model over chat-completions.
 
 An LLMON model's behavior lives in its fine-tuned weights, not a server chat
-template, so Mellea drives it through the ordinary OpenAI-compatible chat backend.
-The LLMON work is now **automatic and model-driven**: because the served model id
-is in the allowlist (`llmon_models.is_llmon_model`), a plain `m.instruct(prompt)`
-is encoded into Machine LLMON on the way out (in `Backend.generate_from_context`)
-and the reply is stripped back to plain text on the way in (in
-`ModelOutputThunk._set_parsed_repr`) — no `instruction_cls` or per-call flag. This
-exercises that full served path end-to-end — the thing the unit tests in
-`test_llmon_instruction.py` deliberately do not cover.
+template, so Mellea drives it through the ordinary OpenAI-compatible chat backend
+with an `LLMONFormatter`: a plain `m.instruct(prompt)` is sent as LLMON built from
+every part of the instruction, ending in an `exec` block, and the response the
+formatter extracts from the reply becomes the thunk's `value`. This exercises that
+full served path end-to-end, which the unit tests in
+`test/formatters/test_llmon_formatter.py` and
+`test/backends/test_formatter_output_unit.py` do not.
 
 Gating (all three must pass, else the module skips cleanly):
 
@@ -38,6 +37,7 @@ import requests
 import mellea
 from mellea.backends.openai import OpenAIBackend
 from mellea.core import SamplingResult
+from mellea.formatters import LLMONFormatter
 
 # Served endpoint + model. The model id is a placeholder sentinel until a real
 # LLMON model is wired into CI: `_is_placeholder` below gates the module off while
@@ -75,8 +75,10 @@ pytestmark = [
 def llmon_session() -> mellea.MelleaSession:
     """A MelleaSession bound to the served LLMON model.
 
-    Skips the module when the endpoint is unreachable so a missing local server is
-    a skip, not a hard failure.
+    The formatter is passed explicitly, so a model named through the environment
+    gets LLMON even when it is not a registered LLMON model. Skips the module when
+    the endpoint is unreachable so a missing local server is a skip, not a hard
+    failure.
     """
     try:
         requests.get(f"{_LLMON_BASE_URL}/v1/models", timeout=2)
@@ -87,21 +89,24 @@ def llmon_session() -> mellea.MelleaSession:
 
     return mellea.MelleaSession(
         backend=OpenAIBackend(
-            model_id=_LLMON_MODEL_ID, base_url=f"{_LLMON_BASE_URL}/v1", api_key="EMPTY"
+            model_id=_LLMON_MODEL_ID,
+            formatter=LLMONFormatter(_LLMON_MODEL_ID),
+            base_url=f"{_LLMON_BASE_URL}/v1",
+            api_key="EMPTY",
         )
     )
 
 
 def _print_round_trip(
-    title: str, model_id: str, prompt: str, user_variables: dict, thunk, parsed
+    title: str, model_id: str, prompt: str, user_variables: dict, thunk
 ) -> None:
     """Print one LLMON round-trip so `pytest -s` shows what crossed the wire.
 
-    Shows the prompt template + user vars the test supplied, the exact chat
-    payload Mellea actually sent (`generate_log.prompt` — the rendered messages,
-    LLMON-encoded when `llmonize_input=True`), the raw bytes the model emitted
-    (possibly Machine LLMON), and the plain text LLMON parsing extracted. Values
-    are printed directly (not `repr`'d) so embedded newlines render as newlines.
+    Shows the prompt template and user variables the test supplied, the chat
+    payload Mellea sent (`generate_log.prompt`, the messages as rendered by
+    `LLMONFormatter`), the text the model generated (`raw.text`, possibly with LLMON
+    markup), and the response extracted from it (`value`). Values are printed
+    directly (not `repr`'d) so embedded newlines render as newlines.
     """
     wire_messages = thunk._generate_log.prompt if thunk._generate_log else None
 
@@ -122,48 +127,54 @@ def _print_round_trip(
     else:
         print(wire_messages)
     print("-" * 72)
-    print("RAW MODEL OUTPUT (thunk.value, pre-parse):")
-    print(thunk.value)
+    print("GENERATED TEXT (thunk.raw.text, or thunk.value when nothing was extracted):")
+    print(thunk.raw.text if thunk.raw.text is not None else thunk.value)
     print("-" * 72)
-    print("PARSED RESULT (parsed_repr, str()):")
-    print(str(parsed))
+    print("EXTRACTED RESPONSE (thunk.value):")
+    print(thunk.value)
     print("=" * 72)
 
 
 def test_served_instruct_round_trip_returns_plain_text(llmon_session):
-    """A plain `m.instruct` against an LLMON model auto-strips to plain text.
+    """A plain `m.instruct` against an LLMON model sends LLMON and returns plain text.
 
-    No `instruction_cls`, no flags: because the served model is in the allowlist,
-    the instruction is auto-encoded into Machine LLMON on the way out and the reply
-    is auto-stripped on the way in. Whether the model replies with raw Machine
-    LLMON or already-detokenized prose, `parsed_repr` must be a plain `str` with no
-    LLMON markup.
+    The prompt must carry every part of the instruction (description and
+    requirements) and an `exec` block. Whether the model replies with raw LLMON or
+    already-detokenized prose, the thunk's `value` must be plain text with no LLMON
+    markup.
     """
     prompt = "Summarise this customer feedback in one sentence: {{text}}"
     user_variables = {"text": "loved the product, but shipping was very slow"}
+    requirements = [
+        "The summary must be a single sentence.",
+        "Include both positive and negative aspects if both are present.",
+    ]
 
     result = llmon_session.instruct(
-        prompt,
-        requirements=[
-            "The summary must be a single sentence.",
-            "Include both positive and negative aspects if both are present.",
-        ],
-        user_variables=user_variables,
+        prompt, requirements=requirements, user_variables=user_variables
     )
 
     thunk = result.result if isinstance(result, SamplingResult) else result
-    parsed = thunk.parsed_repr
 
     _print_round_trip(
-        "LLMON MODEL — automatic encode + strip",
+        "LLMON MODEL — LLMONFormatter round trip",
         _LLMON_MODEL_ID,
         prompt,
         user_variables,
         thunk,
-        parsed,
     )
 
-    text = str(parsed)
-    assert text  # non-empty answer
-    # The parsed value is always plain text — never raw LLMON markup.
-    assert "<|open|>" not in text
+    assert thunk._generate_log is not None
+    wire = thunk._generate_log.prompt
+    sent = wire[-1]["content"] if isinstance(wire, list) else str(wire)
+    for part in [
+        "Summarise this customer feedback in one sentence: "
+        "loved the product, but shipping was very slow",
+        *requirements,
+    ]:
+        assert part in sent
+    assert "exec" in sent
+
+    assert thunk.value  # non-empty answer
+    # The response is always plain text, never raw LLMON markup.
+    assert "<|open|>" not in thunk.value

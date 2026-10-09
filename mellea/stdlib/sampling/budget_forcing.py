@@ -208,17 +208,11 @@ class BudgetForcingSamplingStrategy(RejectionSamplingStrategy):
                 # type / value. Explicitly overwrite that here.
                 # CBlocks and ModelOutputThunks have no `.parse`, so fall back to the
                 # raw value (mirrors how backends handle non-Component actions).
-                # Exception: for an LLMON model, `avalue()` already set parsed_repr to
-                # the model-driven strip (plain text); re-parsing would clobber it back
-                # to raw Machine LLMON, so leave it in place (see sampling/base.py).
-                from ..components.llmon_models import is_llmon_model
-
-                if not is_llmon_model(backend._model_id):
-                    result.parsed_repr = (
-                        action.parse(result)
-                        if isinstance(action, Component)
-                        else result.value
-                    )
+                result.parsed_repr = (
+                    action.parse(result)
+                    if isinstance(action, Component)
+                    else result.value
+                )
 
                 # validation pass; validate over the caller's validation context if they
                 # supplied one, otherwise over this attempt's post-generation context.

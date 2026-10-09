@@ -38,7 +38,7 @@ from ..core import (
     RawProviderResponse,
 )
 from ..core.base import AbstractMelleaTool
-from ..formatters import ChatFormatter, TemplateFormatter
+from ..formatters import ChatFormatter, default_formatter
 from ..helpers import (
     DEFAULT_CHUNK_TIMEOUT,
     ClientCache,
@@ -96,7 +96,8 @@ class WatsonxAIBackend(FormatterBackend):
         model_id (str | ModelIdentifier): WatsonX model identifier. Defaults to
             `model_ids.IBM_GRANITE_4_HYBRID_SMALL`.
         formatter (ChatFormatter | None): Formatter for rendering components.
-            Defaults to `TemplateFormatter`.
+            Defaults to `default_formatter(model_id)`: an `LLMONFormatter` for a
+            registered LLMON model, otherwise a `TemplateFormatter`.
         base_url (str | None): URL for the WatsonX ML deployment endpoint;
             defaults to the `WATSONX_URL` environment variable.
         model_options (dict | None): Default model options for generation requests.
@@ -139,9 +140,7 @@ class WatsonxAIBackend(FormatterBackend):
         super().__init__(
             model_id=model_id,
             formatter=(
-                formatter
-                if formatter is not None
-                else TemplateFormatter(model_id=model_id)
+                formatter if formatter is not None else default_formatter(model_id)
             ),
             model_options=model_options,
         )
@@ -798,6 +797,7 @@ class WatsonxAIBackend(FormatterBackend):
             result.generation.usage = per_mot_usage
             result.generation.model = self._model_id
             result.generation.provider = self._provider
+            self._finalize_output(result)
 
             action = actions[i]
             result.parsed_repr = (

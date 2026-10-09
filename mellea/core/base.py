@@ -1063,11 +1063,15 @@ class RawProviderResponse:
         response: Full SDK response object. Shape depends on `provider`.
         streamed_chunks: Per-chunk SDK objects from streaming responses.
             `None` for non-streaming requests.
+        text: The text the model generated, when the backend's formatter extracted
+            a different `mot.value` from it (e.g. `LLMONFormatter` stripping LLMON
+            markup). `None` when `mot.value` is the generated text itself.
     """
 
     provider: str | None = None
     response: Any | None = None
     streamed_chunks: list[Any] | None = None
+    text: str | None = None
 
 
 @dataclass
@@ -1123,6 +1127,9 @@ class _GenerationState:
             `None` — each computation owns its own thread signal.
         process: Backend coroutine that folds a streamed chunk into the thunk.
         post_process: Backend coroutine run once after the value is complete.
+        finalize: Backend callable run once after `post_process` and before the
+            output is parsed, to replace the generated text in `value` with the
+            response extracted from it.
         on_computed: Coroutine run when the thunk becomes computed.
         start: Wall-clock start time of generation, for latency metrics.
         chunk_intervals: Per-chunk receipt intervals in milliseconds (`None` for
@@ -1141,6 +1148,7 @@ class _GenerationState:
     cancel_hook: Callable[[], None] | None = None
     process: Callable[[ModelOutputThunk, Any], Coroutine] | None = None
     post_process: Callable[[ModelOutputThunk], Coroutine] | None = None
+    finalize: Callable[[ModelOutputThunk], None] | None = None
     on_computed: Callable[[ModelOutputThunk], Coroutine] | None = None
     start: datetime.datetime | None = None
     chunk_intervals: deque[float | None] = field(default_factory=deque)
@@ -1559,12 +1567,19 @@ class ModelOutputThunk(Generic[S]):
                 )
             self._gen.processed_chunk_index += 1
 
+        streamed = self._underlying_value
         if do_set_computed:
             assert self._underlying_value is not None
             self._computed = True
 
             assert self._gen.post_process is not None
             await self._gen.post_process(self)
+
+            # Deltas are slices of the generated text, so take the last one before
+            # `finalize` replaces `value` with the response extracted from it.
+            streamed = self._underlying_value
+            if self._gen.finalize is not None:
+                self._gen.finalize(self)
 
             self._set_parsed_repr()
             assert self.parsed_repr is not None, (
@@ -1591,9 +1606,7 @@ class ModelOutputThunk(Generic[S]):
                 #     self._copy_from(replacement)
 
         return (
-            self._underlying_value
-            if beginning_length == 0
-            else self._underlying_value[beginning_length:]  # type: ignore
+            streamed if beginning_length == 0 else streamed[beginning_length:]  # type: ignore
         )
 
     def __aiter__(self) -> ModelOutputThunk[S]:
@@ -1665,36 +1678,15 @@ class ModelOutputThunk(Generic[S]):
     def _set_parsed_repr(self) -> None:
         """Compute `parsed_repr` from the originating action once the thunk is computed.
 
-        For an LLMON model (gated on `generation.model` via
-        `llmon_models.is_llmon_model`) a pre-match short-circuit strips any raw
-        Machine LLMON out of `value` with `parse_llmon_reply` and sets `parsed_repr`
-        to that plain `str`, regardless of action type. This is the outbound-from-model
-        half of the automatic LLMON round-trip; it intentionally skips the per-action
-        recovery below (an LLMON model's reply is detokenized text, not a tool/role
-        turn to reconstruct). `value` itself is left as the raw record.
-
-        Otherwise it dispatches on the originating `action`: a `Component` action
-        parses via its own `_parse`; a `ModelOutputThunk` action (a computed thunk
-        reused as the next incoming turn) is re-parsed through `Message._parse` so
-        its role, tool calls, and reasoning survive the round-trip rather than
-        degrading to a raw string; a `CBlock` action keeps its raw string value.
+        Dispatches on the originating `action`: a `Component` action parses via its
+        own `_parse`; a `ModelOutputThunk` action (a computed thunk reused as the
+        next incoming turn) is re-parsed through `Message._parse` so its role,
+        tool calls, and reasoning survive the round-trip rather than degrading to a
+        raw string; a `CBlock` action keeps its raw string value.
 
         Raises:
             ValueError: If the thunk has no originating action set.
         """
-        # Outbound-from-model LLMON strip. `is_llmon_model` lives in a
-        # dependency-free module (no `llmon` extra needed to import it), but
-        # `parse_llmon_reply` needs the extra — so both are imported lazily here to
-        # avoid a core→stdlib import cycle, and the heavy one only once a model has
-        # matched (an allowlisted model implies the extra is installed).
-        from ..stdlib.components.llmon_models import is_llmon_model
-
-        if is_llmon_model(self.generation.model) and self.value is not None:
-            from ..stdlib.components.llmon import parse_llmon_reply
-
-            self.parsed_repr = parse_llmon_reply(self.value)  # type: ignore[assignment]
-            return
-
         match self._call.action:
             case Component():
                 self.parsed_repr = self._call.action._parse(self)

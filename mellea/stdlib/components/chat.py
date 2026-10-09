@@ -216,6 +216,14 @@ class Message(Component["Message"]):
         provider = computed.raw.provider
         response = computed.raw.response
 
+        def _content(provider_content: str) -> str:
+            # When the backend's formatter extracted the response from the generated
+            # text (e.g. stripping LLMON markup), `raw.text` holds the original and the
+            # provider's message content still matches it; use the extracted `value`.
+            if computed.raw.text is not None and computed.value is not None:
+                return computed.value
+            return provider_content
+
         if computed.tool_calls is not None:
             # A tool was successfully requested.
             # Assistant responses for tool calling differ by backend. Preserve
@@ -235,7 +243,7 @@ class Message(Component["Message"]):
                 )
                 return Message(
                     role=response.message.role,
-                    content=getattr(response.message, "content", "") or "",
+                    content=_content(getattr(response.message, "content", "") or ""),
                     tool_calls=tool_calls,
                     thinking=thinking,
                 )
@@ -253,7 +261,7 @@ class Message(Component["Message"]):
                 thinking = computed.thinking if msg["role"] == "assistant" else None
                 return Message(
                     role=msg["role"],
-                    content=msg.get("content") or "",
+                    content=_content(msg.get("content") or ""),
                     tool_calls=msg.get("tool_calls") or None,
                     thinking=thinking,
                 )
@@ -274,13 +282,13 @@ class Message(Component["Message"]):
             )
             return Message(
                 role=response.message.role,
-                content=response.message.content,
+                content=_content(response.message.content),
                 thinking=thinking,
             )
         if provider in ("openai", "watsonx", "litellm") and isinstance(response, dict):
             msg = response["choices"][0].get("message", {})
             role = msg.get("role", "assistant")
-            content = msg.get("content") or ""
+            content = _content(msg.get("content") or "")
             thinking = computed.thinking if role == "assistant" else None
             return Message(role=role, content=content, thinking=thinking)
 
@@ -331,7 +339,11 @@ class ToolMessage(Message):
 
 
 def message_from_template_representation(
-    tr: TemplateRepresentation, *, default_role: "Message.Role", content: str
+    tr: TemplateRepresentation,
+    *,
+    default_role: "Message.Role",
+    content: str,
+    message_cls: type[Message] = Message,
 ) -> Message:
     """Build a `Message` from a component's `TemplateRepresentation`.
 
@@ -346,12 +358,15 @@ def message_from_template_representation(
         tr: The template representation returned by the component's `format_for_llm`.
         default_role: The positional role guess to use when `tr.role` is `None`.
         content: The already-rendered text content for the message.
+        message_cls: The class to build: `Message` or a subclass that takes the
+            same constructor arguments.
 
     Returns:
-        A `Message` with the resolved role, content, attachments, and tool metadata.
+        A `message_cls` instance with the resolved role, content, attachments, and
+        tool metadata.
     """
     role = tr.role if tr.role is not None else default_role
-    return Message(
+    return message_cls(
         role=role,  # type: ignore[arg-type]  # validated by Message.__init__
         content=content,
         images=tr.images,

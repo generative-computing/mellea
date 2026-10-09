@@ -607,13 +607,9 @@ class Requirement(Component[str]):
         target. Must only be called from within a `validate` call for this same requirement,
         after the target has been bound by `_bind_validation_target`.
 
-        When the target is a `ModelOutputThunk` with a non-`None` `parsed_repr` (a
-        `Component` or a plain `str`), the parsed representation is used so the judge
-        sees the parsed output rather than the raw generated string. For an LLMON
-        model this is the detokenized plain-text `parsed_repr` (a `str`) rather than
-        the raw Machine-LLMON `value`; for a chat turn it is the parsed `Message`
-        `Component`. For a normal instruct the `str` `parsed_repr` equals the raw
-        value, so substituting it is a no-op.
+        When the target is a `ModelOutputThunk` with a `Component` `parsed_repr`, the parsed
+        representation is used so that the judge sees the structured output rather than the
+        raw generated string.
 
         Returns:
             TemplateRepresentation | str: A `TemplateRepresentation` containing the description
@@ -623,8 +619,10 @@ class Requirement(Component[str]):
             "Object protocol error: should never try to templatize a Requirement except inside of a validate call for that same requirement."
         )
 
-        target: Span | str = self._validation_target
-        if isinstance(target, ModelOutputThunk) and target.parsed_repr is not None:
+        target: Span = self._validation_target
+        if isinstance(target, ModelOutputThunk) and isinstance(
+            target.parsed_repr, Component
+        ):
             target = target.parsed_repr
 
         return TemplateRepresentation(

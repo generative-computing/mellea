@@ -73,7 +73,7 @@ from ..core import (
     get_images_from_component,
 )
 from ..core.base import AbstractMelleaTool
-from ..formatters import ChatFormatter, TemplateFormatter, granite as granite_formatters
+from ..formatters import ChatFormatter, default_formatter, granite as granite_formatters
 from ..formatters.granite import intrinsics as intrinsics
 from ..formatters.granite.base.util import (
     _LLGUIDANCE_GRAMMAR_DEFAULTS,
@@ -653,7 +653,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         model_id (str | ModelIdentifier): Used to load the model and tokenizer via
             Hugging Face `Auto*` classes.
         formatter (ChatFormatter | None): Formatter for rendering components into
-            prompts. Defaults to `TemplateFormatter`.
+            prompts. Defaults to `default_formatter(model_id)`: an `LLMONFormatter`
+            for a registered LLMON model, otherwise a `TemplateFormatter`.
         use_caches (bool): If `False`, KV caching is disabled even if a `Cache`
             is provided.
         cache (Cache | None): Caching strategy; defaults to
@@ -700,9 +701,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         model_options: dict | None = None,
     ):
         """Load model weights from the given model ID, or from a custom config if provided."""
-        formatter = (
-            formatter if formatter is not None else TemplateFormatter(model_id=model_id)
-        )
+        formatter = formatter if formatter is not None else default_formatter(model_id)
 
         super().__init__(model_id, formatter, model_options=model_options)
 
@@ -1912,9 +1911,17 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 set_seed(seed)
 
             format_kwargs = {}
-            _lp = _grammar_logits_processor(action, _format, self._llguidance_tokenizer)
-            if _lp is not None:
-                format_kwargs["logits_processor"] = _lp
+            if _format:
+                schema: dict[str, Any] = _format.model_json_schema()
+                grammar: str = llguidance.LLMatcher.grammar_from_json_schema(
+                    schema, overrides=_LLGUIDANCE_GRAMMAR_DEFAULTS
+                )
+                logits_processor = _GuidanceLogitsProcessor(
+                    grammar, self._llguidance_tokenizer
+                )
+                format_kwargs["logits_processor"] = LogitsProcessorList(
+                    [logits_processor]
+                )
 
             streaming_kwargs = {}
             streamer = None
@@ -2112,9 +2119,17 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             ).to(self._device)  # type: ignore
 
             format_kwargs = {}
-            _lp = _grammar_logits_processor(action, _format, self._llguidance_tokenizer)
-            if _lp is not None:
-                format_kwargs["logits_processor"] = _lp
+            if _format:
+                schema: dict[str, Any] = _format.model_json_schema()
+                grammar: str = llguidance.LLMatcher.grammar_from_json_schema(
+                    schema, overrides=_LLGUIDANCE_GRAMMAR_DEFAULTS
+                )
+                logits_processor = _GuidanceLogitsProcessor(
+                    grammar, self._llguidance_tokenizer
+                )
+                format_kwargs["logits_processor"] = LogitsProcessorList(
+                    [logits_processor]
+                )
 
             streaming_kwargs = {}
             streamer = None
@@ -2646,18 +2661,15 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         )
 
         format_kwargs = {}
-        # The raw path generates a batch with one shared LogitsProcessorList, which
-        # cannot carry a per-action grammar. So only honor an action-supplied grammar
-        # when every action agrees; otherwise fall back to `format` (the common raw
-        # case). LLMON hard mode uses the chat path, not this one, so this is a
-        # conservative best-effort rather than its primary route.
-        grammar_specs = {getattr(a, "output_grammar", lambda: None)() for a in actions}
-        uniform_action = actions[0] if len(grammar_specs) == 1 and actions else None
-        _lp = _grammar_logits_processor(
-            uniform_action, format, self._llguidance_tokenizer
-        )
-        if _lp is not None:
-            format_kwargs["logits_processor"] = _lp
+        if format:
+            schema: dict[str, Any] = format.model_json_schema()
+            grammar: str = llguidance.LLMatcher.grammar_from_json_schema(
+                schema, overrides=_LLGUIDANCE_GRAMMAR_DEFAULTS
+            )
+            logits_processor = _GuidanceLogitsProcessor(
+                grammar, self._llguidance_tokenizer
+            )
+            format_kwargs["logits_processor"] = LogitsProcessorList([logits_processor])
 
         generate_kwargs = self._make_backend_specific_and_remove(model_opts)
         if "stop_strings" in generate_kwargs and "tokenizer" not in generate_kwargs:
@@ -2808,6 +2820,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 if want_raw_logits and mot_logits_raw is not None:
                     result.generation.raw_logits = mot_logits_raw
 
+                self._finalize_output(result)
                 action = actions[i]
                 result.parsed_repr = (
                     action.parse(result)

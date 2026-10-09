@@ -4,19 +4,15 @@
 
 The LLMON behavior lives in the model's fine-tuned weights, not a server chat
 template (verified against `llmon95:latest`, whose Ollama template is a bare
-passthrough — see LLMON-SUMMARY.md). Mellea sends its message through the ordinary
-OpenAI-compatible chat backend — no new backend and no formatter swap.
+passthrough). Mellea sends its message through the ordinary OpenAI-compatible chat
+backend — no new backend.
 
-The LLMON round-trip is automatic and model-driven: because the served model id is
-in Mellea's allowlist (`llmon_models.is_llmon_model`), a plain `m.instruct(prompt)`
-is encoded into a Machine-LLMON `instr`/`data`/`req` object on the way out (in
-`Backend.generate_from_context`) and the reply is stripped back to plain text on
-the way in (in `ModelOutputThunk._set_parsed_repr`). No `instruction_cls` and no
-per-call flag are needed; `thunk.parsed_repr` is always plain text, never markup.
-
-(To opt into LLMON hard-mode output grammar, pass
-`instruction_cls=LLMONInstruction, instruction_kwargs={"constrain_output": True}`;
-the automatic encode/strip still apply.)
+Because `llmon95:latest` is a registered LLMON model, the backend renders with
+`LLMONFormatter` by default: a plain `m.instruct(prompt)` is sent as LLMON built
+from every part of the instruction (`instr`, `req`, ... and an `exec` block), and
+the reply is extracted back to plain text, which becomes the thunk's `value`. The
+text the model generated is kept on `thunk.raw.text`. To use another LLMON model,
+pass `formatter=LLMONFormatter(model_id)` to the backend.
 
 Requires the `llmon` extra (`pip install "mellea[llmon]"`) and a served LLMON
 model reachable at `LLMON_TEST_BASE_URL` (default `http://localhost:8000`; for the
@@ -65,8 +61,8 @@ def summarize_feedback(text: str) -> str:
     # return a SamplingResult; its `.result` is the chosen output thunk.
     thunk = result.result if isinstance(result, SamplingResult) else result
 
-    # For an LLMON model, parsed_repr is the detokenized plain text (never markup).
-    return str(thunk.parsed_repr)
+    # For an LLMON model, value is the extracted reply (never markup).
+    return thunk.value
 
 
 if __name__ == "__main__":

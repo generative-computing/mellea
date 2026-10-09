@@ -451,21 +451,11 @@ class BaseSamplingStrategy(SamplingStrategy):
                 # `parsed_repr = value` for CBlock/MOT actions). So there is no
                 # Component to re-parse against, even for a MOT[Component]; fall back
                 # to the raw value (mirrors how backends handle non-Component actions).
-                #
-                # Exception: for an LLMON model the correct parsed_repr is the
-                # model-driven strip that `avalue()` already computed in
-                # `_set_parsed_repr` (plain text, markup removed), independent of the
-                # action. Re-parsing via `action.parse` would re-run the base
-                # Instruction._parse and clobber it back to raw Machine LLMON, so
-                # leave the stripped parsed_repr in place for an LLMON model.
-                from ..components.llmon_models import is_llmon_model
-
-                if not is_llmon_model(backend._model_id):
-                    result.parsed_repr = (
-                        action.parse(result)
-                        if isinstance(action, Component)
-                        else result.value  # type: ignore[assignment]
-                    )
+                result.parsed_repr = (
+                    action.parse(result)
+                    if isinstance(action, Component)
+                    else result.value  # type: ignore[assignment]
+                )
 
                 # validation pass; validate over the caller's validation context if they
                 # supplied one, otherwise over this attempt's post-generation context.

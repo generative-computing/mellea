@@ -36,7 +36,7 @@ from ..core import (
     RawProviderResponse,
 )
 from ..core.base import AbstractMelleaTool
-from ..formatters import ChatFormatter, TemplateFormatter
+from ..formatters import ChatFormatter, default_formatter
 from ..helpers import (
     DEFAULT_CHUNK_TIMEOUT,
     chat_completion_delta_merge,
@@ -71,7 +71,8 @@ class LiteLLMBackend(FormatterBackend):
         model_id (str): The LiteLLM model identifier string; typically
             `"<provider>/<model_creator>/<model_name>"`.
         formatter (ChatFormatter | None): Formatter for rendering components.
-            Defaults to `TemplateFormatter`.
+            Defaults to `default_formatter(model_id)`: an `LLMONFormatter` for a
+            registered LLMON model, otherwise a `TemplateFormatter`.
         base_url (str | None): Base URL for the LLM API endpoint. When set,
             forwarded as `api_base` to LiteLLM. When `None` (default),
             LiteLLM infers the endpoint from the model prefix (e.g.
@@ -101,9 +102,7 @@ class LiteLLMBackend(FormatterBackend):
         super().__init__(
             model_id=model_id,
             formatter=(
-                formatter
-                if formatter is not None
-                else TemplateFormatter(model_id=model_id)
+                formatter if formatter is not None else default_formatter(model_id)
             ),
             model_options=model_options,
         )
@@ -834,6 +833,7 @@ class LiteLLMBackend(FormatterBackend):
             )
             output.generation.model = self._model_id
             output.generation.provider = self._provider
+            self._finalize_output(output)
 
             output.parsed_repr = (
                 action.parse(output) if isinstance(action, Component) else output.value

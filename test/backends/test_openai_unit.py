@@ -947,53 +947,5 @@ async def test_thinking_false_omits_reasoning_effort_against_real_openai():
     assert call_kwargs["extra_body"]["chat_template_kwargs"]["enable_thinking"] is False
 
 
-async def test_output_grammar_injects_guided_grammar_into_extra_body():
-    """An action exposing output_grammar() adds extra_body.guided_grammar (vLLM).
-
-    Plumbing only: official OpenAI / Ollama ignore guided_grammar (soft no-op); this
-    asserts the grammar reaches the request body, not that it is enforced.
-    """
-    pytest.importorskip("lang.json.llmon_converters")  # the llmon extra
-    from mellea.core.base import CBlock
-    from mellea.stdlib.context import ChatContext
-
-    backend = OpenAIBackend(
-        model_id="gpt-4o", base_url="http://localhost:9999/v1", api_key="test-key"
-    )
-
-    class _GrammarAction(CBlock):
-        """A minimal action that advertises a GBNF output grammar."""
-
-        def output_grammar(self):
-            return ('root ::= "x"', "gbnf")
-
-    with patch.object(
-        backend._async_client.chat.completions, "create", new_callable=AsyncMock
-    ) as mock_create:
-        mock_create.return_value = ChatCompletion(
-            id="t",
-            choices=[
-                Choice(
-                    finish_reason="stop",
-                    index=0,
-                    message=ChatCompletionMessage(role="assistant", content="ok"),
-                )
-            ],
-            created=0,
-            model="gpt-4o",
-            object="chat.completion",
-        )
-        mot, _ = await backend.generate_from_chat_context(
-            _GrammarAction(value="summarize this"),
-            ChatContext(),
-            model_options={ModelOption.STREAM: False},
-        )
-        await mot.avalue()
-
-    extra_body = mock_create.call_args.kwargs["extra_body"]
-    # GBNF is passed through verbatim — vLLM consumes it natively, no conversion.
-    assert extra_body["guided_grammar"] == 'root ::= "x"'
-
-
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

@@ -2766,6 +2766,7 @@ async def test_generate_from_raw_logits_sliced_per_item():
         patch.object(backend, "formatter") as mock_fmt,
     ):
         mock_fmt.print = MagicMock(return_value="prompt")
+        mock_fmt.parse_output = MagicMock(side_effect=lambda text: text)
         results = await backend.generate_from_raw(
             actions, MagicMock(), model_options={ModelOption.LOGITS: True}
         )
@@ -2829,6 +2830,7 @@ async def test_generate_from_raw_logits_not_set_when_option_absent():
         patch.object(backend, "formatter") as mock_fmt,
     ):
         mock_fmt.print = MagicMock(return_value="prompt")
+        mock_fmt.parse_output = MagicMock(side_effect=lambda text: text)
         results = await backend.generate_from_raw(
             [Message("user", "hi")], MagicMock(), model_options={}
         )
@@ -3801,6 +3803,7 @@ async def test_generate_from_raw_raw_response_set_per_mot():
         patch.object(backend, "formatter") as mock_fmt,
     ):
         mock_fmt.print = MagicMock(return_value="prompt")
+        mock_fmt.parse_output = MagicMock(side_effect=lambda text: text)
         results = await backend.generate_from_raw(
             actions, MagicMock(), model_options={}
         )
@@ -3869,6 +3872,7 @@ async def test_generate_from_raw_raw_response_scores_are_clones_when_logits_requ
         patch.object(backend, "formatter") as mock_fmt,
     ):
         mock_fmt.print = MagicMock(return_value="prompt")
+        mock_fmt.parse_output = MagicMock(side_effect=lambda text: text)
         results = await backend.generate_from_raw(
             actions, MagicMock(), model_options={ModelOption.LOGITS: True}
         )
@@ -3923,6 +3927,7 @@ async def test_generate_from_raw_raw_response_scores_none_when_logits_not_reques
         patch.object(backend, "formatter") as mock_fmt,
     ):
         mock_fmt.print = MagicMock(return_value="prompt")
+        mock_fmt.parse_output = MagicMock(side_effect=lambda text: text)
         results = await backend.generate_from_raw(
             [Message("user", "hi")], MagicMock(), model_options={}
         )
@@ -3966,6 +3971,7 @@ async def test_generate_from_raw_raw_response_none_for_non_tensor_sequences():
         patch.object(backend, "formatter") as mock_fmt,
     ):
         mock_fmt.print = MagicMock(return_value="prompt")
+        mock_fmt.parse_output = MagicMock(side_effect=lambda text: text)
         results = await backend.generate_from_raw(
             cast(Any, actions), MagicMock(), model_options={}
         )
@@ -4011,6 +4017,7 @@ async def test_generate_from_raw_raw_response_none_for_beam_outputs():
         patch.object(backend, "formatter") as mock_fmt,
     ):
         mock_fmt.print = MagicMock(return_value="prompt")
+        mock_fmt.parse_output = MagicMock(side_effect=lambda text: text)
         results = await backend.generate_from_raw(
             cast(Any, actions), MagicMock(), model_options={}
         )
@@ -4061,46 +4068,3 @@ async def test_alora_requirement_dispatch_honors_explicit_adapter_types_override
 
     assert captured["name"] == "my-custom-check"
     assert captured["adapter_types"] == ("lora",)
-
-
-class TestGrammarLogitsProcessor:
-    """`_grammar_logits_processor` picks raw-grammar over json-schema, else None."""
-
-    def test_action_grammar_takes_precedence_and_skips_json_schema(self):
-        from mellea.backends.huggingface import _grammar_logits_processor
-
-        action = SimpleNamespace(output_grammar=lambda: ('root ::= "x"', "gbnf"))
-        with (
-            patch("mellea.backends.huggingface._GuidanceLogitsProcessor") as mock_gp,
-            patch("mellea.backends.huggingface.llguidance") as mock_llg,
-        ):
-            mock_llg.grammar_from.return_value = "COMPILED"
-            lp = _grammar_logits_processor(action, _FakeSchema, ll_tokenizer=object())
-
-        # The action grammar is compiled for its syntax and used; the json-schema
-        # path was not touched.
-        mock_llg.grammar_from.assert_called_once_with("gbnf", 'root ::= "x"')
-        mock_gp.assert_called_once()
-        assert mock_gp.call_args[0][0] == "COMPILED"
-        mock_llg.LLMatcher.grammar_from_json_schema.assert_not_called()
-        assert lp is not None
-
-    def test_falls_back_to_json_schema_when_no_action_grammar(self):
-        from mellea.backends.huggingface import _grammar_logits_processor
-
-        action = SimpleNamespace(output_grammar=lambda: None)
-        with (
-            patch("mellea.backends.huggingface._GuidanceLogitsProcessor") as mock_gp,
-            patch("mellea.backends.huggingface.llguidance") as mock_llg,
-        ):
-            mock_llg.LLMatcher.grammar_from_json_schema.return_value = "JSON_GRAMMAR"
-            _grammar_logits_processor(action, _FakeSchema, ll_tokenizer=object())
-
-        mock_llg.LLMatcher.grammar_from_json_schema.assert_called_once()
-        assert mock_gp.call_args[0][0] == "JSON_GRAMMAR"
-
-    def test_returns_none_when_no_grammar_and_no_format(self):
-        from mellea.backends.huggingface import _grammar_logits_processor
-
-        action = SimpleNamespace()  # no output_grammar at all
-        assert _grammar_logits_processor(action, None, ll_tokenizer=object()) is None

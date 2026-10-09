@@ -14,7 +14,7 @@ import abc
 from enum import Enum
 from urllib.parse import urlparse
 
-from ..core import Backend
+from ..core import Backend, ModelOutputThunk
 from ..formatters import ChatFormatter
 from .model_ids import ModelIdentifier
 
@@ -51,3 +51,20 @@ class FormatterBackend(Backend, abc.ABC):
         self.model_options = model_options if model_options is not None else {}
         self.formatter: ChatFormatter = formatter
         self._warned_about: set[str] = set()
+
+    def _finalize_output(self, mot: ModelOutputThunk) -> None:
+        """Replace `mot.value` with the response the formatter extracts from it.
+
+        When extraction changes the text, the generated text is kept on
+        `mot.raw.text`.
+
+        Args:
+            mot: The just-completed model output.
+        """
+        generated = mot.value
+        if generated is None:
+            return
+        response = self.formatter.parse_output(generated)
+        if response != generated:
+            mot.raw.text = generated
+            mot.value = response

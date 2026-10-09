@@ -72,6 +72,10 @@ IMPORTS: dict[str, list[str]] = {
     "hooks": [
         "import cpex"  # We directly import a non-Mellea class/package here since the hooks classes are defined regardless of if cpex is installed.
     ],
+    # LLMONFormatter imports the `llmon` library when constructed, not on import.
+    "llmon": [
+        'from mellea.formatters import LLMONFormatter; LLMONFormatter("llmon95:latest")'
+    ],
 }
 
 # Flag checks keyed by extra name: list of (module, attr, expected_with, expected_without)
@@ -95,7 +99,7 @@ META_GROUPS = {"backends", "all"}
 # Extras whose IMPORTS entries all go through guarded mellea/cli modules
 # (i.e. ImportError will contain a mellea[<extra>] hint). Allows us to
 # check for a nice ImportError message.
-GUARDED_EXTRAS = {*BACKEND_EXTRAS, "server", "docling", "cli"}
+GUARDED_EXTRAS = {*BACKEND_EXTRAS, "server", "docling", "cli", "llmon"}
 
 # Extras that have a corresponding test_<name> function in this module.
 # Used to determine if we are missing tests for a given optional-dependency group.
@@ -112,6 +116,7 @@ TESTED_EXTRAS = {
     "switch",
     "hooks",
     "cli",
+    "llmon",
     "backends",
 }
 
@@ -399,6 +404,11 @@ def test_sandbox() -> None:
 def test_switch() -> None:
     """mellea[switch]: huggingface_hub is available for embedded adapter downloads."""
     _run_check(extra="switch", should_succeed=[*IMPORTS["core"], *IMPORTS["switch"]])
+
+
+def test_llmon() -> None:
+    """mellea[llmon]: the `llmon` converters that `LLMONFormatter` uses are available."""
+    _run_check(extra="llmon", should_succeed=[*IMPORTS["core"], *IMPORTS["llmon"]])
 
 
 def test_cli() -> None:

@@ -73,6 +73,7 @@ to run.
 | `library_interop/` | LangChain message conversion, OpenAI format compatibility, cross-library workflows |
 | `mcp/` | MCP tool creation, Claude Desktop integration, Langflow integration |
 | `bedrock/` | Amazon Bedrock backend configuration and usage |
+| `llmon/` | Instructing a served LLMON-trained model through [`LLMONFormatter`](../concepts/llmon.md): LLMON prompts ending in an `exec` block, plain-text replies |
 
 ### Performance and advanced sampling
 

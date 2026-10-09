@@ -36,7 +36,7 @@ from ..core import (
     Span,
 )
 from ..core.base import AbstractMelleaTool
-from ..formatters import ChatFormatter, TemplateFormatter, granite as granite_formatters
+from ..formatters import ChatFormatter, default_formatter, granite as granite_formatters
 from ..helpers import (
     DEFAULT_CHUNK_TIMEOUT,
     ClientCache,
@@ -91,7 +91,8 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         model_id (str | ModelIdentifier): OpenAI-compatible model identifier.
             Defaults to `model_ids.OPENAI_GPT_5_1`.
         formatter (ChatFormatter | None): Formatter for rendering components.
-            Defaults to `TemplateFormatter`.
+            Defaults to `default_formatter(model_id)`: an `LLMONFormatter` for a
+            registered LLMON model, otherwise a `TemplateFormatter`.
         base_url (str | None): Base URL for the API endpoint; defaults to the
             standard OpenAI endpoint if not set.
         model_options (dict | None): Default model options for generation requests.
@@ -184,9 +185,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         super().__init__(
             model_id=model_id,
             formatter=(
-                formatter
-                if formatter is not None
-                else TemplateFormatter(model_id=model_id)
+                formatter if formatter is not None else default_formatter(model_id)
             ),
             model_options=model_options,
         )
@@ -1474,31 +1473,6 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         if model_opts.get(ModelOption.STREAM, False):
             extra_params["stream_options"] = {"include_usage": True}
 
-        # LLMON hard mode (and any action exposing `output_grammar()`): inject the
-        # grammar as a vLLM `guided_grammar` into the Mellea-assembled extra_body.
-        # vLLM's `guided_grammar` consumes GBNF natively, so a GBNF grammar is passed
-        # through unchanged — no conversion and no extra dependency on this backend.
-        # EXPERIMENTAL / vLLM-only and UNENFORCED IN CI: only vLLM-backed servers act
-        # on `guided_grammar`; official OpenAI and Ollama ignore it (soft no-op). This
-        # path is plumbed and mock-tested but not enforcement-tested here (vLLM does
-        # not build on this platform); see LLMON-SUMMARY.md. A non-GBNF syntax is
-        # skipped rather than passed raw, since vLLM would reject it.
-        output_grammar = getattr(action, "output_grammar", None)
-        if callable(output_grammar):
-            grammar_spec = output_grammar()
-            if grammar_spec is not None:
-                grammar_text, syntax = grammar_spec
-                if syntax == "gbnf":
-                    extra_params.setdefault("extra_body", {})
-                    extra_params["extra_body"]["guided_grammar"] = grammar_text
-                else:
-                    MelleaLogger.get_logger().warning(
-                        "output_grammar() syntax %r is not GBNF; vLLM `guided_grammar` "
-                        "expects GBNF, so this grammar is not sent. Generation is "
-                        "unconstrained on this backend.",
-                        syntax,
-                    )
-
         # Build the final backend-specific params and merge any user-supplied
         # extra_body into extra_params so there is a single extra_body source.
         # Two spreads each containing extra_body raises TypeError at call time.
@@ -1817,6 +1791,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             )
             output.generation.model = self._model_id
             output.generation.provider = self._provider
+            self._finalize_output(output)
 
             output.parsed_repr = (
                 action.parse(output) if isinstance(action, Component) else output.value

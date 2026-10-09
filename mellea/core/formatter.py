@@ -7,7 +7,8 @@ A `Formatter` converts `Component` and `CBlock` objects into the text strings
 fed to language model prompts. The single abstract method `print` encapsulates this
 rendering contract; concrete subclasses such as `ChatFormatter` and
 `TemplateFormatter` extend it with chat-message and Jinja2-template rendering
-respectively.
+respectively. `parse_output` is the reverse hook: it extracts the model's response
+from the text it generated, for formatters whose prompt format shapes the reply.
 """
 
 import abc
@@ -29,3 +30,19 @@ class Formatter(abc.ABC):
             str: The rendered string representation of `c`.
         """
         ...
+
+    def parse_output(self, text: str) -> str:
+        """Extracts the model's response from the text it generated.
+
+        Backends call this once per generation, after the model finishes and before
+        the originating action parses the output. The default returns `text`
+        unchanged; a formatter whose prompt format also shapes the reply (such as
+        `LLMONFormatter`) overrides it.
+
+        Args:
+            text (str): The generated text, exactly as the model returned it.
+
+        Returns:
+            str: The response text to store as the output's `value`.
+        """
+        return text
