@@ -1188,12 +1188,13 @@ def _parse_docstring(doc_string: str | None) -> dict[str, str]:
     if not doc_string:
         return parsed_docstring
 
+    args_section_key = "<args section>"
     key = str(hash(doc_string))
     for line in doc_string.splitlines():
         lowered_line = line.lower().strip()
-        if lowered_line.startswith("args:"):
-            key = "args"
-        elif lowered_line.startswith(("returns:", "yields:", "raises:")):
+        if lowered_line == "args:":
+            key = args_section_key
+        elif lowered_line in ("returns:", "yields:", "raises:"):
             key = "_"
 
         else:
@@ -1201,7 +1202,7 @@ def _parse_docstring(doc_string: str | None) -> dict[str, str]:
             parsed_docstring[key] += f"{line.strip()}\n"
 
     last_key = None
-    for line in parsed_docstring["args"].splitlines():
+    for line in parsed_docstring[args_section_key].splitlines():
         line = line.strip()
         if ":" in line:
             # Split the line on either:
@@ -1484,6 +1485,18 @@ def convert_function_to_ollama_tool(
     # This schema never consumes the return annotation, so an unresolvable one
     # is left as a string rather than being allowed to fail the conversion.
     sig = resolve_signature_annotations(func)
+    # Tool calls pass arguments by keyword only, so a model can never fill
+    # *args and **kwargs has no fixed name to describe
+    params = []
+    for param in sig.parameters.values():
+        if param.kind in (param.VAR_POSITIONAL, param.VAR_KEYWORD):
+            MelleaLogger.get_logger().debug(
+                f"Tool '{func.__name__}': leaving variadic parameter '{param.name}' out of the schema"
+            )
+            continue
+        params.append(param)
+    sig = sig.replace(parameters=params)
+
     model_attrs: dict[str, Any] = {
         "__annotations__": {
             k: v.annotation if v.annotation != inspect._empty else str
