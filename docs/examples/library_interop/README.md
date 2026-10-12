@@ -4,7 +4,7 @@ This directory demonstrates how to integrate Mellea with other LLM libraries and
 
 ## Files
 
-### langchain_messages.py
+### [langchain_messages.py](./langchain_messages.py)
 Shows how to convert LangChain messages to Mellea format and use them in a session.
 
 **Key Features:**

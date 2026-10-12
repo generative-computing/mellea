@@ -4,7 +4,7 @@ This directory contains examples for extracting structured information from unst
 
 ## Files
 
-### 101_with_gen_stubs.py
+### [101_with_gen_stubs.py](./101_with_gen_stubs.py)
 Basic information extraction using generative stubs to extract person names from text.
 
 **Key Features:**
@@ -13,7 +13,7 @@ Basic information extraction using generative stubs to extract person names from
 - Simple, declarative approach to information extraction
 - Example with NYTimes article text
 
-### advanced_with_m_instruct.py
+### [advanced_with_m_instruct.py](./advanced_with_m_instruct.py)
 More advanced extraction patterns using `m.instruct()` with structured outputs.
 
 ## Concepts Demonstrated

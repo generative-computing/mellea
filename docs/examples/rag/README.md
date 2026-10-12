@@ -4,7 +4,7 @@ This directory contains examples of implementing RAG systems with Mellea.
 
 ## Files
 
-### simple_rag_with_filter.py
+### [simple_rag_with_filter.py](./simple_rag_with_filter.py)
 A complete RAG pipeline with relevance filtering using generative stubs.
 
 **Key Features:**
@@ -14,7 +14,7 @@ A complete RAG pipeline with relevance filtering using generative stubs.
 - Answer generation with grounded context
 - Using `@generative` for filtering logic
 
-### mellea_pdf.py
+### [mellea_pdf.py](./mellea_pdf.py)
 RAG example specifically for PDF documents.
 
 ## Concepts Demonstrated
