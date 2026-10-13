@@ -73,7 +73,7 @@ preserves the `ChatContext` conversation history across turns.
 m serve path/to/your_program.py
 ```
 
-The server starts on port 8000 by default and exposes:
+The server starts on port 8080 by default and exposes:
 
 - `POST /v1/chat/completions` — OpenAI Chat Completions API
 - `POST /v1/responses` — OpenAI Responses API
@@ -96,7 +96,7 @@ so no changes to your program are needed.
 Any OpenAI-compatible client works. Using `curl`:
 
 ```bash
-curl http://localhost:8000/v1/chat/completions \
+curl http://localhost:8080/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{"model": "mellea", "messages": [{"role": "user", "content": "Summarize this in one sentence."}]}'
 ```
@@ -106,7 +106,7 @@ Using the OpenAI Python SDK:
 ```python
 from openai import OpenAI
 
-client = OpenAI(base_url="http://localhost:8000/v1", api_key="unused")
+client = OpenAI(base_url="http://localhost:8080/v1", api_key="unused")
 response = client.chat.completions.create(
     model="mellea",
     messages=[{"role": "user", "content": "Summarize this in one sentence."}],
@@ -121,7 +121,7 @@ print(response.choices[0].message.content)
 Using `curl`:
 
 ```bash
-curl http://localhost:8000/v1/responses \
+curl http://localhost:8080/v1/responses \
   -H "Content-Type: application/json" \
   -d '{"model": "mellea", "input": "Summarize this in one sentence."}'
 ```
@@ -131,7 +131,7 @@ Using the OpenAI Python SDK:
 ```python
 from openai import OpenAI
 
-client = OpenAI(base_url="http://localhost:8000/v1", api_key="unused")
+client = OpenAI(base_url="http://localhost:8080/v1", api_key="unused")
 response = client.responses.create(
     model="mellea",
     input="Summarize this in one sentence.",
