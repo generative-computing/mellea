@@ -1273,19 +1273,22 @@ async def test_alora_activation_guard_abort_hook_reports_shim_as_pinned_local_fi
 
 
 @pytest.mark.asyncio
-async def test_requirement_reroute_falls_back_to_llm_as_a_judge_on_activation_failure(
-    caplog,
-):
+@pytest.mark.parametrize("explicit_alora", [False, True], ids=["plain", "explicit"])
+async def test_requirement_reroute_on_activation_failure(caplog, explicit_alora):
     """AC1's "treated as unavailable" arm, delivered through the real routing path.
 
     A plain `Requirement` auto-reroutes to `requirement-check_alora`
     (`default_to_constraint_checking_alora=True`, the default). When that
     adapter's activation guard fires, `_generate_from_context` must catch
-    `AloraActivationError` and fall back to LLM-as-a-judge — the exact same
-    treatment the adjacent `alora_req_adapter is None` branch already gives
-    an adapter that was never registered at all. Without that catch, this
-    call would raise straight out of `.validate()`/a sampling loop instead of
-    degrading gracefully.
+    `AloraActivationError` and fall back to LLMaJ — auto-rerouting
+    is only an optimisation. Without that catch, this call would raise
+    straight out of `.validate()`/a sampling loop instead of degrading
+    gracefully.
+
+    An explicit `ALoraRequirement` is a request for the adapter, and its
+    output_to_bool parses adapter JSON, so the same failure raises
+    `ValueError` (chained from the `AloraActivationError`) instead of falling
+    back to a yes/no answer it could never parse.
 
     Uses `_make_backend()` (a real `LocalHFBackend` over a mocked model/
     tokenizer), not the bare `SimpleNamespace` stub: `_generate_from_context`
@@ -1295,9 +1298,13 @@ async def test_requirement_reroute_falls_back_to_llm_as_a_judge_on_activation_fa
     """
     import logging
 
-    from mellea.backends.adapters._core import Adapter as _AdapterCore, LocalFileBinding
+    from mellea.backends.adapters._core import (
+        Adapter as _AdapterCore,
+        AloraActivationError,
+        LocalFileBinding,
+    )
     from mellea.backends.adapters.io_contracts import get_io_contract
-    from mellea.stdlib.requirements import Requirement
+    from mellea.stdlib.requirements import ALoraRequirement, Requirement
 
     backend = _make_backend()
     backend.default_to_constraint_checking_alora = True
@@ -1336,7 +1343,11 @@ async def test_requirement_reroute_falls_back_to_llm_as_a_judge_on_activation_fa
         return mot
 
     ctx = ChatContext().add(Message("user", "hi")).add(Message("assistant", "hello"))
-    req = Requirement("The response should be a greeting.")
+    req: Requirement = (
+        ALoraRequirement("The response should be a greeting.")
+        if explicit_alora
+        else Requirement("The response should be a greeting.")
+    )
 
     with (
         patch(
@@ -1365,6 +1376,14 @@ async def test_requirement_reroute_falls_back_to_llm_as_a_judge_on_activation_fa
         patch.object(backend, "do_generate_walk", AsyncMock(return_value=None)),
         caplog.at_level(logging.WARNING),
     ):
+        if explicit_alora:
+            with pytest.raises(ValueError, match="failed to activate") as excinfo:
+                await backend._generate_from_context(req, ctx, model_options={})
+            assert isinstance(excinfo.value.__cause__, AloraActivationError)
+            assert standard_calls == [], (
+                "an explicit ALoraRequirement must not fall back"
+            )
+            return
         mot, _ = await backend._generate_from_context(req, ctx, model_options={})
 
     assert standard_calls == [req], (
@@ -4033,7 +4052,8 @@ async def test_alora_requirement_dispatch_honors_explicit_adapter_types_override
     hardcoded `self._find_adapter(adapter_name, ("alora",))` regardless of
     what `adapter_types` the caller passed to `ALoraRequirement` — a custom,
     LoRA-only adapter could never be found this way, silently falling back
-    to regular generation.
+    to regular generation. An explicit `ALoraRequirement` that can't find its
+    adapter now raises instead, so the lookup is observed via the raise.
     """
     from mellea.stdlib.requirements.requirement import ALoraRequirement
 
@@ -4048,16 +4068,17 @@ async def test_alora_requirement_dispatch_honors_explicit_adapter_types_override
     def fake_find_adapter(name, adapter_types=None):
         captured["name"] = name
         captured["adapter_types"] = adapter_types
-        return None  # not registered; falls back to regular generation below
+        return None  # not registered; an explicit ALoraRequirement raises
 
     with (
         patch.object(backend, "_find_adapter", side_effect=fake_find_adapter),
         patch.object(
             LocalHFBackend, "_generate_from_context_standard", new_callable=AsyncMock
         ) as mock_standard,
+        pytest.raises(ValueError, match="no 'my-custom-check' adapter registered"),
     ):
-        mock_standard.return_value = (MagicMock(), ctx)
         await backend._generate_from_context(action, ctx, model_options={})
 
     assert captured["name"] == "my-custom-check"
     assert captured["adapter_types"] == ("lora",)
+    mock_standard.assert_not_awaited()

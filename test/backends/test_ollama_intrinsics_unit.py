@@ -391,8 +391,8 @@ async def test_alora_requirement_with_explicit_lora_type_skips_resolve(
     """An explicit override that excludes aLoRA does not trigger a cold resolve.
 
     `resolve_adapter()` can't be steered to a specific type, so resolving
-    here could register the wrong one; falling back to regular generation is
-    correct instead.
+    here could register the wrong one. An explicit `ALoraRequirement` that
+    can't get its adapter raises instead of degrading to LLMaJ.
     """
     config_path = tmp_path / "io.yaml"
     config_path.write_text(json.dumps(_SIMPLE_CONFIG), encoding="utf-8")
@@ -412,15 +412,17 @@ async def test_alora_requirement_with_explicit_lora_type_skips_resolve(
     )
     ctx = _make_context()
 
-    with patch.object(
-        OllamaModelBackend, "generate_from_chat_context", new_callable=AsyncMock
-    ) as mock_standard:
-        mock_standard.return_value = MagicMock()
+    with (
+        patch.object(
+            OllamaModelBackend, "generate_from_chat_context", new_callable=AsyncMock
+        ) as mock_standard,
+        pytest.raises(ValueError, match="no usable 'requirement-check' adapter"),
+    ):
         await backend._generate_from_context(action, ctx, model_options={})
 
     assert resolve_calls == []
     assert backend.list_adapters() == []
-    mock_standard.assert_awaited_once()
+    mock_standard.assert_not_awaited()
 
 
 async def test_llmaj_requirement_never_attempts_adapter_resolve():
@@ -468,8 +470,58 @@ async def test_requirement_reroute_falls_back_when_resolve_fails():
     mock_standard.assert_awaited_once()
 
 
+async def test_alora_requirement_raises_when_resolve_fails():
+    """An explicit `ALoraRequirement` is not downgraded when the resolve fails.
+
+    The same resolve failure a plain `Requirement` absorbs (see
+    `test_requirement_reroute_falls_back_when_resolve_fails`) must surface for
+    an explicit `ALoraRequirement`: its output_to_bool parses adapter JSON, so
+    falling back to LLMaJ's yes/no would fail every call.
+    """
+    backend = _make_backend(adapter_models={"requirement-check": _ADAPTER_TAG})
+    action = ALoraRequirement("Be polite.")
+    ctx = _make_context()
+
+    with (
+        patch.object(
+            backend, "resolve_adapter", side_effect=RuntimeError("network error")
+        ),
+        patch.object(
+            OllamaModelBackend, "generate_from_chat_context", new_callable=AsyncMock
+        ) as mock_standard,
+        pytest.raises(ValueError, match="no usable 'requirement-check' adapter"),
+    ):
+        await backend._generate_from_context(action, ctx, model_options={})
+
+    mock_standard.assert_not_awaited()
+
+
+async def test_alora_requirement_raises_when_adapter_never_registered():
+    """With no adapter registered and nothing to resolve, an explicit
+    `ALoraRequirement` raises; a plain `Requirement` still falls back.
+    """
+    backend = _make_backend()
+    ctx = _make_context()
+
+    with patch.object(
+        OllamaModelBackend, "generate_from_chat_context", new_callable=AsyncMock
+    ) as mock_standard:
+        mock_standard.return_value = MagicMock()
+
+        with pytest.raises(ValueError, match="no usable 'requirement-check' adapter"):
+            await backend._generate_from_context(
+                ALoraRequirement("Be polite."), ctx, model_options={}
+            )
+        mock_standard.assert_not_awaited()
+
+        await backend._generate_from_context(
+            Requirement("Be polite."), ctx, model_options={}
+        )
+        mock_standard.assert_awaited_once()
+
+
 async def test_requirement_reroute_falls_back_when_warm_adapter_has_no_tag():
-    """A warm-added adapter with no adapter_models entry degrades to LLMaJ.
+    """A plain `Requirement` falls back to LLMaJ when a warm-added adapter has no model tag.
 
     The adapter is already registered via add_adapter() (so the cold-resolve
     gate never runs), but no Ollama model tag is configured for it. Without
@@ -479,7 +531,7 @@ async def test_requirement_reroute_falls_back_when_warm_adapter_has_no_tag():
     not-yet-added case does.
     """
     backend = _make_backend_with_adapter(_SIMPLE_CONFIG, adapter_models={})
-    action = ALoraRequirement("The response is correct.", "uncertainty")
+    action = Requirement("The response is correct.")
     ctx = _make_context()
 
     with patch.object(
@@ -489,6 +541,28 @@ async def test_requirement_reroute_falls_back_when_warm_adapter_has_no_tag():
         await backend._generate_from_context(action, ctx, model_options={})
 
     mock_standard.assert_awaited_once()
+
+
+async def test_alora_requirement_raises_when_warm_adapter_has_no_tag():
+    """An explicit `ALoraRequirement` is not downgraded when the tag is missing.
+
+    Same setup as the plain-`Requirement` test above: the adapter is
+    registered but has no Ollama model tag. For an explicit
+    `ALoraRequirement` that raises instead of falling back to LLMaJ.
+    """
+    backend = _make_backend_with_adapter(_SIMPLE_CONFIG, adapter_models={})
+    action = ALoraRequirement("The response is correct.", "uncertainty")
+    ctx = _make_context()
+
+    with (
+        patch.object(
+            OllamaModelBackend, "generate_from_chat_context", new_callable=AsyncMock
+        ) as mock_standard,
+        pytest.raises(ValueError, match="no Ollama model tag"),
+    ):
+        await backend._generate_from_context(action, ctx, model_options={})
+
+    mock_standard.assert_not_awaited()
 
 
 async def test_result_processor_applied():

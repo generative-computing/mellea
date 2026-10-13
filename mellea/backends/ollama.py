@@ -923,6 +923,11 @@ class OllamaModelBackend(FormatterBackend, AdapterMixin):
             tool_calls (bool): If `True`, expose available tools to the model and
                 parse tool-call responses.
 
+        Raises:
+            ValueError: If `action` is an `ALoraRequirement` and its adapter is
+                unavailable (not registered on this backend, excluded by
+                `adapter_types`, unresolvable, or missing an Ollama model tag).
+
         Returns:
             tuple[ModelOutputThunk[C], Context]: A thunk holding the (lazy) model output
                 and an updated context that includes `action` and the new output.
@@ -994,12 +999,20 @@ class OllamaModelBackend(FormatterBackend, AdapterMixin):
                 # matching adapter_models entry — the cold-resolve gate above
                 # only protects the not-yet-added case. Generating with it
                 # would hit the hard raise in _generate_from_intrinsic, so
-                # this best-effort reroute must degrade the same way the
-                # not-found case below does, not propagate out of validate().
+                # a plain Requirement's best-effort reroute must degrade the
+                # same way the not-found case below does, not propagate out
+                # of validate().
                 if (
                     alora_req_adapter is not None
                     and adapter_name not in self._adapter_models
                 ):
+                    if isinstance(action, ALoraRequirement):
+                        raise ValueError(
+                            f"cannot validate an ALoraRequirement: adapter "
+                            f"{adapter_name!r} is registered but has no Ollama model "
+                            "tag in `adapter_models`. Map it to a model tag, or use a "
+                            "plain Requirement."
+                        )
                     MelleaLogger.get_logger().warning(
                         f"adapter {adapter_name!r} is registered but has no Ollama "
                         "model tag in `adapter_models`; defaulting to regular "
@@ -1007,11 +1020,11 @@ class OllamaModelBackend(FormatterBackend, AdapterMixin):
                     )
                     alora_req_adapter = None
                 if alora_req_adapter is None:
-                    if reroute_to_alora and isinstance(action, ALoraRequirement):
-                        MelleaLogger.get_logger().warning(
-                            f"attempted to use an AloraRequirement but backend {self} "
-                            f"doesn't have the specified adapter added {adapter_name}; "
-                            f"defaulting to regular generation"
+                    if isinstance(action, ALoraRequirement):
+                        raise ValueError(
+                            f"cannot validate an ALoraRequirement: backend {self} has "
+                            f"no usable {adapter_name!r} adapter. Register one with "
+                            "backend.add_adapter(), or use a plain Requirement."
                         )
                     reroute_to_alora = False
 

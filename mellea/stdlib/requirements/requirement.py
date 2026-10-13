@@ -63,17 +63,16 @@ def requirement_check_to_bool(x: CBlock | ModelOutputThunk | str) -> bool:
 
 
 class ALoraRequirement(Requirement, Intrinsic):
-    """A requirement validated by an ALoRA adapter; falls back to LLM-as-a-Judge only on generation error.
+    """A requirement validated by an ALoRA adapter; never falls back to LLMaJ.
 
-    If the adapter is unavailable (e.g. cannot be loaded), `mellea` uses
-    LLMaJ for that requirement instead.  That is the only case where LLMaJ
-    will be used.
+    If the adapter is unavailable or cannot activate, validation raises
+    `ValueError` rather than degrading to LLMaJ. Use a plain `Requirement` to
+    have `mellea` try the adapter and fall back to LLMaJ.
 
     If the adapter generates output but the output **fails schema validation**
     (`requirement_check_to_bool` raises `AdapterSchemaMismatchError`), the
     error is surfaced on the returned `ValidationResult.error` by
-    `Requirement.validate` — it is not caught here and does not trigger the
-    LLMaJ fallback, which covers only generation errors.  The result fails
+    `Requirement.validate`.  The result fails
     closed (`bool(result)` is `False`), so schema drift is neither silently
     treated as a pass nor raised as an unexpected exception; callers can inspect
     `result.error` to tell it apart from an ordinary "requirement not met".
@@ -93,8 +92,9 @@ class ALoraRequirement(Requirement, Intrinsic):
             ALoRA adapters for validation.
 
     Raises:
-        ValueError: `intrinsic_name` is a custom, non-catalog adapter
-            function and `adapter_types` was not provided.
+        ValueError: If a custom `intrinsic_name` is given without
+            `adapter_types`, or, at validation time, if the adapter is
+            unavailable or cannot activate.
     """
 
     def __init__(

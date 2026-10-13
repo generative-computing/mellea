@@ -940,6 +940,28 @@ async def test_alora_requirement_over_a_context_that_renders_nothing_raises():
         await ALoraRequirement("must mention Paris").validate(backend, ctx)
 
 
+async def test_alora_requirement_raises_when_adapter_not_registered():
+    """An explicit `ALoraRequirement` raises when no matching adapter is registered.
+
+    The backend has no `requirement-check` adapter added. A plain `Requirement`
+    in this situation falls back to LLMaJ, but an explicit `ALoraRequirement`
+    must raise.
+    """
+    backend = OpenAIBackend(
+        model_id="granite-switch",
+        api_key="fake-key",
+        base_url="http://localhost:9999/v1",
+    )
+    ctx = (
+        ChatContext()
+        .add(Message("user", "What is the capital of France?"))
+        .add(ModelOutputThunk("The capital of France is Paris."))
+    )
+
+    with pytest.raises(ValueError, match="no 'requirement-check' adapter registered"):
+        await ALoraRequirement("must mention Paris").validate(backend, ctx)
+
+
 async def test_plain_requirement_over_empty_view_falls_back_to_llmaj(caplog):
     """Auto-rerouting is an optimisation, so a plain `Requirement` degrades instead.
 
