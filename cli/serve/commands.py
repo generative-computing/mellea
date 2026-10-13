@@ -20,8 +20,10 @@ def serve(
     port: int = typer.Option(8080, help="Port to bind to"),
     response_ttl: int = typer.Option(
         1800,
+        min=1,
         help="Seconds before stored responses expire (default: 1800 = 30 minutes). "
-        "Stored responses enable multi-turn sessions via previous_response_id.",
+        "Must be at least 1. Stored responses enable multi-turn sessions "
+        "via previous_response_id.",
     ),
 ):
     """Serve a Mellea program as an OpenAI-compatible HTTP endpoint.
@@ -54,7 +56,6 @@ def serve(
     See Also:
         guide: integrations/m-serve
     """
-
     from cli.serve.app import run_server
 
     run_server(script_path=script_path, host=host, port=port, response_ttl=response_ttl)

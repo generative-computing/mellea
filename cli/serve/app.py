@@ -748,9 +748,8 @@ def run_server(
         response_model=Response | OpenAIErrorResponse,
     )
 
-    ttl_minutes = response_ttl // 60
     typer.echo(
         f"Serving /v1/chat/completions and /v1/responses at http://{host}:{port}"
     )
-    typer.echo(f"Response store TTL: {ttl_minutes} minutes")
+    typer.echo(f"Response store TTL: {response_ttl} seconds")
     uvicorn.run(app, host=host, port=port)
