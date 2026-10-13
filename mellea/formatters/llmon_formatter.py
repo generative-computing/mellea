@@ -10,11 +10,12 @@ granite LLMON preview models' chat template writes that markup itself from the f
 of each chat message: a user message's `content` and `instruction` items become
 `instr` blocks, its `data` items `data` blocks, its `requirement` items `req` blocks,
 and its `documents` `doc` blocks, each wired into the `exec` block the template adds.
-`LLMONFormatter` maps an `Instruction`'s `format_for_llm()` args onto those fields and
-sends every other turn as its plain text, so it writes no LLMON itself. Content is
-sanitized by the `llmon` library first, since the template inserts it as it is, and
-`parse_output` extracts the assistant's reply from a generation that carries LLMON
-markup.
+`LLMONFormatter` maps an `Instruction`'s `format_for_llm()` args onto those fields,
+sends a requirement's LLM-as-a-judge check as an instruction with what it judges as
+data, and sends every other turn as its plain text, so it writes no LLMON itself.
+Content is sanitized by the `llmon` library first, since the template inserts it as
+it is, and `parse_output` extracts the assistant's reply from a generation that
+carries LLMON markup.
 
 Backends use this formatter by default for the served models registered here (see
 `default_formatter`); pass one to a backend explicitly to use it with any other
@@ -31,7 +32,14 @@ from collections.abc import Callable, Iterable
 from typing import Any, cast
 
 from ..backends.model_ids import ModelIdentifier
-from ..core import CBlock, Component, ModelOutputThunk, Span, TemplateRepresentation
+from ..core import (
+    CBlock,
+    Component,
+    ModelOutputThunk,
+    Requirement,
+    Span,
+    TemplateRepresentation,
+)
 from ..stdlib.components.chat import Message, message_from_template_representation
 from ..stdlib.components.docs.document import Document
 from ..stdlib.components.instruction import Instruction
@@ -65,6 +73,15 @@ _LLMON_MODELS: dict[str, LLMONDialect] = {"llmon95:latest": LLMONDialect()}
 # and drop the rest, so the template's fields are declared for HuggingFace alone: a
 # turn that needs them fails on another backend instead of silently losing them.
 _TEMPLATE_FIELDS_PROVIDER = "huggingface"
+# The instruction for a requirement's LLM-as-a-judge check: the wording of Mellea's
+# `Requirement` template, with the output and the requirement sent as labeled `data`
+# items rather than inline. A requirement in a `req` item would instead constrain the
+# judge's own reply.
+_JUDGE_INSTRUCTION = (
+    "Check whether the output satisfies the requirement. "
+    "Reply with 'yes' if the requirement is satisfied and 'no' otherwise. "
+    "Do not include any other text in your response."
+)
 # Whitespace and special tokens (e.g. `<|end_of_text|>`) only.
 _ONLY_SPECIAL_TOKENS = re.compile(r"(?:\s|<\|[^<>|]*\|>)*")
 # A tool call as the model writes it in its reply, with the whitespace before it.
@@ -134,12 +151,16 @@ class LLMONFormatter(ChatFormatter):
     message's fields, so this formatter fills those fields rather than writing LLMON.
     An `Instruction` becomes a user message from its `format_for_llm()` args: its
     prefix and description, joined, are the message's content, which the template
-    takes as its instruction; a repair (rejection sampling's feedback) is a further
-    `instruction` item; each requirement is a `requirement` item; each in-context
-    example and each grounding-context value is a `data` item, except a `Document`,
-    which is a `documents` item with its title. Every item is wired into the turn's
+    takes as its instruction; a repair (the feedback `RepairTemplateStrategy` adds
+    after a failed check) is a further `instruction` item; each requirement is a
+    `requirement` item; each in-context
+    example and each grounding-context value is a `data` item, a `Document` as its
+    text alone. Every item is wired into the turn's
     `exec` block. A user `Message` is its content, with its documents as `documents`
-    items, and a `CBlock` is its text, as the instruction. Any other component raises.
+    items, and a `CBlock` is its text, as the instruction. A `Requirement` being
+    validated (its LLM-as-a-judge check) is an instruction to judge the output, with
+    the output and the requirement as labeled `data` items: in a `requirement` item,
+    the requirement would constrain the judge's own reply. Any other component raises.
 
     System, assistant, and tool turns are sent as their text alone (a message's
     content, or a model output's reply), with their tool calls and tool-call id as
@@ -255,12 +276,13 @@ class LLMONFormatter(ChatFormatter):
             str: The text of the turn.
 
         Raises:
-            TypeError: If `c` is a component other than an `Instruction` or a
-                `Message`, or an instruction holds one in its args.
+            TypeError: If `c` is a component other than an `Instruction`, a
+                `Message`, or a `Requirement` being validated, or an instruction holds
+                one in its args.
             ValueError: If `c` has parts that reach the model only as chat template
                 fields (an instruction's requirements, examples, grounding context,
-                or repair, or a user message's documents), or is an instruction with
-                an output prefix.
+                or repair, a user message's documents, or what a requirement judges),
+                or is an instruction with an output prefix.
         """
         if isinstance(c, _LLMONMessage):
             return c.content
@@ -292,8 +314,9 @@ class LLMONFormatter(ChatFormatter):
             list[Message]: One message per item in `cs`, in order.
 
         Raises:
-            TypeError: If an item is a component other than an `Instruction` or a
-                `Message`, or an instruction holds one in its args.
+            TypeError: If an item is a component other than an `Instruction`, a
+                `Message`, or a `Requirement` being validated, or an instruction holds
+                one in its args.
             ValueError: If an item is an instruction with an output prefix.
         """
         messages: list[Message] = []
@@ -405,13 +428,31 @@ class LLMONFormatter(ChatFormatter):
                 documents = cast(list[Document] | None, rep.args.get("documents"))
                 fields["documents"] = [self._document(d) for d in documents or []]
             return _Turn(role, self._sanitize(c.content), _non_empty(fields), rep)
+        if isinstance(c, Requirement):
+            return self._judge_turn(_representation(c))
         raise TypeError(
-            "LLMONFormatter sends only instructions, messages, content blocks, and "
-            f"model outputs to an LLMON model; got a {type(c).__name__}."
+            "LLMONFormatter sends only instructions, messages, requirements being "
+            "validated, content blocks, and model outputs to an LLMON model; got a "
+            f"{type(c).__name__}."
         )
 
+    def _judge_turn(self, rep: TemplateRepresentation) -> _Turn:
+        """Map a requirement's LLM-as-a-judge check onto an instruction and its data."""
+        args = cast(dict[str, Any], rep.args)
+        # A chat reply is judged by its parsed `Message`.
+        output = args.get("output")
+        text = output.content if isinstance(output, Message) else _plain_text(output)
+        description = _plain_text(args.get("description"))
+        fields = {
+            "data": self._items([f"Output: {text}", f"Requirement: {description}"])
+        }
+        return _Turn(_role(rep, "user"), _JUDGE_INSTRUCTION, fields, rep)
+
     def _instruction_turn(self, rep: TemplateRepresentation) -> _Turn:
-        """Map an instruction's args onto the chat template's user-message fields."""
+        """Map an instruction's args onto the chat template's user-message fields.
+
+        Every grounding-context value is a `data` item, a `Document` as its text alone.
+        """
         args = cast(dict[str, Any], rep.args)
         if _plain_text(args.get("output_prefix")):
             raise ValueError(
@@ -426,18 +467,14 @@ class LLMONFormatter(ChatFormatter):
             )
             if text
         )
-        data = self._items(args.get("icl_examples") or [])
-        documents: list[dict[str, Any]] = []
-        for value in (args.get("grounding_context") or {}).values():
-            if isinstance(value, Document):
-                documents.append(self._document(value))
-            else:
-                data.extend(self._items([value]))
+        grounding = [
+            value.text if isinstance(value, Document) else value
+            for value in (args.get("grounding_context") or {}).values()
+        ]
         fields = {
             "instruction": self._items([args.get("repair")]),
-            "data": data,
+            "data": self._items([*(args.get("icl_examples") or []), *grounding]),
             "requirement": self._items(args.get("requirements") or []),
-            "documents": documents,
         }
         return _Turn(
             _role(rep, "user"), self._sanitize(instruction), _non_empty(fields), rep

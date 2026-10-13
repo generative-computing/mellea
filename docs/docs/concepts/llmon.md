@@ -37,6 +37,7 @@ Pass the formatter to the backend:
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.formatters import LLMONFormatter
 from mellea.stdlib.context import ChatContext
+from mellea.stdlib.sampling import MultiTurnStrategy
 from mellea.stdlib.session import MelleaSession
 
 model_id = "ibm-granite/granite-4.1-3b-llmon-preview"
@@ -48,7 +49,7 @@ result = m.instruct(
     "What is the warehouse code for Lyon?",
     grounding_context={"codes": "The Lyon warehouse code is WH-7Q4Z-LY."},
     requirements=["Answer with the code only."],
-    strategy=None,  # LLM-as-a-judge requirement checks are not sent yet.
+    strategy=MultiTurnStrategy(loop_budget=3),  # See "Requirement validation".
 )
 print(result.value)  # Plain text, never LLMON markup.
 # Output will vary — LLM responses depend on model and temperature.
@@ -68,21 +69,24 @@ and `instruction` items into `instr` blocks, its `data` items into `data` blocks
 wires every item into the turn's `exec` block (each is sent with `"exec": True`).
 
 - **Instruction:** the prefix and description, joined, are the content, which the
-  template takes as the instruction. A repair (rejection sampling's feedback on the
-  last attempt) is a further `instruction` item, each requirement a `requirement`
-  item, and each in-context example and grounding-context value a `data` item. A
-  `Document` in the grounding context is a `documents` item instead, with its title.
+  template takes as the instruction. A repair (the feedback `RepairTemplateStrategy`
+  adds after a failed check) is a further `instruction` item, each requirement a
+  `requirement` item, and each in-context example and grounding-context value a
+  `data` item. A `Document` in the grounding context is a `data` item too, sent as
+  its text alone, without its title.
   Grounding-context labels are not sent, since a `data` block has no name. An
   instruction with an `output_prefix` raises `ValueError`, since the template cannot
   start the reply with one.
 - **Message:** its content, plus a user message's documents as `documents` items.
 - **Content block:** its text, as the instruction.
+- **Requirement check:** the LLM-as-a-judge turn that requirement validation sends
+  is an instruction to judge, worded as in Mellea's `Requirement` template, with
+  `Output: …` and `Requirement: …` as `data` items. In a `requirement` item, the
+  requirement would constrain the judge's own reply instead.
 
-Any other component raises `TypeError`. That includes the LLM-as-a-judge turn that
-requirement validation sends, so for now check requirements with validation
-functions, or pass `strategy=None` to skip the checks. A component inside an
-instruction's args raises too, other than a `Document` or a model output, which is
-sent as its text.
+Any other component raises `TypeError`, and so does a component inside an
+instruction's args, other than a `Document` or a model output, which is sent as its
+text.
 
 The fields travel in each message's `provider_fields`, declared for the HuggingFace
 backend. `print` returns a turn's text alone, so it raises for a turn with fields:
@@ -169,6 +173,24 @@ contain markup until the output is complete.
 
 Structured output works as usual: `format=` is passed to the backend unchanged. A
 `@generative` function is a component of its own, so `LLMONFormatter` raises for it.
+
+## Requirement validation
+
+An instruction's requirements are checked with the LLM-as-a-judge turn described
+above, and a sampling strategy repairs an output that fails a check. The strategy
+matters on `LocalHFBackend`, which decodes greedily:
+
+- **`RejectionSamplingStrategy`**, the default for `m.instruct`, sends the same
+  prompt again, which the model answers the same way, so it cannot fix a miss.
+- **`MultiTurnStrategy`** keeps the failed answer in the conversation and adds a
+  message naming the requirements it missed.
+- **`RepairTemplateStrategy`** sends the instruction again with the failed
+  requirements as a further `instruction` item. A second try that fails the same
+  requirements sends the same prompt again.
+
+Use `MultiTurnStrategy` or `RepairTemplateStrategy` for an LLMON model. The judge is
+unreliable on requirements it has to count (an exact number of words, how often a
+word appears), so check those with a validation function instead.
 
 ## LLMON dialects
 

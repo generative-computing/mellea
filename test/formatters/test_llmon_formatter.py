@@ -124,14 +124,26 @@ class TestInstruction:
         assert message.provider_fields == {
             "huggingface": {
                 "instruction": [_item("The last answer was too long.")],
-                "data": [_item("The X100 is quiet."), _item("Loved it.")],
+                "data": [
+                    _item("The X100 is quiet."),
+                    _item("Loved it."),
+                    _item("Too loud."),
+                ],
                 "requirement": [
                     _item("Mention pros and cons."),
                     _item("Max 60 words."),
                 ],
-                "documents": [{"title": "r2", "text": "Too loud.", "exec": True}],
             }
         }
+
+    def test_grounding_document_is_data_without_its_title(self, formatter):
+        # Unlike a user message's documents, a grounding Document is data.
+        instruction = Instruction(
+            "Answer from the spec.",
+            grounding_context={"spec": Document("Weighs 2 kg.", title="Spec")},
+        )
+        (message,) = formatter.to_chat_messages([instruction])
+        assert _fields(message) == {"data": [_item("Weighs 2 kg.")]}
 
     def test_instruction_alone_declares_no_fields(self, formatter):
         (message,) = formatter.to_chat_messages([Instruction("Do X.")])
@@ -207,13 +219,8 @@ class TestOtherTurns:
 
     @pytest.mark.parametrize(
         "component",
-        [
-            _Lookup(),
-            ReactThought(),
-            Document("Paris."),
-            Requirement("Be brief.")._bind_validation_target(_thunk("Short.", None)),
-        ],
-        ids=["custom", "react", "document", "requirement-judge"],
+        [_Lookup(), ReactThought(), Document("Paris.")],
+        ids=["custom", "react", "document"],
     )
     def test_other_components_raise(self, formatter, component):
         name = type(component).__name__
@@ -221,6 +228,39 @@ class TestOtherTurns:
             formatter.to_chat_messages([component])
         with pytest.raises(TypeError, match=name):
             formatter.print(component)
+
+
+class TestRequirementJudge:
+    """A requirement's LLM-as-a-judge check is an instruction with what it judges."""
+
+    _INSTRUCTION = (
+        "Check whether the output satisfies the requirement. "
+        "Reply with 'yes' if the requirement is satisfied and 'no' otherwise. "
+        "Do not include any other text in your response."
+    )
+
+    def test_output_and_requirement_are_labeled_data(self, formatter):
+        judged = Requirement("Be brief.")._bind_validation_target(
+            _thunk("Short answer.", None)
+        )
+        (message,) = formatter.to_chat_messages([judged])
+        assert message.role == "user"
+        assert message.content == self._INSTRUCTION
+        # In a `requirement` item it would constrain the judge's own reply.
+        assert message.provider_fields == {
+            "huggingface": {
+                "data": [
+                    _item("Output: Short answer."),
+                    _item("Requirement: Be brief."),
+                ]
+            }
+        }
+
+    def test_judged_chat_reply_is_its_message_text(self, formatter):
+        reply = _thunk("Hi there.", Message("assistant", "Hi there."))
+        judged = Requirement("Be polite.")._bind_validation_target(reply)
+        (message,) = formatter.to_chat_messages([judged])
+        assert _fields(message)["data"][0] == _item("Output: Hi there.")
 
 
 class TestModelOutputs:
@@ -355,15 +395,8 @@ class TestSanitization:
         assert message.content == _sanitize("Summarise the <|open|> page.")
         assert _fields(message) == {
             "instruction": [_item(_sanitize(_INJECTED))],
-            "data": [_item(_sanitize(_INJECTED))],
+            "data": [_item(_sanitize(_INJECTED)), _item(_sanitize(_INJECTED))],
             "requirement": [_item(_sanitize("Quote <|open_end|> verbatim."))],
-            "documents": [
-                {
-                    "title": _sanitize("<|:|>t"),
-                    "text": _sanitize(_INJECTED),
-                    "exec": True,
-                }
-            ],
         }
 
     def test_message_content_and_documents_are_sanitized(self, formatter):
@@ -379,6 +412,16 @@ class TestSanitization:
                     "text": _sanitize(_INJECTED),
                     "exec": True,
                 }
+            ]
+        }
+
+    def test_judged_output_and_requirement_are_sanitized(self, formatter):
+        judged = Requirement(_INJECTED)._bind_validation_target(_thunk(_INJECTED, None))
+        (message,) = formatter.to_chat_messages([judged])
+        assert _fields(message) == {
+            "data": [
+                _item(_sanitize(f"Output: {_INJECTED}")),
+                _item(_sanitize(f"Requirement: {_INJECTED}")),
             ]
         }
 

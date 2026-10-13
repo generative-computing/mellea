@@ -6,7 +6,9 @@
 The model's chat template writes each turn into its own LLMON blocks. An
 instruction's grounding context and requirements are sent as the template's message
 fields, so they reach the model as `data` and `req` blocks of their own rather than
-nested in the instruction. For tools, Mellea sends the assistant's tool call back as
+nested in the instruction. A requirement's LLM-as-a-judge check sends the output and
+the requirement as `data`, and the validation test runs the judge-and-repair loop on
+the real weights. For tools, Mellea sends the assistant's tool call back as
 the turn's `tool_calls` and the tool's result as plain text for the template to
 wrap, and the tool-calling test runs that whole loop on the real weights: the model
 calls a tool, Mellea parses the call and runs the tool, the result goes back, and
@@ -34,14 +36,22 @@ from mellea import MelleaSession
 from mellea.backends import ModelOption, tool
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.backends.tools import convert_tools_to_json
+from mellea.core import ModelOutputThunk, Requirement
 from mellea.formatters import LLMONFormatter
-from mellea.stdlib.components import Message
+from mellea.stdlib.components import Instruction, Message
 from mellea.stdlib.context import ChatContext
 from mellea.stdlib.functional import call_tools
+from mellea.stdlib.sampling import MultiTurnStrategy
 from test.conftest import hf_skip
 
 _MODEL_ID = "ibm-granite/granite-4.1-3b-llmon-preview"
 _CODE = "WH-7Q4Z-LY"
+_REVIEW = (
+    "I bought the X100 blender last month for $89. It is powerful and crushes ice "
+    "easily, but it is very loud and the shipping took three weeks."
+)
+# A chat template block of `tag` holding exactly `text` (a regex), with any id.
+_BLOCK = r"<\|open\|>{tag}<\|:\|>[^<]+<\|close\|>{text}<\|open_end\|>"
 
 
 @pytest.fixture(scope="module")
@@ -75,8 +85,7 @@ def test_instruction_answers_from_its_grounding_context(backend, session):
         "What is the warehouse code for Lyon?",
         grounding_context={"codes": grounding},
         requirements=["Answer with the code only."],
-        # The default strategy validates requirements with an LLM-as-a-judge turn,
-        # which LLMONFormatter does not send.
+        # Only the generation is under test; validation has a test of its own.
         strategy=None,
         model_options={ModelOption.MAX_NEW_TOKENS: 50},
     )
@@ -92,15 +101,85 @@ def test_instruction_answers_from_its_grounding_context(backend, session):
     # One instruction block, the template's own, with no LLMON nested inside it; the
     # grounding context and the requirement are blocks of their own.
     assert prompt.count("<|open|>instr") == 1
-    block = r"<\|open\|>{tag}<\|:\|>[^<]+<\|close\|>{text}<\|open_end\|>"
-    assert re.search(block.format(tag="data", text=re.escape(grounding)), prompt)
+    assert re.search(_BLOCK.format(tag="data", text=re.escape(grounding)), prompt)
     assert re.search(
-        block.format(tag="req", text="Answer with the code only\\."), prompt
+        _BLOCK.format(tag="req", text="Answer with the code only\\."), prompt
     )
 
     # The model answers from the grounding context.
     assert answer.value is not None
     assert _CODE in answer.value
+
+
+@pytest.mark.qualitative
+@pytest.mark.parametrize(
+    ("summary", "meets"),
+    [
+        ("The X100 is powerful but loud, and shipping took three weeks.", True),
+        ("The X100 blender is powerful and crushes ice easily, but it is loud.", False),
+    ],
+    ids=["meets", "misses"],
+)
+async def test_judge_verdict_matches_the_output(backend, summary, meets):
+    """The LLM-as-a-judge check sees the output and the requirement as data, and
+    says whether the output meets the requirement."""
+    requirement = Requirement("Mention the shipping time.")
+    instruction = Instruction(
+        "Summarize this customer review.",
+        grounding_context={"review": _REVIEW},
+        requirements=[requirement],
+    )
+    ctx = ChatContext().add(instruction).add(ModelOutputThunk(summary))
+
+    verdict = await requirement.validate(backend, ctx)
+
+    assert verdict.thunk is not None and verdict.thunk._generate_log is not None
+    sent = verdict.thunk._generate_log.prompt
+    assert isinstance(sent, list)
+    prompt = backend._tokenizer.apply_chat_template(
+        sent, tokenize=False, add_generation_prompt=True
+    )
+    assert isinstance(prompt, str)
+    print(f"\n{prompt}\n\n{verdict.thunk.value}")
+    # The judge's turn: the output and the requirement are data, not a `req` block,
+    # which would constrain the judge's own reply.
+    judge_turn = prompt[prompt.rfind("<|open|>instr") :]
+    for text in (f"Output: {summary}", "Requirement: Mention the shipping time."):
+        assert re.search(_BLOCK.format(tag="data", text=re.escape(text)), judge_turn)
+    assert "<|open|>req" not in judge_turn
+
+    assert verdict.as_bool() is meets
+
+
+@pytest.mark.qualitative
+def test_missed_requirement_is_repaired(session):
+    """The judge catches a requirement the model missed, and a repair turn gets the
+    model to meet it."""
+    result = session.instruct(
+        "Summarize this customer review.",
+        grounding_context={"review": _REVIEW},
+        # The model's first summary names the product, as the review does.
+        requirements=['Refer to the product only as "the device".'],
+        # The default strategy re-sends the same prompt, which greedy decoding answers
+        # the same way; this one shows the model its miss and the failed requirement.
+        strategy=MultiTurnStrategy(loop_budget=3),
+        return_sampling_results=True,
+        model_options={ModelOption.MAX_NEW_TOKENS: 120},
+    )
+    attempts = [g.value or "" for g in result.sample_generations]
+    print(f"\n{attempts}")
+
+    def meets(text: str) -> bool:
+        lowered = text.lower()
+        return "device" in lowered and not any(
+            name in lowered for name in ("blender", "x100")
+        )
+
+    assert not meets(attempts[0]), "the model met the requirement on its first try"
+    (_, first_verdict) = result.sample_validations[0][0]
+    assert not first_verdict.as_bool()
+    assert result.success
+    assert meets(attempts[-1])
 
 
 @pytest.mark.qualitative
