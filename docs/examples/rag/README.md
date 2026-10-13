@@ -15,7 +15,54 @@ A complete RAG pipeline with relevance filtering using generative stubs.
 - Using `@generative` for filtering logic
 
 ### [mellea_pdf.py](./mellea_pdf.py)
-RAG example specifically for PDF documents.
+Document-grounded question answering using W3C's
+[WCAG 1.0 checklist PDF](https://www.w3.org/TR/1999/WAI-WEBCONTENT-19990505/full-checklist.pdf).
+The question asks what the three checkpoint priority levels mean; the answer is
+in the document's **Priorities** section on page 2. In brief, developers must
+satisfy Priority 1 checkpoints, should satisfy Priority 2 checkpoints, and may
+address Priority 3 checkpoints. Generated wording can vary.
+
+This dated, seven-page publication is historical sample material, not current
+accessibility guidance. It replaces a USDA PDF that returned HTTP 403 for users
+outside the US. The PDF remains hosted by W3C under its
+[document license](https://www.w3.org/Consortium/Legal/copyright-documents-19990405);
+no copy is bundled with this example.
+
+**Prerequisites:** Install the Docling extra, have internet access to download
+the PDF and Docling's conversion models, and run Ollama with `granite4.2:3b`
+(the current `start_session()` default). FAISS and sentence-transformers are
+not needed for this example. OCR is disabled because the PDF contains text;
+Docling may still download layout and table models on the first conversion.
+
+From the repository root:
+
+```bash
+uv sync --frozen --extra docling
+ollama serve  # run in a separate terminal if Ollama is not already running
+ollama pull granite4.2:3b
+uv run python docs/examples/rag/mellea_pdf.py
+```
+
+From another working directory, use absolute paths to the checkout and script:
+
+```bash
+uv run --project /path/to/mellea python /path/to/mellea/docs/examples/rag/mellea_pdf.py
+```
+
+The document URL is independent of the working directory. PDF conversion happens
+before the session is created, so document-loading failures can be distinguished
+from model-inference failures. The `e2e, ollama, slow` markers opt the example
+into explicit slow-test runs. Its assertions check only that the result is a
+non-empty string, not the factual content of the answer. The `slow` marker
+accounts for cold conversion-model downloads and inference; ordinary test runs
+exclude it. `CICD=1` does not skip this structural test, but current PR CI does
+not collect Python examples.
+
+To run it through pytest, including the slow marker:
+
+```bash
+uv run pytest docs/examples/rag/mellea_pdf.py -m "e2e and ollama" --no-cov -v -s
+```
 
 ## Concepts Demonstrated
 
