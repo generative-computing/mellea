@@ -1637,7 +1637,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
             model_arg = _CapturingModelProxy()  # type: ignore[assignment]
 
-        if isinstance(adapter.weights, EmbeddedBinding):
+        if adapter_is_embedded:
             chat_response = _await_generation_reporting_error(
                 asyncio.to_thread(
                     self._generate_embedded_with_generation_lock,
