@@ -219,30 +219,34 @@ async def stream_response_chunks(
     sequence_number = 0
     accumulated_text = ""
     try:
-        # Build the initial in-progress response object
-        in_progress_response = {
-            "id": response_id,
-            "created_at": created,
-            "model": model,
-            "status": "in_progress",
-            "output": [],
-            "output_text": "",
-            "usage": None,
-            "conversation": conversation,
-            "previous_response_id": previous_response_id,
-        }
+        # Build the in-progress response object from the full Response model so
+        # the created/in_progress envelopes parse into a Response model on strict
+        # SDK clients and stay consistent with the completed/failed envelopes.
+        in_progress_response = Response(
+            id=response_id,
+            created_at=created,
+            expires_at=created + ttl if store else None,
+            model=model,
+            status="in_progress",
+            output=[],
+            output_text="",
+            usage=ResponseUsage(input_tokens=0, output_tokens=0, total_tokens=0),
+            conversation=conversation,
+            previous_response_id=previous_response_id,
+        )
+        in_progress_payload = in_progress_response.model_dump()
 
         # response.created event - OpenAI SDK format
         yield (
             f"event: response.created\n"
-            f"data: {json.dumps({'type': 'response.created', 'sequence_number': sequence_number, 'response': in_progress_response})}\n\n"
+            f"data: {json.dumps({'type': 'response.created', 'sequence_number': sequence_number, 'response': in_progress_payload})}\n\n"
         )
         sequence_number += 1
 
         # response.in_progress event - OpenAI SDK format
         yield (
             f"event: response.in_progress\n"
-            f"data: {json.dumps({'type': 'response.in_progress', 'sequence_number': sequence_number, 'response': {'id': response_id, 'status': 'in_progress'}})}\n\n"
+            f"data: {json.dumps({'type': 'response.in_progress', 'sequence_number': sequence_number, 'response': in_progress_payload})}\n\n"
         )
         sequence_number += 1
 

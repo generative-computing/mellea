@@ -615,13 +615,25 @@ class TestStreamResponseChunks:
         assert events[0]["data"]["response"]["status"] == "in_progress"
 
     @pytest.mark.asyncio
-    async def test_emits_in_progress_event(self):
+    async def test_in_progress_event_carries_full_response_shape(self):
+        """response.in_progress follows created and carries the full Response model."""
         output = ModelOutputThunk("hello")
         events = await self._collect(
             output, response_id="resp_1", model="m", created=1234
         )
-        names = [e["event"] for e in events]
-        assert "response.in_progress" in names
+        assert events[1]["event"] == "response.in_progress"
+        assert events[1]["data"]["type"] == "response.in_progress"
+        assert events[1]["data"]["sequence_number"] == 1
+        response = events[1]["data"]["response"]
+        assert response["id"] == "resp_1"
+        assert response["status"] == "in_progress"
+        assert response["model"] == "m"
+        assert response["created_at"] == 1234
+        assert response["expires_at"] == 1234 + 1800
+        assert response["output"] == []
+        assert response["output_text"] == ""
+        # Full shape: required usage field present (not null) for SDK parsing
+        assert response["usage"]["total_tokens"] == 0
 
     @pytest.mark.asyncio
     async def test_emits_output_text_delta(self):
