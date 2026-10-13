@@ -1,18 +1,23 @@
 # Copyright IBM Corp. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""E2E tool-calling round trip on a granite LLMON preview model with `LocalHFBackend`.
+"""E2E tests on a granite LLMON preview model with `LocalHFBackend`.
 
-The model's chat template writes each turn into its own LLMON block, so Mellea sends
-the assistant's tool call back as the turn's `tool_calls` and the tool's result as
-plain text for the template to wrap. This runs the whole loop on the real weights:
-the model calls a tool, Mellea parses the call and runs the tool, the result goes
-back, and the model answers from it. The tool returns a made-up code the model
-cannot know, so an answer that contains it came from the tool.
+The model's chat template writes each turn into its own LLMON blocks. An
+instruction's grounding context and requirements are sent as the template's message
+fields, so they reach the model as `data` and `req` blocks of their own rather than
+nested in the instruction. For tools, Mellea sends the assistant's tool call back as
+the turn's `tool_calls` and the tool's result as plain text for the template to
+wrap, and the tool-calling test runs that whole loop on the real weights: the model
+calls a tool, Mellea parses the call and runs the tool, the result goes back, and
+the model answers from it. Each test's answer has to contain a made-up code the
+model cannot know, so an answer that contains it came from what Mellea sent.
 
 The served path is covered by `test_llmon_e2e.py`, and the messages Mellea builds by
 the unit tests in `test/formatters/test_llmon_formatter.py`.
 """
+
+import re
 
 import pytest
 
@@ -59,6 +64,43 @@ def session(backend):
     session = MelleaSession(backend, ctx=ChatContext())
     yield session
     session.reset()
+
+
+@pytest.mark.qualitative
+def test_instruction_answers_from_its_grounding_context(backend, session):
+    """An instruction's parts reach the model as the chat template's own blocks, and
+    the model answers from its grounding context."""
+    grounding = f"The Lyon warehouse code is {_CODE}."
+    answer = session.instruct(
+        "What is the warehouse code for Lyon?",
+        grounding_context={"codes": grounding},
+        requirements=["Answer with the code only."],
+        # The default strategy validates requirements with an LLM-as-a-judge turn,
+        # which LLMONFormatter does not send.
+        strategy=None,
+        model_options={ModelOption.MAX_NEW_TOKENS: 50},
+    )
+
+    assert answer._generate_log is not None
+    sent = answer._generate_log.prompt
+    assert isinstance(sent, list)
+    prompt = backend._tokenizer.apply_chat_template(
+        sent, tokenize=False, add_generation_prompt=True
+    )
+    assert isinstance(prompt, str)
+    print(f"\n{prompt}\n\n{answer.value}")
+    # One instruction block, the template's own, with no LLMON nested inside it; the
+    # grounding context and the requirement are blocks of their own.
+    assert prompt.count("<|open|>instr") == 1
+    block = r"<\|open\|>{tag}<\|:\|>[^<]+<\|close\|>{text}<\|open_end\|>"
+    assert re.search(block.format(tag="data", text=re.escape(grounding)), prompt)
+    assert re.search(
+        block.format(tag="req", text="Answer with the code only\\."), prompt
+    )
+
+    # The model answers from the grounding context.
+    assert answer.value is not None
+    assert _CODE in answer.value
 
 
 @pytest.mark.qualitative

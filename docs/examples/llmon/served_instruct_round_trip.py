@@ -8,11 +8,13 @@ passthrough). Mellea sends its message through the ordinary OpenAI-compatible ch
 backend — no new backend.
 
 Because `llmon95:latest` is a registered LLMON model, the backend renders with
-`LLMONFormatter` by default: a plain `m.instruct(prompt)` is sent as LLMON built
-from every part of the instruction (`instr`, `req`, ... and an `exec` block), and
-the reply is extracted back to plain text, which becomes the thunk's `value`. The
-text the model generated is kept on `thunk.raw.text`. To use another LLMON model,
-pass `formatter=LLMONFormatter(model_id)` to the backend.
+`LLMONFormatter` by default: a plain `m.instruct(prompt)` is sent as its instruction
+text, and the reply is extracted back to plain text, which becomes the thunk's
+`value`. The text the model generated is kept on `thunk.raw.text`. An instruction's
+requirements and grounding context reach an LLMON model only as its chat template's
+message fields, which OpenAI-compatible servers drop, so this example sends the
+instruction alone. To use another LLMON model, pass
+`formatter=LLMONFormatter(model_id)` to the backend.
 
 Requires the `llmon` extra (`pip install "mellea[llmon]"`) and a served LLMON
 model reachable at `LLMON_TEST_BASE_URL` (default `http://localhost:8000`; for the
@@ -37,7 +39,6 @@ except requests.ConnectionError:
 
 import mellea
 from mellea.backends.openai import OpenAIBackend
-from mellea.core import SamplingResult
 
 MODEL_ID = os.environ.get("LLMON_TEST_MODEL_ID", "llmon95:latest")
 
@@ -48,18 +49,10 @@ m = mellea.MelleaSession(
 
 def summarize_feedback(text: str) -> str:
     """Summarize customer feedback via the automatic LLMON round-trip."""
-    result = m.instruct(
+    thunk = m.instruct(
         "Summarise this customer feedback in one sentence: {{text}}",
-        requirements=[
-            "The summary must be a single sentence.",
-            "Include both positive and negative aspects if both are present.",
-        ],
         user_variables={"text": text},
     )
-
-    # The default sampling strategy validates the requirements, so `instruct` may
-    # return a SamplingResult; its `.result` is the chosen output thunk.
-    thunk = result.result if isinstance(result, SamplingResult) else result
 
     # For an LLMON model, value is the extracted reply (never markup).
     return thunk.value

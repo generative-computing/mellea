@@ -5,10 +5,11 @@
 
 An LLMON model's behavior lives in its fine-tuned weights, not a server chat
 template, so Mellea drives it through the ordinary OpenAI-compatible chat backend
-with an `LLMONFormatter`: a plain `m.instruct(prompt)` is sent as LLMON built from
-every part of the instruction, ending in an `exec` block, and the response the
-formatter extracts from the reply becomes the thunk's `value`. This exercises that
-full served path end-to-end, which the unit tests in
+with an `LLMONFormatter`: a plain `m.instruct(prompt)` is sent as its instruction
+text, and the response the formatter extracts from the reply becomes the thunk's
+`value`. An instruction's other parts reach the model only as the chat template's
+message fields, which OpenAI-compatible servers drop, so this sends the instruction
+alone. This exercises that served path end-to-end, which the unit tests in
 `test/formatters/test_llmon_formatter.py` and
 `test/backends/test_formatter_output_unit.py` do not.
 
@@ -136,23 +137,16 @@ def _print_round_trip(
 
 
 def test_served_instruct_round_trip_returns_plain_text(llmon_session):
-    """A plain `m.instruct` against an LLMON model sends LLMON and returns plain text.
+    """A plain `m.instruct` against an LLMON model returns plain text.
 
-    The prompt must carry every part of the instruction (description and
-    requirements) and an `exec` block. Whether the model replies with raw LLMON or
-    already-detokenized prose, the thunk's `value` must be plain text with no LLMON
-    markup.
+    The prompt must carry the instruction. Whether the model replies with raw LLMON
+    or already-detokenized prose, the thunk's `value` must be plain text with no
+    LLMON markup.
     """
     prompt = "Summarise this customer feedback in one sentence: {{text}}"
     user_variables = {"text": "loved the product, but shipping was very slow"}
-    requirements = [
-        "The summary must be a single sentence.",
-        "Include both positive and negative aspects if both are present.",
-    ]
 
-    result = llmon_session.instruct(
-        prompt, requirements=requirements, user_variables=user_variables
-    )
+    result = llmon_session.instruct(prompt, user_variables=user_variables)
 
     thunk = result.result if isinstance(result, SamplingResult) else result
 
@@ -167,13 +161,10 @@ def test_served_instruct_round_trip_returns_plain_text(llmon_session):
     assert thunk._generate_log is not None
     wire = thunk._generate_log.prompt
     sent = wire[-1]["content"] if isinstance(wire, list) else str(wire)
-    for part in [
+    assert sent == (
         "Summarise this customer feedback in one sentence: "
-        "loved the product, but shipping was very slow",
-        *requirements,
-    ]:
-        assert part in sent
-    assert "exec" in sent
+        "loved the product, but shipping was very slow"
+    )
 
     assert thunk.value  # non-empty answer
     # The response is always plain text, never raw LLMON markup.

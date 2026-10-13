@@ -194,7 +194,6 @@ class TestOpenAIBackend:
 
     async def test_chat_round_trip(self):
         backend = _openai_backend()
-        instruction = Instruction("Summarize.", grounding_context={"doc": "Text."})
         with patch.object(
             backend._async_client.chat.completions, "create", new_callable=AsyncMock
         ) as mock_create:
@@ -202,14 +201,32 @@ class TestOpenAIBackend:
                 ChatCompletionMessage(role="assistant", content=_REPLY)
             )
             mot, _ = await backend.generate_from_context(
-                instruction, ChatContext(), model_options={ModelOption.STREAM: False}
+                Instruction("Summarize."),
+                ChatContext(),
+                model_options={ModelOption.STREAM: False},
             )
             await mot.avalue()
 
         (sent,) = mock_create.call_args.kwargs["messages"]
-        assert sent["content"] == backend.formatter.print(instruction)
+        assert sent["content"] == "Summarize."
         assert mot.value == "the answer"
         assert mot.raw.text == _REPLY
+
+    async def test_instruction_fields_raise_before_the_request_is_sent(self):
+        # OpenAI-compatible servers such as vLLM drop unknown message fields, so a
+        # turn that needs the chat template's fields fails rather than losing them.
+        backend = _openai_backend()
+        instruction = Instruction("Summarize.", grounding_context={"doc": "Text."})
+        with patch.object(
+            backend._async_client.chat.completions, "create", new_callable=AsyncMock
+        ) as mock_create:
+            with pytest.raises(ValueError, match="huggingface"):
+                await backend.generate_from_context(
+                    instruction,
+                    ChatContext(),
+                    model_options={ModelOption.STREAM: False},
+                )
+        mock_create.assert_not_called()
 
     async def test_chat_reply_message_holds_only_the_reply_text(self):
         # A chat turn parses into a Message built from the provider's response; its

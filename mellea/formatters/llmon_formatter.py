@@ -1,21 +1,20 @@
 # Copyright IBM Corp. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""`LLMONFormatter`: renders components as LLMON for models trained on it.
+"""`LLMONFormatter`: sends components to models trained on LLMON.
 
 LLMON (LLM Object Notation, arXiv:2603.22519) marks a prompt up with special-token
 blocks, so an LLMON-trained model can tell what it should do (`instr`) from what it
-should only read (`data`, `doc`) and what its answer must satisfy (`req`).
-`LLMONFormatter` builds that markup from the same `format_for_llm()` args that
-`TemplateFormatter` renders through Jinja2: each component is lowered to a nested
-dict, its sub-components are lowered the same way, and the tree is converted once
-by the `llmon` library's `LLMONConverters`, which flattens the nesting into dotted
-tag names. Each user turn ends with an `exec` block that wires its blocks to the
-`assistant` output. System, assistant, and tool turns are sent as their plain text,
-since the model's chat template wraps those in their LLMON blocks itself, and
+should only read (`data`, `doc`) and what its answer must satisfy (`req`). The
+granite LLMON preview models' chat template writes that markup itself from the fields
+of each chat message: a user message's `content` and `instruction` items become
+`instr` blocks, its `data` items `data` blocks, its `requirement` items `req` blocks,
+and its `documents` `doc` blocks, each wired into the `exec` block the template adds.
+`LLMONFormatter` maps an `Instruction`'s `format_for_llm()` args onto those fields and
+sends every other turn as its plain text, so it writes no LLMON itself. Content is
+sanitized by the `llmon` library first, since the template inserts it as it is, and
 `parse_output` extracts the assistant's reply from a generation that carries LLMON
-markup. All content is sanitized by the library first, so LLMON special tokens
-inside it cannot open or close blocks.
+markup.
 
 Backends use this formatter by default for the served models registered here (see
 `default_formatter`); pass one to a backend explicitly to use it with any other
@@ -28,81 +27,44 @@ import dataclasses
 import inspect
 import json
 import re
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable
 from typing import Any, cast
-
-import pydantic
 
 from ..backends.model_ids import ModelIdentifier
 from ..core import CBlock, Component, ModelOutputThunk, Span, TemplateRepresentation
 from ..stdlib.components.chat import Message, message_from_template_representation
+from ..stdlib.components.docs.document import Document
+from ..stdlib.components.instruction import Instruction
 from .chat_formatter import ChatFormatter
 from .template_formatter import TemplateFormatter
 
 
 @dataclasses.dataclass(frozen=True)
 class LLMONDialect:
-    """The `LLMONConverters` options for the LLMON variant a model was trained on.
+    """The LLMON variant a model writes its replies in.
 
-    Each field sets the converter option of the same name. A field left as `None`
-    keeps the converter's own default; those defaults are the LLMON format Mellea
-    recommends, so set a field only for a model trained on a different variant.
+    Each field sets the `LLMONConverters` option of the same name that
+    `LLMONFormatter.parse_output` reads replies with. A field left as `None` keeps
+    the converter's own default, which is the LLMON format Mellea recommends, so set
+    a field only for a model trained on a different variant.
 
     Args:
-        no_type_tags_for_literals (bool | None): Leave `int`, `float`, `bool` and
-            `None` values without their `int`/`float`/`bool`/`none` type tags.
-        no_composite_tags (bool | None): Leave out the `object` and `list` blocks,
-            which flattens list items into `tag<|:|>index` blocks.
-        no_openend_tagname (bool | None): Close every block with a bare
-            `<|open_end|>` instead of repeating its tag name.
-        generate_nested_tagnames (bool | None): Also emit a block for each nesting
-            level that holds only other blocks.
+        no_openend_tagname (bool | None): Blocks are closed with a bare
+            `<|open_end|>` rather than one that repeats their tag name.
     """
 
-    no_type_tags_for_literals: bool | None = None
-    no_composite_tags: bool | None = None
     no_openend_tagname: bool | None = None
-    generate_nested_tagnames: bool | None = None
 
 
 # Served models that speak LLMON, with the dialect each was trained on, matched
 # exactly against a model id. `llmon95:latest` uses the converter's defaults.
 _LLMON_MODELS: dict[str, LLMONDialect] = {"llmon95:latest": LLMONDialect()}
 
-# Instructions and messages are the turns LLMON models were trained on: their args
-# become a turn's top-level blocks, under the tag names the models expect (from the
-# granite LLMON preview models' chat template). Args not listed keep their own name.
-_TURN_ARG_TAGS: dict[str, dict[str, str]] = {
-    "instruction": {
-        "description": "instr",
-        "requirements": "req",
-        "grounding_context": "data",
-    },
-    "message": {"documents": "doc"},
-}
-# The `exec` slot that each of those args is wired into. Args not listed are inputs.
-_EXEC_SLOTS: dict[str, dict[str, str]] = {
-    "instruction": {
-        "description": "instruction",
-        "prefix": "instruction",
-        "repair": "instruction",
-        "output_prefix": "instruction",
-        "requirements": "requirement",
-    },
-    "message": {"content": "instruction"},
-}
-# The order of the slots in an `exec` block, as in the granite LLMON preview models'
-# chat template. The `output` slot always comes last.
-_EXEC_SLOT_ORDER = ("instruction", "system", "input", "requirement")
-# A message's content is tagged by its role.
-_ROLE_TAGS: dict[str, str] = {
-    "user": "instr",
-    "assistant": "assistant",
-    "system": "system",
-    "tool": "data",
-}
-# Other components whose tag is renamed to the one the models expect.
-_COMPONENT_TAGS: dict[str, str] = {"document": "doc"}
+# Only the HuggingFace backend hands each message to the chat template as it is.
+# OpenAI-compatible servers such as vLLM rebuild every message from its standard keys
+# and drop the rest, so the template's fields are declared for HuggingFace alone: a
+# turn that needs them fails on another backend instead of silently losing them.
+_TEMPLATE_FIELDS_PROVIDER = "huggingface"
 # Whitespace and special tokens (e.g. `<|end_of_text|>`) only.
 _ONLY_SPECIAL_TOKENS = re.compile(r"(?:\s|<\|[^<>|]*\|>)*")
 # A tool call as the model writes it in its reply, with the whitespace before it.
@@ -151,42 +113,56 @@ class _LLMONMessage(Message):
 
     Backends print every message from `to_chat_messages` again to serialize it;
     marking these lets `LLMONFormatter.print` return the content as it is instead of
-    encoding it a second time.
+    rendering it a second time.
     """
 
 
-class LLMONFormatter(ChatFormatter):
-    """Formatter that renders components as LLMON for LLMON-trained models.
+@dataclasses.dataclass
+class _Turn:
+    """One chat turn: its role, its sanitized text, and its chat template fields."""
 
-    A user turn is lowered from its component's `format_for_llm()` args: every
-    non-empty arg is output, sub-components inside the args are lowered the same way,
-    and a model output inside the args is lowered from its parsed representation. An
-    instruction or a user message uses the tag names the models were trained on
-    (`instr`, `req` and `data` for an instruction's description, requirements and
-    grounding context; `instr` for a message's content; `doc` for documents), and its
-    other args are tagged with their arg names. Any other component nests its args
-    under its own tag, named after its template (e.g. `query`). Every user turn ends
-    with an `exec` block that references its blocks by tag.
+    role: str
+    content: str
+    fields: dict[str, list[dict[str, Any]]]
+    rep: TemplateRepresentation | None
+
+
+class LLMONFormatter(ChatFormatter):
+    """Formatter that sends components to LLMON-trained models through their chat template.
+
+    The granite LLMON preview models' chat template writes the LLMON markup from each
+    message's fields, so this formatter fills those fields rather than writing LLMON.
+    An `Instruction` becomes a user message from its `format_for_llm()` args: its
+    prefix and description, joined, are the message's content, which the template
+    takes as its instruction; a repair (rejection sampling's feedback) is a further
+    `instruction` item; each requirement is a `requirement` item; each in-context
+    example and each grounding-context value is a `data` item, except a `Document`,
+    which is a `documents` item with its title. Every item is wired into the turn's
+    `exec` block. A user `Message` is its content, with its documents as `documents`
+    items, and a `CBlock` is its text, as the instruction. Any other component raises.
 
     System, assistant, and tool turns are sent as their text alone (a message's
     content, or a model output's reply), with their tool calls and tool-call id as
-    message fields, because the model's chat template wraps each in its own LLMON
-    block and writes an assistant's `tool_calls` out itself. When a reply holds tool
-    calls the model wrote out (as the HuggingFace backend leaves them) and the
-    backend parsed every one, they are moved from the text into `tool_calls`, so the
-    template also wires that assistant turn into the next `exec` as an input.
+    message fields, because the template wraps each in its own LLMON block and writes
+    an assistant's `tool_calls` out itself. When a reply holds tool calls the model
+    wrote out (as the HuggingFace backend leaves them) and the backend parsed every
+    one, they are moved from the text into `tool_calls`, so the template also wires
+    that assistant turn into the next `exec` as an input.
 
-    Content is sanitized with the `llmon` library's `LLMONConverters.sanitize`, which
-    replaces each LLMON special token with a look-alike that is not one, so content
-    such as a retrieved document cannot open or close blocks. That covers every
-    string value and key in a user turn and the text of system, assistant, and tool
-    turns.
+    All text is sanitized with the `llmon` library's `LLMONConverters.sanitize`, which
+    replaces each LLMON special token with a look-alike that is not one, because the
+    template inserts content as it is.
+
+    The template's fields reach it only through the HuggingFace backend, which hands
+    it each message as it is, so they are declared in the message's `provider_fields`
+    for that backend alone: a turn that needs them raises on any other backend, and
+    `print` raises for one, since a single string cannot carry them.
 
     Args:
         model_id (str | ModelIdentifier): The model the prompts are for.
-        dialect (LLMONDialect | None): The converter options for the LLMON variant
-            the model was trained on. Defaults to the dialect registered for
-            `model_id`, else the converter defaults.
+        dialect (LLMONDialect | None): The LLMON variant the model replies in.
+            Defaults to the dialect registered for `model_id`, else the converter
+            defaults.
 
     Attributes:
         dialect (LLMONDialect): The dialect in use, resolved from `model_id` when
@@ -197,9 +173,9 @@ class LLMONFormatter(ChatFormatter):
         from mellea.formatters import LLMONFormatter
         from mellea.stdlib.components import Instruction
 
-        formatter = LLMONFormatter("llmon95:latest")
-        text = formatter.print(
-            Instruction("Summarize the review.", grounding_context={"review": "..."})
+        formatter = LLMONFormatter("ibm-granite/granite-4.1-3b-llmon-preview")
+        (message,) = formatter.to_chat_messages(
+            [Instruction("Summarize the review.", grounding_context={"review": "..."})]
         )
         ```
     """
@@ -263,39 +239,50 @@ class LLMONFormatter(ChatFormatter):
         )
 
     def print(self, c: Span) -> str:
-        """Render a component, content block, or model output as one turn's content.
+        """Render the text a turn is sent as.
 
-        A user turn is LLMON ending in an `exec` block; a system, assistant, or tool
-        turn is its text alone. A message that `to_chat_messages` already rendered is
-        returned as it is. Any other value, such as a tool's output that `call_tools`
-        prints for its tool message, is not a turn and is returned as plain text. All
-        content is sanitized.
+        That is an instruction's prefix and description, a message's content, a
+        content block's text, or a model output's reply. A message that
+        `to_chat_messages` already rendered is returned as it is. Any other value,
+        such as a tool's output that `call_tools` prints for its tool message, is not
+        a turn and is returned as plain text. All text is sanitized.
 
         Args:
-            c (Span): The component, content block, or model output to render.
+            c (Span): The content block, model output, instruction, or message to
+                render.
 
         Returns:
-            str: The content of the turn.
+            str: The text of the turn.
+
+        Raises:
+            TypeError: If `c` is a component other than an `Instruction` or a
+                `Message`, or an instruction holds one in its args.
+            ValueError: If `c` has parts that reach the model only as chat template
+                fields (an instruction's requirements, examples, grounding context,
+                or repair, or a user message's documents), or is an instruction with
+                an output prefix.
         """
         if isinstance(c, _LLMONMessage):
             return c.content
-        if not isinstance(c, Component | CBlock | ModelOutputThunk):
-            lowered = self._lower(c)
-            if lowered is None:
-                return ""
-            return lowered if isinstance(lowered, str) else str(lowered)
-        subject, rep, role = self._resolve(c)
-        if role == "user":
-            return self._render_user_turn(subject, rep)
-        return self._turn_text(c, subject)
+        if not isinstance(c, Component | CBlock):
+            return "" if c is None else self._sanitize(str(c))
+        turn = self._turn(c)
+        if turn.fields:
+            raise ValueError(
+                f"This {type(c).__name__} has parts ({', '.join(turn.fields)}) that "
+                "reach an LLMON model only as chat template message fields, so it "
+                "cannot be printed as one string; send it as a chat message instead."
+            )
+        return turn.content
 
     def to_chat_messages(self, cs: list[Span]) -> list[Message]:
-        """Convert a linearized chat history into messages with LLMON content.
+        """Convert a linearized chat history into messages for the LLMON chat template.
 
-        Roles, attachments, and tool metadata are resolved as in
-        `ChatFormatter.to_chat_messages`, except that a `Message` is rendered too
-        rather than passed through. `print` returns the content of the resulting
-        messages unchanged.
+        Each item becomes one message, as described for the class: roles and
+        attachments are resolved as in `ChatFormatter.to_chat_messages`, the turn's
+        text is the content, and the parts the template takes as fields are declared
+        in the message's `provider_fields` for the HuggingFace backend. `print`
+        returns the content of the resulting messages unchanged.
 
         Args:
             cs (list[Span]): The linearized sequence of context components, content
@@ -305,38 +292,42 @@ class LLMONFormatter(ChatFormatter):
             list[Message]: One message per item in `cs`, in order.
 
         Raises:
-            ValueError: If a component declares a `role` (via its
-                `TemplateRepresentation`) outside `Message.Role`.
+            TypeError: If an item is a component other than an `Instruction` or a
+                `Message`, or an instruction holds one in its args.
+            ValueError: If an item is an instruction with an output prefix.
         """
         messages: list[Message] = []
         for c in cs:
-            subject, rep, role = self._resolve(c)
-            tool_calls = None
-            if role == "user":
-                content = self._render_user_turn(subject, rep)
-            else:
-                content = self._turn_text(c, subject)
-                if isinstance(c, ModelOutputThunk) and not (rep and rep.tool_calls):
-                    content, tool_calls = _move_written_tool_calls(c, content)
-            if rep is None:
+            turn = self._turn(c)
+            content, tool_calls = turn.content, None
+            if isinstance(c, ModelOutputThunk) and not (
+                turn.rep and turn.rep.tool_calls
+            ):
+                content, tool_calls = _move_written_tool_calls(c, content)
+            provider_fields = _with_template_fields(
+                turn.rep.provider_fields if turn.rep else None, turn.fields
+            )
+            if turn.rep is None:
                 messages.append(
                     _LLMONMessage(
-                        role=cast(Message.Role, role),
+                        role=cast(Message.Role, turn.role),
                         content=content,
                         tool_calls=tool_calls,
+                        provider_fields=provider_fields,
                     )
                 )
-            else:
-                if tool_calls is not None:
-                    rep = dataclasses.replace(rep, tool_calls=tool_calls)
-                messages.append(
-                    message_from_template_representation(
-                        rep,
-                        default_role=cast(Message.Role, role),
-                        content=content,
-                        message_cls=_LLMONMessage,
-                    )
+                continue
+            rep = dataclasses.replace(turn.rep, provider_fields=provider_fields)
+            if tool_calls is not None:
+                rep = dataclasses.replace(rep, tool_calls=tool_calls)
+            messages.append(
+                message_from_template_representation(
+                    rep,
+                    default_role=cast(Message.Role, turn.role),
+                    content=content,
+                    message_cls=_LLMONMessage,
                 )
+            )
         return messages
 
     def parse_output(self, text: str) -> str:
@@ -391,147 +382,80 @@ class LLMONFormatter(ChatFormatter):
                 return head
         return text
 
-    def _resolve(self, c: Span) -> tuple[Span, TemplateRepresentation | None, str]:
-        """Return what to lower for one turn, its representation, and its role.
-
-        Mirrors `ChatFormatter.to_chat_messages`: a model output is an assistant
-        turn of its parsed component, if it has one, and a component's
-        representation can declare a different role.
-        """
-        role = "user"
+    def _turn(self, c: Span) -> _Turn:
+        """Resolve one turn's role, sanitized text, and chat template fields."""
         if isinstance(c, ModelOutputThunk):
-            role = "assistant"
             assert c.is_computed(), "a model output must be computed to be rendered"
-            if isinstance(c.parsed_repr, Component):
-                c = c.parsed_repr
-        rep = c.format_for_llm() if isinstance(c, Component) else None
-        if not isinstance(rep, TemplateRepresentation):
-            return c, None, role
-        return c, rep, rep.role if rep.role is not None else role
+            # A chat reply's parsed `Message` carries the turn's tool metadata.
+            parsed = c.parsed_repr
+            rep = _representation(parsed) if isinstance(parsed, Message) else None
+            return _Turn(
+                _role(rep, "assistant"), self._sanitize(c.value or ""), {}, rep
+            )
+        if isinstance(c, CBlock):
+            return _Turn("user", self._sanitize(c.value or ""), {}, None)
+        if isinstance(c, Instruction):
+            return self._instruction_turn(_representation(c))
+        if isinstance(c, Message):
+            rep = _representation(c)
+            role = _role(rep, "user")
+            fields: dict[str, list[dict[str, Any]]] = {}
+            # The chat template reads documents on user messages only.
+            if role == "user":
+                documents = cast(list[Document] | None, rep.args.get("documents"))
+                fields["documents"] = [self._document(d) for d in documents or []]
+            return _Turn(role, self._sanitize(c.content), _non_empty(fields), rep)
+        raise TypeError(
+            "LLMONFormatter sends only instructions, messages, content blocks, and "
+            f"model outputs to an LLMON model; got a {type(c).__name__}."
+        )
 
-    def _render_user_turn(self, c: Span, rep: TemplateRepresentation | None) -> str:
-        """Render a user turn as LLMON ending in its `exec` block."""
-        blocks, slots = self._user_turn_blocks(c, rep)
-        if slots:
-            blocks["exec"] = _exec_block(slots)
-        converter = self._converters(**self._options)
-        return converter.json_dict_to_llmon_str(blocks, compact=True)
+    def _instruction_turn(self, rep: TemplateRepresentation) -> _Turn:
+        """Map an instruction's args onto the chat template's user-message fields."""
+        args = cast(dict[str, Any], rep.args)
+        if _plain_text(args.get("output_prefix")):
+            raise ValueError(
+                "An LLMON chat template cannot start the reply with a prefix, so an "
+                "Instruction's output_prefix cannot be sent to an LLMON model."
+            )
+        instruction = "\n\n".join(
+            text
+            for text in (
+                _plain_text(args.get("prefix")),
+                _plain_text(args.get("description")),
+            )
+            if text
+        )
+        data = self._items(args.get("icl_examples") or [])
+        documents: list[dict[str, Any]] = []
+        for value in (args.get("grounding_context") or {}).values():
+            if isinstance(value, Document):
+                documents.append(self._document(value))
+            else:
+                data.extend(self._items([value]))
+        fields = {
+            "instruction": self._items([args.get("repair")]),
+            "data": data,
+            "requirement": self._items(args.get("requirements") or []),
+            "documents": documents,
+        }
+        return _Turn(
+            _role(rep, "user"), self._sanitize(instruction), _non_empty(fields), rep
+        )
 
-    def _turn_text(self, c: Span, subject: Span) -> str:
-        """Return the sanitized text of a system, assistant, or tool turn.
+    def _items(self, values: Iterable[object]) -> list[dict[str, Any]]:
+        """Build a chat template item for each value with text, wired into the `exec`."""
+        texts = (_plain_text(value) for value in values)
+        return [{"value": self._sanitize(text), "exec": True} for text in texts if text]
 
-        The chat template wraps these turns in their own block, so LLMON here would
-        nest inside it. A model output is its reply; a message is its content.
-        """
-        if isinstance(c, ModelOutputThunk):
-            return self._sanitize(c.value or "")
-        if isinstance(subject, Message):
-            return self._sanitize(subject.content)
-        # Another component declaring one of these roles has no text of its own,
-        # so it is sent as LLMON of its args.
-        lowered = self._lower(subject)
-        if isinstance(lowered, dict):
-            converter = self._converters(**self._options)
-            return converter.json_dict_to_llmon_str(lowered, compact=True)
-        return "" if lowered is None else str(lowered)
-
-    def _user_turn_blocks(
-        self, c: Span, rep: TemplateRepresentation | None
-    ) -> tuple[dict[str, Any], dict[str, str]]:
-        """Lower a user turn to its top-level blocks and the `exec` slot of each."""
-        if rep is None:
-            lowered = self._lower(c)
-        else:
-            tag = _component_tag(rep, c)
-            if tag in _TURN_ARG_TAGS:
-                return self._arg_blocks(tag, rep, "user")
-            lowered = self._lower_representation(rep, c)
-
-        if isinstance(lowered, dict) and len(lowered) == 1:
-            # A component's own block: the request itself, unless it is a document.
-            (tag,) = lowered
-            return lowered, {tag: "input" if tag == "doc" else "instruction"}
-        return {"instr": lowered}, {"instr": "instruction"}
-
-    def _arg_blocks(
-        self, tag: str, rep: TemplateRepresentation, role: str
-    ) -> tuple[dict[str, Any], dict[str, str]]:
-        """Lower an instruction's or a message's args to blocks named as trained."""
-        names = _TURN_ARG_TAGS[tag]
-        if tag == "message":
-            names = {**names, "content": _ROLE_TAGS.get(role, role)}
-        blocks: dict[str, Any] = {}
-        slots: dict[str, str] = {}
-        for key, value in rep.args.items():
-            lowered = self._lower(value)
-            if _is_empty(lowered):
-                continue
-            name = names.get(key, self._sanitize(key))
-            blocks[name] = _unwrap(lowered, name)
-            slots[name] = _EXEC_SLOTS[tag].get(key, "input")
-        return blocks, slots
-
-    def _lower_representation(
-        self, rep: TemplateRepresentation, component: object
-    ) -> Any:
-        """Lower a component's representation from its args."""
-        tag = _component_tag(rep, component)
-        if tag in _TURN_ARG_TAGS:
-            blocks, _ = self._arg_blocks(tag, rep, rep.role or "user")
-            return blocks
-        args: dict[str, Any] = {}
-        for key, value in rep.args.items():
-            lowered = self._lower(value)
-            if not _is_empty(lowered):
-                args[self._sanitize(key)] = lowered
-        # A component with nothing to show still marks its place, as a self-closing
-        # block.
-        return {_COMPONENT_TAGS.get(tag, tag): args or ""}
-
-    def _lower(self, value: object) -> Any:
-        """Lower a value to the dicts, lists and scalars `LLMONConverters` reads.
-
-        Mirrors `TemplateFormatter._stringify`: strings and content blocks become
-        text, components are lowered from their args, model outputs from their
-        parsed representation, and mappings and iterables keep their structure,
-        without their empty entries. All text, keys included, is sanitized.
-        """
-        match value:
-            case str():
-                return self._sanitize(value)
-            case None | bool() | int() | float():
-                return value
-            case ModelOutputThunk():
-                parsed = value.parsed_repr
-                if parsed is None or isinstance(parsed, ModelOutputThunk):
-                    return self._lower(value.value)
-                return self._lower(parsed)
-            case CBlock():
-                return self._lower(value.value)
-            case Component():
-                rep = value.format_for_llm()
-                if isinstance(rep, TemplateRepresentation):
-                    return self._lower_representation(rep, value)
-                return self._lower(rep)
-            case TemplateRepresentation():
-                return self._lower_representation(value, value.obj)
-            case pydantic.BaseModel():
-                return self._lower(value.model_dump())
-            case Mapping():
-                lowered: dict[str, Any] = {}
-                for key, item in value.items():
-                    lowered_item = self._lower(item)
-                    if not _is_empty(lowered_item):
-                        lowered[self._sanitize(str(key))] = lowered_item
-                return lowered
-            case Iterable():
-                return [
-                    lowered_item
-                    for lowered_item in map(self._lower, value)
-                    if not _is_empty(lowered_item)
-                ]
-            case _:
-                return self._sanitize(str(value))
+    def _document(self, document: Document) -> dict[str, Any]:
+        """Build a chat template `documents` item, wired into the `exec`."""
+        item: dict[str, Any] = {}
+        if document.title:
+            item["title"] = self._sanitize(document.title)
+        item["text"] = self._sanitize(document.text or "")
+        item["exec"] = True
+        return item
 
     def _assistant_value(self, parsed: object) -> str | None:
         """Return the assistant block's value from the converter's JSON, if any."""
@@ -549,45 +473,63 @@ class LLMONFormatter(ChatFormatter):
         return None
 
 
-def _component_tag(rep: TemplateRepresentation, component: object) -> str:
-    """Name a component's block after the template it is rendered with, in snake_case.
+def _representation(component: Component) -> TemplateRepresentation:
+    """Return an instruction's or a message's `TemplateRepresentation`."""
+    rep = component.format_for_llm()
+    assert isinstance(rep, TemplateRepresentation), (
+        f"a {type(component).__name__} must format to a TemplateRepresentation"
+    )
+    return rep
 
-    The first template named in `template_order` is the one a component shares with
-    its subclasses (`Instruction` for any `Instruction`); a component that names
-    none is named after its class.
+
+def _role(rep: TemplateRepresentation | None, default: str) -> str:
+    """Return the role a representation declares, else `default`."""
+    return rep.role if rep is not None and rep.role is not None else default
+
+
+def _plain_text(value: object) -> str:
+    """Return a value from an instruction's args as text.
+
+    Raises:
+        TypeError: If `value` is a component, which has no text of its own.
     """
-    names = [name for name in rep.template_order or [] if name != "*"]
-    name = names[0] if names else type(component).__name__
-    return re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", name).lower()
+    match value:
+        case None:
+            return ""
+        case str():
+            return value
+        case CBlock():
+            return value.value or ""
+        case Component():
+            raise TypeError(
+                f"LLMONFormatter cannot send a {type(value).__name__} inside an "
+                "instruction to an LLMON model; only text, content blocks, model "
+                "outputs, and documents can be sent."
+            )
+        case _:
+            return str(value)
 
 
-def _exec_block(slots: Mapping[str, str]) -> dict[str, Any]:
-    """Build a user turn's `exec` block, which references its blocks by tag."""
-    block: dict[str, Any] = {}
-    for slot in _EXEC_SLOT_ORDER:
-        tags = [tag for tag, tag_slot in slots.items() if tag_slot == slot]
-        if tags:
-            block[slot] = tags[0] if len(tags) == 1 else tags
-    block["output"] = "assistant"
-    return block
+def _non_empty(
+    fields: dict[str, list[dict[str, Any]]],
+) -> dict[str, list[dict[str, Any]]]:
+    """Drop the fields that have no items."""
+    return {name: items for name, items in fields.items() if items}
 
 
-def _unwrap(lowered: Any, tag: str) -> Any:
-    """Drop the block of `tag` that each item of a block of that same tag carries.
-
-    A message's documents each lower to a `doc` block, which would otherwise nest
-    inside the message's own `doc` block.
-    """
-    if isinstance(lowered, list):
-        return [_unwrap(item, tag) for item in lowered]
-    if isinstance(lowered, dict) and lowered.keys() == {tag}:
-        return lowered[tag]
-    return lowered
-
-
-def _is_empty(value: object) -> bool:
-    """Whether a lowered value has nothing to show: `None`, or an empty string or container."""
-    return value is None or (isinstance(value, str | list | dict) and not value)
+def _with_template_fields(
+    provider_fields: dict[str, dict[str, Any]] | None,
+    fields: dict[str, list[dict[str, Any]]],
+) -> dict[str, dict[str, Any]] | None:
+    """Declare a turn's chat template fields in its message's `provider_fields`."""
+    if not fields:
+        return provider_fields
+    merged = dict(provider_fields or {})
+    merged[_TEMPLATE_FIELDS_PROVIDER] = {
+        **merged.get(_TEMPLATE_FIELDS_PROVIDER, {}),
+        **fields,
+    }
+    return merged
 
 
 def _as_text(value: object) -> str:
