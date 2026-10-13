@@ -738,6 +738,83 @@ class TestStreamResponseChunks:
         assert fc_events[0]["data"]["output_index"] == 1
 
     @pytest.mark.asyncio
+    async def test_function_call_events_have_type_and_sequence_number(self):
+        """Function call events include type and sequence_number per spec."""
+        from mellea.core.base import ModelToolCall
+
+        output = ModelOutputThunk("ok")
+        tc = Mock(spec=ModelToolCall)
+        tc.name = "get_weather"
+        tc.args = {"location": "Paris"}
+        tc.tool_call_id = "call_abc"
+        output.tool_calls = [tc]
+
+        events = await self._collect(
+            output, response_id="resp_tc", model="m", created=1234
+        )
+
+        delta_events = [
+            e for e in events if e["event"] == "response.function_call_arguments.delta"
+        ]
+        assert len(delta_events) == 1
+        assert (
+            delta_events[0]["data"]["type"] == "response.function_call_arguments.delta"
+        )
+        assert "sequence_number" in delta_events[0]["data"]
+
+        done_events = [
+            e for e in events if e["event"] == "response.function_call_arguments.done"
+        ]
+        assert len(done_events) == 1
+        assert done_events[0]["data"]["type"] == "response.function_call_arguments.done"
+        assert "sequence_number" in done_events[0]["data"]
+
+        # sequence_number should be monotonically increasing
+        assert (
+            done_events[0]["data"]["sequence_number"]
+            > delta_events[0]["data"]["sequence_number"]
+        )
+
+    @pytest.mark.asyncio
+    async def test_function_call_item_id_matches_completed_output_item_id(self):
+        """item_id in function_call_arguments events matches the id in completed output."""
+        from mellea.core.base import ModelToolCall
+
+        output = ModelOutputThunk("ok")
+        tc = Mock(spec=ModelToolCall)
+        tc.name = "get_weather"
+        tc.args = {"location": "Paris"}
+        tc.tool_call_id = "call_abc"
+        output.tool_calls = [tc]
+
+        events = await self._collect(
+            output, response_id="resp_tc", model="m", created=1234
+        )
+
+        # Get item_id from the delta event
+        delta_events = [
+            e for e in events if e["event"] == "response.function_call_arguments.delta"
+        ]
+        assert len(delta_events) == 1
+        stream_fc_item_id = delta_events[0]["data"]["item_id"]
+
+        # Get item_id from the done event
+        done_events = [
+            e for e in events if e["event"] == "response.function_call_arguments.done"
+        ]
+        assert len(done_events) == 1
+        assert done_events[0]["data"]["item_id"] == stream_fc_item_id
+
+        # Verify the completed response's function_call item has the same id
+        completed_event = next(e for e in events if e["event"] == "response.completed")
+        completed_output = completed_event["data"]["response"]["output"]
+        fc_items = [
+            item for item in completed_output if item["type"] == "function_call"
+        ]
+        assert len(fc_items) == 1
+        assert fc_items[0]["id"] == stream_fc_item_id
+
+    @pytest.mark.asyncio
     async def test_tool_call_output_index_zero_without_text(self):
         """Tool call output_index is 0 and no output_text events are emitted when there's no text output."""
         from mellea.core.base import ModelToolCall
@@ -822,7 +899,17 @@ class TestStreamResponseChunks:
 
         failed = [e for e in events if e["event"] == "response.failed"]
         assert len(failed) == 1
-        assert failed[0]["data"]["status"] == "failed"
+        assert failed[0]["data"]["type"] == "response.failed"
+        assert "sequence_number" in failed[0]["data"]
+        response = failed[0]["data"]["response"]
+        assert response["status"] == "failed"
+        assert response["id"] == "resp_err"
+        assert response["model"] == "m"
+        assert response["created_at"] == 1234
+        assert response["output"] == []
+        assert response["error"]["code"] == "server_error"
+        # Full Response shape: required fields present for SDK parsing
+        assert response["usage"]["total_tokens"] == 0
 
     @pytest.mark.asyncio
     async def test_usage_always_included_in_completed(self):
@@ -1022,3 +1109,23 @@ class TestBuildResponseOutputItems:
         ]
         items = build_response_output_items(output, tool_calls)
         assert items[0].id.startswith("fc_")
+
+    def test_function_call_ids_uses_provided_ids(self):
+        output = ModelOutputThunk(None)
+        tool_calls = [
+            {
+                "id": "c1",
+                "type": "function",
+                "function": {"name": "f1", "arguments": "{}"},
+            },
+            {
+                "id": "c2",
+                "type": "function",
+                "function": {"name": "f2", "arguments": "{}"},
+            },
+        ]
+        items = build_response_output_items(
+            output, tool_calls, function_call_ids=["fc_custom_1", "fc_custom_2"]
+        )
+        assert items[0].id == "fc_custom_1"
+        assert items[1].id == "fc_custom_2"

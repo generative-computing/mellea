@@ -739,6 +739,7 @@ def build_response_output_items(
     output: ModelOutputThunk,
     tool_calls_list: list[ToolCallDict] | None,
     message_id: str | None = None,
+    function_call_ids: list[str] | None = None,
 ) -> list[ResponseOutputItem]:
     """Build typed Responses API output items from a model output.
 
@@ -751,6 +752,9 @@ def build_response_output_items(
             or `None`.
         message_id: Optional ID for the message item. If not provided, a new ID
             is generated with a `msg_` prefix.
+        function_call_ids: Optional list of IDs for function call items, one per
+            tool call in `tool_calls_list`. If not provided or shorter than the
+            tool call list, missing IDs are generated with an `fc_` prefix.
 
     Returns:
         A list of `ResponseOutputItem` subclass instances.
@@ -769,10 +773,15 @@ def build_response_output_items(
         )
 
     if tool_calls_list:
-        for tool_call in tool_calls_list:
+        for i, tool_call in enumerate(tool_calls_list):
+            fc_id = (
+                function_call_ids[i]
+                if function_call_ids is not None and i < len(function_call_ids)
+                else f"fc_{uuid.uuid4().hex[:24]}"
+            )
             items.append(
                 ResponseFunctionCall(
-                    id=f"fc_{uuid.uuid4().hex[:24]}",
+                    id=fc_id,
                     type="function_call",
                     status="completed",
                     name=tool_call["function"]["name"],

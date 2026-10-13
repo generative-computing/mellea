@@ -24,6 +24,7 @@ from .models import (
     OpenAIError,
     OpenAIErrorResponse,
     Response,
+    ResponseError,
     ResponseUsage,
     StreamOptions,
 )
@@ -215,6 +216,8 @@ async def stream_response_chunks(
         ttl: Response TTL in seconds. Used to compute `expires_at`.
         previous_response_id: Echoed back in the completed envelope.
     """
+    sequence_number = 0
+    accumulated_text = ""
     try:
         # Build the initial in-progress response object
         in_progress_response = {
@@ -228,8 +231,6 @@ async def stream_response_chunks(
             "conversation": conversation,
             "previous_response_id": previous_response_id,
         }
-
-        sequence_number = 0
 
         # response.created event - OpenAI SDK format
         yield (
@@ -245,7 +246,6 @@ async def stream_response_chunks(
         )
         sequence_number += 1
 
-        accumulated_text = ""
         output_index = 0
         content_index = 0
         # Generate a message item ID for the output_text events
@@ -285,10 +285,18 @@ async def stream_response_chunks(
                 sequence_number += 1
 
         tool_calls = build_tool_calls(output)
+        # Pre-generate function call item IDs so streaming events and the
+        # completed response share the same identifiers (per OpenAI spec,
+        # item_id in events must match the id of the corresponding output item).
+        function_call_ids = (
+            [f"fc_{uuid.uuid4().hex[:24]}" for _ in tool_calls] if tool_calls else []
+        )
         if tool_calls:
             # output_index for tool calls: starts at 0 if no text, 1 if text exists
             start_index = 1 if accumulated_text else 0
-            for idx, tool_call in enumerate(tool_calls, start=start_index):
+            for idx, (tool_call, fc_id) in enumerate(
+                zip(tool_calls, function_call_ids), start=start_index
+            ):
                 output_index = idx
                 arguments = tool_call["function"]["arguments"]
                 # Emit a single delta carrying the full arguments string.
@@ -296,18 +304,20 @@ async def stream_response_chunks(
                 # delta with the complete payload is spec-conformant.
                 yield (
                     f"event: response.function_call_arguments.delta\n"
-                    f"data: {json.dumps({'id': response_id, 'output_index': output_index, 'call_id': tool_call['id'], 'delta': arguments})}\n\n"
+                    f"data: {json.dumps({'type': 'response.function_call_arguments.delta', 'sequence_number': sequence_number, 'item_id': fc_id, 'output_index': output_index, 'call_id': tool_call['id'], 'delta': arguments})}\n\n"
                 )
+                sequence_number += 1
                 yield (
                     f"event: response.function_call_arguments.done\n"
-                    f"data: {json.dumps({'id': response_id, 'output_index': output_index, 'call_id': tool_call['id'], 'name': tool_call['function']['name'], 'arguments': arguments})}\n\n"
+                    f"data: {json.dumps({'type': 'response.function_call_arguments.done', 'sequence_number': sequence_number, 'item_id': fc_id, 'output_index': output_index, 'call_id': tool_call['id'], 'name': tool_call['function']['name'], 'arguments': arguments})}\n\n"
                 )
+                sequence_number += 1
 
         usage = build_response_usage(output) or ResponseUsage(
             input_tokens=0, output_tokens=0, total_tokens=0
         )
         output_items = build_response_output_items(
-            output, tool_calls, message_id=item_id
+            output, tool_calls, message_id=item_id, function_call_ids=function_call_ids
         )
         completed_response = Response(
             id=response_id,
@@ -328,7 +338,23 @@ async def stream_response_chunks(
 
     except Exception as e:
         MelleaLogger.get_logger().exception("Streaming error in responses endpoint")
+        # Build the failed envelope from the full Response model so strict
+        # SDK clients can parse it (a minimal dict would be missing required
+        # fields like `model`, `created_at`, and `output`).
+        failed_response = Response(
+            id=response_id,
+            created_at=created,
+            expires_at=created + ttl if store else None,
+            model=model,
+            status="failed",
+            output=[],
+            output_text=accumulated_text,
+            error=ResponseError(code="server_error", message=str(e)),
+            usage=ResponseUsage(input_tokens=0, output_tokens=0, total_tokens=0),
+            conversation=conversation,
+            previous_response_id=previous_response_id,
+        )
         yield (
             f"event: response.failed\n"
-            f"data: {json.dumps({'id': response_id, 'status': 'failed', 'error': {'message': str(e), 'code': 'streaming_error'}})}\n\n"
+            f"data: {json.dumps({'type': 'response.failed', 'sequence_number': sequence_number, 'response': failed_response.model_dump()})}\n\n"
         )
