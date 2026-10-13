@@ -6,7 +6,6 @@
 import json
 import uuid
 from collections.abc import AsyncGenerator
-from typing import Literal
 
 from mellea.core.base import ModelOutputThunk
 from mellea.core.utils import MelleaLogger
@@ -254,18 +253,19 @@ async def stream_response_chunks(
 
         if output.is_computed():
             text = output.value or ""
-            accumulated_text = text
-            # For pre-computed output, emit delta + done
-            yield (
-                f"event: response.output_text.delta\n"
-                f"data: {json.dumps({'type': 'response.output_text.delta', 'sequence_number': sequence_number, 'output_index': output_index, 'content_index': content_index, 'item_id': item_id, 'delta': text})}\n\n"
-            )
-            sequence_number += 1
-            yield (
-                f"event: response.output_text.done\n"
-                f"data: {json.dumps({'type': 'response.output_text.done', 'sequence_number': sequence_number, 'output_index': output_index, 'content_index': content_index, 'item_id': item_id, 'text': text})}\n\n"
-            )
-            sequence_number += 1
+            if text:
+                accumulated_text = text
+                # For pre-computed output, emit delta + done
+                yield (
+                    f"event: response.output_text.delta\n"
+                    f"data: {json.dumps({'type': 'response.output_text.delta', 'sequence_number': sequence_number, 'output_index': output_index, 'content_index': content_index, 'item_id': item_id, 'delta': text})}\n\n"
+                )
+                sequence_number += 1
+                yield (
+                    f"event: response.output_text.done\n"
+                    f"data: {json.dumps({'type': 'response.output_text.done', 'sequence_number': sequence_number, 'output_index': output_index, 'content_index': content_index, 'item_id': item_id, 'text': text})}\n\n"
+                )
+                sequence_number += 1
         else:
             while not output.is_computed():
                 delta = await output.astream()
@@ -277,11 +277,12 @@ async def stream_response_chunks(
                     )
                     sequence_number += 1
 
-            yield (
-                f"event: response.output_text.done\n"
-                f"data: {json.dumps({'type': 'response.output_text.done', 'sequence_number': sequence_number, 'output_index': output_index, 'content_index': content_index, 'item_id': item_id, 'text': accumulated_text})}\n\n"
-            )
-            sequence_number += 1
+            if accumulated_text:
+                yield (
+                    f"event: response.output_text.done\n"
+                    f"data: {json.dumps({'type': 'response.output_text.done', 'sequence_number': sequence_number, 'output_index': output_index, 'content_index': content_index, 'item_id': item_id, 'text': accumulated_text})}\n\n"
+                )
+                sequence_number += 1
 
         tool_calls = build_tool_calls(output)
         if tool_calls:
@@ -305,7 +306,9 @@ async def stream_response_chunks(
         usage = build_response_usage(output) or ResponseUsage(
             input_tokens=0, output_tokens=0, total_tokens=0
         )
-        output_items = build_response_output_items(output, tool_calls)
+        output_items = build_response_output_items(
+            output, tool_calls, message_id=item_id
+        )
         completed_response = Response(
             id=response_id,
             created_at=created,

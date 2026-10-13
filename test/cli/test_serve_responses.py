@@ -488,8 +488,6 @@ class TestResponsesEndpointNonStreaming:
         self, mock_module, simple_request
     ):
         """serve(client_options=...) receives the full raw request dict."""
-        import inspect
-        from unittest.mock import MagicMock
 
         def serve_with_co(
             input, requirements=None, model_options=None, client_options=None
@@ -656,6 +654,21 @@ class TestStreamResponseChunks:
         assert events[-1]["data"]["response"]["status"] == "completed"
 
     @pytest.mark.asyncio
+    async def test_completed_event_output_item_id_matches_stream_item_id(self):
+        output = ModelOutputThunk("hello")
+        events = await self._collect(
+            output, response_id="resp_1", model="m", created=1234
+        )
+        delta_event = next(
+            e for e in events if e["event"] == "response.output_text.delta"
+        )
+        stream_item_id = delta_event["data"]["item_id"]
+        completed_event = next(e for e in events if e["event"] == "response.completed")
+        completed_output_items = completed_event["data"]["response"]["output"]
+        assert len(completed_output_items) == 1
+        assert completed_output_items[0]["id"] == stream_item_id
+
+    @pytest.mark.asyncio
     async def test_conversation_echoed_in_created_event(self):
         output = ModelOutputThunk("hi")
         events = await self._collect(
@@ -726,7 +739,7 @@ class TestStreamResponseChunks:
 
     @pytest.mark.asyncio
     async def test_tool_call_output_index_zero_without_text(self):
-        """Tool call output_index is 0 when there's no text output."""
+        """Tool call output_index is 0 and no output_text events are emitted when there's no text output."""
         from mellea.core.base import ModelToolCall
 
         output = ModelOutputThunk("")
@@ -739,6 +752,54 @@ class TestStreamResponseChunks:
         events = await self._collect(
             output, response_id="resp_tc", model="m", created=1234
         )
+
+        text_events = [
+            e for e in events if e["event"].startswith("response.output_text")
+        ]
+        assert len(text_events) == 0
+
+        fc_events = [
+            e for e in events if e["event"] == "response.function_call_arguments.done"
+        ]
+        assert len(fc_events) == 1
+        assert fc_events[0]["data"]["output_index"] == 0
+
+    @pytest.mark.asyncio
+    async def test_stream_without_text_emits_no_output_text_events(self):
+        """When astream yields no text, no response.output_text.* events are emitted."""
+        from mellea.core.base import ModelToolCall
+
+        output = Mock()
+        call_count = 0
+
+        def is_computed():
+            return call_count >= 1
+
+        async def astream():
+            nonlocal call_count
+            call_count += 1
+            return None
+
+        tc = Mock(spec=ModelToolCall)
+        tc.name = "get_weather"
+        tc.args = {"location": "Paris"}
+        tc.tool_call_id = "call_abc"
+
+        output.is_computed = is_computed
+        output.astream = astream
+        output.tool_calls = [tc]
+        output.value = None
+        output.generation = Mock()
+        output.generation.usage = None
+
+        events = await self._collect(
+            output, response_id="resp_tc_stream", model="m", created=1234
+        )
+
+        text_events = [
+            e for e in events if e["event"].startswith("response.output_text")
+        ]
+        assert len(text_events) == 0
 
         fc_events = [
             e for e in events if e["event"] == "response.function_call_arguments.done"
@@ -944,6 +1005,11 @@ class TestBuildResponseOutputItems:
         output = ModelOutputThunk("hi")
         items = build_response_output_items(output, None)
         assert items[0].id.startswith("msg_")
+
+    def test_message_item_id_uses_provided_id(self):
+        output = ModelOutputThunk("hi")
+        items = build_response_output_items(output, None, message_id="msg_custom_123")
+        assert items[0].id == "msg_custom_123"
 
     def test_function_call_item_id_has_fc_prefix(self):
         output = ModelOutputThunk(None)

@@ -736,7 +736,9 @@ def build_response_usage(output: ModelOutputThunk) -> ResponseUsage | None:
 
 
 def build_response_output_items(
-    output: ModelOutputThunk, tool_calls_list: list[ToolCallDict] | None
+    output: ModelOutputThunk,
+    tool_calls_list: list[ToolCallDict] | None,
+    message_id: str | None = None,
 ) -> list[ResponseOutputItem]:
     """Build typed Responses API output items from a model output.
 
@@ -747,6 +749,8 @@ def build_response_output_items(
         output: Model output thunk containing the generated text and metadata.
         tool_calls_list: List of `ToolCallDict` objects from `build_tool_calls`,
             or `None`.
+        message_id: Optional ID for the message item. If not provided, a new ID
+            is generated with a `msg_` prefix.
 
     Returns:
         A list of `ResponseOutputItem` subclass instances.
@@ -756,7 +760,7 @@ def build_response_output_items(
     if output.value:
         items.append(
             ResponseOutputMessage(
-                id=f"msg_{uuid.uuid4().hex[:24]}",
+                id=message_id or f"msg_{uuid.uuid4().hex[:24]}",
                 type="message",
                 role="assistant",
                 status="completed",
