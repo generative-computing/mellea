@@ -190,7 +190,7 @@ qc.measure_all()
 
     # Setting use_lintq to True also rejects code flagged by the LintQ CodeQL queries.
     # Requires the codeql CLI and LINTQ_DIR (see README.md → LintQ setup)
-    use_lintq = True
+    use_lintq = False
     extra_requirements = (
         [
             req(
