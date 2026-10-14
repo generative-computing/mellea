@@ -740,6 +740,7 @@ def build_response_output_items(
     tool_calls_list: list[ToolCallDict] | None,
     message_id: str | None = None,
     function_call_ids: list[str] | None = None,
+    message_text: str | None = None,
 ) -> list[ResponseOutputItem]:
     """Build typed Responses API output items from a model output.
 
@@ -755,20 +756,27 @@ def build_response_output_items(
         function_call_ids: Optional list of IDs for function call items, one per
             tool call in `tool_calls_list`. If not provided or shorter than the
             tool call list, missing IDs are generated with an `fc_` prefix.
+        message_text: Optional text for the message item. When `None`, the
+            message item is derived from `output.value` (created iff truthy).
+            When a non-empty string, it replaces `output.value` as the message
+            text. When an empty string, no message item is created even if
+            `output.value` is set — for callers that build the message item
+            separately from streamed text.
 
     Returns:
         A list of `ResponseOutputItem` subclass instances.
     """
     items: list[ResponseOutputItem] = []
 
-    if output.value:
+    text = output.value if message_text is None else message_text
+    if text:
         items.append(
             ResponseOutputMessage(
                 id=message_id or f"msg_{uuid.uuid4().hex[:24]}",
                 type="message",
                 role="assistant",
                 status="completed",
-                content=[OutputTextContent(type="output_text", text=output.value)],
+                content=[OutputTextContent(type="output_text", text=text)],
             )
         )
 

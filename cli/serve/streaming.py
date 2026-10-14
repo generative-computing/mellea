@@ -6,6 +6,7 @@
 import json
 import uuid
 from collections.abc import AsyncGenerator
+from typing import Any
 
 from mellea.core.base import ModelOutputThunk
 from mellea.core.utils import MelleaLogger
@@ -23,12 +24,74 @@ from .models import (
     ChatCompletionMessageToolCallDelta,
     OpenAIError,
     OpenAIErrorResponse,
+    OutputTextContent,
     Response,
     ResponseError,
+    ResponseOutputItem,
+    ResponseOutputMessage,
     ResponseUsage,
     StreamOptions,
 )
 from .utils import extract_finish_reason
+
+
+def _format_sse_event(event_name: str, payload: dict[str, Any]) -> str:
+    """Format a single Responses API SSE event, injecting its `type` field.
+
+    Args:
+        event_name: SSE event name; also used as the payload's `type` field.
+        payload: Event payload fields (without `type`).
+
+    Returns:
+        The `event:`/`data:` line pair as one SSE chunk string.
+    """
+    return (
+        f"event: {event_name}\ndata: {json.dumps({'type': event_name, **payload})}\n\n"
+    )
+
+
+def _message_item_open_events(
+    item_id: str, output_index: int, content_index: int, sequence_number: int
+) -> str:
+    """Build the event pair that opens a message output item.
+
+    Per the Responses API spec, the first event for an item is
+    `response.output_item.added`, and streamable content is backed by a
+    content part opened with `response.content_part.added`.
+
+    Args:
+        item_id: ID of the message item being opened.
+        output_index: Output index of the message item.
+        content_index: Content index of the text part within the item.
+        sequence_number: Sequence number for the `output_item.added` event;
+            the `content_part.added` event uses the next number.
+
+    Returns:
+        Both events as a single SSE payload string.
+    """
+    return _format_sse_event(
+        "response.output_item.added",
+        {
+            "sequence_number": sequence_number,
+            "output_index": output_index,
+            "item": {
+                "id": item_id,
+                "type": "message",
+                "status": "in_progress",
+                "role": "assistant",
+                "content": [],
+            },
+        },
+    ) + _format_sse_event(
+        "response.content_part.added",
+        {
+            "sequence_number": sequence_number + 1,
+            "item_id": item_id,
+            "output_index": output_index,
+            "content_index": content_index,
+            "part": {"type": "output_text", "text": "", "annotations": []},
+        },
+    )
 
 
 async def stream_chat_completion_chunks(
@@ -194,13 +257,20 @@ async def stream_response_chunks(
 
     - `response.created` — initial in-progress envelope
     - `response.in_progress` — signals streaming has started
+    - `response.output_item.added` — message item opened (when text is produced)
+    - `response.content_part.added` — text content part opened (when text is produced)
     - `response.output_text.delta` — one per streamed token (or one for pre-computed)
-    - `response.output_text.done` — full accumulated text
+    - `response.output_text.done` — full accumulated text (when text is produced)
+    - `response.content_part.done` — text content part closed (when text is produced)
+    - `response.output_item.done` — message item closed (when text is produced)
+    - `response.output_item.added` — function call item opened (one per tool call, if any)
     - `response.function_call_arguments.delta` — one per tool call argument payload (if any)
     - `response.function_call_arguments.done` — one per tool call (if any)
+    - `response.output_item.done` — function call item closed (one per tool call, if any)
     - `response.completed` — full `Response` object matching the non-streaming shape
 
-    On error, emits `response.failed` instead of the completion event.
+    On error, emits `response.failed` instead of the completion event, carrying
+    the output items whose `output_item.done` events were already emitted.
 
     Args:
         output: The model output thunk to stream.
@@ -218,6 +288,10 @@ async def stream_response_chunks(
     """
     sequence_number = 0
     accumulated_text = ""
+    # Items whose output_item.done event has been emitted; used by both the
+    # completed and failed envelopes so the final response always matches
+    # what the client saw closed on the stream.
+    output_items: list[ResponseOutputItem] = []
     try:
         # Build the in-progress response object from the full Response model so
         # the created/in_progress envelopes parse into a Response model on strict
@@ -237,16 +311,16 @@ async def stream_response_chunks(
         in_progress_payload = in_progress_response.model_dump()
 
         # response.created event - OpenAI SDK format
-        yield (
-            f"event: response.created\n"
-            f"data: {json.dumps({'type': 'response.created', 'sequence_number': sequence_number, 'response': in_progress_payload})}\n\n"
+        yield _format_sse_event(
+            "response.created",
+            {"sequence_number": sequence_number, "response": in_progress_payload},
         )
         sequence_number += 1
 
         # response.in_progress event - OpenAI SDK format
-        yield (
-            f"event: response.in_progress\n"
-            f"data: {json.dumps({'type': 'response.in_progress', 'sequence_number': sequence_number, 'response': in_progress_payload})}\n\n"
+        yield _format_sse_event(
+            "response.in_progress",
+            {"sequence_number": sequence_number, "response": in_progress_payload},
         )
         sequence_number += 1
 
@@ -259,34 +333,115 @@ async def stream_response_chunks(
             text = output.value or ""
             if text:
                 accumulated_text = text
+                # Open the message item and its text content part before the
+                # first delta.
+                yield _message_item_open_events(
+                    item_id, output_index, content_index, sequence_number
+                )
+                sequence_number += 2
                 # For pre-computed output, emit delta + done
-                yield (
-                    f"event: response.output_text.delta\n"
-                    f"data: {json.dumps({'type': 'response.output_text.delta', 'sequence_number': sequence_number, 'output_index': output_index, 'content_index': content_index, 'item_id': item_id, 'delta': text})}\n\n"
+                yield _format_sse_event(
+                    "response.output_text.delta",
+                    {
+                        "sequence_number": sequence_number,
+                        "output_index": output_index,
+                        "content_index": content_index,
+                        "item_id": item_id,
+                        "delta": text,
+                    },
                 )
                 sequence_number += 1
-                yield (
-                    f"event: response.output_text.done\n"
-                    f"data: {json.dumps({'type': 'response.output_text.done', 'sequence_number': sequence_number, 'output_index': output_index, 'content_index': content_index, 'item_id': item_id, 'text': text})}\n\n"
+                yield _format_sse_event(
+                    "response.output_text.done",
+                    {
+                        "sequence_number": sequence_number,
+                        "output_index": output_index,
+                        "content_index": content_index,
+                        "item_id": item_id,
+                        "text": text,
+                    },
                 )
                 sequence_number += 1
         else:
+            message_item_opened = False
             while not output.is_computed():
                 delta = await output.astream()
                 if delta:
+                    if not message_item_opened:
+                        message_item_opened = True
+                        # Open the message item and its text content part
+                        # before the first streamed delta.
+                        yield _message_item_open_events(
+                            item_id, output_index, content_index, sequence_number
+                        )
+                        sequence_number += 2
                     accumulated_text += delta
-                    yield (
-                        f"event: response.output_text.delta\n"
-                        f"data: {json.dumps({'type': 'response.output_text.delta', 'sequence_number': sequence_number, 'output_index': output_index, 'content_index': content_index, 'item_id': item_id, 'delta': delta})}\n\n"
+                    yield _format_sse_event(
+                        "response.output_text.delta",
+                        {
+                            "sequence_number": sequence_number,
+                            "output_index": output_index,
+                            "content_index": content_index,
+                            "item_id": item_id,
+                            "delta": delta,
+                        },
                     )
                     sequence_number += 1
 
             if accumulated_text:
-                yield (
-                    f"event: response.output_text.done\n"
-                    f"data: {json.dumps({'type': 'response.output_text.done', 'sequence_number': sequence_number, 'output_index': output_index, 'content_index': content_index, 'item_id': item_id, 'text': accumulated_text})}\n\n"
+                yield _format_sse_event(
+                    "response.output_text.done",
+                    {
+                        "sequence_number": sequence_number,
+                        "output_index": output_index,
+                        "content_index": content_index,
+                        "item_id": item_id,
+                        "text": accumulated_text,
+                    },
                 )
                 sequence_number += 1
+
+        # Build the message item from the accumulated stream text — not
+        # `output.value`, which post-processing may rewrite after the last
+        # delta — so the item-close events and `response.completed` carry
+        # exactly the text the client saw streamed.
+        if accumulated_text:
+            message_item = ResponseOutputMessage(
+                id=item_id,
+                type="message",
+                role="assistant",
+                status="completed",
+                content=[OutputTextContent(type="output_text", text=accumulated_text)],
+            )
+            # Close the text content part, then the message item, before
+            # building the function-call items: if that construction fails,
+            # the message item is already closed and included in the failed
+            # envelope rather than left dangling in_progress on the client.
+            yield _format_sse_event(
+                "response.content_part.done",
+                {
+                    "sequence_number": sequence_number,
+                    "item_id": item_id,
+                    "output_index": output_index,
+                    "content_index": content_index,
+                    "part": {
+                        "type": "output_text",
+                        "text": accumulated_text,
+                        "annotations": [],
+                    },
+                },
+            )
+            sequence_number += 1
+            yield _format_sse_event(
+                "response.output_item.done",
+                {
+                    "sequence_number": sequence_number,
+                    "output_index": output_index,
+                    "item": message_item.model_dump(),
+                },
+            )
+            sequence_number += 1
+            output_items.append(message_item)
 
         tool_calls = build_tool_calls(output)
         # Pre-generate function call item IDs so streaming events and the
@@ -295,33 +450,79 @@ async def stream_response_chunks(
         function_call_ids = (
             [f"fc_{uuid.uuid4().hex[:24]}" for _ in tool_calls] if tool_calls else []
         )
+
         if tool_calls:
+            # Build only the function-call items here (message_text="" skips
+            # the value-derived message item, built above from streamed text).
+            fc_items = build_response_output_items(
+                output, tool_calls, function_call_ids=function_call_ids, message_text=""
+            )
             # output_index for tool calls: starts at 0 if no text, 1 if text exists
             start_index = 1 if accumulated_text else 0
-            for idx, (tool_call, fc_id) in enumerate(
-                zip(tool_calls, function_call_ids), start=start_index
+            for idx, (tool_call, fc_id, fc_item) in enumerate(
+                zip(tool_calls, function_call_ids, fc_items), start=start_index
             ):
                 output_index = idx
+                name = tool_call["function"]["name"]
                 arguments = tool_call["function"]["arguments"]
+                # Open the function call item before the argument events
+                # (spec: the first event for an item is output_item.added,
+                # echoing at least the function name).
+                yield _format_sse_event(
+                    "response.output_item.added",
+                    {
+                        "sequence_number": sequence_number,
+                        "output_index": output_index,
+                        "item": {
+                            "id": fc_id,
+                            "type": "function_call",
+                            "status": "in_progress",
+                            "name": name,
+                            "arguments": "",
+                            "call_id": tool_call["id"],
+                        },
+                    },
+                )
+                sequence_number += 1
                 # Emit a single delta carrying the full arguments string.
                 # The backend doesn't stream arguments incrementally, so one
                 # delta with the complete payload is spec-conformant.
-                yield (
-                    f"event: response.function_call_arguments.delta\n"
-                    f"data: {json.dumps({'type': 'response.function_call_arguments.delta', 'sequence_number': sequence_number, 'item_id': fc_id, 'output_index': output_index, 'call_id': tool_call['id'], 'delta': arguments})}\n\n"
+                yield _format_sse_event(
+                    "response.function_call_arguments.delta",
+                    {
+                        "sequence_number": sequence_number,
+                        "item_id": fc_id,
+                        "output_index": output_index,
+                        "call_id": tool_call["id"],
+                        "delta": arguments,
+                    },
                 )
                 sequence_number += 1
-                yield (
-                    f"event: response.function_call_arguments.done\n"
-                    f"data: {json.dumps({'type': 'response.function_call_arguments.done', 'sequence_number': sequence_number, 'item_id': fc_id, 'output_index': output_index, 'call_id': tool_call['id'], 'name': tool_call['function']['name'], 'arguments': arguments})}\n\n"
+                yield _format_sse_event(
+                    "response.function_call_arguments.done",
+                    {
+                        "sequence_number": sequence_number,
+                        "item_id": fc_id,
+                        "output_index": output_index,
+                        "call_id": tool_call["id"],
+                        "arguments": arguments,
+                    },
                 )
                 sequence_number += 1
+                # Close the function call item with the completed item object.
+                yield _format_sse_event(
+                    "response.output_item.done",
+                    {
+                        "sequence_number": sequence_number,
+                        "output_index": output_index,
+                        "item": fc_item.model_dump(),
+                    },
+                )
+                sequence_number += 1
+                output_items.append(fc_item)
 
         usage = build_response_usage(output) or ResponseUsage(
             input_tokens=0, output_tokens=0, total_tokens=0
-        )
-        output_items = build_response_output_items(
-            output, tool_calls, message_id=item_id, function_call_ids=function_call_ids
         )
         completed_response = Response(
             id=response_id,
@@ -335,30 +536,38 @@ async def stream_response_chunks(
             conversation=conversation,
             previous_response_id=previous_response_id,
         )
-        yield (
-            f"event: response.completed\n"
-            f"data: {json.dumps({'type': 'response.completed', 'sequence_number': sequence_number, 'response': completed_response.model_dump()})}\n\n"
+        yield _format_sse_event(
+            "response.completed",
+            {
+                "sequence_number": sequence_number,
+                "response": completed_response.model_dump(),
+            },
         )
 
     except Exception as e:
         MelleaLogger.get_logger().exception("Streaming error in responses endpoint")
         # Build the failed envelope from the full Response model so strict
         # SDK clients can parse it (a minimal dict would be missing required
-        # fields like `model`, `created_at`, and `output`).
+        # fields like `model`, `created_at`, and `output`). It carries the
+        # items the client already saw closed so event-driven reconstruction
+        # and the failed response agree.
         failed_response = Response(
             id=response_id,
             created_at=created,
             expires_at=created + ttl if store else None,
             model=model,
             status="failed",
-            output=[],
+            output=output_items,
             output_text=accumulated_text,
             error=ResponseError(code="server_error", message=str(e)),
             usage=ResponseUsage(input_tokens=0, output_tokens=0, total_tokens=0),
             conversation=conversation,
             previous_response_id=previous_response_id,
         )
-        yield (
-            f"event: response.failed\n"
-            f"data: {json.dumps({'type': 'response.failed', 'sequence_number': sequence_number, 'response': failed_response.model_dump()})}\n\n"
+        yield _format_sse_event(
+            "response.failed",
+            {
+                "sequence_number": sequence_number,
+                "response": failed_response.model_dump(),
+            },
         )

@@ -656,6 +656,111 @@ class TestStreamResponseChunks:
         assert done_events[0]["data"]["text"] == "hello world"
 
     @pytest.mark.asyncio
+    async def test_message_item_lifecycle_events(self):
+        """Text output emits output_item.added/done and content_part.added/done."""
+        output = ModelOutputThunk("hello world")
+        events = await self._collect(
+            output, response_id="resp_1", model="m", created=1234
+        )
+
+        item_added = next(
+            e for e in events if e["event"] == "response.output_item.added"
+        )
+        item = item_added["data"]["item"]
+        delta_event = next(
+            e for e in events if e["event"] == "response.output_text.delta"
+        )
+        assert item_added["data"]["output_index"] == 0
+        assert item["id"] == delta_event["data"]["item_id"]
+        assert item["type"] == "message"
+        assert item["status"] == "in_progress"
+        assert item["role"] == "assistant"
+        assert item["content"] == []
+
+        part_added = next(
+            e for e in events if e["event"] == "response.content_part.added"
+        )
+        assert part_added["data"]["item_id"] == item["id"]
+        assert part_added["data"]["output_index"] == 0
+        assert part_added["data"]["content_index"] == 0
+        assert part_added["data"]["part"] == {
+            "type": "output_text",
+            "text": "",
+            "annotations": [],
+        }
+
+        part_done = next(
+            e for e in events if e["event"] == "response.content_part.done"
+        )
+        assert part_done["data"]["part"] == {
+            "type": "output_text",
+            "text": "hello world",
+            "annotations": [],
+        }
+
+        item_done = next(e for e in events if e["event"] == "response.output_item.done")
+        done_item = item_done["data"]["item"]
+        assert item_done["data"]["output_index"] == 0
+        assert done_item["id"] == item["id"]
+        assert done_item["status"] == "completed"
+        assert done_item["content"] == [{"type": "output_text", "text": "hello world"}]
+        # The done item must match the corresponding item in response.completed
+        completed = next(e for e in events if e["event"] == "response.completed")
+        assert done_item == completed["data"]["response"]["output"][0]
+
+    @pytest.mark.asyncio
+    async def test_streaming_event_order_with_tool_call(self):
+        """Full event sequence follows the spec item/content-part lifecycle."""
+        from mellea.core.base import ModelToolCall
+
+        output = ModelOutputThunk("ok")
+        tc = Mock(spec=ModelToolCall)
+        tc.name = "get_weather"
+        tc.args = {"location": "Paris"}
+        tc.tool_call_id = "call_abc"
+        output.tool_calls = [tc]
+
+        events = await self._collect(
+            output, response_id="resp_tc", model="m", created=1234
+        )
+
+        names = [e["event"] for e in events]
+        assert names == [
+            "response.created",
+            "response.in_progress",
+            "response.output_item.added",
+            "response.content_part.added",
+            "response.output_text.delta",
+            "response.output_text.done",
+            "response.content_part.done",
+            "response.output_item.done",
+            "response.output_item.added",
+            "response.function_call_arguments.delta",
+            "response.function_call_arguments.done",
+            "response.output_item.done",
+            "response.completed",
+        ]
+
+    @pytest.mark.asyncio
+    async def test_sequence_numbers_are_sequential(self):
+        """sequence_number starts at 0 and increments by one on every event."""
+        from mellea.core.base import ModelToolCall
+
+        output = ModelOutputThunk("ok")
+        tc = Mock(spec=ModelToolCall)
+        tc.name = "get_weather"
+        tc.args = {"location": "Paris"}
+        tc.tool_call_id = "call_abc"
+        output.tool_calls = [tc]
+
+        events = await self._collect(
+            output, response_id="resp_tc", model="m", created=1234
+        )
+
+        sequence_numbers = [e["data"]["sequence_number"] for e in events]
+        assert sequence_numbers == list(range(len(events)))
+
+    @pytest.mark.asyncio
     async def test_emits_completed_event_last(self):
         output = ModelOutputThunk("hello")
         events = await self._collect(
@@ -726,6 +831,107 @@ class TestStreamResponseChunks:
         assert done_events[0]["data"]["text"] == "Hello"
 
     @pytest.mark.asyncio
+    async def test_streamed_text_wins_over_postprocessed_value(self):
+        """Events and completed response carry the streamed text, not a rewritten value.
+
+        Post-processing may rewrite `output.value` after the last delta; the
+        close events and `response.completed` must agree with the deltas the
+        client already saw.
+        """
+        output = Mock()
+        tokens = ["He", "ll", "o"]
+        call_count = 0
+
+        def is_computed():
+            return call_count >= len(tokens)
+
+        async def astream():
+            nonlocal call_count
+            token = tokens[call_count]
+            call_count += 1
+            return token
+
+        output.is_computed = is_computed
+        output.astream = astream
+        output.tool_calls = None
+        # Simulate a backend whose post-processing rewrote the value after
+        # the deltas were already streamed.
+        output.value = "Post-processed text"
+        output.generation = Mock()
+        output.generation.usage = None
+
+        events = await self._collect(
+            output, response_id="resp_s", model="m", created=1234
+        )
+
+        part_done = next(
+            e for e in events if e["event"] == "response.content_part.done"
+        )
+        assert part_done["data"]["part"]["text"] == "Hello"
+
+        item_done = next(e for e in events if e["event"] == "response.output_item.done")
+        assert item_done["data"]["item"]["content"] == [
+            {"type": "output_text", "text": "Hello"}
+        ]
+
+        completed = next(e for e in events if e["event"] == "response.completed")
+        assert completed["data"]["response"]["output_text"] == "Hello"
+        assert completed["data"]["response"]["output"][0]["content"] == [
+            {"type": "output_text", "text": "Hello"}
+        ]
+
+    @pytest.mark.asyncio
+    async def test_tool_item_failure_closes_message_item(self):
+        """If function-call item construction fails, the message item is closed
+        and carried in the failed envelope."""
+        from mellea.core.base import ModelToolCall
+
+        output = Mock()
+        tokens = ["Hi"]
+        call_count = 0
+
+        def is_computed():
+            return call_count >= len(tokens)
+
+        async def astream():
+            nonlocal call_count
+            token = tokens[call_count]
+            call_count += 1
+            return token
+
+        # A tool call with an invalid name (None) makes function-call item
+        # construction raise after the message item was already streamed.
+        tc = Mock(spec=ModelToolCall)
+        tc.name = None
+        tc.args = {"location": "Paris"}
+        tc.tool_call_id = "call_abc"
+
+        output.is_computed = is_computed
+        output.astream = astream
+        output.tool_calls = [tc]
+        output.generation = Mock()
+        output.generation.usage = None
+
+        events = await self._collect(
+            output, response_id="resp_fail", model="m", created=1234
+        )
+
+        # The message item was closed before the failure.
+        item_done_events = [
+            e for e in events if e["event"] == "response.output_item.done"
+        ]
+        assert len(item_done_events) == 1
+        assert item_done_events[0]["data"]["item"]["content"] == [
+            {"type": "output_text", "text": "Hi"}
+        ]
+
+        # The failed envelope carries the closed message item.
+        failed = next(e for e in events if e["event"] == "response.failed")
+        assert failed["data"]["response"]["output"] == [
+            item_done_events[0]["data"]["item"]
+        ]
+
+    @pytest.mark.asyncio
     async def test_tool_calls_emit_function_call_arguments_done(self):
         """Tool calls on the output produce function_call_arguments.done events."""
         from mellea.core.base import ModelToolCall
@@ -745,7 +951,9 @@ class TestStreamResponseChunks:
             e for e in events if e["event"] == "response.function_call_arguments.done"
         ]
         assert len(fc_events) == 1
-        assert fc_events[0]["data"]["name"] == "get_weather"
+        # Spec fields only: no `name` on the done event (it lives on the item).
+        assert "name" not in fc_events[0]["data"]
+        assert fc_events[0]["data"]["arguments"] == '{"location": "Paris"}'
         assert fc_events[0]["data"]["call_id"] == "call_abc"
         assert fc_events[0]["data"]["output_index"] == 1
 
@@ -827,6 +1035,59 @@ class TestStreamResponseChunks:
         assert fc_items[0]["id"] == stream_fc_item_id
 
     @pytest.mark.asyncio
+    async def test_function_call_item_lifecycle_events(self):
+        """Tool calls emit output_item.added before and output_item.done after
+        the argument events."""
+        from mellea.core.base import ModelToolCall
+
+        output = ModelOutputThunk("ok")
+        tc = Mock(spec=ModelToolCall)
+        tc.name = "get_weather"
+        tc.args = {"location": "Paris"}
+        tc.tool_call_id = "call_abc"
+        output.tool_calls = [tc]
+
+        events = await self._collect(
+            output, response_id="resp_tc", model="m", created=1234
+        )
+
+        # Two output_item.added events: the message, then the function call.
+        item_added_events = [
+            e for e in events if e["event"] == "response.output_item.added"
+        ]
+        assert len(item_added_events) == 2
+        fc_added = item_added_events[1]
+        item = fc_added["data"]["item"]
+        delta_event = next(
+            e for e in events if e["event"] == "response.function_call_arguments.delta"
+        )
+        assert fc_added["data"]["output_index"] == 1
+        assert item["id"] == delta_event["data"]["item_id"]
+        assert item["type"] == "function_call"
+        assert item["status"] == "in_progress"
+        assert item["name"] == "get_weather"
+        assert item["arguments"] == ""
+        assert item["call_id"] == "call_abc"
+
+        item_done_events = [
+            e for e in events if e["event"] == "response.output_item.done"
+        ]
+        assert len(item_done_events) == 2
+        done_item = item_done_events[1]["data"]["item"]
+        assert item_done_events[1]["data"]["output_index"] == 1
+        assert done_item["id"] == item["id"]
+        assert done_item["status"] == "completed"
+        assert done_item["arguments"] == '{"location": "Paris"}'
+        # The done item must match the corresponding item in response.completed
+        completed = next(e for e in events if e["event"] == "response.completed")
+        completed_fc = next(
+            i
+            for i in completed["data"]["response"]["output"]
+            if i["type"] == "function_call"
+        )
+        assert done_item == completed_fc
+
+    @pytest.mark.asyncio
     async def test_tool_call_output_index_zero_without_text(self):
         """Tool call output_index is 0 and no output_text events are emitted when there's no text output."""
         from mellea.core.base import ModelToolCall
@@ -895,6 +1156,34 @@ class TestStreamResponseChunks:
         ]
         assert len(fc_events) == 1
         assert fc_events[0]["data"]["output_index"] == 0
+
+    @pytest.mark.asyncio
+    async def test_tool_only_stream_has_no_message_lifecycle_events(self):
+        """Without text output there are no message item or content part events."""
+        from mellea.core.base import ModelToolCall
+
+        output = ModelOutputThunk("")
+        tc = Mock(spec=ModelToolCall)
+        tc.name = "get_weather"
+        tc.args = {"location": "Paris"}
+        tc.tool_call_id = "call_abc"
+        output.tool_calls = [tc]
+
+        events = await self._collect(
+            output, response_id="resp_tc", model="m", created=1234
+        )
+
+        item_added_events = [
+            e for e in events if e["event"] == "response.output_item.added"
+        ]
+        assert len(item_added_events) == 1
+        assert item_added_events[0]["data"]["item"]["type"] == "function_call"
+        assert item_added_events[0]["data"]["output_index"] == 0
+
+        part_events = [
+            e for e in events if e["event"].startswith("response.content_part")
+        ]
+        assert len(part_events) == 0
 
     @pytest.mark.asyncio
     async def test_error_emits_failed_event(self):
@@ -1141,3 +1430,25 @@ class TestBuildResponseOutputItems:
         )
         assert items[0].id == "fc_custom_1"
         assert items[1].id == "fc_custom_2"
+
+    def test_message_text_overrides_value(self):
+        """A non-empty message_text replaces output.value as the message text."""
+        output = ModelOutputThunk("rewritten value")
+        items = build_response_output_items(output, None, message_text="streamed text")
+        assert len(items) == 1
+        msg = items[0]
+        assert msg.type == "message"
+        assert msg.content[0].text == "streamed text"  # type: ignore[union-attr]
+
+    def test_empty_message_text_suppresses_message_item(self):
+        """An empty message_text skips the message item even when value is set."""
+        output = ModelOutputThunk("some value")
+        tool_calls = [
+            {
+                "id": "c1",
+                "type": "function",
+                "function": {"name": "f", "arguments": "{}"},
+            }
+        ]
+        items = build_response_output_items(output, tool_calls, message_text="")
+        assert [i.type for i in items] == ["function_call"]
