@@ -1013,9 +1013,10 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         Applies the intrinsic's I/O rewriter to transform the conversation,
         injects `intrinsic_name` into `chat_template_kwargs` so that the
-        Granite Switch chat template activates the correct adapter, and
-        post-processes the model output through the intrinsic's result
-        processor.
+        Granite Switch chat template activates the correct adapter, mirrors
+        `documents` into `chat_template_kwargs` so servers without a
+        first-class documents field still render them, and post-processes
+        the model output through the intrinsic's result processor.
 
         Intrinsics default to options provided by `io.yaml`. Model options
         override these defaults. All model options besides streaming are
@@ -1185,6 +1186,25 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         api_params.update(self._map_thinking_option(thinking, extra_body))
 
         extra_body = self._merge_user_extra_body(extra_body, user_extra_body)
+
+        # vLLM reads documents from its first-class request field, but other
+        # OpenAI-compatible servers (llama-server is the tested one) drop
+        # unknown top-level fields and only reach chat-template variables
+        # through `chat_template_kwargs` — there, the Granite Switch
+        # template's `documents` variable never renders and every RAG
+        # adapter sees an empty document set. Mirror documents into
+        # `chat_template_kwargs` so both server families render them; vLLM
+        # folds both shapes into the same template context, so the duplicate
+        # is harmless there. A caller's own `chat_template_kwargs.documents`
+        # wins on llama-server; on vLLM, `build_chat_params` merges the
+        # top-level field over it, so such an override only takes effect on
+        # servers that read `chat_template_kwargs` alone.
+        documents = extra_body.get("documents")
+        if documents:
+            kwargs = dict(extra_body.get("chat_template_kwargs") or {})
+            if "documents" not in kwargs:
+                kwargs["documents"] = documents
+                extra_body["chat_template_kwargs"] = kwargs
 
         # Embedded adapters activate via control tokens in the chat template;
         # the binding owns the final request edit so callers cannot override

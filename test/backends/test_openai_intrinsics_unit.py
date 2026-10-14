@@ -35,7 +35,7 @@ from mellea.backends.adapters.adapter import EmbeddedIntrinsicAdapter
 from mellea.backends.openai import OpenAIBackend
 from mellea.core import ModelOutputThunk, Requirement
 from mellea.stdlib import functional as mfuncs
-from mellea.stdlib.components import Intrinsic, Message
+from mellea.stdlib.components import Document, Intrinsic, Message
 from mellea.stdlib.context import ChatContext, SimpleContext
 from mellea.stdlib.requirements import ALoraRequirement
 
@@ -242,6 +242,9 @@ async def test_chat_template_kwargs_set():
 
     assert "chat_template_kwargs" in extra_body
     assert extra_body["chat_template_kwargs"]["adapter_name"] == "answerability"
+    # No documents in the context means no mirror: an empty documents list is
+    # falsy in the chat template too, so mirroring it would change nothing.
+    assert "documents" not in extra_body["chat_template_kwargs"]
 
 
 async def test_composed_adapter_drives_generate_from_intrinsic():
@@ -694,6 +697,86 @@ async def test_user_extra_body_merges_into_intrinsic_extra_body():
     assert extra_body["chat_template_kwargs"]["enable_thinking"] is True
     assert extra_body["chat_template_kwargs"]["caller_key"] == "caller-value"
     assert call_kwargs["reasoning_effort"] == "medium"
+
+
+async def test_documents_mirrored_into_chat_template_kwargs():
+    """Documents ride in chat_template_kwargs as well as the top-level field.
+
+    vLLM reads the top-level `documents` field, but llama-server and other
+    OpenAI-compatible servers drop unknown top-level fields and only reach
+    chat-template variables through `chat_template_kwargs`. Without the
+    mirror, the Granite Switch template's `documents` variable never renders
+    there and every RAG adapter sees an empty document set (issue #1735).
+    """
+    backend = _make_backend_with_adapter(_SIMPLE_CONFIG)
+    ctx = ChatContext().add(
+        Message(
+            "user",
+            "What is the square root of 4?",
+            documents=[Document("The square root of 4 is 2.")],
+        )
+    )
+    mock_create = AsyncMock(return_value=_simple_chat_completion())
+
+    mock_client = MagicMock()
+    mock_client.chat.completions.create = mock_create
+
+    with patch.object(
+        OpenAIBackend,
+        "_async_client",
+        new_callable=PropertyMock,
+        return_value=mock_client,
+    ):
+        mot, _ = await mfuncs.aact(
+            Intrinsic("answerability"), ctx, backend, strategy=None
+        )
+        await mot.avalue()
+
+    extra_body = mock_create.call_args.kwargs["extra_body"]
+    assert extra_body["documents"]
+    assert extra_body["chat_template_kwargs"]["documents"] == extra_body["documents"]
+    assert extra_body["chat_template_kwargs"]["adapter_name"] == "answerability"
+
+
+async def test_user_chat_template_kwargs_documents_not_overwritten():
+    """A caller-supplied chat_template_kwargs.documents wins over the mirror."""
+    backend = _make_backend_with_adapter(_SIMPLE_CONFIG)
+    ctx = ChatContext().add(
+        Message(
+            "user",
+            "What is the square root of 4?",
+            documents=[Document("The square root of 4 is 2.")],
+        )
+    )
+    mock_create = AsyncMock(return_value=_simple_chat_completion())
+
+    mock_client = MagicMock()
+    mock_client.chat.completions.create = mock_create
+
+    caller_docs = [{"text": "caller document"}]
+    with patch.object(
+        OpenAIBackend,
+        "_async_client",
+        new_callable=PropertyMock,
+        return_value=mock_client,
+    ):
+        mot, _ = await mfuncs.aact(
+            Intrinsic("answerability"),
+            ctx,
+            backend,
+            strategy=None,
+            model_options={
+                "extra_body": {"chat_template_kwargs": {"documents": caller_docs}}
+            },
+        )
+        await mot.avalue()
+
+    extra_body = mock_create.call_args.kwargs["extra_body"]
+    assert extra_body["chat_template_kwargs"]["documents"] == caller_docs
+    # The top-level field still carries the documents derived from the
+    # context, not the caller's override.
+    assert extra_body["documents"] == [{"text": "The square root of 4 is 2."}]
+    assert extra_body["chat_template_kwargs"]["adapter_name"] == "answerability"
 
 
 async def test_user_extra_body_cannot_override_embedded_adapter():
