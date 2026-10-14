@@ -868,7 +868,7 @@ class OllamaModelBackend(FormatterBackend, AdapterMixin):
                     _to_chat_completion_dict(chunk), rewritten
                 )
             except json.JSONDecodeError as e:
-                raise Exception(
+                raise ValueError(
                     f"Intrinsic did not return a JSON: {chunk.message.content}"
                 ) from e
 

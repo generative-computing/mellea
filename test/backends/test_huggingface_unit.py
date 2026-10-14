@@ -676,7 +676,7 @@ async def test_embedded_intrinsic_invocation_complete_fires_schema_error(stub_ba
         stub_backend, _JSONDecodeErrorResultProcessor
     )
 
-    assert isinstance(raised, Exception)
+    assert isinstance(raised, ValueError)
     assert "did not return a JSON" in str(raised)
     assert isinstance(raised.__cause__, json.JSONDecodeError)
     assert len(payloads) == 1
