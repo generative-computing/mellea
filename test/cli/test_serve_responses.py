@@ -116,6 +116,18 @@ class TestBuildModelOptionsFromResponseRequest:
         opts = _build_model_options_from_response_request(req)
         assert opts[ModelOption.TOOL_CHOICE] == "auto"
 
+    def test_stream_true_sets_model_option_stream(self):
+        """stream=True must reach the backend so it streams from the provider."""
+        req = ResponseRequest(model="m", input="hi", stream=True)
+        opts = _build_model_options_from_response_request(req)
+        assert opts.get(ModelOption.STREAM) is True
+
+    def test_stream_false_omits_model_option_stream(self):
+        """stream=False (the default) must not forward ModelOption.STREAM."""
+        req = ResponseRequest(model="m", input="hi", stream=False)
+        opts = _build_model_options_from_response_request(req)
+        assert ModelOption.STREAM not in opts
+
     @pytest.mark.parametrize(
         "tool_type", ["web_search", "file_search", "mcp", "code_interpreter"]
     )

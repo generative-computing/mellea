@@ -244,7 +244,6 @@ def _build_model_options_from_response_request(request: ResponseRequest) -> dict
         "input",
         "instructions",
         "model",
-        "stream",
         "store",
         "conversation",
         "previous_response_id",
@@ -261,6 +260,7 @@ def _build_model_options_from_response_request(request: ResponseRequest) -> dict
     openai_to_model_option = {
         "max_output_tokens": ModelOption.MAX_NEW_TOKENS,
         "temperature": ModelOption.TEMPERATURE,
+        "stream": ModelOption.STREAM,
         "tools": ModelOption.TOOLS,
         "tool_choice": ModelOption.TOOL_CHOICE,
     }
@@ -270,6 +270,13 @@ def _build_model_options_from_response_request(request: ResponseRequest) -> dict
         for key, value in request.model_dump(exclude_none=True).items()
         if key not in excluded_fields
     }
+
+    # Only forward stream when True (don't forward False), matching the chat
+    # endpoint. The backend relies on ModelOption.STREAM to stream from the
+    # provider and to request token usage; without it, the responses endpoint's
+    # "streaming" would be non-incremental (a single delta with the full text).
+    if "stream" in filtered_options and not filtered_options["stream"]:
+        del filtered_options["stream"]
 
     result = ModelOption.replace_keys(filtered_options, openai_to_model_option)
 
