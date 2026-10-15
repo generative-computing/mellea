@@ -36,7 +36,7 @@ from mellea.core import ModelOutputThunk, Requirement
 from mellea.core.base import AbstractMelleaTool
 from mellea.formatters import TemplateFormatter
 from mellea.serve import ChatMessage
-from mellea.stdlib.components.chat import Message
+from mellea.stdlib.context import ChatContext
 from mellea.stdlib.functional import call_tools
 from mellea.stdlib.session import MelleaSession
 
@@ -229,7 +229,10 @@ def serve(
         final_model_options[ModelOption.TOOLS] = tools
 
     message = input[-1].content
-    session = MelleaSession(backend)
+    # A ChatContext (not the default SimpleContext) is required so the
+    # conversation history — including tool results — is forwarded to the
+    # model on re-prompts.
+    session = MelleaSession(backend, ctx=ChatContext())
 
     # First call — model may emit tool_calls instead of (or alongside) text.
     result = session.instruct(
@@ -239,6 +242,13 @@ def serve(
         tool_calls=bool(tools),
         strategy=None,
     )
+
+    # Re-prompts keep the tools advertised so the model may request more
+    # rounds, but relax a pinned tool_choice to "auto" — a forced choice
+    # would make the model call the same tool every round and never answer.
+    re_prompt_options = dict(final_model_options)
+    re_prompt_options[ModelOption.TOOL_CHOICE] = "auto"
+    re_prompt_options.setdefault(ModelOption.MAX_NEW_TOKENS, 1000)
 
     # Agentic loop: execute requested tools and re-prompt until the model
     # produces a plain text answer (no more tool calls).
@@ -252,15 +262,11 @@ def serve(
             session.ctx = session.ctx.add(tool_msg)
 
         # Re-prompt the model; it now has the tool results in context and
-        # should produce a final answer rather than another tool call.
+        # may either request another tool or produce a final answer.
         result = session.instruct(
             description="Answer the user's question using the tool results above.",
-            model_options={
-                ModelOption.MAX_NEW_TOKENS: final_model_options.get(
-                    ModelOption.MAX_NEW_TOKENS, 1000
-                )
-            },
-            tool_calls=False,
+            model_options=re_prompt_options,
+            tool_calls=bool(tools),
             strategy=None,
         )
 
@@ -269,7 +275,8 @@ def serve(
 
 if __name__ == "__main__":
     # Quick smoke test: the whole tool loop runs locally.
-    session = MelleaSession(backend)
+    # A ChatContext is required so tool results reach the model on re-prompts.
+    session = MelleaSession(backend, ctx=ChatContext())
     result = session.instruct(
         "What's the weather in Boston?",
         model_options={
@@ -287,10 +294,16 @@ if __name__ == "__main__":
             session.ctx = session.ctx.add(tool_msg)
             print(f"Tool executed: {tool_msg.name} → {tool_msg._tool_output}")
 
+        # Keep the tools advertised so the model could request another round;
+        # here it should use the tool result to answer.
         result = session.instruct(
             "Answer the user's question using the tool results above.",
-            model_options={ModelOption.MAX_NEW_TOKENS: 1000},
-            tool_calls=False,
+            model_options={
+                ModelOption.TOOLS: [weather_tool],
+                ModelOption.TOOL_CHOICE: "auto",
+                ModelOption.MAX_NEW_TOKENS: 1000,
+            },
+            tool_calls=True,
             strategy=None,
         )
 
