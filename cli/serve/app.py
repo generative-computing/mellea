@@ -11,6 +11,7 @@ import secrets
 import string
 import sys
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Literal, cast
 
@@ -502,6 +503,23 @@ def make_responses_endpoint(module):
             storing = request.store is not False
 
             if request.stream:
+                save_streamed_response: Callable[[Response], None] | None = None
+                if storing:
+                    # Persist the response once the stream has completed so
+                    # that a follow-up request can chain via
+                    # previous_response_id. The callback fires only after the
+                    # response.completed event has been sent (see
+                    # stream_response_chunks), not on a failed stream.
+                    def _save_streamed_response(response: Response) -> None:
+                        _response_store[response.id] = _StoredResponse(
+                            response=response,
+                            history=_build_history_from_messages(
+                                messages, response.output_text
+                            ),
+                        )
+
+                    save_streamed_response = _save_streamed_response
+
                 return StreamingResponse(
                     stream_response_chunks(
                         output=output,
@@ -513,6 +531,7 @@ def make_responses_endpoint(module):
                         store=storing,
                         ttl=_response_ttl_seconds,
                         previous_response_id=request.previous_response_id,
+                        on_complete=save_streamed_response,
                     ),
                     media_type="text/event-stream",
                 )

@@ -5,7 +5,7 @@
 
 import json
 import uuid
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Callable
 from typing import Any
 
 from mellea.core.base import ModelOutputThunk
@@ -250,6 +250,7 @@ async def stream_response_chunks(
     store: bool = True,
     ttl: int = 1800,
     previous_response_id: str | None = None,
+    on_complete: Callable[[Response], None] | None = None,
 ) -> AsyncGenerator[str, None]:
     """Generate Responses API SSE events with semantic event names.
 
@@ -285,6 +286,11 @@ async def stream_response_chunks(
             `expires_at` in the completed envelope.
         ttl: Response TTL in seconds. Used to compute `expires_at`.
         previous_response_id: Echoed back in the completed envelope.
+        on_complete: Optional callback invoked with the completed `Response`
+            object after the `response.completed` event has been sent. Used by
+            callers to persist the response for `previous_response_id`
+            chaining. Not called if the stream fails or the client disconnects
+            before the final event is delivered.
     """
     sequence_number = 0
     accumulated_text = ""
@@ -543,6 +549,18 @@ async def stream_response_chunks(
                 "response": completed_response.model_dump(),
             },
         )
+
+        # Invoked after the completed event has been sent to the client. Runs
+        # only when the consumer pulls the generator to completion, so a
+        # client disconnect (or a failed stream, which takes the except
+        # branch) leaves the callback uninvoked. Isolated in its own
+        # try/except so a callback failure cannot send a response.failed
+        # event after response.completed has already been delivered.
+        if on_complete is not None:
+            try:
+                on_complete(completed_response)
+            except Exception:
+                MelleaLogger.get_logger().exception("on_complete callback failed")
 
     except Exception as e:
         MelleaLogger.get_logger().exception("Streaming error in responses endpoint")

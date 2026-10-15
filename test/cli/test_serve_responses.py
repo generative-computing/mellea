@@ -563,6 +563,12 @@ class TestResponsesEndpointNonStreaming:
 class TestResponsesEndpointStreaming:
     """Tests for the /v1/responses endpoint (streaming path)."""
 
+    def setup_method(self):
+        _response_store.clear()
+
+    def teardown_method(self):
+        _response_store.clear()
+
     @pytest.mark.asyncio
     async def test_stream_true_returns_streaming_response(self, mock_module):
         from fastapi.responses import StreamingResponse
@@ -573,6 +579,67 @@ class TestResponsesEndpointStreaming:
         response = await endpoint(req)
         assert isinstance(response, StreamingResponse)
         assert response.media_type == "text/event-stream"
+
+    @pytest.mark.asyncio
+    async def test_streamed_response_is_stored_when_store_true(self, mock_module):
+        """A completed stream is stored for previous_response_id chaining."""
+        from fastapi.responses import StreamingResponse
+
+        req = ResponseRequest(model="m", input="hi", stream=True)
+        mock_module.serve.return_value = ModelOutputThunk("streamed content")
+        endpoint = make_responses_endpoint(mock_module)
+        response = await endpoint(req)
+        assert isinstance(response, StreamingResponse)
+
+        # The store is populated only after the stream is consumed to completion.
+        assert len(_response_store) == 0
+        async for _chunk in response.body_iterator:
+            pass
+        assert len(_response_store) == 1
+        stored = next(iter(_response_store.values()))
+        assert stored.response.output_text == "streamed content"
+        assert stored.response.status == "completed"
+        assert stored.history == [
+            {"role": "user", "content": "hi"},
+            {"role": "assistant", "content": "streamed content"},
+        ]
+
+    @pytest.mark.asyncio
+    async def test_streamed_response_not_stored_when_store_false(self, mock_module):
+        """No entry is written when store=False, even after the stream completes."""
+        from fastapi.responses import StreamingResponse
+
+        req = ResponseRequest(model="m", input="hi", stream=True, store=False)
+        mock_module.serve.return_value = ModelOutputThunk("ephemeral")
+        endpoint = make_responses_endpoint(mock_module)
+        response = await endpoint(req)
+        assert isinstance(response, StreamingResponse)
+
+        async for _chunk in response.body_iterator:
+            pass
+        assert len(_response_store) == 0
+
+    @pytest.mark.asyncio
+    async def test_streamed_response_stored_id_matches_stream(self, mock_module):
+        """The stored response id is the id the client saw in the stream events."""
+        from fastapi.responses import StreamingResponse
+
+        req = ResponseRequest(model="m", input="hi", stream=True)
+        mock_module.serve.return_value = ModelOutputThunk("streamed content")
+        endpoint = make_responses_endpoint(mock_module)
+        response = await endpoint(req)
+        assert isinstance(response, StreamingResponse)
+
+        streamed_ids = []
+        async for chunk in response.body_iterator:
+            for line in chunk.split("\n"):
+                line = line.strip()
+                if line.startswith("data:"):
+                    data = json.loads(line.split(":", 1)[1].strip())
+                    if data.get("response") and "id" in data["response"]:
+                        streamed_ids.append(data["response"]["id"])
+        assert streamed_ids and len(set(streamed_ids)) == 1
+        assert streamed_ids[0] in _response_store
 
 
 # ---------------------------------------------------------------------------
