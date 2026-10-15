@@ -27,7 +27,7 @@ __all__ = [
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, RootModel, model_validator
+from pydantic import BaseModel, Field, RootModel, field_validator, model_validator
 
 from mellea.helpers.openai_compatible_helpers import (
     CompletionUsage,
@@ -522,11 +522,17 @@ class ResponseRequest(BaseModel):
     stream: bool | None = False
     store: bool | None = True
     conversation: str | None = None
+    """Conversation id. The SDK's object form ({"id": ...}) is accepted and
+    collapsed to its id string at parse time."""
+
     previous_response_id: str | None = None
     background: bool | None = False
     include: list[str] | None = None
     parallel_tool_calls: bool | None = True
-    context_management: ContextManagementConfig | None = None
+    context_management: (
+        list[ContextManagementConfig] | ContextManagementConfig | None
+    ) = None
+    """Accepted for OpenAI compatibility (the SDK sends a list); ignored."""
     prompt_cache_options: PromptCacheOptions | None = None
     format: ResponseFormat | None = None
     """Response format configuration for structured outputs.
@@ -547,6 +553,16 @@ class ResponseRequest(BaseModel):
     text: ResponseTextConfig | None = Field(default=None, exclude=True)
 
     extra: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("conversation", mode="before")
+    @classmethod
+    def _normalize_conversation(cls, value: Any) -> Any:
+        # The OpenAI SDK accepts conversation={"id": ...} alongside a bare id
+        # string; collapse the object form to its id so the field stays a
+        # string and the conversation echo round-trips.
+        if isinstance(value, dict) and "id" in value:
+            return value["id"]
+        return value
 
     @model_validator(mode="after")
     def _normalize_tool_choice(self) -> "ResponseRequest":

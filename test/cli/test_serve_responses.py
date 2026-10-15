@@ -705,6 +705,30 @@ class TestResponsesEndpointNonStreaming:
         assert response.conversation == "conv-abc"
 
     @pytest.mark.asyncio
+    async def test_conversation_object_echoed_as_id(self, mock_module):
+        """The SDK's conversation={"id": ...} shape is accepted, echoed as the id."""
+        req = ResponseRequest(model="m", input="hi", conversation={"id": "conv-obj"})
+        mock_module.serve.return_value = ModelOutputThunk("ok")
+        endpoint = make_responses_endpoint(mock_module)
+        response = await endpoint(req)
+        assert response.conversation == "conv-obj"
+
+    def test_context_management_sdk_list_shape_accepted(self):
+        """The SDK sends context_management as a list; it must not 422."""
+        req = ResponseRequest(
+            model="m",
+            input="hi",
+            context_management=[{"type": "compaction", "compact_threshold": 5}],
+        )
+        assert req.context_management is not None
+
+    def test_context_management_dict_shape_still_accepted(self):
+        req = ResponseRequest(
+            model="m", input="hi", context_management={"strategy": "auto"}
+        )
+        assert req.context_management is not None
+
+    @pytest.mark.asyncio
     async def test_requirements_passed_to_serve(self, mock_module):
         """Requirements reach serve() as a list, not as a raw model_options key."""
         received: dict = {}

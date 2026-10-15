@@ -146,6 +146,21 @@ class TestResponsesSdkIntegration:
         # Required spec fields populated by the usage helper (zeros when unknown)
         assert isinstance(response.usage.output_tokens_details.reasoning_tokens, int)
 
+    def test_deferred_fields_sdk_shapes_accepted(self, mock_module):
+        """SDK shapes for not-yet-implemented fields must not 400."""
+        mock_module.serve.return_value = ModelOutputThunk("ok")
+
+        with _sdk_client(mock_module) as client:
+            response = client.responses.create(
+                model="test-model",
+                input="Hi",
+                conversation={"id": "conv_sdk"},
+                context_management=[{"type": "compaction", "compact_threshold": 5}],
+            )
+
+        assert response.status == "completed"
+        assert response.output_text == "ok"
+
     def test_stream_helper(self, mock_module):
         """client.responses.stream() consumes the SSE event sequence."""
         mock_module.serve.return_value = ModelOutputThunk("Count down from ten")
