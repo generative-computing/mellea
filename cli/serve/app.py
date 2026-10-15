@@ -321,7 +321,9 @@ def _convert_input_content_to_message_content(
         - None: If input is None
 
     Raises:
-        ValueError: If an unsupported content type is encountered.
+        ValueError: If an unsupported content type is encountered (the
+            endpoint converts this to a 400, matching how invalid image
+            data is handled).
     """
     from mellea.serve.models import ImageUrlContent, TextContent
 
@@ -338,16 +340,12 @@ def _convert_input_content_to_message_content(
                 ImageUrlContent(type="image_url", image_url={"url": block.image_url})
             )
         elif block.type == "input_file":
-            # File content is not yet supported - skip with a warning
-            logger.warning(
-                "File content (type='input_file') is not yet supported in multimodal "
-                "messages. This content block will be ignored."
+            raise ValueError(
+                "File content (type='input_file') is not yet supported in "
+                "multimodal messages."
             )
         else:
-            logger.warning(
-                f"Unsupported content block type: {block.type!r}. "
-                "This content block will be ignored."
-            )
+            raise ValueError(f"Unsupported or empty content block: {block.type!r}.")
 
     return message_content if message_content else None
 

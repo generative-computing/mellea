@@ -563,10 +563,8 @@ class TestConvertResponseInputToMessages:
         assert isinstance(msgs[1].content, list)
         assert len(msgs[1].content) == 2
 
-    def test_file_content_type_ignored_with_warning(self, caplog):
-        """File content blocks are ignored with a warning."""
-        import logging
-
+    def test_file_content_block_raises(self):
+        """File content blocks are rejected with a ValueError (→ 400)."""
         items = [
             ResponseInputItem(
                 role="user",
@@ -576,14 +574,19 @@ class TestConvertResponseInputToMessages:
                 ],
             )
         ]
-        with caplog.at_level(logging.WARNING):
-            msgs = _convert_response_input_to_messages(items, None)
-        assert len(msgs) == 1
-        # Only text block should be present
-        assert len(msgs[0].content) == 1
-        assert msgs[0].content[0].type == "text"
-        # Warning should be logged
-        assert "File content (type='input_file') is not yet supported" in caplog.text
+        with pytest.raises(ValueError, match="input_file"):
+            _convert_response_input_to_messages(items, None)
+
+    def test_unknown_content_block_raises(self):
+        """Blocks that parse but carry no convertible payload are rejected."""
+        # input_text without text falls through to the unsupported branch.
+        # (A truly unknown type string is rejected earlier, at pydantic
+        # validation of the Literal field.)
+        items = [
+            ResponseInputItem(role="user", content=[InputContent(type="input_text")])
+        ]
+        with pytest.raises(ValueError, match="Unsupported or empty content block"):
+            _convert_response_input_to_messages(items, None)
 
     def test_empty_content_list_returns_none(self):
         """Empty content list results in None content."""
@@ -848,6 +851,24 @@ class TestResponsesEndpointNonStreaming:
         endpoint = make_responses_endpoint(mock_module)
         resp = await endpoint(simple_request)
         assert resp.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_input_file_message_returns_400(self, mock_module):
+        """A message containing only an input_file block is rejected, not emptied."""
+        req = ResponseRequest(
+            model="m",
+            input=[
+                ResponseInputItem(
+                    role="user",
+                    content=[InputContent(type="input_file", file_id="file-123")],
+                )
+            ],
+        )
+        endpoint = make_responses_endpoint(mock_module)
+        resp = await endpoint(req)
+        assert resp.status_code == 400
+        # serve() was never called with an empty turn
+        mock_module.serve.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_client_options_passed_when_declared(
