@@ -387,7 +387,7 @@ field:
 - `"fail"` — the stream is cancelled immediately; no further chunks reach the
   consumer; `validate()` is skipped for this requirement.
 
-By default a `"fail"` ends the stream. Passing a `SamplingStrategy` to `stream()`
+By default a `"fail"` ends the stream. Passing a sampling strategy to `stream()`
 instead repairs and retries the failed attempt — see
 [Retrying with a sampling strategy](../how-to/use-async-and-streaming.md#retrying-with-a-sampling-strategy).
 

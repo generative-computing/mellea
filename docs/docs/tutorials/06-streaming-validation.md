@@ -21,7 +21,7 @@ By the end you will have covered:
 - Observing the typed event vocabulary (`ChunkEvent`, `QuickCheckEvent`, …)
   by iterating `stream(as_events=True)`
 - Subclassing `ChunkingStrategy` to define a custom split boundary
-- Retrying and repairing a failed attempt with a `SamplingStrategy`
+- Retrying and repairing a failed attempt with a `BaseSamplingStrategy`
 
 **Prerequisites:** [Tutorial 02](./02-streaming-and-async.md) (async and streaming),
 [Tutorial 04](./04-making-agents-reliable.md) (requirements and validation),
@@ -638,7 +638,7 @@ three.
 
 ## Step 7: Retrying and repairing on failure
 
-Steps 1–6 detect a failure and stop. A `SamplingStrategy` goes further: it repairs
+Steps 1–6 detect a failure and stop. A `BaseSamplingStrategy` goes further: it repairs
 and retries a failed attempt instead of giving up. Pass `strategy=` to `stream()`
 and, up to `loop_budget` attempts, the failure is folded into a repaired
 instruction and the generation is re-run.

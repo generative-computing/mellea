@@ -351,7 +351,7 @@ for a full walkthrough.
 
 ### Retrying with a sampling strategy
 
-By default, a failed stream stops. Pass a `SamplingStrategy` to `stream()` and a
+By default, a failed stream stops. Pass a sampling strategy to `stream()` and a
 failed attempt is repaired and retried instead, up to the strategy's
 `loop_budget`. A retry is triggered by either:
 
@@ -363,8 +363,8 @@ failed attempt is repaired and retried instead, up to the strategy's
 Chunks from every attempt arrive through the same `async for`; a `RetryEvent`
 separates one attempt from the next, and `streamer.attempts` holds the
 per-attempt history after the run. If `loop_budget` is exhausted with no passing
-attempt, `select_from_failure()` selects which attempt the `Streamer`'s final
-state (`full_text`, `mot`, and so on) reports.
+attempt, `select_from_failure()` selects which completed attempt the `Streamer`'s
+final state (`full_text`, `mot`, and so on) reports. If every attempt failed early, the last attempt is used instead.
 
 > **Note:** A plain `Streamer` yields only chunks, with no `RetryEvent` between
 > attempts, so concatenating them joins a discarded attempt's output onto the

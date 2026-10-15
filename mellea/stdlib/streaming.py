@@ -195,11 +195,15 @@ class CompletedEvent(StreamEvent):
         full_text: Validated-and-emitted output.  On early exit or exception,
             reflects whatever passed validation before the stop.
         attempts_used: Number of attempts run (1 without a strategy).
+        sampling_success: Whether the strategy's selected attempt passed
+            validation: `True`/`False` once a run reaches a verdict, `None` with
+            no strategy or an early abandon.
     """
 
     success: bool
     full_text: str
     attempts_used: int
+    sampling_success: bool | None = None
 
 
 @dataclass
@@ -229,8 +233,8 @@ class StreamAttempt:
     Unlike the non-streaming `SamplingResult`, an attempt may be either completed
     (reached its natural end) or broken early (a requirement returned `"fail"`
     mid-stream and the attempt was cancelled), so the fields cover both cases.
-    Exactly one attempt in a run is `selected` — the one whose output the
-    `Streamer`'s top-level fields reflect.
+    A run that reaches a verdict selects exactly one attempt; a run abandoned
+    early selects no attempt.
 
     Args:
         attempt: This attempt's position in the run, numbered from `1`.
@@ -252,7 +256,7 @@ class StreamAttempt:
             mid-stream chunk that failed, when `failed_early`.
         final_validations: `ValidationResult`s from the stream-end `validate()`
             calls; empty for an early-broken attempt.
-        selected: `True` for the single attempt chosen as the run's result.
+        selected: `True` for the attempt chosen as the run's result.
     """
 
     attempt: int
@@ -316,6 +320,8 @@ class Streamer:
             `validate()` calls; empty on early exit.
         attempts: One `StreamAttempt` record per attempt; a single entry when no
             `strategy` is set. The attributes above describe the selected attempt.
+        sampling_success: The sampling strategy's verdict: `True`/`False` once a
+            run reaches a verdict, `None` with no strategy or an early abandon.
         streaming_id: UUID correlating this stream's START/EVENT/END hooks.
     """
 
@@ -349,6 +355,7 @@ class Streamer:
         """Wrap an in-flight generation; iterating the `Streamer` drives it."""
         self._reset()
         self.attempts: list[StreamAttempt] = []
+        self.sampling_success: bool | None = None
         # Correlates this stream's START/EVENT/END hooks; created in `stream()`
         # so START can fire before generation opens the backend span.
         self.streaming_id: str = streaming_id
@@ -406,6 +413,11 @@ class Streamer:
             # aclose() is a no-op once the stream is fully drained; cancels otherwise.
             await self._mot.aclose()
         finally:
+            self.sampling_success = (
+                next((a.success for a in self.attempts if a.selected), None)
+                if self._strategy is not None
+                else None
+            )
             try:
                 await _emit_event(
                     self.streaming_id,
@@ -413,6 +425,7 @@ class Streamer:
                         success=success,
                         full_text=self.full_text,
                         attempts_used=attempts_used,
+                        sampling_success=self.sampling_success,
                     ),
                     event_queue=self._event_queue,
                 )
@@ -420,11 +433,6 @@ class Streamer:
                 if has_plugins(HookType.STREAMING_END):
                     from ..plugins.hooks.streaming import StreamingEndPayload
 
-                    sampling_success = (
-                        any(a.selected and a.success for a in self.attempts)
-                        if self._strategy is not None
-                        else None
-                    )
                     await invoke_hook(
                         HookType.STREAMING_END,
                         StreamingEndPayload(
@@ -439,7 +447,7 @@ class Streamer:
                             strategy_name=type(self._strategy).__name__
                             if self._strategy is not None
                             else None,
-                            sampling_success=sampling_success,
+                            sampling_success=self.sampling_success,
                         ),
                     )
 
@@ -630,8 +638,17 @@ class EventStreamer:
 
     @property
     def attempts(self) -> list[StreamAttempt]:
-        """Per-attempt `StreamAttempt` records on the sampling path; else empty."""
+        """Per-attempt `StreamAttempt` records."""
         return self._streamer.attempts if self._streamer is not None else []
+
+    @property
+    def sampling_success(self) -> bool | None:
+        """The sampling strategy's verdict for the run.
+
+        `True`/`False` once a run reaches a verdict, `None` with no strategy or an
+        early abandon.
+        """
+        return self._streamer.sampling_success if self._streamer is not None else None
 
     @property
     def streaming_id(self) -> str | None:

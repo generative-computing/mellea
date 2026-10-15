@@ -171,7 +171,7 @@ class BaseSamplingStrategy(SamplingStrategy):
             old_ctx: The context WITHOUT the last action + output.
             new_ctx: The context including the last action + output.
             past_actions: List of actions that have been executed (without success).
-            past_results: List of (unsuccessful) generation results for these actions.
+            past_results: Generation results per action, or `None` for an early-broken attempt.
             past_val: List of validation results for the results.
 
         Returns:
@@ -608,7 +608,7 @@ class RejectionSamplingStrategy(BaseSamplingStrategy):
             old_ctx: The context WITHOUT the last action + output.
             new_ctx: The context including the last action + output.
             past_actions: List of actions that have been executed (without success).
-            past_results: List of (unsuccessful) generation results for these actions.
+            past_results: Generation results per action, or `None` for an early-broken attempt.
             past_val: List of validation results for the results.
 
         Returns:
@@ -674,7 +674,7 @@ class RepairTemplateStrategy(BaseSamplingStrategy):
             old_ctx: The context WITHOUT the last action + output.
             new_ctx: The context including the last action + output.
             past_actions: List of actions that have been executed (without success).
-            past_results: List of (unsuccessful) generation results for these actions.
+            past_results: Generation results per action, or `None` for an early-broken attempt.
             past_val: List of validation results for the results.
 
         Returns:
@@ -777,7 +777,7 @@ class MultiTurnStrategy(BaseSamplingStrategy):
             old_ctx: The context WITHOUT the last action + output.
             new_ctx: The context including the last action + output.
             past_actions: List of actions that have been executed (without success).
-            past_results: List of (unsuccessful) generation results for these actions.
+            past_results: Generation results per action, or `None` for an early-broken attempt.
             past_val: List of validation results for the results.
 
         Returns:

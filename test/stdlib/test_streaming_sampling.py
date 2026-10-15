@@ -195,6 +195,7 @@ async def test_completed_fail_retries_then_succeeds() -> None:
     assert len(s.attempts) == 2
     assert s.attempts[0].completed_normally is True and s.attempts[0].success is False
     assert s.attempts[1].success is True and s.attempts[1].selected is True
+    assert s.sampling_success is True
     # Flat continuation: both attempts' chunks arrive in one async-for.
     assert "".join(chunks) == "no marker here.now with GOOD in it."
 
@@ -264,6 +265,7 @@ async def test_budget_exhausted_reports_failure() -> None:
     # Top-level fields project the selected failed attempt.
     assert s.full_text == s.attempts[0].full_text == "still nope."
     assert s.mot is s.attempts[0].mot
+    assert s.sampling_success is False
 
 
 async def test_strategy_requirements_merge_with_call_requirements() -> None:
@@ -364,3 +366,47 @@ async def test_completed_fail_routes_to_repair() -> None:
         strategy=_recording_strategy(calls),
     )
     assert calls == ["repair"]
+
+
+async def test_caller_break_mid_retry_reports_no_sampling_verdict() -> None:
+    """A caller break mid-retry reaches no verdict: sampling_success is None.
+
+    Attempt 1 completes and fails validation, driving a retry; the caller breaks
+    during attempt 2 before it is selected. With no attempt selected, the run has
+    no sampling verdict, so the terminal `CompletedEvent` reports `None` and the
+    break drives no further attempt.
+    """
+    backend = MultiResponseStreamingMockBackend(
+        ["first output.", "second output.", "third output."]
+    )
+    events: list[StreamEvent] = []
+    retried = False
+    async with await stream(
+        as_events=True,
+        action=Instruction("write"),
+        backend=backend,
+        ctx=SimpleContext(),
+        requirements=[RequireMarkerReq("GOOD")],  # never present: every attempt fails
+        strategy=RejectionSamplingStrategy(loop_budget=3),
+    ) as s:
+        async for ev in s:
+            events.append(ev)
+            if isinstance(ev, RetryEvent):
+                retried = True
+            elif isinstance(ev, ChunkEvent) and retried:
+                break  # abandon during the second (retried) attempt
+    # Drain the terminal events queued during cancellation.
+    events.extend([ev async for ev in s])
+
+    # Budget allowed a third attempt; the break halted the run at two.
+    assert len(s.attempts) == 2
+    assert not any(a.selected for a in s.attempts)
+    assert s.completed_normally is False
+    # Attempt 1 is a completed failure, not a mid-stream fail.
+    assert s.attempts[0].completed_normally is True
+    assert s.attempts[0].success is False
+    assert s.attempts[0].failed_early is False
+    completed = [e for e in events if isinstance(e, CompletedEvent)]
+    assert len(completed) == 1
+    assert completed[0].sampling_success is None
+    assert s.sampling_success is None
