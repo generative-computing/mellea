@@ -322,7 +322,7 @@ python docs/examples/m_serve/sessions/client_responses_sessions.py
 
 ## Response Format Support
 
-The server supports structured output via the `format` parameter (Responses API) or `response_format` parameter (Chat Completions API), which allows you to control the format of the model's response. This is compatible with OpenAI's response format API.
+The server supports structured output via the `text` parameter (Responses API, `text={"format": {...}}` — the shape the OpenAI SDK sends) or the `response_format` parameter (Chat Completions API), which allows you to control the format of the model's response. This is compatible with OpenAI's response format API. A top-level `format` parameter on `/v1/responses` is also accepted as an alias.
 
 **Three Format Types:**
 
@@ -380,13 +380,13 @@ client = openai.OpenAI(api_key="na", base_url="http://0.0.0.0:8080/v1")
 response = client.responses.create(
     input="Generate a person named Alice",
     model="granite4:micro-h",
-    format={
-        "type": "json_schema",
-        "json_schema": {
+    text={
+        "format": {
+            "type": "json_schema",
             "name": "Person",
             "schema": person_schema,
             "strict": True,
-        },
+        }
     },
 )
 

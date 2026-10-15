@@ -19,6 +19,7 @@ __all__ = [
     "ResponseOutputItem",
     "ResponseOutputMessage",
     "ResponseRequest",
+    "ResponseTextConfig",
     "ResponseTool",
     "ResponseUsage",
     "TextContent",
@@ -98,17 +99,65 @@ class JsonSchemaFormat(BaseModel):
 
 
 class ResponseFormat(BaseModel):
+    """Response format configuration for structured outputs.
+
+    Accepts both the Chat Completions nested shape
+    (`{"type": "json_schema", "json_schema": {"name", "schema", "strict"}}`)
+    and the flat Responses API / SDK shape
+    (`{"type": "json_schema", "name", "schema", "strict"}`). Flat fields are
+    folded into `json_schema` at parse time so consumers only ever see the
+    nested shape.
+    """
+
     type: Literal["text", "json_object", "json_schema"]
 
     json_schema: JsonSchemaFormat | None = None
     """JSON Schema definition when type is 'json_schema'."""
 
+    # Flat (Responses API / SDK) json_schema fields. Accepted at the edge
+    # and folded into `json_schema` by _fold_flat_json_schema; excluded from
+    # serialization so consumers only ever see the nested shape.
+    name: str | None = Field(default=None, exclude=True)
+    schema_: dict[str, Any] | None = Field(default=None, alias="schema", exclude=True)
+    strict: bool | None = Field(default=None, exclude=True)
+
+    @model_validator(mode="after")
+    def _fold_flat_json_schema(self) -> "ResponseFormat":
+        if (
+            self.type == "json_schema"
+            and self.json_schema is None
+            and self.name is not None
+        ):
+            # Construct via the "schema" alias (mypy's pydantic plugin
+            # expects the alias for aliased fields).
+            self.json_schema = JsonSchemaFormat(
+                name=self.name, schema=self.schema_ or {}, strict=self.strict
+            )
+        return self
+
     @model_validator(mode="after")
     def validate_json_schema_required(self) -> "ResponseFormat":
         """Validate that json_schema is provided when type is 'json_schema'."""
         if self.type == "json_schema" and self.json_schema is None:
-            raise ValueError("json_schema field is required when type is 'json_schema'")
+            raise ValueError(
+                "json_schema field is required when type is 'json_schema' "
+                "(send the nested 'json_schema' object or flat 'name'/'schema' keys)"
+            )
         return self
+
+
+class ResponseTextConfig(BaseModel):
+    """Configuration for the Responses API `text` request parameter.
+
+    Mirrors the OpenAI SDK's `text` argument
+    (`text={"format": {...}, "verbosity": "low"}`). `format` is lifted into
+    the top-level `format` field of `ResponseRequest` at parse time.
+    """
+
+    format: ResponseFormat | None = None
+
+    verbosity: Literal["low", "medium", "high"] | None = None
+    """Accepted for OpenAI compatibility; currently ignored by `m serve`."""
 
 
 class StreamOptions(BaseModel):
@@ -479,10 +528,20 @@ class ResponseRequest(BaseModel):
     format: ResponseFormat | None = None
     """Response format configuration for structured outputs.
 
+    The OpenAI SDK sends structured output as `text={"format": {...}}`; the
+    flat `text.format` is lifted into this field at parse time. This
+    top-level field is the canonical (and alias) location, accepting both
+    the nested and flat shapes.
+
     Configuring `{ "type": "json_schema" }` enables Structured Outputs,
     which ensures the model will match your supplied JSON schema.
     The default format is `{ "type": "text" }`.
     """
+
+    # SDK `text` parameter. Accepted at the edge and lifted into `format`
+    # by _lift_text_format; excluded from serialization so serve() only ever
+    # sees the canonical `format` field.
+    text: ResponseTextConfig | None = Field(default=None, exclude=True)
 
     extra: dict[str, Any] = Field(default_factory=dict)
 
@@ -502,6 +561,22 @@ class ResponseRequest(BaseModel):
             and tc.get("name") is not None
         ):
             self.tool_choice = {"type": "function", "function": {"name": tc["name"]}}
+        return self
+
+    @model_validator(mode="after")
+    def _lift_text_format(self) -> "ResponseRequest":
+        # The OpenAI Responses API / SDK sends structured output as
+        # text={"format": {...}} rather than a top-level `format`. Lift the
+        # nested format into the canonical top-level field so the endpoint's
+        # format handling sees one consistent location. When both are sent,
+        # the top-level `format` wins (only lift when it is None), matching
+        # the nested-wins rule of ResponseTool._fold_flat_function.
+        if (
+            self.format is None
+            and self.text is not None
+            and self.text.format is not None
+        ):
+            self.format = self.text.format
         return self
 
 

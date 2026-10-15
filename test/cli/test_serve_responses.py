@@ -61,6 +61,13 @@ def message_request():
     )
 
 
+PERSON_SCHEMA: dict = {
+    "type": "object",
+    "properties": {"name": {"type": "string"}, "age": {"type": "integer"}},
+    "required": ["name", "age"],
+}
+
+
 # ---------------------------------------------------------------------------
 # _build_model_options_from_response_request
 # ---------------------------------------------------------------------------
@@ -239,6 +246,111 @@ class TestBuildModelOptionsFromResponseRequest:
         req = ResponseRequest(model="m", input="hi", format=ResponseFormat(type="text"))
         opts = _build_model_options_from_response_request(req)
         assert "format" not in opts
+
+    def test_text_format_lifted_to_top_level_format(self):
+        """The SDK's flat text.format shape must lift into the canonical format."""
+        req = ResponseRequest(
+            model="m",
+            input="hi",
+            text={
+                "format": {
+                    "type": "json_schema",
+                    "name": "Person",
+                    "schema": PERSON_SCHEMA,
+                    "strict": True,
+                },
+                "verbosity": "low",
+            },
+        )
+        assert req.format is not None
+        assert req.format.type == "json_schema"
+        assert req.format.json_schema is not None
+        assert req.format.json_schema.name == "Person"
+        assert req.format.json_schema.schema_ == PERSON_SCHEMA
+        assert req.format.json_schema.strict is True
+
+    def test_text_excluded_from_model_options(self):
+        """The SDK's text key must not leak into model_options as a raw key."""
+        req = ResponseRequest(
+            model="m",
+            input="hi",
+            text={
+                "format": {
+                    "type": "json_schema",
+                    "name": "Person",
+                    "schema": PERSON_SCHEMA,
+                }
+            },
+        )
+        opts = _build_model_options_from_response_request(req)
+        assert "text" not in opts
+        assert "format" not in opts
+
+    def test_text_verbosity_only_accepted_and_ignored(self):
+        """text={"verbosity": ...} alone parses and is not forwarded."""
+        req = ResponseRequest(model="m", input="hi", text={"verbosity": "low"})
+        assert req.format is None
+        opts = _build_model_options_from_response_request(req)
+        assert "text" not in opts
+
+    def test_flat_top_level_format_normalized_to_nested(self):
+        """The flat json_schema shape must fold into the nested canonical form."""
+        req = ResponseRequest(
+            model="m",
+            input="hi",
+            format={
+                "type": "json_schema",
+                "name": "Person",
+                "schema": PERSON_SCHEMA,
+                "strict": True,
+            },
+        )
+        assert req.format is not None
+        assert req.format.json_schema is not None
+        assert req.format.json_schema.name == "Person"
+        # Serialization carries only the nested shape (flat fields excluded,
+        # schema_ serialized under its "schema" alias).
+        assert req.model_dump()["format"] == {
+            "type": "json_schema",
+            "json_schema": {"name": "Person", "schema": PERSON_SCHEMA, "strict": True},
+        }
+
+    def test_nested_top_level_format_still_accepted(self):
+        """The nested Chat Completions shape remains a working alias."""
+        req = ResponseRequest(
+            model="m",
+            input="hi",
+            format={
+                "type": "json_schema",
+                "json_schema": {"name": "Person", "schema": PERSON_SCHEMA},
+            },
+        )
+        assert req.format is not None
+        assert req.format.json_schema is not None
+        assert req.format.json_schema.name == "Person"
+        assert req.format.json_schema.schema_ == PERSON_SCHEMA
+
+    def test_top_level_format_wins_over_text_format(self):
+        """When both are sent, the top-level format wins (text.format ignored)."""
+        req = ResponseRequest(
+            model="m",
+            input="hi",
+            format={"type": "json_schema", "name": "Top", "schema": PERSON_SCHEMA},
+            text={
+                "format": {
+                    "type": "json_schema",
+                    "name": "Lifted",
+                    "schema": PERSON_SCHEMA,
+                }
+            },
+        )
+        assert req.format is not None
+        assert req.format.json_schema is not None
+        assert req.format.json_schema.name == "Top"
+
+    def test_invalid_text_verbosity_rejected(self):
+        with pytest.raises(ValidationError):
+            ResponseRequest(model="m", input="hi", text={"verbosity": "ultra"})
 
 
 # ---------------------------------------------------------------------------
@@ -735,6 +847,64 @@ class TestResponsesEndpointNonStreaming:
         )
         response = await endpoint(request_with_invalid_schema)
         assert response.status_code == 400  # type: ignore[union-attr]
+
+    @pytest.mark.asyncio
+    async def test_text_format_json_schema_reaches_serve_as_model(self, mock_module):
+        """The SDK's text.format json_schema must reach serve() as a Pydantic model."""
+        from pydantic import BaseModel
+
+        received: dict = {}
+
+        def capture_format(input, requirements=None, model_options=None, format=None):
+            received["format"] = format
+            received["model_options"] = model_options
+            return ModelOutputThunk('{"name": "Alice", "age": 30}')
+
+        mock_module.serve = capture_format
+        endpoint = make_responses_endpoint(mock_module)
+
+        request = ResponseRequest(
+            model="m",
+            input="hi",
+            text={
+                "format": {
+                    "type": "json_schema",
+                    "name": "Person",
+                    "schema": PERSON_SCHEMA,
+                    "strict": True,
+                },
+                "verbosity": "low",
+            },
+        )
+        response = await endpoint(request)
+        assert isinstance(response, Response)
+
+        assert received["format"] is not None
+        assert issubclass(received["format"], BaseModel)
+        assert "name" in received["format"].model_fields
+        assert "age" in received["format"].model_fields
+        # The SDK's text key must not leak into model_options
+        assert "text" not in (received["model_options"] or {})
+
+    @pytest.mark.asyncio
+    async def test_text_format_text_type_passes_none_to_serve(self, mock_module):
+        """text={"format": {"type": "text"}} behaves like format=text (None to serve)."""
+        received_format = None
+
+        def capture_format(input, requirements=None, model_options=None, format=None):
+            nonlocal received_format
+            received_format = format
+            return ModelOutputThunk("ok")
+
+        mock_module.serve = capture_format
+        endpoint = make_responses_endpoint(mock_module)
+
+        request = ResponseRequest(
+            model="m", input="hi", text={"format": {"type": "text"}}
+        )
+        response = await endpoint(request)
+        assert isinstance(response, Response)
+        assert received_format is None
 
 
 # ---------------------------------------------------------------------------

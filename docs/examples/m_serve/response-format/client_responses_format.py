@@ -1,7 +1,8 @@
 # pytest: skip_always
-"""Client demonstrating response_format parameter with /v1/responses endpoint.
+"""Client demonstrating structured outputs with /v1/responses endpoint.
 
-This example shows how to use structured outputs via the Responses API:
+This example shows how to use structured outputs via the Responses API,
+requested with the SDK's `text={"format": ...}` parameter:
 1. text - Plain text output (default)
 2. json_schema - Structured output validated against a JSON schema
 
@@ -62,9 +63,13 @@ def example_json_schema_person():
     response = client.responses.create(
         model="granite4:micro-h",
         input="Generate information about a software engineer named Alice.",
-        format={
-            "type": "json_schema",
-            "json_schema": {"name": "Person", "schema": person_schema, "strict": True},
+        text={
+            "format": {
+                "type": "json_schema",
+                "name": "Person",
+                "schema": person_schema,
+                "strict": True,
+            }
         },
     )
 
@@ -117,13 +122,13 @@ def example_json_schema_product():
     response = client.responses.create(
         model="granite4:micro-h",
         input="Generate a product listing for a laptop computer.",
-        format={
-            "type": "json_schema",
-            "json_schema": {
+        text={
+            "format": {
+                "type": "json_schema",
                 "name": "Product",
                 "schema": product_schema,
                 "strict": True,
-            },
+            }
         },
     )
 
