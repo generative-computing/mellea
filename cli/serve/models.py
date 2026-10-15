@@ -74,6 +74,7 @@ class FunctionDefinition(BaseModel):
     name: str
     description: str | None = None
     parameters: FunctionParameters
+    strict: bool | None = None
 
 
 class ToolFunction(BaseModel):
@@ -369,16 +370,41 @@ class InputContent(BaseModel):
 
 
 class ResponseInputItem(BaseModel):
-    """A single input message for the Responses API."""
+    """A single input item for the Responses API.
 
-    role: Literal["user", "assistant", "developer", "system", "tool"]
+    Accepts message items (`{"role": ..., "content": ...}`, optionally with
+    an explicit `type: "message"`) and tool-result items
+    (`{"type": "function_call_output", "call_id": ..., "output": ...}`) as
+    sent by the OpenAI SDK.
+    """
+
+    type: Literal["message", "function_call_output"] | None = None
+    role: Literal["user", "assistant", "developer", "system", "tool"] | None = None
     content: str | list[InputContent] | None = None
     tool_call_id: str | None = None
     tool_calls: list[Any] | None = None
+    # function_call_output shape:
+    call_id: str | None = None
+    output: str | list[InputContent] | None = None
+
+    @model_validator(mode="after")
+    def _require_role_or_function_call_output(self) -> "ResponseInputItem":
+        if self.role is None and self.type != "function_call_output":
+            raise ValueError(
+                "Input item requires a 'role' (message item) or "
+                "type='function_call_output' (tool result)."
+            )
+        return self
 
 
 class ResponseTool(BaseModel):
     """Tool declaration accepted by the Responses API.
+
+    Accepts both the OpenAI Responses API / SDK flat function shape
+    (`{"type": "function", "name", "parameters", "strict"}`) and the nested
+    Chat Completions shape (`{"type": "function", "function": {...}}`).
+    Flat fields are folded into `function` at parse time so `serve()` always
+    receives the nested shape.
 
     Only `type: "function"` is currently supported by m serve. The other
     types (`web_search`, `file_search`, `mcp`, `code_interpreter`)
@@ -388,6 +414,24 @@ class ResponseTool(BaseModel):
 
     type: Literal["function", "web_search", "file_search", "mcp", "code_interpreter"]
     function: FunctionDefinition | None = None
+    # Flat (Responses API / SDK) function-tool fields. Accepted at the edge
+    # and folded into `function` by _fold_flat_function; excluded from
+    # serialization so `serve()` only ever sees the nested shape.
+    name: str | None = Field(default=None, exclude=True)
+    description: str | None = Field(default=None, exclude=True)
+    parameters: dict[str, Any] | None = Field(default=None, exclude=True)
+    strict: bool | None = Field(default=None, exclude=True)
+
+    @model_validator(mode="after")
+    def _fold_flat_function(self) -> "ResponseTool":
+        if self.type == "function" and self.function is None and self.name is not None:
+            self.function = FunctionDefinition(
+                name=self.name,
+                description=self.description,
+                parameters=FunctionParameters(root=self.parameters or {}),
+                strict=self.strict,
+            )
+        return self
 
 
 class ContextManagementConfig(BaseModel):
@@ -441,6 +485,24 @@ class ResponseRequest(BaseModel):
     """
 
     extra: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _normalize_tool_choice(self) -> "ResponseRequest":
+        # The OpenAI Responses API / SDK sends a specific-function choice as
+        # the flat {"type": "function", "name": ...}; the Chat Completions
+        # shape is {"type": "function", "function": {"name": ...}}. Normalize
+        # the flat form to the nested one so serve() (and the shipped
+        # examples) read a single consistent shape. String choices
+        # ("none"/"auto"/"required") pass through unchanged.
+        tc = self.tool_choice
+        if (
+            isinstance(tc, dict)
+            and tc.get("type") == "function"
+            and "function" not in tc
+            and tc.get("name") is not None
+        ):
+            self.tool_choice = {"type": "function", "function": {"name": tc["name"]}}
+        return self
 
 
 class ResponseError(BaseModel):

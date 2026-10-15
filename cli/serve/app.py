@@ -366,13 +366,25 @@ def _convert_response_input_to_messages(
     (not yet supported). Content blocks are converted from Responses API
     format (InputContent) to ChatMessage format (MessageContent).
 
+    `function_call_output` input items (tool results sent back by the client)
+    are converted to `tool`-role messages carrying the item's `call_id` as
+    `tool_call_id`; a `tool_call_id` on a regular message item (Chat
+    Completions-style tool messages) is preserved as well.
+
     Either argument may be `None`; the corresponding messages are simply
     omitted. Callers convert `input` and `instructions` separately when they
     need to control their relative ordering (see `make_responses_endpoint`).
     """
     from mellea.serve.models import ChatMessage
 
-    def _role(r: str) -> Literal["system", "user", "assistant", "tool", "function"]:
+    def _role(
+        r: str | None,
+    ) -> Literal["system", "user", "assistant", "tool", "function"]:
+        if r is None:
+            raise ValueError(
+                "Input item is missing 'role'; expected a message item with a "
+                "role or type='function_call_output'."
+            )
         if r in ("developer", "system"):
             return "system"
         if r in ("user", "assistant", "tool", "function"):
@@ -395,8 +407,23 @@ def _convert_response_input_to_messages(
         messages.append(ChatMessage(role="user", content=input_data))
     else:
         for item in input_data:
-            content = _convert_input_content_to_message_content(item.content)
-            messages.append(ChatMessage(role=_role(item.role), content=content))
+            if item.type == "function_call_output":
+                # Tool result from the client: a tool-role message carrying
+                # the call id so the backend can pair it with the function
+                # call.
+                content = _convert_input_content_to_message_content(item.output)
+                messages.append(
+                    ChatMessage(role="tool", content=content, tool_call_id=item.call_id)
+                )
+            else:
+                content = _convert_input_content_to_message_content(item.content)
+                messages.append(
+                    ChatMessage(
+                        role=_role(item.role),
+                        content=content,
+                        tool_call_id=item.tool_call_id,
+                    )
+                )
 
     return messages
 

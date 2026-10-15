@@ -7,6 +7,7 @@ import json
 from unittest.mock import AsyncMock, Mock
 
 import pytest
+from pydantic import ValidationError
 
 from cli.serve.app import (
     _build_model_options_from_response_request,
@@ -148,6 +149,81 @@ class TestBuildModelOptionsFromResponseRequest:
         with pytest.raises(ValueError, match="web_search"):
             _build_model_options_from_response_request(req)
 
+    def test_flat_sdk_function_tool_normalized_to_nested(self):
+        """The SDK's flat function tool shape must reach serve() as nested."""
+        parameters = {"type": "object", "properties": {"city": {"type": "string"}}}
+        req = ResponseRequest(
+            model="m",
+            input="hi",
+            tools=[
+                {
+                    "type": "function",
+                    "name": "get_weather",
+                    "description": "Get the weather",
+                    "parameters": parameters,
+                    "strict": True,
+                }
+            ],
+        )
+        opts = _build_model_options_from_response_request(req)
+        assert opts[ModelOption.TOOLS] == [
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_weather",
+                    "description": "Get the weather",
+                    "parameters": parameters,
+                    "strict": True,
+                },
+            }
+        ]
+
+    def test_flat_function_tool_without_parameters_defaults_to_empty(self):
+        req = ResponseRequest(
+            model="m", input="hi", tools=[{"type": "function", "name": "f"}]
+        )
+        opts = _build_model_options_from_response_request(req)
+        assert opts[ModelOption.TOOLS] == [
+            {"type": "function", "function": {"name": "f", "parameters": {}}}
+        ]
+
+    def test_nested_function_tool_still_accepted(self):
+        """The nested Chat Completions shape remains a working alias."""
+        req = ResponseRequest(
+            model="m",
+            input="hi",
+            tools=[{"type": "function", "function": {"name": "f", "parameters": {}}}],
+        )
+        opts = _build_model_options_from_response_request(req)
+        assert opts[ModelOption.TOOLS] == [
+            {"type": "function", "function": {"name": "f", "parameters": {}}}
+        ]
+
+    def test_flat_tool_choice_normalized_to_nested(self):
+        """The SDK's flat tool_choice must reach serve() in nested form."""
+        req = ResponseRequest(
+            model="m",
+            input="hi",
+            tool_choice={"type": "function", "name": "get_weather"},
+        )
+        opts = _build_model_options_from_response_request(req)
+        assert opts[ModelOption.TOOL_CHOICE] == {
+            "type": "function",
+            "function": {"name": "get_weather"},
+        }
+
+    def test_nested_tool_choice_passthrough(self):
+        req = ResponseRequest(
+            model="m",
+            input="hi",
+            tool_choice={"type": "function", "function": {"name": "f"}},
+        )
+        opts = _build_model_options_from_response_request(req)
+        assert opts[ModelOption.TOOL_CHOICE] == {
+            "type": "function",
+            "function": {"name": "f"},
+        }
+
     def test_empty_request_produces_minimal_options(self):
         req = ResponseRequest(model="m", input="hi")
         opts = _build_model_options_from_response_request(req)
@@ -220,6 +296,65 @@ class TestConvertResponseInputToMessages:
         )
         assert msgs[0].role == "system"
         assert msgs[1].role == "user"
+
+    def test_function_call_output_becomes_tool_message(self):
+        """SDK tool results (function_call_output) become tool-role messages."""
+        items = [
+            ResponseInputItem(role="user", content="Weather in Paris?"),
+            ResponseInputItem(
+                type="function_call_output", call_id="call_123", output="Sunny, 25C"
+            ),
+        ]
+        msgs = _convert_response_input_to_messages(items, None)
+        assert len(msgs) == 2
+        assert msgs[0].role == "user"
+        assert msgs[1].role == "tool"
+        assert msgs[1].tool_call_id == "call_123"
+        assert msgs[1].content == "Sunny, 25C"
+
+    def test_function_call_output_with_content_blocks(self):
+        items = [
+            ResponseInputItem(
+                type="function_call_output",
+                call_id="call_1",
+                output=[{"type": "input_text", "text": "42"}],
+            )
+        ]
+        msgs = _convert_response_input_to_messages(items, None)
+        assert msgs[0].role == "tool"
+        assert msgs[0].tool_call_id == "call_1"
+        assert msgs[0].get_text_content() == "42"
+
+    def test_message_item_tool_call_id_preserved(self):
+        """Chat Completions-style tool messages keep their tool_call_id."""
+        items = [
+            ResponseInputItem(role="user", content="Weather in Paris?"),
+            ResponseInputItem(role="tool", tool_call_id="call_abc", content="Sunny"),
+        ]
+        msgs = _convert_response_input_to_messages(items, None)
+        assert msgs[1].role == "tool"
+        assert msgs[1].tool_call_id == "call_abc"
+        assert msgs[1].content == "Sunny"
+
+    def test_input_item_without_role_or_type_rejected(self):
+        with pytest.raises(ValidationError, match="role"):
+            ResponseInputItem(content="hi")
+
+    def test_message_item_with_explicit_type_accepted(self):
+        item = ResponseInputItem(type="message", role="user", content="hi")
+        msgs = _convert_response_input_to_messages([item], None)
+        assert msgs[0].role == "user"
+
+    def test_tool_message_item_preserves_tool_call_id(self):
+        """Chat Completions-style tool message preserves tool_call_id."""
+        item = ResponseInputItem(
+            role="tool", content="Sunny, 25C", tool_call_id="call_abc"
+        )
+        msgs = _convert_response_input_to_messages([item], None)
+        assert len(msgs) == 1
+        assert msgs[0].role == "tool"
+        assert msgs[0].content == "Sunny, 25C"
+        assert msgs[0].tool_call_id == "call_abc"
 
     def test_multimodal_text_content_converted(self):
         """Content blocks (multimodal) are converted to MessageContent list."""
@@ -472,6 +607,41 @@ class TestResponsesEndpointNonStreaming:
         assert messages[0].content == "Be funny."
         assert messages[1].role == "user"
         assert messages[1].content == "Tell me a joke."
+
+    @pytest.mark.asyncio
+    async def test_sdk_shapes_reach_serve_normalized(self, mock_module):
+        """SDK wire shapes (flat tools, flat tool_choice, function_call_output)
+        are normalized before reaching serve()."""
+        req = ResponseRequest(
+            model="m",
+            input=[
+                ResponseInputItem(role="user", content="Weather in Paris?"),
+                ResponseInputItem(
+                    type="function_call_output", call_id="call_123", output="Sunny, 25C"
+                ),
+            ],
+            tools=[{"type": "function", "name": "get_weather", "parameters": {}}],
+            tool_choice={"type": "function", "name": "get_weather"},
+        )
+        mock_module.serve.return_value = ModelOutputThunk("It is sunny.")
+        endpoint = make_responses_endpoint(mock_module)
+        await endpoint(req)
+
+        call_kwargs = mock_module.serve.call_args.kwargs
+        # Tool result converted to a tool message paired by tool_call_id.
+        messages = call_kwargs["input"]
+        assert messages[-1].role == "tool"
+        assert messages[-1].tool_call_id == "call_123"
+        assert messages[-1].content == "Sunny, 25C"
+        # Flat tool/tool_choice normalized to the nested shape.
+        model_options = call_kwargs["model_options"]
+        assert model_options[ModelOption.TOOLS] == [
+            {"type": "function", "function": {"name": "get_weather", "parameters": {}}}
+        ]
+        assert model_options[ModelOption.TOOL_CHOICE] == {
+            "type": "function",
+            "function": {"name": "get_weather"},
+        }
 
     @pytest.mark.asyncio
     async def test_async_serve_function(self, async_mock_module, simple_request):
