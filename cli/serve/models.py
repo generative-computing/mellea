@@ -511,6 +511,9 @@ class ResponseRequest(BaseModel):
     instructions: str | list[ResponseInputItem] | None = None
     """System/developer context for the response."""
 
+    requirements: list[str | None] | None = Field(default_factory=list)
+    """Mellea requirements - passed separately to serve()."""
+
     tools: list[ResponseTool] | None = None
     tool_choice: Literal["none", "auto", "required"] | dict[str, Any] | None = None
     max_output_tokens: int | None = None

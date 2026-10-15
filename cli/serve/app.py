@@ -243,6 +243,7 @@ def _build_model_options_from_response_request(request: ResponseRequest) -> dict
     excluded_fields = {
         "input",
         "instructions",
+        "requirements",  # Mellea requirements - passed separately to serve()
         "model",
         "store",
         "conversation",
@@ -545,7 +546,7 @@ def make_responses_endpoint(module):
 
             serve_kwargs: dict[str, Any] = {
                 "input": messages,
-                "requirements": None,
+                "requirements": request.requirements,
                 "model_options": model_options,
             }
             if accepts_format:

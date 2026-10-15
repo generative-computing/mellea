@@ -97,6 +97,7 @@ class TestBuildModelOptionsFromResponseRequest:
             background=False,
             include=["reasoning"],
             parallel_tool_calls=True,
+            requirements=["Be terse."],
         )
         opts = _build_model_options_from_response_request(req)
         for excluded in (
@@ -108,6 +109,7 @@ class TestBuildModelOptionsFromResponseRequest:
             "background",
             "include",
             "parallel_tool_calls",
+            "requirements",
         ):
             assert excluded not in opts
 
@@ -701,6 +703,26 @@ class TestResponsesEndpointNonStreaming:
         endpoint = make_responses_endpoint(mock_module)
         response = await endpoint(req)
         assert response.conversation == "conv-abc"
+
+    @pytest.mark.asyncio
+    async def test_requirements_passed_to_serve(self, mock_module):
+        """Requirements reach serve() as a list, not as a raw model_options key."""
+        received: dict = {}
+
+        def capture_requirements(input, requirements=None, model_options=None):
+            received["requirements"] = requirements
+            received["model_options"] = model_options
+            return ModelOutputThunk("ok")
+
+        mock_module.serve = capture_requirements
+        endpoint = make_responses_endpoint(mock_module)
+
+        req = ResponseRequest(model="m", input="hi", requirements=["Be terse."])
+        response = await endpoint(req)
+        assert isinstance(response, Response)
+
+        assert received["requirements"] == ["Be terse."]
+        assert "requirements" not in (received["model_options"] or {})
 
     @pytest.mark.asyncio
     async def test_previous_response_id_echoed(self, mock_module):
