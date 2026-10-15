@@ -1377,7 +1377,7 @@ async def test_requirement_reroute_on_activation_failure(caplog, explicit_alora)
         caplog.at_level(logging.WARNING),
     ):
         if explicit_alora:
-            with pytest.raises(ValueError, match="failed to activate") as excinfo:
+            with pytest.raises(ValueError, match="failed to activate \\(") as excinfo:
                 await backend._generate_from_context(req, ctx, model_options={})
             assert isinstance(excinfo.value.__cause__, AloraActivationError)
             assert standard_calls == [], (
@@ -4082,3 +4082,31 @@ async def test_alora_requirement_dispatch_honors_explicit_adapter_types_override
     assert captured["name"] == "my-custom-check"
     assert captured["adapter_types"] == ("lora",)
     mock_standard.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_plain_requirement_falls_back_when_adapter_not_registered():
+    """A plain `Requirement` falls back to LLMaJ when no adapter is registered.
+
+    The raise and the fallback are one `isinstance` check apart in
+    `_generate_from_context`. This test ensures that check doesn't also raise
+    for a plain `Requirement`, leaving most users (who never register the
+    adapter) unable to use requirements at all.
+    """
+    from mellea.stdlib.requirements.requirement import Requirement
+
+    backend = _make_backend()
+    backend.default_to_constraint_checking_alora = True
+    ctx = ChatContext().add(Message("user", "hi")).add(Message("assistant", "hello"))
+
+    with patch.object(
+        LocalHFBackend,
+        "_generate_from_context_standard",
+        new_callable=AsyncMock,
+        return_value=MagicMock(),
+    ) as mock_standard:
+        await backend._generate_from_context(
+            Requirement("Be polite."), ctx, model_options={}
+        )
+
+    mock_standard.assert_awaited_once()

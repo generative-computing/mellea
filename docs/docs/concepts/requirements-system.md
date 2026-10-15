@@ -292,9 +292,10 @@ For high-throughput workloads, prefer `simple_validate` for deterministic checks
 reserve LLM-based requirements for subjective criteria that cannot be coded directly.
 
 > **Advanced:** `ALoraRequirement` (from `mellea.stdlib.requirements`) uses a fine-tuned
-> LoRA adapter for validation instead of LLM-as-a-judge. If the adapter is unavailable,
-> validation raises `ValueError` rather than falling back — use a plain `Requirement` if
-> you want automatic LLMaJ fallback. See [LoRA and aLoRA Adapters](../advanced/lora-and-alora-adapters.md).
+> LoRA adapter for validation instead of LLM-as-a-judge. On the HF, OpenAI and Ollama
+> backends, if the adapter is unavailable, validation raises `ValueError` rather than
+> falling back — use a plain `Requirement` if you want automatic LLMaJ fallback. See
+> [LoRA and aLoRA Adapters](../advanced/lora-and-alora-adapters.md).
 
 For a full walkthrough of using LLM-as-a-judge for output quality evaluation, see [Evaluate with LLM-as-a-Judge](../how-to/evaluate-with-llm-as-a-judge.md).
 

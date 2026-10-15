@@ -947,9 +947,9 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                         if isinstance(action, ALoraRequirement):
                             raise ValueError(
                                 f"cannot validate an ALoraRequirement: the "
-                                f"{adapter_name!r} adapter failed to activate. "
-                                "Use a plain Requirement to fall back to "
-                                "LLM-as-a-judge automatically."
+                                f"{adapter_name!r} adapter failed to activate "
+                                f"({exc}). Use a plain Requirement to fall back "
+                                "to LLM-as-a-judge automatically."
                             ) from exc
                         warn_key = f"alora_activation_failed_{exc.qualified_name}"
                         if warn_key not in self._warned_about:

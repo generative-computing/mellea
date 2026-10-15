@@ -396,6 +396,9 @@ class Requirement(Component[str]):
         Raises:
             AssertionError: If the LLM-as-a-Judge strategy is selected but `output_to_bool`
                 is `None`, or if the context has no `ModelOutputThunk` as its last output.
+            ValueError: If `self` is an `ALoraRequirement` and the backend cannot use its
+                adapter (not registered, cannot activate, or context renders no conversation).
+                Raised by the backend during the `generate_from_context` call.
         """
         if self.validation_fn is not None:
             # Python validation strategy

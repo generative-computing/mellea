@@ -72,8 +72,8 @@ class ALoraRequirement(Requirement, Intrinsic):
     If the adapter generates output but the output **fails schema validation**
     (`requirement_check_to_bool` raises `AdapterSchemaMismatchError`), the
     error is surfaced on the returned `ValidationResult.error` by
-    `Requirement.validate`.  The result fails
-    closed (`bool(result)` is `False`), so schema drift is neither silently
+    `Requirement.validate`. The result fails closed (`bool(result)` is `False`),
+    so schema drift is neither silently
     treated as a pass nor raised as an unexpected exception; callers can inspect
     `result.error` to tell it apart from an ordinary "requirement not met".
 

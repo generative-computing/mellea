@@ -986,6 +986,11 @@ class OllamaModelBackend(FormatterBackend, AdapterMixin):
                     try:
                         await asyncio.to_thread(self.resolve_adapter, adapter_name)
                     except Exception as e:
+                        if isinstance(action, ALoraRequirement):
+                            raise ValueError(
+                                f"cannot validate an ALoraRequirement: the "
+                                f"{adapter_name!r} adapter could not be resolved: {e}"
+                            ) from e
                         MelleaLogger.get_logger().warning(
                             f"failed to resolve adapter {adapter_name!r} while "
                             f"attempting automatic requirement-check rerouting; "
@@ -1024,7 +1029,8 @@ class OllamaModelBackend(FormatterBackend, AdapterMixin):
                         raise ValueError(
                             f"cannot validate an ALoraRequirement: backend {self} has "
                             f"no usable {adapter_name!r} adapter. Register one with "
-                            "backend.add_adapter(), or use a plain Requirement."
+                            "backend.add_adapter() and map it to an Ollama model tag "
+                            "in `adapter_models`, or use a plain Requirement."
                         )
                     reroute_to_alora = False
 

@@ -962,6 +962,41 @@ async def test_alora_requirement_raises_when_adapter_not_registered():
         await ALoraRequirement("must mention Paris").validate(backend, ctx)
 
 
+async def test_plain_requirement_falls_back_when_adapter_not_registered():
+    """A plain `Requirement` falls back to LLMaJ when no adapter is registered.
+
+    The raise and the fallback are one `isinstance` check apart in
+    `_generate_from_context`. This test ensures that check doesn't also raise
+    for a plain `Requirement`, leaving most users (who never register the
+    adapter) unable to use requirements at all.
+    """
+    backend = OpenAIBackend(
+        model_id="granite-switch",
+        api_key="fake-key",
+        base_url="http://localhost:9999/v1",
+    )
+    ctx = (
+        ChatContext()
+        .add(Message("user", "What is the capital of France?"))
+        .add(ModelOutputThunk("The capital of France is Paris."))
+    )
+
+    mock_create = AsyncMock(return_value=_simple_chat_completion("yes"))
+    mock_client = MagicMock()
+    mock_client.chat.completions.create = mock_create
+
+    with patch.object(
+        OpenAIBackend,
+        "_async_client",
+        new_callable=PropertyMock,
+        return_value=mock_client,
+    ):
+        result = await Requirement("must mention Paris").validate(backend, ctx)
+
+    assert mock_create.await_count == 1, "should fall through to LLMaJ generation"
+    assert bool(result) is True
+
+
 async def test_plain_requirement_over_empty_view_falls_back_to_llmaj(caplog):
     """Auto-rerouting is an optimisation, so a plain `Requirement` degrades instead.
 

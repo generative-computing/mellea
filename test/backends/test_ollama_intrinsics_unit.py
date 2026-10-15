@@ -471,12 +471,12 @@ async def test_requirement_reroute_falls_back_when_resolve_fails():
 
 
 async def test_alora_requirement_raises_when_resolve_fails():
-    """An explicit `ALoraRequirement` is not downgraded when the resolve fails.
+    """An explicit `ALoraRequirement` raises with the resolve error chained when the resolve fails.
 
     The same resolve failure a plain `Requirement` absorbs (see
     `test_requirement_reroute_falls_back_when_resolve_fails`) must surface for
-    an explicit `ALoraRequirement`: its output_to_bool parses adapter JSON, so
-    falling back to LLMaJ's yes/no would fail every call.
+    an explicit `ALoraRequirement`. The original exception is chained as `__cause__`
+    so callers can inspect what went wrong.
     """
     backend = _make_backend(adapter_models={"requirement-check": _ADAPTER_TAG})
     action = ALoraRequirement("Be polite.")
@@ -489,11 +489,12 @@ async def test_alora_requirement_raises_when_resolve_fails():
         patch.object(
             OllamaModelBackend, "generate_from_chat_context", new_callable=AsyncMock
         ) as mock_standard,
-        pytest.raises(ValueError, match="no usable 'requirement-check' adapter"),
+        pytest.raises(ValueError, match="could not be resolved") as excinfo,
     ):
         await backend._generate_from_context(action, ctx, model_options={})
 
     mock_standard.assert_not_awaited()
+    assert isinstance(excinfo.value.__cause__, RuntimeError)
 
 
 async def test_alora_requirement_raises_when_adapter_never_registered():
@@ -530,7 +531,15 @@ async def test_requirement_reroute_falls_back_when_warm_adapter_has_no_tag():
     would propagate out of validate() instead of degrading like the
     not-yet-added case does.
     """
-    backend = _make_backend_with_adapter(_SIMPLE_CONFIG, adapter_models={})
+    backend = _make_backend(adapter_models={})
+    backend.add_adapter(
+        Adapter(
+            identity=Identity(name="requirement-check", adapter_type="alora"),
+            io_contract=get_io_contract("requirement-check"),
+            weights=ServerMediatedBinding(),
+        ),
+        config=_SIMPLE_CONFIG,
+    )
     action = Requirement("The response is correct.")
     ctx = _make_context()
 
