@@ -686,6 +686,9 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
     _cached_blocks: dict[str, DynamicCache] = dict()
     _supports_composed_adapters = True
+    # The one backend that hands the chat template each message as it is, with the
+    # fields an LLMON template reads a turn's parts from.
+    _supports_llmon = True
 
     def __init__(
         self,

@@ -12,10 +12,12 @@ supply the model-specific `generate_from_context` logic.
 
 import abc
 from enum import Enum
+from typing import ClassVar
 from urllib.parse import urlparse
 
 from ..core import Backend, ModelOutputThunk
-from ..formatters import ChatFormatter
+from ..formatters import ChatFormatter, LLMONFormatter
+from ..formatters.llmon_formatter import llmon_dialect_for
 from .model_ids import ModelIdentifier
 
 
@@ -39,6 +41,11 @@ class FormatterBackend(Backend, abc.ABC):
 
     """
 
+    # Whether the backend can send LLMON (see `LLMONFormatter`). Only `LocalHFBackend`
+    # can: the LLMON chat template reads a turn's parts from message fields that other
+    # backends do not pass on, so they reject an LLMON model or formatter outright.
+    _supports_llmon: ClassVar[bool] = False
+
     def __init__(
         self,
         model_id: str | ModelIdentifier,
@@ -46,7 +53,26 @@ class FormatterBackend(Backend, abc.ABC):
         *,
         model_options: dict | None = None,
     ):
-        """Initialize a formatter-based backend for the given model ID."""
+        """Initialize a formatter-based backend for the given model ID.
+
+        Raises:
+            ValueError: If the backend does not support LLMON and `formatter` is an
+                `LLMONFormatter` or `model_id` is a registered LLMON model.
+        """
+        if not self._supports_llmon:
+            backend = type(self).__name__
+            if isinstance(formatter, LLMONFormatter):
+                raise ValueError(
+                    f"LLMONFormatter can only be used with LocalHFBackend, not "
+                    f"{backend}: the LLMON chat template reads a turn's parts from "
+                    "message fields that other backends do not pass on."
+                )
+            if llmon_dialect_for(model_id) is not None:
+                raise ValueError(
+                    f"{model_id!r} is an LLMON model, which only LocalHFBackend "
+                    f"supports, not {backend}: the LLMON chat template reads a turn's "
+                    "parts from message fields that other backends do not pass on."
+                )
         self.model_id = model_id
         self.model_options = model_options if model_options is not None else {}
         self.formatter: ChatFormatter = formatter

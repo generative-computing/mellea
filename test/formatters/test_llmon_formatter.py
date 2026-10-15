@@ -448,7 +448,12 @@ class TestDialects:
         assert LLMONFormatter("unregistered-model").dialect == LLMONDialect()
 
     def test_default_formatter_is_chosen_by_model_id(self):
-        assert isinstance(default_formatter("llmon95:latest"), LLMONFormatter)
+        for model_id in (
+            "ibm-granite/granite-4.1-3b-llmon-preview",
+            "ibm-granite/granite-4.1-8b-llmon-preview",
+            "llmon95:latest",
+        ):
+            assert isinstance(default_formatter(model_id), LLMONFormatter)
         assert isinstance(
             default_formatter(ModelIdentifier(ollama_name="llmon95:latest")),
             LLMONFormatter,

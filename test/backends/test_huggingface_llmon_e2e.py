@@ -15,8 +15,9 @@ calls a tool, Mellea parses the call and runs the tool, the result goes back, an
 the model answers from it. Each test's answer has to contain a made-up code the
 model cannot know, so an answer that contains it came from what Mellea sent.
 
-The served path is covered by `test_llmon_e2e.py`, and the messages Mellea builds by
-the unit tests in `test/formatters/test_llmon_formatter.py`.
+`LocalHFBackend` is the only backend that supports LLMON; the unit tests in
+`test/backends/test_formatter_output_unit.py` check that the others raise, and those
+in `test/formatters/test_llmon_formatter.py` cover the messages Mellea builds.
 """
 
 import re

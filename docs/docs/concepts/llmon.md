@@ -22,12 +22,11 @@ on, all from the fields of each chat message. `LLMONFormatter` fills those field
 and writes no LLMON itself.
 
 The fields reach the template intact only on `LocalHFBackend`, which hands it each
-message as Mellea built it. OpenAI-compatible servers such as vLLM apply the same
-template, but they rebuild every message from its standard keys first, so only each
-turn's text gets through. On any other backend, a turn whose parts need those fields
-raises rather than silently losing them. A model served with a passthrough template,
-such as `llmon95:latest` on Ollama (`{{ .Prompt }}`), receives each turn's text and
-no LLMON structure.
+message as Mellea built it, so LLMON is supported on that backend alone.
+OpenAI-compatible servers such as vLLM, and Ollama, rebuild every message from its
+standard keys before applying the template, which drops the fields. So every other
+backend raises `ValueError` when it is given an `LLMONFormatter` or a registered
+LLMON model, rather than silently sending prompts without their LLMON structure.
 
 ## Using `LLMONFormatter`
 
@@ -55,9 +54,10 @@ print(result.value)  # Plain text, never LLMON markup.
 # Output will vary — LLM responses depend on model and temperature.
 ```
 
-Backends choose `LLMONFormatter` automatically for a registered LLMON model
-(`llmon95:latest` today). A model that is neither registered nor given an
-`LLMONFormatter` is unaffected: it gets the usual `TemplateFormatter` prose.
+`LocalHFBackend` chooses `LLMONFormatter` automatically for a registered LLMON
+model, which both granite LLMON preview models are, so `formatter=` above can be
+left out. A model that is neither registered nor given an `LLMONFormatter` is
+unaffected: it gets the usual `TemplateFormatter` prose.
 
 ## What the model receives
 
@@ -160,8 +160,8 @@ When a generation completes, the backend has `LLMONFormatter.parse_output`
 extract the reply. The chat template's prompt ends by opening the `assistant`
 block, so a reply is normally the model's text followed by the block's closer (and
 end-of-text), which is dropped. A reply that opens its own `assistant` block yields
-that block's text — the last complete one, if a served model starts mid-structure
-or echoes context before answering. Text without markup is kept as it is, and a
+that block's text — the last complete one, if the model starts mid-structure or
+echoes context before answering. Text without markup is kept as it is, and a
 tool call the model wrote stays part of the reply, where the backend finds it.
 
 The reply becomes the output's `value`, and the `Message` a chat turn is parsed

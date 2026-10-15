@@ -17,9 +17,12 @@ Content is sanitized by the `llmon` library first, since the template inserts it
 it is, and `parse_output` extracts the assistant's reply from a generation that
 carries LLMON markup.
 
-Backends use this formatter by default for the served models registered here (see
-`default_formatter`); pass one to a backend explicitly to use it with any other
-model. It needs the `llmon` extra: `pip install "mellea[llmon]"`.
+Only `LocalHFBackend` supports LLMON, since only it hands the chat template each
+message with the fields the template reads; every other backend raises `ValueError`
+when given an LLMON model or this formatter. `LocalHFBackend` uses this formatter by
+default for the LLMON models registered here (see `default_formatter`); pass one to it
+explicitly to use it with any other model. It needs the `llmon` extra:
+`pip install "mellea[llmon]"`.
 """
 
 from __future__ import annotations
@@ -64,14 +67,19 @@ class LLMONDialect:
     no_openend_tagname: bool | None = None
 
 
-# Served models that speak LLMON, with the dialect each was trained on, matched
-# exactly against a model id. `llmon95:latest` uses the converter's defaults.
-_LLMON_MODELS: dict[str, LLMONDialect] = {"llmon95:latest": LLMONDialect()}
+# Models that speak LLMON, with the dialect each was trained on, matched exactly
+# against a model id. All use the converter's defaults. Only `LocalHFBackend` runs
+# them; other backends raise for them, including for `llmon95:latest`, an Ollama tag.
+_LLMON_MODELS: dict[str, LLMONDialect] = {
+    "ibm-granite/granite-4.1-3b-llmon-preview": LLMONDialect(),
+    "ibm-granite/granite-4.1-8b-llmon-preview": LLMONDialect(),
+    "llmon95:latest": LLMONDialect(),
+}
 
 # Only the HuggingFace backend hands each message to the chat template as it is.
 # OpenAI-compatible servers such as vLLM rebuild every message from its standard keys
-# and drop the rest, so the template's fields are declared for HuggingFace alone: a
-# turn that needs them fails on another backend instead of silently losing them.
+# and drop the rest, so the template's fields are declared for HuggingFace alone, the
+# one backend that takes this formatter.
 _TEMPLATE_FIELDS_PROVIDER = "huggingface"
 # The instruction for a requirement's LLM-as-a-judge check: the wording of Mellea's
 # `Requirement` template, with the output and the requirement sent as labeled `data`
@@ -110,7 +118,7 @@ def llmon_dialect_for(model_id: str | ModelIdentifier | None) -> LLMONDialect | 
 
 
 def default_formatter(model_id: str | ModelIdentifier) -> ChatFormatter:
-    """Return the formatter a backend uses when it is not given one.
+    """Return the formatter `LocalHFBackend` uses when it is not given one.
 
     Args:
         model_id: The model id the backend was constructed with.
@@ -174,10 +182,11 @@ class LLMONFormatter(ChatFormatter):
     replaces each LLMON special token with a look-alike that is not one, because the
     template inserts content as it is.
 
-    The template's fields reach it only through the HuggingFace backend, which hands
-    it each message as it is, so they are declared in the message's `provider_fields`
-    for that backend alone: a turn that needs them raises on any other backend, and
-    `print` raises for one, since a single string cannot carry them.
+    The template's fields reach it only through `LocalHFBackend`, which hands it each
+    message as it is, so they are declared in the message's `provider_fields` for that
+    backend alone, and it is the only backend that takes this formatter: every other
+    backend raises `ValueError` when given it or a registered LLMON model. `print`
+    raises for a turn with fields, since a single string cannot carry them.
 
     Args:
         model_id (str | ModelIdentifier): The model the prompts are for.

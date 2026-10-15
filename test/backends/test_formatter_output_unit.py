@@ -7,29 +7,19 @@ Once a generation completes, the backend's formatter extracts the response from
 the generated text (`Formatter.parse_output`): the response becomes `mot.value`,
 the generated text is kept on `mot.raw.text`, and the originating action parses the
 response. Exercised with `LLMONFormatter`, whose replies can carry LLMON markup, on
-a stub backend and on `OpenAIBackend` with a mocked client.
+a stub backend standing in for `LocalHFBackend`, the one backend that supports LLMON;
+every other backend raises for an LLMON model or formatter.
 """
 
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
 import pydantic
 import pytest
 
 pytest.importorskip("lang.json.llmon_converters", reason='install "mellea[llmon]"')
 
-from openai.types import Completion
-from openai.types.chat import (
-    ChatCompletion,
-    ChatCompletionMessage,
-    ChatCompletionMessageFunctionToolCall,
-)
-from openai.types.chat.chat_completion import Choice
-from openai.types.completion_choice import CompletionChoice
-
-from mellea.backends import ModelOption
 from mellea.backends.backend import FormatterBackend
-from mellea.backends.openai import OpenAIBackend
+from mellea.backends.model_ids import ModelIdentifier
 from mellea.backends.tools import MelleaTool
 from mellea.backends.utils import to_tool_calls
 from mellea.core import GenerateLog, GenerateType, ModelOutputThunk, ModelToolCall
@@ -67,6 +57,9 @@ async def _log_generation(mot: ModelOutputThunk) -> None:
 
 class _StubBackend(FormatterBackend):
     """Streams a fixed reply, in chunks, for whatever it is asked."""
+
+    # Stands in for `LocalHFBackend`, the one backend that supports LLMON.
+    _supports_llmon = True
 
     def __init__(self, formatter: ChatFormatter, chunks: list[str]):
         super().__init__("stub-model", formatter)
@@ -167,157 +160,56 @@ class TestStubBackend:
         assert await mot.avalue() == "the answer"
 
 
-def _openai_backend(**kwargs: Any) -> OpenAIBackend:
-    return OpenAIBackend(
-        model_id="llmon95:latest",
-        base_url="http://localhost:9999/v1",
-        api_key="test-key",
-        **kwargs,
+_OTHER_BACKENDS = {
+    "openai": ("mellea.backends.openai", "OpenAIBackend"),
+    "ollama": ("mellea.backends.ollama", "OllamaModelBackend"),
+    "litellm": ("mellea.backends.litellm", "LiteLLMBackend"),
+    "watsonx": ("mellea.backends.watsonx", "WatsonxAIBackend"),
+}
+
+
+def _other_backend(
+    name: str, model_id: str | ModelIdentifier, formatter: ChatFormatter | None = None
+) -> FormatterBackend:
+    module, cls = _OTHER_BACKENDS[name]
+    backend_cls = getattr(pytest.importorskip(module), cls)
+    kwargs: dict[str, Any] = {}
+    if name == "openai":
+        kwargs = {"base_url": "http://localhost:9999/v1", "api_key": "test-key"}
+    return backend_cls(model_id=model_id, formatter=formatter, **kwargs)
+
+
+@pytest.mark.parametrize("name", list(_OTHER_BACKENDS))
+class TestOtherBackends:
+    """Only `LocalHFBackend` supports LLMON, so every other backend raises for an LLMON
+    model or formatter before it reaches its server."""
+
+    @pytest.mark.parametrize(
+        "model_id",
+        [
+            "ibm-granite/granite-4.1-3b-llmon-preview",
+            "llmon95:latest",
+            # The preview model as a vLLM server serves it, under its HF name.
+            ModelIdentifier(
+                hf_model_name="ibm-granite/granite-4.1-3b-llmon-preview",
+                openai_name="ibm-granite/granite-4.1-3b-llmon-preview",
+            ),
+        ],
     )
+    def test_llmon_model_raises(self, name, model_id):
+        with pytest.raises(ValueError, match="only LocalHFBackend supports"):
+            _other_backend(name, model_id)
+
+    def test_llmon_formatter_raises(self, name):
+        formatter = LLMONFormatter("granite4:micro")
+        with pytest.raises(ValueError, match="only be used with LocalHFBackend"):
+            _other_backend(name, "granite4:micro", formatter)
 
 
-def _completion(message: ChatCompletionMessage) -> ChatCompletion:
-    return ChatCompletion(
-        id="t",
-        choices=[Choice(finish_reason="stop", index=0, message=message)],
-        created=0,
-        model="llmon95:latest",
-        object="chat.completion",
-    )
-
-
-class TestOpenAIBackend:
-    def test_llmon_model_defaults_to_the_llmon_formatter(self):
-        assert isinstance(_openai_backend().formatter, LLMONFormatter)
-        explicit = TemplateFormatter(model_id="llmon95:latest")
-        assert _openai_backend(formatter=explicit).formatter is explicit
-
-    async def test_chat_round_trip(self):
-        backend = _openai_backend()
-        with patch.object(
-            backend._async_client.chat.completions, "create", new_callable=AsyncMock
-        ) as mock_create:
-            mock_create.return_value = _completion(
-                ChatCompletionMessage(role="assistant", content=_REPLY)
-            )
-            mot, _ = await backend.generate_from_context(
-                Instruction("Summarize."),
-                ChatContext(),
-                model_options={ModelOption.STREAM: False},
-            )
-            await mot.avalue()
-
-        (sent,) = mock_create.call_args.kwargs["messages"]
-        assert sent["content"] == "Summarize."
-        assert mot.value == "the answer"
-        assert mot.raw.text == _REPLY
-
-    async def test_instruction_fields_raise_before_the_request_is_sent(self):
-        # OpenAI-compatible servers such as vLLM drop unknown message fields, so a
-        # turn that needs the chat template's fields fails rather than losing them.
-        backend = _openai_backend()
-        instruction = Instruction("Summarize.", grounding_context={"doc": "Text."})
-        with patch.object(
-            backend._async_client.chat.completions, "create", new_callable=AsyncMock
-        ) as mock_create:
-            with pytest.raises(ValueError, match="huggingface"):
-                await backend.generate_from_context(
-                    instruction,
-                    ChatContext(),
-                    model_options={ModelOption.STREAM: False},
-                )
-        mock_create.assert_not_called()
-
-    async def test_chat_reply_message_holds_only_the_reply_text(self):
-        # A chat turn parses into a Message built from the provider's response; its
-        # content must be the extracted reply, which is also what is sent back.
-        backend = _openai_backend()
-        with patch.object(
-            backend._async_client.chat.completions, "create", new_callable=AsyncMock
-        ) as mock_create:
-            mock_create.return_value = _completion(
-                ChatCompletionMessage(role="assistant", content=_REPLY)
-            )
-            mot, _ = await backend.generate_from_context(
-                Message("user", "Hi."),
-                ChatContext(),
-                model_options={ModelOption.STREAM: False},
-            )
-            await mot.avalue()
-
-        assert isinstance(mot.parsed_repr, Message)
-        assert mot.parsed_repr.content == "the answer"
-        (resent,) = backend.formatter.to_chat_messages([mot])
-        assert resent.content == "the answer"
-
-    async def test_tool_call_round_trip(self):
-        backend = _openai_backend()
-        call = ChatCompletionMessageFunctionToolCall(
-            id="c1",
-            type="function",
-            function={"name": "calculator", "arguments": '{"expression": "847 * 293"}'},
-        )
-        with patch.object(
-            backend._async_client.chat.completions, "create", new_callable=AsyncMock
-        ) as mock_create:
-            mock_create.return_value = _completion(
-                ChatCompletionMessage(role="assistant", content=None, tool_calls=[call])
-            )
-            mot, _ = await backend.generate_from_context(
-                Message("user", "What is 847 * 293?"),
-                ChatContext(),
-                model_options={
-                    ModelOption.STREAM: False,
-                    ModelOption.TOOLS: [MelleaTool.from_callable(calculator)],
-                },
-                tool_calls=True,
-            )
-            await mot.avalue()
-
-        # The tool definitions go to the server, whose chat template renders them.
-        (tool,) = mock_create.call_args.kwargs["tools"]
-        assert tool["function"]["name"] == "calculator"
-        assert mot.tool_calls is not None
-        assert [(c.name, c.args) for c in mot.tool_calls] == [
-            ("calculator", {"expression": "847 * 293"})
-        ]
-        # Sent back, the assistant turn carries the call for the chat template to
-        # write out, and the tool result is its plain text.
-        assistant, result = backend.formatter.to_chat_messages(
-            [mot, Message("tool", "248171", tool_call_id="c1")]
-        )
-        assert assistant.content == ""
-        assert assistant.tool_calls is not None
-        assert assistant.tool_calls[0]["function"]["name"] == "calculator"
-        assert result.content == "248171"
-
-    async def test_raw_round_trip(self):
-        backend = _openai_backend()
-        mock_client = MagicMock()
-        mock_client.completions.create = AsyncMock(
-            return_value=Completion(
-                id="raw",
-                created=0,
-                model="llmon95:latest",
-                object="text_completion",
-                choices=[CompletionChoice(index=0, finish_reason="stop", text=_REPLY)],
-            )
-        )
-        instruction = Instruction("Answer.")
-        with patch.object(
-            OpenAIBackend,
-            "_async_client",
-            new_callable=PropertyMock,
-            return_value=mock_client,
-        ):
-            (result,) = await backend.generate_from_raw([instruction], ChatContext())
-
-        assert mock_client.completions.create.call_args.kwargs["prompt"] == [
-            backend.formatter.print(instruction)
-        ]
-        assert result.value == "the answer"
-        assert result.parsed_repr == "the answer"
-        assert result.raw.text == _REPLY
+def test_other_models_default_to_a_template_formatter():
+    backend = _other_backend("openai", "granite4:micro")
+    assert isinstance(backend.formatter, TemplateFormatter)
+    assert not isinstance(backend.formatter, LLMONFormatter)
 
 
 def test_tool_call_written_in_the_reply_round_trips_as_tool_calls():

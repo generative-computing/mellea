@@ -32,7 +32,7 @@ from ..core import (
     RawProviderResponse,
 )
 from ..core.base import AbstractMelleaTool
-from ..formatters import ChatFormatter, default_formatter, granite as granite_formatters
+from ..formatters import ChatFormatter, TemplateFormatter, granite as granite_formatters
 from ..helpers import (
     DEFAULT_CHUNK_TIMEOUT,
     ClientCache,
@@ -195,8 +195,9 @@ class OllamaModelBackend(FormatterBackend, AdapterMixin):
             `ModelIdentifier` is passed, its `ollama_name` attribute must
             be set.
         formatter (ChatFormatter | None): Formatter for rendering components.
-            Defaults to `default_formatter(model_id)`: an `LLMONFormatter` for a
-            registered LLMON model, otherwise a `TemplateFormatter`.
+            Defaults to a `TemplateFormatter`. Only `LocalHFBackend` supports
+            LLMON, so an `LLMONFormatter` or a registered LLMON model raises
+            `ValueError`.
         base_url (str | None): Ollama server endpoint; defaults to
             `env(OLLAMA_HOST)` or `http://localhost:11434`.
         model_options (dict | None): Default model options for generation requests.
@@ -255,7 +256,9 @@ class OllamaModelBackend(FormatterBackend, AdapterMixin):
         super().__init__(
             model_id=model_id,
             formatter=(
-                formatter if formatter is not None else default_formatter(model_id)
+                formatter
+                if formatter is not None
+                else TemplateFormatter(model_id=model_id)
             ),
             model_options=model_options,
         )
