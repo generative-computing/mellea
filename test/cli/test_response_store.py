@@ -270,6 +270,80 @@ class TestResponsesEndpointStore:
         history = _response_store[response.id].history
         assert history[-1] == {"role": "assistant", "content": "my answer"}
 
+    @pytest.mark.asyncio
+    async def test_instructions_excluded_from_stored_history(self):
+        """Instructions are not persisted, so they do not carry over to the next turn."""
+        module = _make_mock_module("answer")
+        endpoint = app_module.make_responses_endpoint(module)
+
+        request = ResponseRequest(
+            model="m", input="a question", instructions="Be concise.", store=True
+        )
+        response = await endpoint(request)
+
+        history = _response_store[response.id].history
+        assert history == [
+            {"role": "user", "content": "a question"},
+            {"role": "assistant", "content": "answer"},
+        ]
+
+    @pytest.mark.asyncio
+    async def test_instructions_not_carried_over_across_turns(self):
+        """A previous turn's instructions are not re-applied on a chained turn."""
+        module = _make_mock_module()
+        endpoint = app_module.make_responses_endpoint(module)
+
+        # Turn 1: with instructions.
+        request1 = ResponseRequest(
+            model="m", input="Q1", instructions="Be concise.", store=True
+        )
+        response1 = await endpoint(request1)
+        assert {"role": "system", "content": "Be concise."} not in _response_store[
+            response1.id
+        ].history
+
+        # Turn 2: chain via previous_response_id, no new instructions.
+        request2 = ResponseRequest(
+            model="m", input="Q2", previous_response_id=response1.id
+        )
+        await endpoint(request2)
+
+        call_messages = module.serve.call_args.kwargs["input"]
+        # No system message: the prior instructions were not stored, and none
+        # were supplied this turn.
+        assert all(m.role != "system" for m in call_messages)
+        assert [m.content for m in call_messages] == ["Q1", "the answer", "Q2"]
+
+    @pytest.mark.asyncio
+    async def test_new_instructions_lead_context_on_continuation(self):
+        """New instructions on a chained turn lead the context; the old ones are dropped."""
+        module = _make_mock_module()
+        endpoint = app_module.make_responses_endpoint(module)
+
+        # Turn 1: with instructions.
+        request1 = ResponseRequest(
+            model="m", input="Q1", instructions="Be concise.", store=True
+        )
+        response1 = await endpoint(request1)
+
+        # Turn 2: chain with NEW, different instructions.
+        request2 = ResponseRequest(
+            model="m",
+            input="Q2",
+            instructions="Be verbose.",
+            previous_response_id=response1.id,
+        )
+        await endpoint(request2)
+
+        call_messages = module.serve.call_args.kwargs["input"]
+        # The new instructions lead the context.
+        assert call_messages[0].role == "system"
+        assert call_messages[0].content == "Be verbose."
+        # The prior turn's instructions must not appear anywhere.
+        assert all(m.content != "Be concise." for m in call_messages)
+        # Prior conversation + new input follow the new instructions.
+        assert [m.content for m in call_messages[1:]] == ["Q1", "the answer", "Q2"]
+
 
 # ---------------------------------------------------------------------------
 # GET /v1/responses/{response_id}

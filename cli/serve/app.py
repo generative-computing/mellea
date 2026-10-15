@@ -345,7 +345,7 @@ def _convert_input_content_to_message_content(
 
 
 def _convert_response_input_to_messages(
-    input_data: str | list[ResponseInputItem],
+    input_data: str | list[ResponseInputItem] | None,
     instructions: str | list[ResponseInputItem] | None,
 ) -> list:
     """Convert Responses API input + instructions to a ChatMessage list.
@@ -358,6 +358,10 @@ def _convert_response_input_to_messages(
     Supports multimodal content: text, images (via image_url), and files
     (not yet supported). Content blocks are converted from Responses API
     format (InputContent) to ChatMessage format (MessageContent).
+
+    Either argument may be `None`; the corresponding messages are simply
+    omitted. Callers convert `input` and `instructions` separately when they
+    need to control their relative ordering (see `make_responses_endpoint`).
     """
     from mellea.serve.models import ChatMessage
 
@@ -378,6 +382,8 @@ def _convert_response_input_to_messages(
                 content = _convert_input_content_to_message_content(item.content)
                 messages.append(ChatMessage(role=_role(item.role), content=content))
 
+    if input_data is None:
+        return messages
     if isinstance(input_data, str):
         messages.append(ChatMessage(role="user", content=input_data))
     else:
@@ -434,12 +440,21 @@ def make_responses_endpoint(module):
             response_id = "resp_" + "".join(secrets.choice(_BASE62) for _ in range(24))
             created_timestamp = int(time.time())
 
-            messages = _convert_response_input_to_messages(
-                request.input, request.instructions
+            # Convert the new input and the new instructions separately so that,
+            # when continuing a conversation via previous_response_id, the
+            # instructions can be placed before the stored history instead of
+            # landing in the middle of it (see the ordering below).
+            input_messages = _convert_response_input_to_messages(request.input, None)
+            instruction_messages = _convert_response_input_to_messages(
+                None, request.instructions
             )
 
             # Prepend history from a previous response if the client is
-            # continuing an existing conversation.
+            # continuing an existing conversation. The stored history holds only
+            # the conversation turns (input items + assistant replies), never
+            # instructions — per the OpenAI Responses API, a previous response's
+            # instructions do not carry over to the next response.
+            prior_messages: list = []
             if request.previous_response_id:
                 stored = _response_store.get(request.previous_response_id)
                 if stored is None:
@@ -455,7 +470,16 @@ def make_responses_endpoint(module):
                     ChatMessage(role=m["role"], content=m["content"])
                     for m in stored.history
                 ]
-                messages = prior_messages + messages
+
+            # New instructions lead the context, followed by the prior
+            # conversation and then this request's new input. With no
+            # previous_response_id this reduces to instructions + input.
+            messages = instruction_messages + prior_messages + input_messages
+
+            # The conversation to persist: prior turns + this request's new
+            # input. Instructions are excluded on purpose (see note above) so
+            # they are not re-applied on the next turn.
+            conversation_messages = prior_messages + input_messages
 
             model_options = _build_model_options_from_response_request(request)
 
@@ -514,7 +538,7 @@ def make_responses_endpoint(module):
                         _response_store[response.id] = _StoredResponse(
                             response=response,
                             history=_build_history_from_messages(
-                                messages, response.output_text
+                                conversation_messages, response.output_text
                             ),
                         )
 
@@ -557,11 +581,16 @@ def make_responses_endpoint(module):
                 previous_response_id=request.previous_response_id,
             )
 
-            # Store the response and full history for future previous_response_id use.
+            # Store the response and conversation history for future
+            # previous_response_id use. The history excludes instructions so
+            # they do not carry over to the next turn (OpenAI Responses API
+            # behavior).
             if storing:
                 _response_store[response_id] = _StoredResponse(
                     response=response,
-                    history=_build_history_from_messages(messages, output.value or ""),
+                    history=_build_history_from_messages(
+                        conversation_messages, output.value or ""
+                    ),
                 )
 
             return response
