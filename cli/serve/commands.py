@@ -25,6 +25,13 @@ def serve(
         "Must be at least 1. Stored responses enable multi-turn sessions "
         "via previous_response_id.",
     ),
+    max_stored_responses: int = typer.Option(
+        1000,
+        min=1,
+        help="Maximum number of stored responses kept in memory (default: 1000). "
+        "Must be at least 1. When the cap is reached, the oldest stored "
+        "responses are dropped first.",
+    ),
 ):
     """Serve a Mellea program as an OpenAI-compatible HTTP endpoint.
 
@@ -36,7 +43,8 @@ def serve(
     response is stored in memory and returned in its `id` field.  Pass that
     `id` as `previous_response_id` in the next request to continue the
     conversation without resending history.  Responses expire after
-    `--response-ttl` seconds.
+    `--response-ttl` seconds, and at most `--max-stored-responses` entries
+    are kept (oldest dropped first).
 
     Prerequisites:
         Mellea installed with server dependency group (`uv add 'mellea[server]'`).
@@ -52,10 +60,17 @@ def serve(
     Examples:
         m serve my_app.py --port 9000
         m serve my_app.py --response-ttl 3600
+        m serve my_app.py --max-stored-responses 5000
 
     See Also:
         guide: integrations/m-serve
     """
     from cli.serve.app import run_server
 
-    run_server(script_path=script_path, host=host, port=port, response_ttl=response_ttl)
+    run_server(
+        script_path=script_path,
+        host=host,
+        port=port,
+        response_ttl=response_ttl,
+        max_stored_responses=max_stored_responses,
+    )

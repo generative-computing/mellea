@@ -85,10 +85,13 @@ app = FastAPI(
 # object plus the full message history so that a future request can pass
 # previous_response_id to continue the conversation without re-sending
 # history.  Entries are evicted after _response_ttl_seconds by a background
-# sweep task started in run_server().
+# sweep task started by the app's lifespan (_lifespan), the oldest entries
+# are dropped when the store grows past _max_stored_responses, and reads
+# reject entries past their expiry even before the next sweep.
 # ---------------------------------------------------------------------------
 
 _response_ttl_seconds: int = 1800  # 30 minutes, overridden by run_server()
+_max_stored_responses: int = 1000  # overridden by run_server()
 
 
 @dataclass
@@ -102,6 +105,21 @@ class _StoredResponse:
 
 
 _response_store: dict[str, _StoredResponse] = {}
+
+
+def _enforce_store_cap() -> None:
+    """Drop the oldest stored responses when the store exceeds its cap.
+
+    Bounds memory on an unauthenticated server where each chained entry
+    keeps a full copy of the conversation history.
+    """
+    excess = len(_response_store) - _max_stored_responses
+    if excess <= 0:
+        return
+    # Evict oldest-first by insertion time.
+    oldest = sorted(_response_store.items(), key=lambda kv: kv[1].stored_at)
+    for rid, _ in oldest[:excess]:
+        del _response_store[rid]
 
 
 async def _evict_expired_responses() -> None:
@@ -574,6 +592,7 @@ def make_responses_endpoint(module):
                                 conversation_messages, response.output_text
                             ),
                         )
+                        _enforce_store_cap()
 
                     save_streamed_response = _save_streamed_response
 
@@ -625,6 +644,7 @@ def make_responses_endpoint(module):
                         conversation_messages, output.value or ""
                     ),
                 )
+                _enforce_store_cap()
 
             return response
 
@@ -801,6 +821,17 @@ async def get_response(response_id: str) -> Response | JSONResponse:
             message=f"Response '{response_id}' not found or has expired.",
             error_type="invalid_request_error",
         )
+    # Reject entries past their expiry even before the background sweep
+    # has evicted them (the sweep runs at most once a minute).
+    expires_at = stored.response.expires_at
+    if expires_at is None:
+        expires_at = int(stored.stored_at + _response_ttl_seconds)
+    if time.time() > expires_at:
+        return create_openai_error_response(
+            status_code=404,
+            message=f"Response '{response_id}' not found or has expired.",
+            error_type="invalid_request_error",
+        )
     return stored.response
 
 
@@ -809,10 +840,12 @@ def run_server(
     host: str = "0.0.0.0",
     port: int = 8080,
     response_ttl: int = 1800,
+    max_stored_responses: int = 1000,
 ):
     """Serve a FastAPI endpoint for a given script."""
-    global _response_ttl_seconds
+    global _response_ttl_seconds, _max_stored_responses
     _response_ttl_seconds = response_ttl
+    _max_stored_responses = max_stored_responses
 
     module = load_module_from_path(script_path)
 
@@ -833,4 +866,5 @@ def run_server(
         f"Serving /v1/chat/completions and /v1/responses at http://{host}:{port}"
     )
     typer.echo(f"Response store TTL: {response_ttl} seconds")
+    typer.echo(f"Response store capacity: {max_stored_responses} entries")
     uvicorn.run(app, host=host, port=port)

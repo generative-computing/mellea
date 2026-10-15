@@ -501,6 +501,14 @@ to `m serve` to change the TTL:
 m serve my_app.py --response-ttl 3600   # 1-hour sessions
 ```
 
+At most 1000 responses are kept in memory; when the cap is reached the
+oldest stored responses are dropped first.  Pass
+`--max-stored-responses <n>` to change it:
+
+```bash
+m serve my_app.py --max-stored-responses 5000
+```
+
 See `sessions/` for a full runnable example.
 
 ## API Endpoints

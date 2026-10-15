@@ -377,3 +377,76 @@ class TestGetResponseEndpoint:
         result = await app_module.get_response("resp_unknown")
         assert isinstance(result, JSONResponse)
         assert result.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_returns_404_after_expiry(self):
+        """An entry still in the store but past its TTL is not served."""
+        from fastapi.responses import JSONResponse
+
+        _response_store["resp_old"] = _StoredResponse(
+            response=_make_response("resp_old"), history=[], stored_at=0.0
+        )
+        app_module._response_ttl_seconds = 1800
+
+        result = await app_module.get_response("resp_old")
+        assert isinstance(result, JSONResponse)
+        assert result.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_returns_stored_response_with_future_expires_at(self):
+        """An explicit future expires_at keeps the entry servable."""
+        resp = _make_response("resp_future")
+        resp.expires_at = int(time.time()) + 3600
+        _response_store["resp_future"] = _StoredResponse(
+            response=resp, history=[], stored_at=0.0
+        )
+
+        result = await app_module.get_response("resp_future")
+        assert result.id == "resp_future"
+
+
+class TestStoreCap:
+    """The store drops the oldest entries once it exceeds its cap."""
+
+    def setup_method(self):
+        _response_store.clear()
+        self._original_cap = app_module._max_stored_responses
+
+    def teardown_method(self):
+        _response_store.clear()
+        app_module._max_stored_responses = self._original_cap
+
+    def test_enforce_store_cap_evicts_oldest(self):
+        app_module._max_stored_responses = 2
+        for i, rid in enumerate(["resp_a", "resp_b", "resp_c"]):
+            _response_store[rid] = _StoredResponse(
+                response=_make_response(rid), history=[], stored_at=float(i)
+            )
+
+        app_module._enforce_store_cap()
+
+        assert "resp_a" not in _response_store  # oldest evicted
+        assert set(_response_store) == {"resp_b", "resp_c"}
+
+    def test_enforce_store_cap_noop_at_or_below_cap(self):
+        app_module._max_stored_responses = 5
+        _response_store["resp_a"] = _StoredResponse(
+            response=_make_response("resp_a"), history=[]
+        )
+
+        app_module._enforce_store_cap()
+
+        assert "resp_a" in _response_store
+
+    @pytest.mark.asyncio
+    async def test_cap_enforced_on_store_write(self):
+        """Storing past the cap evicts the oldest entry on the write path."""
+        app_module._max_stored_responses = 1
+        module = _make_mock_module("first")
+        endpoint = app_module.make_responses_endpoint(module)
+
+        first = await endpoint(ResponseRequest(model="m", input="one"))
+        second = await endpoint(ResponseRequest(model="m", input="two"))
+
+        assert first.id not in _response_store
+        assert second.id in _response_store
