@@ -20,6 +20,7 @@ from cli.serve.streaming import stream_response_chunks
 from mellea.backends.model_options import ModelOption
 from mellea.core.base import ModelOutputThunk
 from mellea.helpers.openai_compatible_helpers import (
+    ResponseUsage,
     build_response_output_items,
     build_response_usage,
 )
@@ -659,6 +660,27 @@ class TestResponsesEndpointNonStreaming:
         assert response.usage.total_tokens == 15
 
     @pytest.mark.asyncio
+    async def test_usage_details_populated_from_chat_completions_usage(
+        self, mock_module, simple_request
+    ):
+        """Nested Chat Completions usage surfaces at the spec locations."""
+        mock_output = ModelOutputThunk("hi")
+        mock_output.generation.usage = {
+            "prompt_tokens": 10,
+            "completion_tokens": 5,
+            "total_tokens": 15,
+            "completion_tokens_details": {"reasoning_tokens": 7},
+            "prompt_tokens_details": {"cached_tokens": 4},
+        }
+        mock_module.serve.return_value = mock_output
+        endpoint = make_responses_endpoint(mock_module)
+        response = await endpoint(simple_request)
+
+        assert response.usage.reasoning_tokens == 7
+        assert response.usage.output_tokens_details.reasoning_tokens == 7
+        assert response.usage.input_tokens_details.cached_tokens == 4
+
+    @pytest.mark.asyncio
     async def test_usage_zero_when_unavailable(self, mock_module, simple_request):
         mock_module.serve.return_value = ModelOutputThunk("hi")
         endpoint = make_responses_endpoint(mock_module)
@@ -667,6 +689,10 @@ class TestResponsesEndpointNonStreaming:
         assert response.usage.input_tokens == 0
         assert response.usage.output_tokens == 0
         assert response.usage.total_tokens == 0
+        # Details objects must exist even on the zero fallback, or SDK
+        # clients reading usage.output_tokens_details.reasoning_tokens crash.
+        assert response.usage.output_tokens_details.reasoning_tokens == 0
+        assert response.usage.input_tokens_details.cached_tokens == 0
 
     @pytest.mark.asyncio
     async def test_conversation_echoed(self, mock_module):
@@ -1630,6 +1656,7 @@ class TestStreamResponseChunks:
         assert response["error"]["code"] == "server_error"
         # Full Response shape: required fields present for SDK parsing
         assert response["usage"]["total_tokens"] == 0
+        assert response["usage"]["output_tokens_details"]["reasoning_tokens"] == 0
 
     @pytest.mark.asyncio
     async def test_usage_always_included_in_completed(self):
@@ -1649,6 +1676,25 @@ class TestStreamResponseChunks:
         assert completed["data"]["response"]["usage"]["input_tokens"] == 5
         assert completed["data"]["response"]["usage"]["output_tokens"] == 3
         assert completed["data"]["response"]["usage"]["total_tokens"] == 8
+
+    @pytest.mark.asyncio
+    async def test_usage_details_included_in_completed(self):
+        """Nested Chat Completions usage details surface in response.completed."""
+        output = ModelOutputThunk("hello")
+        output.generation.usage = {
+            "prompt_tokens": 5,
+            "completion_tokens": 3,
+            "total_tokens": 8,
+            "completion_tokens_details": {"reasoning_tokens": 7},
+            "prompt_tokens_details": {"cached_tokens": 4},
+        }
+        events = await self._collect(
+            output, response_id="resp_1", model="m", created=1234
+        )
+        completed = next(e for e in events if e["event"] == "response.completed")
+        usage = completed["data"]["response"]["usage"]
+        assert usage["output_tokens_details"]["reasoning_tokens"] == 7
+        assert usage["input_tokens_details"]["cached_tokens"] == 4
 
     @pytest.mark.asyncio
     async def test_endpoint_streams_with_openai_sdk_format(self, mock_module):
@@ -1746,6 +1792,69 @@ class TestBuildResponseUsage:
         usage = build_response_usage(output)
         assert usage is not None
         assert usage.total_tokens == 10
+
+    def test_reasoning_tokens_from_completion_tokens_details(self):
+        """Reasoning tokens arrive nested, the way OpenAI/LiteLLM backends store them."""
+        output = ModelOutputThunk("hi")
+        output.generation.usage = {
+            "prompt_tokens": 10,
+            "completion_tokens": 5,
+            "total_tokens": 15,
+            "completion_tokens_details": {"reasoning_tokens": 7},
+        }
+        usage = build_response_usage(output)
+        assert usage is not None
+        assert usage.reasoning_tokens == 7
+        assert usage.output_tokens_details.reasoning_tokens == 7
+
+    def test_cached_tokens_from_prompt_tokens_details(self):
+        """Cached tokens arrive nested under prompt_tokens_details."""
+        output = ModelOutputThunk("hi")
+        output.generation.usage = {
+            "prompt_tokens": 10,
+            "completion_tokens": 5,
+            "total_tokens": 15,
+            "prompt_tokens_details": {"cached_tokens": 4},
+        }
+        usage = build_response_usage(output)
+        assert usage is not None
+        assert usage.input_tokens_details.cached_tokens == 4
+
+    def test_details_zero_when_usage_has_no_breakdown(self):
+        """Flat usage dicts (Ollama/HF style) still get spec-shaped details."""
+        output = ModelOutputThunk("hi")
+        output.generation.usage = {
+            "prompt_tokens": 1,
+            "completion_tokens": 1,
+            "total_tokens": 2,
+        }
+        usage = build_response_usage(output)
+        assert usage is not None
+        assert usage.input_tokens_details.cached_tokens == 0
+        assert usage.output_tokens_details.reasoning_tokens == 0
+        assert usage.reasoning_tokens is None
+
+    def test_top_level_reasoning_tokens_preferred_over_details(self):
+        """A top-level reasoning_tokens wins over the nested location."""
+        output = ModelOutputThunk("hi")
+        output.generation.usage = {
+            "prompt_tokens": 10,
+            "completion_tokens": 5,
+            "total_tokens": 15,
+            "reasoning_tokens": 3,
+            "completion_tokens_details": {"reasoning_tokens": 9},
+        }
+        usage = build_response_usage(output)
+        assert usage is not None
+        assert usage.reasoning_tokens == 3
+
+    def test_zero_usage_includes_details_objects(self):
+        """The zero-fallback construction still emits the details objects."""
+        usage = ResponseUsage(input_tokens=0, output_tokens=0, total_tokens=0)
+        assert usage.input_tokens_details.cached_tokens == 0
+        assert usage.output_tokens_details.reasoning_tokens == 0
+        assert usage.model_dump()["input_tokens_details"] == {"cached_tokens": 0}
+        assert usage.model_dump()["output_tokens_details"] == {"reasoning_tokens": 0}
 
 
 # ---------------------------------------------------------------------------

@@ -11,7 +11,7 @@ import json
 import uuid
 from typing import TYPE_CHECKING, Any, Literal, TypedDict
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ..core.base import AudioBlock, AudioUrlBlock, ImageUrlBlock
 from ..core.utils import MelleaLogger
@@ -654,15 +654,37 @@ def has_user_content(messages: list[Message]) -> bool:
 # ---------------------------------------------------------------------------
 
 
+class InputTokensDetails(BaseModel):
+    """Prompt-side token usage details for a Responses API response."""
+
+    cached_tokens: int = 0
+    """Tokens served from the provider prompt cache; zero when unreported."""
+
+
+class OutputTokensDetails(BaseModel):
+    """Completion-side token usage details for a Responses API response."""
+
+    reasoning_tokens: int = 0
+    """Tokens spent on reasoning; zero when unreported."""
+
+
 class ResponseUsage(BaseModel):
-    """Token usage for a Responses API response, including reasoning tokens."""
+    """Token usage for a Responses API response, including reasoning tokens.
+
+    Mirrors the OpenAI Responses API usage shape: both details objects are
+    always present, with zeros when the backend reports no breakdown. The
+    top-level `reasoning_tokens` field is a Mellea extension and stays
+    `None` when the backend does not report reasoning tokens.
+    """
 
     input_tokens: int
     output_tokens: int
     total_tokens: int
     reasoning_tokens: int | None = None
-    input_tokens_details: dict[str, Any] | None = None
-    output_tokens_details: dict[str, Any] | None = None
+    input_tokens_details: InputTokensDetails = Field(default_factory=InputTokensDetails)
+    output_tokens_details: OutputTokensDetails = Field(
+        default_factory=OutputTokensDetails
+    )
 
 
 class ResponseOutputItem(BaseModel):
@@ -703,11 +725,28 @@ class ResponseFunctionCall(ResponseOutputItem):
     call_id: str
 
 
+def _detail_tokens(
+    usage: dict[str, Any], details_key: str, value_key: str
+) -> int | None:
+    """Read a token count from a nested usage details dict, if present."""
+    details = usage.get(details_key)
+    if isinstance(details, dict):
+        value = details.get(value_key)
+        if value is not None:
+            return value
+    return None
+
+
 def build_response_usage(output: ModelOutputThunk) -> ResponseUsage | None:
     """Build a Responses API usage object from a model output, if available.
 
-    Extends the standard completion usage with reasoning tokens and token
-    detail dicts when the backend populates them.
+    Maps the Chat Completions usage shape that backends store onto the
+    Responses API shape: reasoning tokens are read from top-level
+    `reasoning_tokens`, falling back to
+    `completion_tokens_details.reasoning_tokens`; cached tokens from
+    `input_tokens_details.cached_tokens`, falling back to
+    `prompt_tokens_details.cached_tokens`. Both details objects are always
+    emitted, with zeros when the backend reports no breakdown.
 
     Args:
         output: Model output object whose `generation.usage` mapping contains
@@ -720,18 +759,34 @@ def build_response_usage(output: ModelOutputThunk) -> ResponseUsage | None:
     if output.generation is None or output.generation.usage is None:
         return None
 
-    prompt_tokens = output.generation.usage.get("prompt_tokens", 0)
-    completion_tokens = output.generation.usage.get("completion_tokens", 0)
-    total_tokens = output.generation.usage.get(
-        "total_tokens", prompt_tokens + completion_tokens
-    )
+    usage = output.generation.usage
+    prompt_tokens = usage.get("prompt_tokens", 0)
+    completion_tokens = usage.get("completion_tokens", 0)
+    total_tokens = usage.get("total_tokens", prompt_tokens + completion_tokens)
+
+    # Reasoning tokens: prefer a top-level value, fall back to the
+    # Chat Completions location that the OpenAI and LiteLLM backends write.
+    reasoning_tokens = usage.get("reasoning_tokens")
+    if reasoning_tokens is None:
+        reasoning_tokens = _detail_tokens(
+            usage, "completion_tokens_details", "reasoning_tokens"
+        )
+
+    # Cached tokens: prefer a Responses-shaped value, fall back to the
+    # Chat Completions location.
+    cached_tokens = _detail_tokens(usage, "input_tokens_details", "cached_tokens")
+    if cached_tokens is None:
+        cached_tokens = _detail_tokens(usage, "prompt_tokens_details", "cached_tokens")
+
     return ResponseUsage(
         input_tokens=prompt_tokens,
         output_tokens=completion_tokens,
         total_tokens=total_tokens,
-        reasoning_tokens=output.generation.usage.get("reasoning_tokens"),
-        input_tokens_details=output.generation.usage.get("input_tokens_details"),
-        output_tokens_details=output.generation.usage.get("output_tokens_details"),
+        reasoning_tokens=reasoning_tokens,
+        input_tokens_details=InputTokensDetails(cached_tokens=cached_tokens or 0),
+        output_tokens_details=OutputTokensDetails(
+            reasoning_tokens=reasoning_tokens or 0
+        ),
     )
 
 
