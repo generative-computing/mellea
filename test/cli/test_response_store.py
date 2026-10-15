@@ -3,9 +3,10 @@
 
 """Unit tests for the in-memory response store and previous_response_id session chaining."""
 
+import asyncio
 import time
 from typing import Literal
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -98,36 +99,36 @@ class TestStoredResponse:
 class TestEvictExpiredResponses:
     """TTL eviction removes old entries and keeps fresh ones."""
 
-    def test_evicts_expired_entry(self):
+    async def _run_one_sweep(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Run the real coroutine through one sweep, then cancel it.
+
+        The first sleep returns so one real sweep executes; the second raises
+        CancelledError, which is what task.cancel() does to the sleeping loop.
+        """
+        sleep_mock = AsyncMock(side_effect=[None, asyncio.CancelledError()])
+        monkeypatch.setattr(app_module.asyncio, "sleep", sleep_mock)
+        with pytest.raises(asyncio.CancelledError):
+            await app_module._evict_expired_responses()
+
+    async def test_evicts_expired_entry(self, monkeypatch):
         _response_store.clear()
         _response_store["old"] = _StoredResponse(
             response=_make_response("old"), history=[], stored_at=0.0
         )
         app_module._response_ttl_seconds = 1800
 
-        # Run one sweep iteration directly (skip the asyncio.sleep)
-        cutoff = time.time() - app_module._response_ttl_seconds
-        expired = [
-            rid for rid, entry in _response_store.items() if entry.stored_at < cutoff
-        ]
-        for rid in expired:
-            del _response_store[rid]
+        await self._run_one_sweep(monkeypatch)
 
         assert "old" not in _response_store
 
-    def test_keeps_fresh_entry(self):
+    async def test_keeps_fresh_entry(self, monkeypatch):
         _response_store.clear()
         _response_store["fresh"] = _StoredResponse(
             response=_make_response("fresh"), history=[]
         )
         app_module._response_ttl_seconds = 1800
 
-        cutoff = time.time() - app_module._response_ttl_seconds
-        expired = [
-            rid for rid, entry in _response_store.items() if entry.stored_at < cutoff
-        ]
-        for rid in expired:
-            del _response_store[rid]
+        await self._run_one_sweep(monkeypatch)
 
         assert "fresh" in _response_store
         _response_store.clear()
