@@ -40,10 +40,12 @@ def serve(
     model_options: dict | None = None,
 ) -> ModelOutputThunk:
     """Pass the full conversation history to the model and return its reply."""
-    # Build a ChatContext from the full message list (which includes prior turns
-    # prepended by the server when previous_response_id is set).
+    # Build a ChatContext from the prior turns only (the server prepends them
+    # to the input when previous_response_id is set). The current user turn —
+    # always the last message — is passed as the instruct description below,
+    # so adding it to the context as well would send it twice.
     ctx = ChatContext()
-    for msg in input:
+    for msg in input[:-1]:
         if msg.role not in _MESSAGE_ROLES:
             continue
         ctx = ctx.add(
@@ -52,7 +54,6 @@ def serve(
             )
         )
 
-    # The last message is the current user turn; the context carries the history.
     last_text = input[-1].get_text_content() or ""
 
     session = mellea.start_session(ctx=ctx)
