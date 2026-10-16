@@ -45,6 +45,7 @@ if TYPE_CHECKING:
     from mellea.plugins.hooks.streaming import (
         StreamingEndPayload,
         StreamingEventPayload,
+        StreamingStartPayload,
     )
     from mellea.plugins.hooks.tool import ToolPostInvokePayload
     from mellea.plugins.hooks.validation import ValidationPostCheckPayload
@@ -403,10 +404,12 @@ class CostMetricsPlugin(Plugin, name="cost_metrics", priority=1053):
 
 
 class SamplingMetricsPlugin(Plugin, name="sampling_metrics", priority=1054):
-    """Records sampling loop attempt and outcome metrics.
+    """Records sampling loop attempt and outcome metrics per strategy.
 
-    Hooks into `sampling_iteration` to count attempts per strategy and
-    `sampling_loop_end` to count successes and failures.
+    Counts attempts (from `sampling_iteration`, or `streaming_start` plus each
+    `RetryEvent` for a strategy-driven stream) and loop successes/failures (from
+    `sampling_loop_end`, or `streaming_end`). Plain streams with no strategy are
+    not recorded.
     """
 
     @hook("sampling_iteration", mode=PluginMode.FIRE_AND_FORGET)
@@ -441,19 +444,64 @@ class SamplingMetricsPlugin(Plugin, name="sampling_metrics", priority=1054):
             return
         record_sampling_outcome(payload.strategy_name or "unknown", payload.success)
 
+    @hook("streaming_start", mode=PluginMode.FIRE_AND_FORGET)
+    async def record_streaming_attempt_start(
+        self, payload: StreamingStartPayload, context: dict[str, Any]
+    ) -> None:
+        """Count the first attempt of a strategy-driven stream.
+
+        Plain streams (no strategy) are not counted.
+
+        Args:
+            payload: Contains the strategy name, or `None` for a plain stream.
+            context: Plugin context (unused).
+        """
+        from mellea.telemetry.metrics import record_sampling_attempt
+
+        if payload.strategy_name is None:
+            return
+        record_sampling_attempt(payload.strategy_name)
+
+    @hook("streaming_event", mode=PluginMode.FIRE_AND_FORGET)
+    async def record_streaming_attempt_retry(
+        self, payload: StreamingEventPayload, context: dict[str, Any]
+    ) -> None:
+        """Count each retried attempt of a strategy-driven stream.
+
+        Args:
+            payload: For a `RetryEvent`, carries the driving strategy's name.
+            context: Plugin context (unused).
+        """
+        from mellea.stdlib.streaming import RetryEvent
+        from mellea.telemetry.metrics import record_sampling_attempt
+
+        if not isinstance(payload.event, RetryEvent) or payload.strategy_name is None:
+            return
+        record_sampling_attempt(payload.strategy_name)
+
     @hook("streaming_end", mode=PluginMode.FIRE_AND_FORGET)
     async def record_streaming_outcome(
         self, payload: StreamingEndPayload, context: dict[str, Any]
     ) -> None:
-        """Record the `stream` outcome when the stream finishes.
+        """Record a strategy-driven stream's sampling outcome, unless it raised.
+
+        Only streams that ran a sampling strategy are recorded — a plain stream is
+        not a sampling loop — and the outcome is attributed to the real strategy. A
+        raised stream is skipped: a crash is not a sampling verdict.
 
         Args:
-            payload: Contains the stream's success flag.
+            payload: Contains the sampling success flag and strategy name.
             context: Plugin context (unused).
         """
         from mellea.telemetry.metrics import record_sampling_outcome
 
-        record_sampling_outcome("stream", payload.success)
+        if (
+            payload.exception is not None
+            or payload.strategy_name is None
+            or payload.sampling_success is None
+        ):
+            return
+        record_sampling_outcome(payload.strategy_name, payload.sampling_success)
 
 
 class RequirementMetricsPlugin(Plugin, name="requirement_metrics", priority=1055):

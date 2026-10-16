@@ -26,10 +26,14 @@ from mellea.plugins.hooks.sampling import (
     SamplingIterationPayload,
     SamplingLoopEndPayload,
 )
-from mellea.plugins.hooks.streaming import StreamingEndPayload, StreamingEventPayload
+from mellea.plugins.hooks.streaming import (
+    StreamingEndPayload,
+    StreamingEventPayload,
+    StreamingStartPayload,
+)
 from mellea.plugins.hooks.tool import ToolPostInvokePayload
 from mellea.plugins.hooks.validation import ValidationPostCheckPayload
-from mellea.stdlib.streaming import ChunkEvent, QuickCheckEvent
+from mellea.stdlib.streaming import ChunkEvent, QuickCheckEvent, RetryEvent
 from mellea.telemetry.metrics import (
     ERROR_TYPE_TIMEOUT,
     ERROR_TYPE_TRANSPORT_ERROR,
@@ -962,25 +966,110 @@ async def test_sampling_plugin_skips_outcome_on_exception(sampling_plugin):
 
 
 @pytest.mark.asyncio
-async def test_sampling_plugin_records_streaming_success_outcome(sampling_plugin):
-    """streaming_end with success=True records a `stream` success."""
-    payload = StreamingEndPayload(streaming_id="sid", success=True)
+@pytest.mark.parametrize("sampling_success", [True, False])
+async def test_sampling_plugin_records_streaming_outcome_by_strategy(
+    sampling_plugin, sampling_success
+):
+    """A strategy-driven streaming_end records `sampling_success`, not completion."""
+    payload = StreamingEndPayload(
+        streaming_id="sid",
+        success=True,
+        strategy_name="RejectionSamplingStrategy",
+        sampling_success=sampling_success,
+    )
 
     with patch("mellea.telemetry.metrics.record_sampling_outcome") as mock_record:
         await sampling_plugin.record_streaming_outcome(payload, {})
 
-        mock_record.assert_called_once_with("stream", True)
+        mock_record.assert_called_once_with(
+            "RejectionSamplingStrategy", sampling_success
+        )
 
 
 @pytest.mark.asyncio
-async def test_sampling_plugin_records_streaming_failure_outcome(sampling_plugin):
-    """streaming_end with success=False records a `stream` failure."""
-    payload = StreamingEndPayload(streaming_id="sid", success=False)
+async def test_sampling_plugin_skips_streaming_outcome_without_strategy(
+    sampling_plugin,
+):
+    """A plain stream (no strategy) is not a sampling loop and is not recorded."""
+    payload = StreamingEndPayload(streaming_id="sid", success=True, strategy_name=None)
 
     with patch("mellea.telemetry.metrics.record_sampling_outcome") as mock_record:
         await sampling_plugin.record_streaming_outcome(payload, {})
 
-        mock_record.assert_called_once_with("stream", False)
+        mock_record.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_sampling_plugin_skips_streaming_outcome_on_exception(sampling_plugin):
+    """A raised strategy-driven stream records no outcome — a crash is not a verdict."""
+    payload = StreamingEndPayload(
+        streaming_id="sid",
+        success=False,
+        strategy_name="RejectionSamplingStrategy",
+        sampling_success=False,
+        exception=RuntimeError("boom"),
+    )
+
+    with patch("mellea.telemetry.metrics.record_sampling_outcome") as mock_record:
+        await sampling_plugin.record_streaming_outcome(payload, {})
+
+        mock_record.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_sampling_plugin_records_streaming_attempt_start(sampling_plugin):
+    """streaming_start counts the first attempt of a strategy-driven stream."""
+    payload = StreamingStartPayload(
+        streaming_id="sid", strategy_name="RejectionSamplingStrategy"
+    )
+
+    with patch("mellea.telemetry.metrics.record_sampling_attempt") as mock_record:
+        await sampling_plugin.record_streaming_attempt_start(payload, {})
+
+        mock_record.assert_called_once_with("RejectionSamplingStrategy")
+
+
+@pytest.mark.asyncio
+async def test_sampling_plugin_skips_streaming_attempt_start_without_strategy(
+    sampling_plugin,
+):
+    """A plain stream's start does not count a sampling attempt."""
+    payload = StreamingStartPayload(streaming_id="sid", strategy_name=None)
+
+    with patch("mellea.telemetry.metrics.record_sampling_attempt") as mock_record:
+        await sampling_plugin.record_streaming_attempt_start(payload, {})
+
+        mock_record.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_sampling_plugin_records_streaming_attempt_on_retry(sampling_plugin):
+    """A RetryEvent counts one more attempt, attributed to the strategy."""
+    payload = StreamingEventPayload(
+        streaming_id="sid",
+        event=RetryEvent(attempt=2, reason="x", failed_early=True, failed_count=1),
+        strategy_name="RejectionSamplingStrategy",
+    )
+
+    with patch("mellea.telemetry.metrics.record_sampling_attempt") as mock_record:
+        await sampling_plugin.record_streaming_attempt_retry(payload, {})
+
+        mock_record.assert_called_once_with("RejectionSamplingStrategy")
+
+
+@pytest.mark.asyncio
+async def test_sampling_plugin_ignores_non_retry_streaming_events(sampling_plugin):
+    """Non-retry events (e.g. a chunk) do not count sampling attempts."""
+    payload = StreamingEventPayload(
+        streaming_id="sid",
+        event=ChunkEvent(text="hi", chunk_index=0, attempt=1),
+        strategy_name="RejectionSamplingStrategy",
+    )
+
+    with patch("mellea.telemetry.metrics.record_sampling_attempt") as mock_record:
+        await sampling_plugin.record_streaming_attempt_retry(payload, {})
+
+        mock_record.assert_not_called()
 
 
 # RequirementMetricsPlugin tests

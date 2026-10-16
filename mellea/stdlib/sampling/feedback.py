@@ -370,7 +370,7 @@ class ModelFriendlyRepairStrategy(RepairTemplateStrategy):
         old_ctx: Context,
         new_ctx: Context,
         past_actions: Sequence[SampleActionType],
-        past_results: list[Any],
+        past_results: Sequence[Any],
         past_val: list[list[tuple[Requirement, ValidationResult]]],
     ) -> tuple[SampleActionType, Context]:
         """Repair with model-friendly feedback formatting.
