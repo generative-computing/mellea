@@ -28,9 +28,13 @@ def check_certainty(
     Args:
         context: Chat context containing user question and assistant answer.
         backend: Backend instance that supports LoRA/aLoRA adapters.
-        model_options: Optional model-level overrides forwarded to the backend
-            (e.g. `{ModelOption.MAX_NEW_TOKENS: 64}`). When `None`, defaults
-            apply.
+        model_options: Optional model-level overrides forwarded to the
+            backend (e.g. `{ModelOption.TEMPERATURE: 0.7}`). For
+            likelihood-scored outputs, the returned score is derived
+            from token probabilities rather than the sampled label.
+            Temperature can change the score, but repeated calls with
+            the same input and settings return the same score. When `None`,
+            defaults apply.
 
     Returns:
         Certainty score as a float (higher = more certain).
@@ -70,9 +74,13 @@ def requirement_check(
         context: Chat context containing user question and assistant answer.
         backend: Backend instance that supports LoRA/aLoRA adapters.
         requirement: Set of requirements to satisfy.
-        model_options: Optional model-level overrides forwarded to the backend
-            (e.g. `{ModelOption.MAX_NEW_TOKENS: 64}`). When `None`, defaults
-            apply.
+        model_options: Optional model-level overrides forwarded to the
+            backend (e.g. `{ModelOption.TEMPERATURE: 0.7}`). For
+            likelihood-scored outputs, the returned score is derived
+            from token probabilities rather than the sampled label.
+            Temperature can change the score, but repeated calls with
+            the same input and settings return the same score. When `None`,
+            defaults apply.
 
     Returns:
         Score as a float between 0.0 and 1.0 (higher = more likely satisfied).
