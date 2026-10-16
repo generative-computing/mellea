@@ -2823,7 +2823,6 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 if want_raw_logits and mot_logits_raw is not None:
                     result.generation.raw_logits = mot_logits_raw
 
-                self._finalize_output(result)
                 action = actions[i]
                 result.parsed_repr = (
                     action.parse(result)

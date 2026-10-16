@@ -14,8 +14,7 @@ and its `documents` `doc` blocks, each wired into the `exec` block the template 
 sends a requirement's LLM-as-a-judge check as an instruction with what it judges as
 data, and sends every other turn as its plain text, so it writes no LLMON itself.
 Content is sanitized by the `llmon` library first, since the template inserts it as
-it is, and `parse_output` extracts the assistant's reply from a generation that
-carries LLMON markup.
+it is.
 
 Only `LocalHFBackend` supports LLMON, since only it hands the chat template each
 message with the fields the template reads; every other backend raises `ValueError`
@@ -28,8 +27,6 @@ explicitly to use it with any other model. It needs the `llmon` extra:
 from __future__ import annotations
 
 import dataclasses
-import inspect
-import json
 import re
 from collections.abc import Callable, Iterable
 from typing import Any, cast
@@ -49,32 +46,16 @@ from ..stdlib.components.instruction import Instruction
 from .chat_formatter import ChatFormatter
 from .template_formatter import TemplateFormatter
 
-
-@dataclasses.dataclass(frozen=True)
-class LLMONDialect:
-    """The LLMON variant a model writes its replies in.
-
-    Each field sets the `LLMONConverters` option of the same name that
-    `LLMONFormatter.parse_output` reads replies with. A field left as `None` keeps
-    the converter's own default, which is the LLMON format Mellea recommends, so set
-    a field only for a model trained on a different variant.
-
-    Args:
-        no_openend_tagname (bool | None): Blocks are closed with a bare
-            `<|open_end|>` rather than one that repeats their tag name.
-    """
-
-    no_openend_tagname: bool | None = None
-
-
-# Models that speak LLMON, with the dialect each was trained on, matched exactly
-# against a model id. All use the converter's defaults. Only `LocalHFBackend` runs
-# them; other backends raise for them, including for `llmon95:latest`, an Ollama tag.
-_LLMON_MODELS: dict[str, LLMONDialect] = {
-    "ibm-granite/granite-4.1-3b-llmon-preview": LLMONDialect(),
-    "ibm-granite/granite-4.1-8b-llmon-preview": LLMONDialect(),
-    "llmon95:latest": LLMONDialect(),
-}
+# Models that speak LLMON, matched exactly against a model id. Only `LocalHFBackend`
+# runs them; other backends raise for them, including for `llmon95:latest`, an Ollama
+# tag.
+_LLMON_MODELS = frozenset(
+    {
+        "ibm-granite/granite-4.1-3b-llmon-preview",
+        "ibm-granite/granite-4.1-8b-llmon-preview",
+        "llmon95:latest",
+    }
+)
 
 # Only the HuggingFace backend hands each message to the chat template as it is.
 # OpenAI-compatible servers such as vLLM rebuild every message from its standard keys
@@ -90,31 +71,25 @@ _JUDGE_INSTRUCTION = (
     "Reply with 'yes' if the requirement is satisfied and 'no' otherwise. "
     "Do not include any other text in your response."
 )
-# Whitespace and special tokens (e.g. `<|end_of_text|>`) only.
-_ONLY_SPECIAL_TOKENS = re.compile(r"(?:\s|<\|[^<>|]*\|>)*")
 # A tool call as the model writes it in its reply, with the whitespace before it.
 _WRITTEN_TOOL_CALL = re.compile(r"\s*<tool_call>.*?</tool_call>", re.DOTALL)
 
 
-def llmon_dialect_for(model_id: str | ModelIdentifier | None) -> LLMONDialect | None:
-    """Return the LLMON dialect registered for a model, if it is an LLMON model.
+def is_llmon_model(model_id: str | ModelIdentifier | None) -> bool:
+    """Return whether a model is a registered LLMON model.
 
     Args:
         model_id: A model id, or a `ModelIdentifier`, which matches when any of its
             provider names is registered.
 
     Returns:
-        The registered `LLMONDialect`, or `None` when the model is not an LLMON
-        model.
+        `True` for a registered LLMON model, otherwise `False`.
     """
     if isinstance(model_id, ModelIdentifier):
         names = [getattr(model_id, f.name) for f in dataclasses.fields(model_id)]
     else:
         names = [model_id]
-    for name in names:
-        if name in _LLMON_MODELS:
-            return _LLMON_MODELS[name]
-    return None
+    return any(name in _LLMON_MODELS for name in names)
 
 
 def default_formatter(model_id: str | ModelIdentifier) -> ChatFormatter:
@@ -127,10 +102,9 @@ def default_formatter(model_id: str | ModelIdentifier) -> ChatFormatter:
         An `LLMONFormatter` for a registered LLMON model, otherwise a
         `TemplateFormatter`.
     """
-    dialect = llmon_dialect_for(model_id)
-    if dialect is None:
-        return TemplateFormatter(model_id=model_id)
-    return LLMONFormatter(model_id, dialect=dialect)
+    if is_llmon_model(model_id):
+        return LLMONFormatter(model_id)
+    return TemplateFormatter(model_id=model_id)
 
 
 class _LLMONMessage(Message):
@@ -186,17 +160,12 @@ class LLMONFormatter(ChatFormatter):
     message as it is, so they are declared in the message's `provider_fields` for that
     backend alone, and it is the only backend that takes this formatter: every other
     backend raises `ValueError` when given it or a registered LLMON model. `print`
-    raises for a turn with fields, since a single string cannot carry them.
+    raises for a turn with fields, since a single string cannot carry them. A reply
+    needs no extracting: `LocalHFBackend` decodes the generation without special
+    tokens, LLMON's among them, so the output's value is the model's text.
 
     Args:
         model_id (str | ModelIdentifier): The model the prompts are for.
-        dialect (LLMONDialect | None): The LLMON variant the model replies in.
-            Defaults to the dialect registered for `model_id`, else the converter
-            defaults.
-
-    Attributes:
-        dialect (LLMONDialect): The dialect in use, resolved from `model_id` when
-            none was given. Options it leaves unset take the converter's defaults.
 
     Example:
         ```python
@@ -210,16 +179,13 @@ class LLMONFormatter(ChatFormatter):
         ```
     """
 
-    def __init__(
-        self, model_id: str | ModelIdentifier, *, dialect: LLMONDialect | None = None
-    ):
-        """Initialize the formatter for a model and load the `llmon` converters.
+    def __init__(self, model_id: str | ModelIdentifier):
+        """Initialize the formatter for a model and load the `llmon` sanitizer.
 
         Raises:
             ImportError: If the `llmon` library is not installed.
         """
         try:
-            from llmon.lang.common import common
             from llmon.lang.json.llmon_converters import LLMONConverters
         except ImportError as e:
             raise ImportError(
@@ -228,45 +194,7 @@ class LLMONFormatter(ChatFormatter):
             ) from e
 
         self.model_id = model_id
-        self.dialect: LLMONDialect = (
-            dialect if dialect is not None else llmon_dialect_for(model_id)
-        ) or LLMONDialect()
-        self._converters = LLMONConverters
         self._sanitize: Callable[[str], str] = LLMONConverters().sanitize
-        # The converter options in effect: those the dialect sets, else the
-        # converter's own defaults.
-        defaults = inspect.signature(LLMONConverters).parameters
-        self._options: dict[str, bool] = {}
-        for field in dataclasses.fields(self.dialect):
-            value = getattr(self.dialect, field.name)
-            self._options[field.name] = (
-                defaults[field.name].default if value is None else value
-            )
-        self._markup = (
-            common.OPEN_TAG,
-            common.CLOSE_TAG,
-            common.OPEN_END_TAG,
-            common.SELF_CLOSE_TAG,
-        )
-        self._open_tag = common.OPEN_TAG
-        self._open_end_tag = common.OPEN_END_TAG
-        # The library keeps the raw separator in JSON keys, e.g. "assistant<|:|>12".
-        self._assistant_key_prefix = "assistant" + common.COLON_SEPARATOR_TAG
-        open_tag, close, open_end, colon = (
-            re.escape(tag)
-            for tag in (
-                common.OPEN_TAG,
-                common.CLOSE_TAG,
-                common.OPEN_END_TAG,
-                common.COLON_SEPARATOR_TAG,
-            )
-        )
-        # A complete assistant block, `<|open|>[data<|:|>]assistant[<|:|>ID]<|close|>
-        # TEXT <|open_end|>`, with an id of any characters; the group is the text.
-        self._assistant_block = re.compile(
-            f"{open_tag}(?:data{colon})?assistant(?:{colon}[^<]*)?{close}(.*?){open_end}",
-            re.DOTALL,
-        )
 
     def print(self, c: Span) -> str:
         """Render the text a turn is sent as.
@@ -362,59 +290,6 @@ class LLMONFormatter(ChatFormatter):
             )
         return messages
 
-    def parse_output(self, text: str) -> str:
-        """Extract the assistant's reply from a generation that may carry LLMON markup.
-
-        Text with no LLMON markup is returned unchanged. Otherwise the reply is,
-        trying each in turn: the `assistant` block (or the only block) of a
-        well-formed generation, as converted by the `llmon` library; the last
-        complete `assistant` block of a partial generation, since a served model can
-        start mid-structure or echo context before answering; and, in a dialect with
-        bare closers, the text before the closer that ends a generation which is the
-        rest of an `assistant` block the prompt opened (as the model's chat template
-        opens it), allowing only special tokens such as end-of-text after the closer.
-        When none applies, `text` is returned unchanged rather than stripped into
-        fragments. Tool calls the model wrote in its reply are part of the reply.
-
-        Args:
-            text (str): The generated text, exactly as the model returned it.
-
-        Returns:
-            str: The assistant's reply.
-        """
-        if not any(tag in text for tag in self._markup):
-            return text
-
-        try:
-            converter = self._converters(
-                converting_to_json=True,
-                no_openend_tagname=self._options["no_openend_tagname"],
-            )
-            reply = self._assistant_value(
-                json.loads(converter.llmon_str_to_json_str(text))
-            )
-        except (Exception, SystemExit):
-            # The converter is strict, so a partial or garbled generation raises; the
-            # `llmon` library reports malformed markup with `sys.exit`.
-            reply = None
-        if reply is not None:
-            return reply
-
-        blocks = self._assistant_block.findall(text)
-        if blocks:
-            return blocks[-1]
-
-        if self._options["no_openend_tagname"]:
-            head, closer, tail = text.partition(self._open_end_tag)
-            if (
-                closer
-                and head.strip()
-                and self._open_tag not in head
-                and _ONLY_SPECIAL_TOKENS.fullmatch(tail)
-            ):
-                return head
-        return text
-
     def _turn(self, c: Span) -> _Turn:
         """Resolve one turn's role, sanitized text, and chat template fields."""
         if isinstance(c, ModelOutputThunk):
@@ -461,7 +336,8 @@ class LLMONFormatter(ChatFormatter):
     def _instruction_turn(self, rep: TemplateRepresentation) -> _Turn:
         """Map an instruction's args onto the chat template's user-message fields.
 
-        Every grounding-context value is a `data` item, a `Document` as its text alone.
+        Every grounding-context value is a `data` item labeled with its key, as
+        `key: value`; a `Document` is its text alone, without its title.
         """
         args = cast(dict[str, Any], rep.args)
         if _plain_text(args.get("output_prefix")):
@@ -477,10 +353,11 @@ class LLMONFormatter(ChatFormatter):
             )
             if text
         )
-        grounding = [
-            value.text if isinstance(value, Document) else value
-            for value in (args.get("grounding_context") or {}).values()
-        ]
+        grounding = []
+        for key, value in (args.get("grounding_context") or {}).items():
+            text = _plain_text(value.text if isinstance(value, Document) else value)
+            if text:
+                grounding.append(f"{key}: {text}")
         fields = {
             "instruction": self._items([args.get("repair")]),
             "data": self._items([*(args.get("icl_examples") or []), *grounding]),
@@ -503,21 +380,6 @@ class LLMONFormatter(ChatFormatter):
         item["text"] = self._sanitize(document.text or "")
         item["exec"] = True
         return item
-
-    def _assistant_value(self, parsed: object) -> str | None:
-        """Return the assistant block's value from the converter's JSON, if any."""
-        if isinstance(parsed, str):
-            return parsed
-        if not isinstance(parsed, dict):
-            return None
-        for key, value in parsed.items():
-            if key == "assistant" or key.startswith(self._assistant_key_prefix):
-                return _as_text(value)
-        if len(parsed) == 1:
-            # A reply that is a single block of another tag is that block's value.
-            (value,) = parsed.values()
-            return _as_text(value)
-        return None
 
 
 def _representation(component: Component) -> TemplateRepresentation:
@@ -549,9 +411,9 @@ def _plain_text(value: object) -> str:
             return value.value or ""
         case Component():
             raise TypeError(
-                f"LLMONFormatter cannot send a {type(value).__name__} inside an "
-                "instruction to an LLMON model; only text, content blocks, model "
-                "outputs, and documents can be sent."
+                f"LLMONFormatter cannot send a {type(value).__name__} in this part "
+                "of an instruction to an LLMON model: only text, content blocks, and "
+                "model outputs can be sent, and documents in the grounding context."
             )
         case _:
             return str(value)
@@ -577,11 +439,6 @@ def _with_template_fields(
         **fields,
     }
     return merged
-
-
-def _as_text(value: object) -> str:
-    """Return a converted block's value as text, as JSON if it is structured."""
-    return value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
 
 
 def _move_written_tool_calls(

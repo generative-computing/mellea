@@ -7,8 +7,8 @@ fields that only `LocalHFBackend` passes on, so LLMON runs on that backend alone
 other backends raise `ValueError` for an LLMON model. Because the model is a
 registered LLMON model, `LocalHFBackend` renders with `LLMONFormatter` by default:
 the instruction's grounding context reaches the model as a `data` block of its own,
-and the reply is extracted back to plain text, which becomes the thunk's `value`. The
-text the model generated is kept on `thunk.raw.text`.
+labeled with its key. The backend decodes the reply without special tokens, so the
+thunk's `value` is the model's text, with no LLMON markup.
 
 Requires the `hf` and `llmon` extras (`pip install "mellea[hf,llmon]"`) and access to
 the model on Hugging Face. Its float32 weights take about 14 GB.
@@ -33,7 +33,7 @@ def summarize_feedback(text: str) -> str:
         grounding_context={"feedback": text},
     )
 
-    # For an LLMON model, value is the extracted reply (never markup).
+    # The reply is decoded without special tokens, so value is plain text.
     return thunk.value
 
 

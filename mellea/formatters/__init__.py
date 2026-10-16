@@ -15,13 +15,12 @@ for your chosen model, or let the backend choose one with `default_formatter`.
 # Import from core for ergonomics.
 from ..core import Formatter
 from .chat_formatter import ChatFormatter
-from .llmon_formatter import LLMONDialect, LLMONFormatter, default_formatter
+from .llmon_formatter import LLMONFormatter, default_formatter
 from .template_formatter import TemplateFormatter
 
 __all__ = [
     "ChatFormatter",
     "Formatter",
-    "LLMONDialect",
     "LLMONFormatter",
     "TemplateFormatter",
     "default_formatter",

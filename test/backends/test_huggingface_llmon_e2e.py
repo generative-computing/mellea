@@ -100,11 +100,11 @@ def test_instruction_answers_from_its_grounding_context(backend, session):
         sent, tokenize=False, add_generation_prompt=True
     )
     assert isinstance(prompt, str)
-    print(f"\n{prompt}\n\n{answer.value}")
     # One instruction block, the template's own, with no LLMON nested inside it; the
     # grounding context and the requirement are blocks of their own.
     assert prompt.count("<|open|>instr") == 1
-    assert re.search(_BLOCK.format(tag="data", text=re.escape(grounding)), prompt)
+    labeled = f"codes: {grounding}"
+    assert re.search(_BLOCK.format(tag="data", text=re.escape(labeled)), prompt)
     assert re.search(
         _BLOCK.format(tag="req", text="Answer with the code only\\."), prompt
     )
@@ -143,7 +143,6 @@ async def test_judge_verdict_matches_the_output(backend, summary, meets):
         sent, tokenize=False, add_generation_prompt=True
     )
     assert isinstance(prompt, str)
-    print(f"\n{prompt}\n\n{verdict.thunk.value}")
     # The judge's turn: the output and the requirement are data, not a `req` block,
     # which would constrain the judge's own reply.
     judge_turn = prompt[prompt.rfind("<|open|>instr") :]
@@ -170,7 +169,6 @@ def test_missed_requirement_is_repaired(session):
         model_options={ModelOption.MAX_NEW_TOKENS: 120},
     )
     attempts = [g.value or "" for g in result.sample_generations]
-    print(f"\n{attempts}")
 
     def meets(text: str) -> bool:
         lowered = text.lower()
@@ -233,7 +231,6 @@ def test_tool_call_round_trip_answers_from_the_tool_result(backend, session):
         add_generation_prompt=True,
     )
     assert isinstance(prompt, str)
-    print(f"\n{prompt}\n\n{answer.value}")
     assert prompt.count("<tool_call>") == 1
     assert f"<tool_response>{_CODE}</tool_response>" in prompt
 

@@ -836,7 +836,6 @@ class LiteLLMBackend(FormatterBackend):
             )
             output.generation.model = self._model_id
             output.generation.provider = self._provider
-            self._finalize_output(output)
 
             output.parsed_repr = (
                 action.parse(output) if isinstance(action, Component) else output.value

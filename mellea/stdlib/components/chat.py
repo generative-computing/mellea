@@ -216,14 +216,6 @@ class Message(Component["Message"]):
         provider = computed.raw.provider
         response = computed.raw.response
 
-        def _content(provider_content: str) -> str:
-            # When the backend's formatter extracted the response from the generated
-            # text (e.g. stripping LLMON markup), `raw.text` holds the original and the
-            # provider's message content still matches it; use the extracted `value`.
-            if computed.raw.text is not None and computed.value is not None:
-                return computed.value
-            return provider_content
-
         if computed.tool_calls is not None:
             # A tool was successfully requested.
             # Assistant responses for tool calling differ by backend. Preserve
@@ -243,7 +235,7 @@ class Message(Component["Message"]):
                 )
                 return Message(
                     role=response.message.role,
-                    content=_content(getattr(response.message, "content", "") or ""),
+                    content=getattr(response.message, "content", "") or "",
                     tool_calls=tool_calls,
                     thinking=thinking,
                 )
@@ -261,7 +253,7 @@ class Message(Component["Message"]):
                 thinking = computed.thinking if msg["role"] == "assistant" else None
                 return Message(
                     role=msg["role"],
-                    content=_content(msg.get("content") or ""),
+                    content=msg.get("content") or "",
                     tool_calls=msg.get("tool_calls") or None,
                     thinking=thinking,
                 )
@@ -282,13 +274,13 @@ class Message(Component["Message"]):
             )
             return Message(
                 role=response.message.role,
-                content=_content(response.message.content),
+                content=response.message.content,
                 thinking=thinking,
             )
         if provider in ("openai", "watsonx", "litellm") and isinstance(response, dict):
             msg = response["choices"][0].get("message", {})
             role = msg.get("role", "assistant")
-            content = _content(msg.get("content") or "")
+            content = msg.get("content") or ""
             thinking = computed.thinking if role == "assistant" else None
             return Message(role=role, content=content, thinking=thinking)
 

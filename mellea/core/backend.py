@@ -187,21 +187,7 @@ class Backend(abc.ABC):
             raise
         # Save the ID for the post_call / error hooks.
         mot._call.generation_id = generation_id
-        mot._gen.finalize = self._finalize_output
         return mot, new_ctx
-
-    def _finalize_output(self, mot: ModelOutputThunk) -> None:
-        """Finalize a completed generation's `value` before it is parsed.
-
-        Runs once per generation, after the backend's post-processing and before the
-        originating action parses the output. The default does nothing;
-        `FormatterBackend` uses it to have its formatter extract the response from
-        the generated text.
-
-        Args:
-            mot: The just-completed model output.
-        """
-        return None
 
     @abc.abstractmethod
     async def _generate_from_context(

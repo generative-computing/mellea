@@ -1,6 +1,6 @@
 ---
 title: "LLMON (LLM Object Notation)"
-description: "How Mellea talks to an LLMON-trained model: LLMONFormatter sends each part of a component in the message fields the model's chat template turns into LLMON, and extracts the model's reply into the output's value."
+description: "How Mellea talks to an LLMON-trained model: LLMONFormatter sends each part of a component in the message fields the model's chat template turns into LLMON."
 # diataxis: explanation
 sidebar_label: "LLMON"
 ---
@@ -11,7 +11,7 @@ text to a language model — for example, distinguishing instructions from data 
 reduce prompt-injection risk. Mellea can talk to a model that has been trained on
 LLMON without the developer hand-building any markup: `LLMONFormatter` sends each
 part of a Mellea component in the message fields the model's chat template turns
-into LLMON, and extracts the model's reply on the way out.
+into LLMON.
 
 ## Where the LLMONizing happens
 
@@ -73,8 +73,8 @@ wires every item into the turn's `exec` block (each is sent with `"exec": True`)
   adds after a failed check) is a further `instruction` item, each requirement a
   `requirement` item, and each in-context example and grounding-context value a
   `data` item. A `Document` in the grounding context is a `data` item too, sent as
-  its text alone, without its title.
-  Grounding-context labels are not sent, since a `data` block has no name. An
+  its text alone, without its title. Each grounding-context value is labeled with
+  its key, as `key: value`, so the model can tell the values apart. An
   instruction with an `output_prefix` raises `ValueError`, since the template cannot
   start the reply with one.
 - **Message:** its content, plus a user message's documents as `documents` items.
@@ -117,7 +117,7 @@ with these fields:
 
 ```python
 {
-    "data": [{"value": "Loved it, but shipping was slow.", "exec": True}],
+    "data": [{"value": "review: Loved it, but shipping was slow.", "exec": True}],
     "requirement": [{"value": "Mention the shipping.", "exec": True}],
 }
 ```
@@ -127,7 +127,7 @@ The granite LLMON preview models' chat template renders that message as follows
 
 ```text
 <|open|>instr<|:|>ID<|close|>Summarise the review in one sentence.<|open_end|>
-<|open|>data<|:|>ID<|close|>Loved it, but shipping was slow.<|open_end|>
+<|open|>data<|:|>ID<|close|>review: Loved it, but shipping was slow.<|open_end|>
 <|open|>req<|:|>ID<|close|>Mention the shipping.<|open_end|>
 <|open|>exec<|:|>ID<|close|>
 <|open|>exec<|.|>instruction<|close|>instr<|:|>ID<|open_end|>
@@ -156,20 +156,11 @@ other special tokens, such as end-of-text, are left as they are.
 
 ## What comes back
 
-When a generation completes, the backend has `LLMONFormatter.parse_output`
-extract the reply. The chat template's prompt ends by opening the `assistant`
-block, so a reply is normally the model's text followed by the block's closer (and
-end-of-text), which is dropped. A reply that opens its own `assistant` block yields
-that block's text — the last complete one, if the model starts mid-structure or
-echoes context before answering. Text without markup is kept as it is, and a
-tool call the model wrote stays part of the reply, where the backend finds it.
-
-The reply becomes the output's `value`, and the `Message` a chat turn is parsed
-into carries the same text, so `print(result)`, validation functions, the
-component's own parsing, and the next turn's history all see plain text. The text
-the model generated is kept on `result.raw.text` whenever extraction changed it.
-Streamed deltas from `astream()` are slices of the generated text, so they can
-contain markup until the output is complete.
+The chat template's prompt ends by opening the `assistant` block, so the model's
+reply is its text, then the block's closer and end-of-text. `LocalHFBackend` decodes
+a generation without special tokens, LLMON's among them, so the output's `value` is
+the reply text itself, with no markup to extract. A tool call the model wrote stays
+part of the reply, where the backend finds it.
 
 Structured output works as usual: `format=` is passed to the backend unchanged. A
 `@generative` function is a component of its own, so `LLMONFormatter` raises for it.
@@ -192,25 +183,10 @@ Use `MultiTurnStrategy` or `RepairTemplateStrategy` for an LLMON model. The judg
 unreliable on requirements it has to count (an exact number of words, how often a
 word appears), so check those with a validation function instead.
 
-## LLMON dialects
-
-Replies are read with the `llmon` library's converter defaults, the LLMON format
-recommended for Mellea, in which each block is closed by a bare `<|open_end|>`. For a
-model whose replies close blocks by repeating their tag name, pass an `LLMONDialect`
-that says so; a registered model uses its registered dialect:
-
-```python
-from mellea.formatters import LLMONDialect, LLMONFormatter
-
-formatter = LLMONFormatter(
-    "my-llmon-model", dialect=LLMONDialect(no_openend_tagname=False)
-)
-```
-
 ## The `llmon` library dependency
 
 `LLMONFormatter` uses the `llmon` converter library (`llmon.lang`) to sanitize
-content and read replies. It is an optional dependency:
+content. It is an optional dependency:
 
 ```bash
 pip install "mellea[llmon]"

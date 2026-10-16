@@ -15,9 +15,9 @@ from enum import Enum
 from typing import ClassVar
 from urllib.parse import urlparse
 
-from ..core import Backend, ModelOutputThunk
+from ..core import Backend
 from ..formatters import ChatFormatter, LLMONFormatter
-from ..formatters.llmon_formatter import llmon_dialect_for
+from ..formatters.llmon_formatter import is_llmon_model
 from .model_ids import ModelIdentifier
 
 
@@ -67,7 +67,7 @@ class FormatterBackend(Backend, abc.ABC):
                     f"{backend}: the LLMON chat template reads a turn's parts from "
                     "message fields that other backends do not pass on."
                 )
-            if llmon_dialect_for(model_id) is not None:
+            if is_llmon_model(model_id):
                 raise ValueError(
                     f"{model_id!r} is an LLMON model, which only LocalHFBackend "
                     f"supports, not {backend}: the LLMON chat template reads a turn's "
@@ -77,20 +77,3 @@ class FormatterBackend(Backend, abc.ABC):
         self.model_options = model_options if model_options is not None else {}
         self.formatter: ChatFormatter = formatter
         self._warned_about: set[str] = set()
-
-    def _finalize_output(self, mot: ModelOutputThunk) -> None:
-        """Replace `mot.value` with the response the formatter extracts from it.
-
-        When extraction changes the text, the generated text is kept on
-        `mot.raw.text`.
-
-        Args:
-            mot: The just-completed model output.
-        """
-        generated = mot.value
-        if generated is None:
-            return
-        response = self.formatter.parse_output(generated)
-        if response != generated:
-            mot.raw.text = generated
-            mot.value = response

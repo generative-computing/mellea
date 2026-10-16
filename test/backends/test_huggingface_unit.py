@@ -49,6 +49,7 @@ from mellea.backends.adapters.adapter import (
 from mellea.backends.adapters.catalog import IntrinsicsCatalogEntry
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.core import ModelOutputThunk
+from mellea.formatters import LLMONFormatter, TemplateFormatter
 from mellea.formatters.granite.base.util import (
     chat_completion_request_to_transformers_inputs,
 )
@@ -100,7 +101,10 @@ _MULTIMODAL_CASES = [
 ]
 
 
-def _make_backend(eos_token_id: int | list[int] = 0) -> LocalHFBackend:
+def _make_backend(
+    eos_token_id: int | list[int] = 0,
+    model_id: str = "ibm-granite/granite-3.3-8b-instruct",
+) -> LocalHFBackend:
     mock_tok = MagicMock(eos_token_id=eos_token_id, vocab_size=32000)
     mock_tok._tokenizer = MagicMock()
     mock_tok._tokenizer.get_vocab_size.return_value = 32000
@@ -112,9 +116,22 @@ def _make_backend(eos_token_id: int | list[int] = 0) -> LocalHFBackend:
     ):
         mock_llg.hf.from_tokenizer.return_value = MagicMock(vocab_size=32000)
         return LocalHFBackend(
-            model_id="ibm-granite/granite-3.3-8b-instruct",
-            custom_config=(mock_tok, mock_model, torch.device("cpu")),
+            model_id=model_id, custom_config=(mock_tok, mock_model, torch.device("cpu"))
         )
+
+
+def test_llmon_model_defaults_to_the_llmon_formatter():
+    pytest.importorskip(
+        "llmon.lang.json.llmon_converters", reason='install "mellea[llmon]"'
+    )
+    backend = _make_backend(model_id="ibm-granite/granite-4.1-3b-llmon-preview")
+    assert isinstance(backend.formatter, LLMONFormatter)
+
+
+def test_other_models_default_to_the_template_formatter():
+    backend = _make_backend()
+    assert isinstance(backend.formatter, TemplateFormatter)
+    assert not isinstance(backend.formatter, LLMONFormatter)
 
 
 @pytest.mark.parametrize(
@@ -2766,7 +2783,6 @@ async def test_generate_from_raw_logits_sliced_per_item():
         patch.object(backend, "formatter") as mock_fmt,
     ):
         mock_fmt.print = MagicMock(return_value="prompt")
-        mock_fmt.parse_output = MagicMock(side_effect=lambda text: text)
         results = await backend.generate_from_raw(
             actions, MagicMock(), model_options={ModelOption.LOGITS: True}
         )
@@ -2830,7 +2846,6 @@ async def test_generate_from_raw_logits_not_set_when_option_absent():
         patch.object(backend, "formatter") as mock_fmt,
     ):
         mock_fmt.print = MagicMock(return_value="prompt")
-        mock_fmt.parse_output = MagicMock(side_effect=lambda text: text)
         results = await backend.generate_from_raw(
             [Message("user", "hi")], MagicMock(), model_options={}
         )
@@ -3803,7 +3818,6 @@ async def test_generate_from_raw_raw_response_set_per_mot():
         patch.object(backend, "formatter") as mock_fmt,
     ):
         mock_fmt.print = MagicMock(return_value="prompt")
-        mock_fmt.parse_output = MagicMock(side_effect=lambda text: text)
         results = await backend.generate_from_raw(
             actions, MagicMock(), model_options={}
         )
@@ -3872,7 +3886,6 @@ async def test_generate_from_raw_raw_response_scores_are_clones_when_logits_requ
         patch.object(backend, "formatter") as mock_fmt,
     ):
         mock_fmt.print = MagicMock(return_value="prompt")
-        mock_fmt.parse_output = MagicMock(side_effect=lambda text: text)
         results = await backend.generate_from_raw(
             actions, MagicMock(), model_options={ModelOption.LOGITS: True}
         )
@@ -3927,7 +3940,6 @@ async def test_generate_from_raw_raw_response_scores_none_when_logits_not_reques
         patch.object(backend, "formatter") as mock_fmt,
     ):
         mock_fmt.print = MagicMock(return_value="prompt")
-        mock_fmt.parse_output = MagicMock(side_effect=lambda text: text)
         results = await backend.generate_from_raw(
             [Message("user", "hi")], MagicMock(), model_options={}
         )
@@ -3971,7 +3983,6 @@ async def test_generate_from_raw_raw_response_none_for_non_tensor_sequences():
         patch.object(backend, "formatter") as mock_fmt,
     ):
         mock_fmt.print = MagicMock(return_value="prompt")
-        mock_fmt.parse_output = MagicMock(side_effect=lambda text: text)
         results = await backend.generate_from_raw(
             cast(Any, actions), MagicMock(), model_options={}
         )
@@ -4017,7 +4028,6 @@ async def test_generate_from_raw_raw_response_none_for_beam_outputs():
         patch.object(backend, "formatter") as mock_fmt,
     ):
         mock_fmt.print = MagicMock(return_value="prompt")
-        mock_fmt.parse_output = MagicMock(side_effect=lambda text: text)
         results = await backend.generate_from_raw(
             cast(Any, actions), MagicMock(), model_options={}
         )

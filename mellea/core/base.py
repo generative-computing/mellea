@@ -1063,15 +1063,11 @@ class RawProviderResponse:
         response: Full SDK response object. Shape depends on `provider`.
         streamed_chunks: Per-chunk SDK objects from streaming responses.
             `None` for non-streaming requests.
-        text: The text the model generated, when the backend's formatter extracted
-            a different `mot.value` from it (e.g. `LLMONFormatter` stripping LLMON
-            markup). `None` when `mot.value` is the generated text itself.
     """
 
     provider: str | None = None
     response: Any | None = None
     streamed_chunks: list[Any] | None = None
-    text: str | None = None
 
 
 @dataclass
@@ -1127,9 +1123,6 @@ class _GenerationState:
             `None` — each computation owns its own thread signal.
         process: Backend coroutine that folds a streamed chunk into the thunk.
         post_process: Backend coroutine run once after the value is complete.
-        finalize: Backend callable run once after `post_process` and before the
-            output is parsed, to replace the generated text in `value` with the
-            response extracted from it.
         on_computed: Coroutine run when the thunk becomes computed.
         start: Wall-clock start time of generation, for latency metrics.
         chunk_intervals: Per-chunk receipt intervals in milliseconds (`None` for
@@ -1148,7 +1141,6 @@ class _GenerationState:
     cancel_hook: Callable[[], None] | None = None
     process: Callable[[ModelOutputThunk, Any], Coroutine] | None = None
     post_process: Callable[[ModelOutputThunk], Coroutine] | None = None
-    finalize: Callable[[ModelOutputThunk], None] | None = None
     on_computed: Callable[[ModelOutputThunk], Coroutine] | None = None
     start: datetime.datetime | None = None
     chunk_intervals: deque[float | None] = field(default_factory=deque)
@@ -1567,19 +1559,12 @@ class ModelOutputThunk(Generic[S]):
                 )
             self._gen.processed_chunk_index += 1
 
-        streamed = self._underlying_value
         if do_set_computed:
             assert self._underlying_value is not None
             self._computed = True
 
             assert self._gen.post_process is not None
             await self._gen.post_process(self)
-
-            # Deltas are slices of the generated text, so take the last one before
-            # `finalize` replaces `value` with the response extracted from it.
-            streamed = self._underlying_value
-            if self._gen.finalize is not None:
-                self._gen.finalize(self)
 
             self._set_parsed_repr()
             assert self.parsed_repr is not None, (
@@ -1606,7 +1591,9 @@ class ModelOutputThunk(Generic[S]):
                 #     self._copy_from(replacement)
 
         return (
-            streamed if beginning_length == 0 else streamed[beginning_length:]  # type: ignore
+            self._underlying_value
+            if beginning_length == 0
+            else self._underlying_value[beginning_length:]  # type: ignore
         )
 
     def __aiter__(self) -> ModelOutputThunk[S]:

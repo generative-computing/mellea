@@ -1366,7 +1366,6 @@ class OllamaModelBackend(FormatterBackend, AdapterMixin):
             result.generation.usage = per_mot_usage
             result.generation.model = self._model_id
             result.generation.provider = self._provider
-            self._finalize_output(result)
 
             action = actions[i]
             result.parsed_repr = (

@@ -149,7 +149,6 @@ async def _drive(
         patch.object(backend, "formatter") as mock_fmt,
     ):
         mock_fmt.print = MagicMock(return_value="prompt")
-        mock_fmt.parse_output = MagicMock(side_effect=lambda text: text)
         return await backend.generate_from_raw(
             actions, MagicMock(), model_options=model_options or {}
         )
