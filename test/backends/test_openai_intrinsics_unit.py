@@ -821,6 +821,39 @@ async def test_response_format_sent_alongside_structured_outputs():
     }
 
 
+async def test_user_structured_outputs_drives_response_format():
+    """A caller's `extra_body.structured_outputs` override is the schema mirrored."""
+    backend = _make_backend_with_adapter(
+        {**_SIMPLE_CONFIG, "response_format": _ANSWERABILITY_SCHEMA}
+    )
+    mock_create = AsyncMock(return_value=_simple_chat_completion('"yes"'))
+
+    mock_client = MagicMock()
+    mock_client.chat.completions.create = mock_create
+
+    caller_schema = {"type": "string", "enum": ["yes", "no"]}
+    with patch.object(
+        OpenAIBackend,
+        "_async_client",
+        new_callable=PropertyMock,
+        return_value=mock_client,
+    ):
+        mot, _ = await mfuncs.aact(
+            Intrinsic("answerability"),
+            _make_context(),
+            backend,
+            strategy=None,
+            model_options={
+                "extra_body": {"structured_outputs": {"json": caller_schema}}
+            },
+        )
+        await mot.avalue()
+
+    call_kwargs = mock_create.call_args.kwargs
+    assert call_kwargs["extra_body"]["structured_outputs"] == {"json": caller_schema}
+    assert call_kwargs["response_format"]["json_schema"]["schema"] == caller_schema
+
+
 async def test_user_response_format_not_overwritten():
     """A caller-supplied `response_format` wins over the io.yaml schema."""
     backend = _make_backend_with_adapter(
