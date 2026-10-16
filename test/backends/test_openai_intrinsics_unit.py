@@ -245,6 +245,8 @@ async def test_chat_template_kwargs_set():
     # No documents in the context means no mirror: an empty documents list is
     # falsy in the chat template too, so mirroring it would change nothing.
     assert "documents" not in extra_body["chat_template_kwargs"]
+    # No io.yaml response_format means no schema to send.
+    assert "response_format" not in call_kwargs.kwargs
 
 
 async def test_composed_adapter_drives_generate_from_intrinsic():
@@ -777,6 +779,75 @@ async def test_user_chat_template_kwargs_documents_not_overwritten():
     # context, not the caller's override.
     assert extra_body["documents"] == [{"text": "The square root of 4 is 2."}]
     assert extra_body["chat_template_kwargs"]["adapter_name"] == "answerability"
+
+
+_ANSWERABILITY_SCHEMA = {"type": "string", "enum": ["answerable", "unanswerable"]}
+
+
+async def test_response_format_sent_alongside_structured_outputs():
+    """The io.yaml schema rides in `response_format` as well as `structured_outputs`.
+
+    `structured_outputs` is vLLM's own field; llama-server ignores it and only
+    constrains decoding from the OpenAI-standard `response_format`, so without
+    this every adapter runs unconstrained there.
+    """
+    backend = _make_backend_with_adapter(
+        {**_SIMPLE_CONFIG, "response_format": _ANSWERABILITY_SCHEMA}
+    )
+    mock_create = AsyncMock(return_value=_simple_chat_completion('"answerable"'))
+
+    mock_client = MagicMock()
+    mock_client.chat.completions.create = mock_create
+
+    with patch.object(
+        OpenAIBackend,
+        "_async_client",
+        new_callable=PropertyMock,
+        return_value=mock_client,
+    ):
+        mot, _ = await mfuncs.aact(
+            Intrinsic("answerability"), _make_context(), backend, strategy=None
+        )
+        await mot.avalue()
+
+    call_kwargs = mock_create.call_args.kwargs
+    assert call_kwargs["response_format"] == {
+        "type": "json_schema",
+        "json_schema": {"name": "answerability", "schema": _ANSWERABILITY_SCHEMA},
+    }
+    # vLLM's own field is untouched.
+    assert call_kwargs["extra_body"]["structured_outputs"] == {
+        "json": _ANSWERABILITY_SCHEMA
+    }
+
+
+async def test_user_response_format_not_overwritten():
+    """A caller-supplied `response_format` wins over the io.yaml schema."""
+    backend = _make_backend_with_adapter(
+        {**_SIMPLE_CONFIG, "response_format": _ANSWERABILITY_SCHEMA}
+    )
+    mock_create = AsyncMock(return_value=_simple_chat_completion('"answerable"'))
+
+    mock_client = MagicMock()
+    mock_client.chat.completions.create = mock_create
+
+    caller_format = {"type": "json_object"}
+    with patch.object(
+        OpenAIBackend,
+        "_async_client",
+        new_callable=PropertyMock,
+        return_value=mock_client,
+    ):
+        mot, _ = await mfuncs.aact(
+            Intrinsic("answerability"),
+            _make_context(),
+            backend,
+            strategy=None,
+            model_options={"response_format": caller_format},
+        )
+        await mot.avalue()
+
+    assert mock_create.call_args.kwargs["response_format"] == caller_format
 
 
 async def test_user_extra_body_cannot_override_embedded_adapter():

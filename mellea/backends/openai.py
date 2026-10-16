@@ -1015,8 +1015,10 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         injects `intrinsic_name` into `chat_template_kwargs` so that the
         Granite Switch chat template activates the correct adapter, mirrors
         `documents` into `chat_template_kwargs` so servers without a
-        first-class documents field still render them, and post-processes
-        the model output through the intrinsic's result processor.
+        first-class documents field still render them, sends the io.yaml
+        schema as `response_format` as well as vLLM's `structured_outputs`
+        so every server constrains decoding, and post-processes the model
+        output through the intrinsic's result processor.
 
         Intrinsics default to options provided by `io.yaml`. Model options
         override these defaults. All model options besides streaming are
@@ -1205,6 +1207,24 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             if "documents" not in kwargs:
                 kwargs["documents"] = documents
                 extra_body["chat_template_kwargs"] = kwargs
+
+        # The same split applies to constrained decoding: the io.yaml schema
+        # arrives as vLLM's own `structured_outputs` field, which llama-server
+        # ignores, so adapters would decode unconstrained there. Also send it
+        # as the OpenAI-standard `response_format`, which both servers honour;
+        # vLLM folds it back into the same `structured_outputs.json`. A
+        # caller's own `response_format` wins.
+        structured_outputs = extra_body.get("structured_outputs")
+        schema = (
+            structured_outputs.get("json")
+            if isinstance(structured_outputs, dict)
+            else None
+        )
+        if isinstance(schema, dict) and "response_format" not in api_params:
+            api_params["response_format"] = {
+                "type": "json_schema",
+                "json_schema": {"name": action.intrinsic_name, "schema": schema},
+            }
 
         # Embedded adapters activate via control tokens in the chat template;
         # the binding owns the final request edit so callers cannot override
