@@ -1044,11 +1044,12 @@ class FirstTokenChoice(TransformationRule):
             chat_completion (ChatCompletion | None): Unused.
 
         Returns:
-            dict[str, object]: `{"token": <sampled top-1 token>,
-            "label_logprobs": {<label>: <logprob> for pool labels found
-            among the returned logprobs}, "min_returned_logprob": <smallest
-            logprob across all returned tokens>, "labels": <the configured
-            label pool>}`. Logprobs are raw (full vocabulary); the caller
+            dict[str, object]: A dict with the sampled top-1 token under
+            `"token"`, each pool label found among the returned logprobs
+            mapped to its logprob under `"label_logprobs"`, the smallest
+            logprob across all returned tokens under
+            `"min_returned_logprob"`, and the configured label pool under
+            `"labels"`. Logprobs are raw (full vocabulary); the caller
             renormalizes over the used labels and checks the configured
             pool covers them.
 

@@ -137,8 +137,11 @@ class _DecisionContract(IOContract):
 
     Expected shape (the `first_token` transformation rule's output, as it
     reaches `call_intrinsic` through the result processor's JSON round-trip):
-    `{"token": <str>, "label_logprobs": {<label>: <float>},
-    "min_returned_logprob": <float>, "labels": [<str>, ...]}`.
+    a dict holding the sampled top-1 token (`"token"`), a mapping of each
+    pool label found among the returned logprobs to its logprob
+    (`"label_logprobs"`), the smallest logprob across all returned tokens
+    (`"min_returned_logprob"`), and the configured label pool
+    (`"labels"`).
     `label_logprobs` carries raw (full-vocabulary) logprobs and may be
     empty or partial; the caller's label-mass check decides whether the
     distribution is usable. `labels` is the capability's configured label
