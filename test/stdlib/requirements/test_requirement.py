@@ -460,5 +460,23 @@ async def test_alora_validate_surfaces_schema_mismatch_as_error(mock_intrinsic_i
     assert bool(result) is False
 
 
+@pytest.mark.parametrize(("score", "expected"), [(0.98, True), (0.1, False)])
+@patch("mellea.stdlib.requirements.requirement.Intrinsic.__init__")
+async def test_rerouted_plain_requirement_follows_adapter_score(
+    mock_intrinsic_init, score, expected
+):
+    """A plain `Requirement` rerouted to the adapter passes or fails by the adapter's score."""
+    mock_intrinsic_init.return_value = None
+    thunk = ModelOutputThunk(json.dumps({"requirement_check": {"score": score}}))
+    backend = MagicMock()
+    backend.generate_from_context = AsyncMock(
+        return_value=(thunk, ctx.add(ALoraRequirement("must be valid")).add(thunk))
+    )
+
+    result = await Requirement("must be valid").validate(backend, ctx=ctx)
+
+    assert bool(result) is expected
+
+
 if __name__ == "__main__":
     pytest.main([__file__])
