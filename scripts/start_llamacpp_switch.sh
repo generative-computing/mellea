@@ -69,6 +69,7 @@ BUILD_CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/mellea/llamacpp-switch-build"
 GGUF="$BUILD_CACHE/$(basename "$LLAMACPP_SWITCH_MODEL")-$LLAMACPP_SWITCH_QUANT.gguf"
 BASE_URL="http://${LLAMACPP_SWITCH_HOST}:${LLAMACPP_SWITCH_PORT}/v1"
 SERVER_PID=""
+INTERRUPTED=""
 
 # --- Preflight -------------------------------------------------------------
 if [[ -z "$LLAMACPP_BIN" ]]; then
@@ -97,6 +98,16 @@ fi
 stop_server() {
     if [[ -n "$SERVER_PID" ]] && kill -0 "$SERVER_PID" 2>/dev/null; then
         log "Shutting down llama-server (PID $SERVER_PID)..."
+        # A terminal Ctrl-C reaches the whole process group, so after a signal
+        # llama-server is usually shutting down already. A second signal makes
+        # it terminate immediately, which can trip a Metal teardown assert, so
+        # give it a few seconds to exit on its own before sending one.
+        if [[ -n "$INTERRUPTED" ]]; then
+            for _ in 1 2 3 4 5; do
+                kill -0 "$SERVER_PID" 2>/dev/null || break
+                sleep 1
+            done
+        fi
         kill "$SERVER_PID" 2>/dev/null || true
         wait "$SERVER_PID" 2>/dev/null || true
         log "llama-server stopped."
@@ -105,8 +116,8 @@ stop_server() {
 }
 trap 'stop_server; rm -f "$GGUF.partial"' EXIT
 # Route signal kills through the EXIT trap so the server is always torn down.
-trap 'exit 130' INT
-trap 'exit 143' TERM
+trap 'INTERRUPTED=1; exit 130' INT
+trap 'INTERRUPTED=1; exit 143' TERM
 
 # --- Convert the checkpoint to GGUF (once) ---------------------------------
 if [[ ! -f "$GGUF" ]]; then
