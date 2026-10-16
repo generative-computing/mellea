@@ -316,7 +316,11 @@ class TestFromHub:
 
         mock_dl.assert_called_once_with(
             repo_id="ibm-granite/granite-switch-micro",
-            allow_patterns=["adapter_index.json", "io_configs/**"],
+            allow_patterns=[
+                "adapter_index.json",
+                "io_configs/**",
+                "chat_template.jinja",
+            ],
             cache_dir=str(cache_dir),
             revision="test-rev",
         )
@@ -335,7 +339,11 @@ class TestFromHub:
 
         mock_dl.assert_called_once_with(
             repo_id="ibm-granite/granite-switch-micro",
-            allow_patterns=["adapter_index.json", "io_configs/**"],
+            allow_patterns=[
+                "adapter_index.json",
+                "io_configs/**",
+                "chat_template.jinja",
+            ],
             cache_dir=str(cache_dir),
             revision="main",
         )
@@ -514,7 +522,11 @@ class TestFromSource:
             )
         mock_dl.assert_called_once_with(
             repo_id="ibm-granite/granite-switch-micro",
-            allow_patterns=["adapter_index.json", "io_configs/**"],
+            allow_patterns=[
+                "adapter_index.json",
+                "io_configs/**",
+                "chat_template.jinja",
+            ],
             cache_dir="/tmp/cache",
             revision="v2",
         )

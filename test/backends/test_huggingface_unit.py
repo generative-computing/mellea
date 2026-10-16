@@ -2191,7 +2191,7 @@ def test_register_embedded_adapter_model_refused_duplicate_does_not_clobber_cach
     first_config = {"version": "first"}
     with patch(
         "mellea.backends.huggingface._discover_embedded_adapters",
-        return_value=[(_make_composed(), first_config)],
+        return_value=([(_make_composed(), first_config)], {}),
     ):
         names = backend.register_embedded_adapter_model(
             "some/repo", intrinsic_name="answerability"
@@ -2202,7 +2202,7 @@ def test_register_embedded_adapter_model_refused_duplicate_does_not_clobber_cach
     second_config = {"version": "second"}
     with patch(
         "mellea.backends.huggingface._discover_embedded_adapters",
-        return_value=[(_make_composed(), second_config)],
+        return_value=([(_make_composed(), second_config)], {}),
     ):
         names = backend.register_embedded_adapter_model(
             "some/other-repo", intrinsic_name="answerability"

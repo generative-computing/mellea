@@ -8,7 +8,7 @@ from typing import cast
 from ....backends import ModelOption
 from ....backends._options import resolve_model_options
 from ....backends.adapters import AdapterMixin, AdapterType
-from ....core import Backend
+from ....core import Backend, ModelOutputThunk
 from ....stdlib import functional as mfuncs
 from ...components import Document
 from ...context import ChatContext
@@ -144,8 +144,8 @@ def _assert_context_forwards_history(intrinsic_name: str, context: ChatContext) 
 
     Adapter functions evaluate over a conversation, so the context must
     linearize to at least one message. A `SimpleContext` (the `start_session`
-    default) always drops history — its `view_for_generation()` returns `[]`
-    even after messages are added — which downstream causes an opaque
+    default) always drops history; its `view_for_generation()` returns `[]`
+    even after messages are added; which downstream causes an opaque
     `IndexError` inside `apply_chat_template` (issue #937). Fail early here
     with an actionable message instead.
 
@@ -168,61 +168,73 @@ def _assert_context_forwards_history(intrinsic_name: str, context: ChatContext) 
         )
 
 
-def call_intrinsic(
+def _call_intrinsic_raw(
     intrinsic_name: str,
     context: ChatContext,
     backend: AdapterMixin,
     /,
     kwargs: dict | None = None,
     model_options: dict | None = None,
-) -> dict[str, object]:
-    """Invoke an adapter function via the backend, returning parsed and validated JSON output.
+    tool_calls: bool = True,
+) -> tuple[dict[str, object], "ModelOutputThunk"]:
+    """Invoke an adapter function, returning both the parsed output and the thunk.
 
-    Uses `AdapterMixin.resolve_adapter` to find or lazily register the adapter, then
-    executes via `mfuncs.act`. The resolved adapter's own
-    `IOContract.parse` method is called on the raw output string before returning — the
-    output contract always travels with the adapter that produced it, rather than as a
-    separate argument a caller could mismatch. For adapters Mellea constructs (the lazy
-    shims) that contract comes from the `mellea.backends.adapters.io_contracts` registry;
-    for an adapter a user registered under the same capability, the user's own
-    `io_contract` wins. The contract validates required fields and
-    raises `AdapterSchemaMismatchError` on contract-breaking deltas; forward-compatible
-    additions (extra optional fields) do not raise.
+    Same contract as `call_intrinsic`, but also returns the
+    `ModelOutputThunk` behind the call (its `raw.response` carries the
+    unprocessed model response), for helpers that log per-call metadata
+    (model, latency) off the thunk.
 
     Args:
-        intrinsic_name (str): Capability name of the adapter function
-            (e.g. `"answerability"`).
+        intrinsic_name (str): Capability name of the adapter function.
         context (ChatContext): The current conversation context.
         backend (AdapterMixin): A backend that supports adapter functions.
         kwargs (dict | None): Extra keyword arguments forwarded to the
-            adapter function's input template.
+            adapter function's input template. A `state` key is reserved for
+            capabilities that declare a `state_template`.
         model_options (dict | None): Model options that override defaults.
-            Adapter functions default to `TEMPERATURE: 0.0` for deterministic
-            output; pass `TEMPERATURE` here to override it.
+        tool_calls (bool): Whether to expose tools to the model for this
+            call. Callers whose capability must not receive tools (e.g.
+            one-token decisions, whose trained prompt has no tool block)
+            pass `False`.
 
     Returns:
-        dict[str, object]: Parsed and validated JSON output from the adapter function.
+        tuple[dict[str, object], ModelOutputThunk]: The parsed and validated
+        JSON output and the computed `ModelOutputThunk`.
 
     Raises:
-        ValueError: When *context* forwards no history to the model (e.g. a
-            `SimpleContext` was passed), when the model output is `None` or is
-            not valid JSON, or when well-formed JSON is rejected for shape by
-            the resolved adapter's contract (wrong top-level type, or a
-            non-object element of an array-shaped contract).
-        AdapterSchemaMismatchError: When the model output is missing a field required
-            by the resolved adapter's output contract.
+        ValueError: When a `state` kwarg is combined with a context that
+            forwards history, when *context* forwards no history and no
+            `state` kwarg was passed, or when the model output is `None` or
+            fails contract validation.
+        AdapterSchemaMismatchError: When the model output is missing a field
+            required by the resolved adapter's output contract.
         AloraActivationError: When the resolved adapter is an aLoRA whose
-            declared activation sequence is absent from the assembled prompt
-            (LocalFile/PEFT backends only).
+            declared activation sequence is absent from the assembled prompt.
     """
-    _assert_context_forwards_history(intrinsic_name, context)
+    # Guard carve-out for state-template capabilities (one-token decisions):
+    # a `state` kwarg implies a `state_template` config (the kwarg name is
+    # reserved), whose rewriter guarantees non-empty outgoing messages —
+    # asserted post-transform in `IntrinsicsRewriter._transform`; so the
+    # history guard is skipped for a history-less context. Combining a
+    # history-bearing context with a `state` kwarg is an error: the trained
+    # layout has one state turn, not state-plus-history.
+    if kwargs is not None and "state" in kwargs:
+        if context.view_for_generation():
+            raise ValueError(
+                f"Intrinsic '{intrinsic_name}' was called with both a history-"
+                "bearing context and a 'state' argument. Pass either a plain "
+                "state (with an empty context) or a ChatContext whose messages "
+                "are the state, not both."
+            )
+    else:
+        _assert_context_forwards_history(intrinsic_name, context)
 
     # Resolve (finding or lazily registering) the adapter now, rather than merely
     # ensuring it is registered and discarding the result: its io_contract is what
     # parses the raw output below.
     adapter = backend.resolve_adapter(intrinsic_name)
 
-    # Adapter activation is the backend's responsibility — the HF backend acquires
+    # Adapter activation is the backend's responsibility; the HF backend acquires
     # its generation lock and activates the adapter inside adapter_scope(), driven
     # from _generate_intrinsic_with_adapter_scope immediately before generation.
     # Activating here (outside that lock) would race with concurrent async requests.
@@ -244,7 +256,7 @@ def call_intrinsic(
         context,
         backend,
         model_options=resolved_opts,
-        tool_calls=True,
+        tool_calls=tool_calls,
         strategy=None,
     )
 
@@ -252,4 +264,72 @@ def call_intrinsic(
     result_str = model_output_thunk.value
     if result_str is None:
         raise ValueError("Model output is None.")
-    return adapter.io_contract.parse(result_str)
+    return adapter.io_contract.parse(result_str), model_output_thunk
+
+
+def call_intrinsic(
+    intrinsic_name: str,
+    context: ChatContext,
+    backend: AdapterMixin,
+    /,
+    kwargs: dict | None = None,
+    model_options: dict | None = None,
+    tool_calls: bool = True,
+) -> dict[str, object]:
+    """Invoke an adapter function via the backend, returning parsed and validated JSON output.
+
+    Uses `AdapterMixin.resolve_adapter` to find or lazily register the adapter, then
+    executes via `mfuncs.act`. The resolved adapter's own
+    `IOContract.parse` method is called on the raw output string before returning; the
+    output contract always travels with the adapter that produced it, rather than as a
+    separate argument a caller could mismatch. For adapters Mellea constructs (the lazy
+    shims) that contract comes from the `mellea.backends.adapters.io_contracts` registry;
+    for an adapter a user registered under the same capability, the user's own
+    `io_contract` wins. The contract validates required fields and
+    raises `AdapterSchemaMismatchError` on contract-breaking deltas; forward-compatible
+    additions (extra optional fields) do not raise.
+
+    Args:
+        intrinsic_name (str): Capability name of the adapter function
+            (e.g. `"answerability"`).
+        context (ChatContext): The current conversation context.
+        backend (AdapterMixin): A backend that supports adapter functions.
+        kwargs (dict | None): Extra keyword arguments forwarded to the
+            adapter function's input template. A `state` key is reserved for
+            capabilities that declare a `state_template`: it renders the
+            state turn and is not available to the instruction template.
+        model_options (dict | None): Model options that override defaults.
+            Adapter functions default to `TEMPERATURE: 0.0` for deterministic
+            output; pass `TEMPERATURE` here to override it.
+        tool_calls (bool): Whether to expose tools to the model for this
+            call. Callers whose capability must not receive tools (e.g.
+            one-token decisions, whose trained prompt has no tool block)
+            pass `False`. Defaults to `True`.
+
+    Returns:
+        dict[str, object]: Parsed and validated JSON output from the adapter function.
+
+    Raises:
+        ValueError: When *context* forwards no history to the model (e.g. a
+            `SimpleContext` was passed) unless a `state` kwarg implies a
+            `state_template` capability; when a `state` kwarg is combined
+            with a history-bearing context; when the model output is `None`
+            or is not valid JSON; or when well-formed JSON is rejected for
+            shape by the resolved adapter's contract (wrong top-level type,
+            or a non-object element of an array-shaped contract).
+        AdapterSchemaMismatchError: When the model output is missing a field required
+            by the resolved adapter's output contract.
+        AloraActivationError: When the resolved adapter is an aLoRA whose
+            declared activation sequence is absent from the assembled prompt
+            (LocalFile/PEFT backends only), or when a configured invocation
+            marker does not occur exactly once in the rewritten request.
+    """
+    parsed, _ = _call_intrinsic_raw(
+        intrinsic_name,
+        context,
+        backend,
+        kwargs=kwargs,
+        model_options=model_options,
+        tool_calls=tool_calls,
+    )
+    return parsed

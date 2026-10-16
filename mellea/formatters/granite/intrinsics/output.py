@@ -52,10 +52,26 @@ class TransformationRule(abc.ABC):
     Attributes:
         YAML_NAME (str | None): The name used to identify this rule in YAML
             configuration files. Subclasses must set this to a non-`None` string.
+        REQUIRES_JSON (bool): Whether this rule operates on the model output
+            parsed as JSON. When `False`, the processor skips JSON parsing
+            entirely and passes the raw output string to the rule instead
+            (raw mode). A rule that declares `REQUIRES_JSON = False` must be
+            the first rule in the transformation list, so later rules see its
+            dict output.
+        REQUIRES_INPUT_PATH (bool): Whether the rule's YAML specification
+            must include an `input_path`. Rules that override `apply()`
+            wholesale (e.g. `first_token`) do not use path matching and may
+            omit it.
     """
 
     YAML_NAME: str | None = None
     """Subclasses should set this to the name of the rule in YAML config files."""
+
+    REQUIRES_JSON: bool = True
+    """Subclasses that read raw output (not parsed JSON) set this to `False`."""
+
+    REQUIRES_INPUT_PATH: bool = True
+    """Subclasses that ignore path matching may set this to `False`."""
 
     def __init__(self, config: dict, input_path_expr: list[str | int | None]):
         """Initialize TransformationRule with a config dict and a path expression."""
@@ -949,6 +965,140 @@ class Nest(InPlaceTransformation):
         return {self.field_name: value}
 
 
+class FirstTokenChoice(TransformationRule):
+    """Transformation rule that reads a one-token decision answer from logprobs.
+
+    For capabilities whose answer is the first generated token (one-token
+    decisions): reads the first token's logprobs, matches the configured label
+    pool against the returned top logprobs by exact token equality, and
+    returns the raw label logprobs for the caller to renormalize. Overrides
+    `apply()` wholesale, so no `input_path` is needed, and declares
+    `REQUIRES_JSON = False`, so the processor hands it the raw output rather
+    than parsed JSON (a one-token answer is generally not valid JSON).
+
+    Token matching is exact: `startswith` would merge `"A"` with `" A"`,
+    which have different token ids. The sampled top-1 token is unioned with
+    (and deduplicated against) `top_logprobs`, since some inference engines
+    emit the top-1 in both places.
+
+    Args:
+        config (dict): Configuration of the parent output processor, as parsed YAML.
+        input_path_expr (list[str | int | None] | None): Unused path expression;
+        `first_token` transforms have no `input_path`.
+        labels (list[str]): The label pool this capability answers with, in
+            call order (e.g. `["A", "B", ...]`).
+
+    Attributes:
+        YAML_NAME (str): YAML configuration key for this rule; always
+            `"first_token"`.
+    """
+
+    YAML_NAME = "first_token"
+    REQUIRES_JSON = False
+    REQUIRES_INPUT_PATH = False
+
+    def __init__(
+        self,
+        config: dict,
+        input_path_expr: list[str | int | None] | None,
+        /,
+        labels: list[str],
+    ):
+        """Initialize FirstTokenChoice with the configured label pool."""
+        super().__init__(config, input_path_expr)  # type: ignore[arg-type]
+        if (
+            not isinstance(labels, list)
+            or not labels
+            or not all(isinstance(label, str) for label in labels)
+        ):
+            raise TypeError(
+                f"'labels' parameter for '{self.rule_name()}' rule must be a "
+                f"non-empty list of strings. Received value {labels}"
+            )
+        self.labels = list(labels)
+
+    def _apply_at_path(self, result: Any, path: tuple, prepare_output: dict) -> Any:
+        """Never called: `apply()` is overridden wholesale for this rule.
+
+        Raises:
+            NotImplementedError: Always.
+        """
+        raise NotImplementedError(
+            f"'{self.rule_name()}' overrides apply() and never applies rules at paths."
+        )
+
+    def apply(
+        self,
+        parsed_json: Any,
+        reparsed_json: Any,
+        logprobs: ChatCompletionLogProbs | None,
+        chat_completion: ChatCompletion | None,
+    ) -> dict[str, object]:
+        """Read the first token's logprobs and return the raw label logprobs.
+
+        Args:
+            parsed_json (Any): Unused; in raw mode this is the raw output string.
+            reparsed_json (Any): Unused; raw mode performs no JSON reparse.
+            logprobs (ChatCompletionLogProbs | None): Token logprobs of the
+                response choice.
+            chat_completion (ChatCompletion | None): Unused.
+
+        Returns:
+            dict[str, object]: `{"token": <sampled top-1 token>,
+            "label_logprobs": {<label>: <logprob> for pool labels found
+            among the returned logprobs}, "min_returned_logprob": <smallest
+            logprob across all returned tokens>, "labels": <the configured
+            label pool>}`. Logprobs are raw (full vocabulary); the caller
+            renormalizes over the used labels and checks the configured
+            pool covers them.
+
+        Raises:
+            ValueError: If no logprobs were returned, if the logprob content
+            is empty. A distribution that does not concentrate on the
+            labels is not raised here; that is the caller's label-mass
+            check, computed from this rule's raw output.
+        """
+        del parsed_json, reparsed_json, chat_completion
+        if logprobs is None:
+            raise ValueError(
+                "This rule requires logprobs, but the response carried none. "
+                "The inference server may not support logprobs or may cap "
+                "them below the requested amount (vLLM: --max-logprobs)."
+            )
+        if not logprobs.content:
+            raise ValueError(
+                "The response's logprobs carry no per-token content, so the "
+                "one-token answer cannot be read. A zero-token response is "
+                "the usual cause."
+            )
+        first = logprobs.content[0]
+        # Union the sampled top-1 with top_logprobs, deduplicated by token
+        # string (some engines emit the top-1 in both places).
+        candidates: dict[str, float] = {first.token: first.logprob}
+        for top_logprob in first.top_logprobs or []:
+            candidates.setdefault(top_logprob.token, top_logprob.logprob)
+        label_set = set(self.labels)
+        label_logprobs = {
+            token: logprob
+            for token, logprob in candidates.items()
+            if token in label_set
+        }
+        # Smallest logprob among the returned ALTERNATIVES (excluding the
+        # sampled top-1, whose logprob is usually the maximum): this is the
+        # bound on what an unreturned label's probability could be, so
+        # including the sampled token would loosen it. Falls back to the
+        # sampled logprob when no alternatives are returned.
+        alt_logprobs = [lp for tok, lp in candidates.items() if tok != first.token]
+        return {
+            "token": first.token,
+            "label_logprobs": label_logprobs,
+            "min_returned_logprob": min(alt_logprobs)
+            if alt_logprobs
+            else first.logprob,
+            "labels": list(self.labels),
+        }
+
+
 class MergeSpans(InPlaceTransformation):
     """Merge adjacent spans into larger spans.
 
@@ -1112,6 +1262,7 @@ ALL_RULES = [
     DecodeSentences,
     DropDuplicates,
     Explode,
+    FirstTokenChoice,
     MergeSpans,
     Nest,
     Project,
@@ -1247,13 +1398,25 @@ class IntrinsicsResultProcessor(ChatCompletionResultProcessor):
     rules: list[TransformationRule]
     """Transformation rules that this object applies, in the order they are applied."""
 
+    raw_mode: bool
+    """Whether JSON parsing of the output is skipped before applying rules.
+
+    `True` when any configured rule declares `REQUIRES_JSON = False` (e.g.
+    `first_token`); the first rule then receives the raw output string."""
+
     def __init__(
         self,
         /,
         config_file: str | pathlib.Path | None = None,
         config_dict: dict | None = None,
     ):
-        """Initialize IntrinsicsResultProcessor from a YAML config file or dict."""
+        """Initialize IntrinsicsResultProcessor from a YAML config file or dict.
+
+        Raises:
+            ValueError: If a transformation rule name is unknown, if a rule
+                that requires an `input_path` has none, or if a rule that
+                declares `REQUIRES_JSON = False` is not the first rule.
+        """
         config = make_config_dict(config_file, config_dict)
         if config is None:
             raise ValueError("config cannot be None")
@@ -1269,7 +1432,12 @@ class IntrinsicsResultProcessor(ChatCompletionResultProcessor):
                         f"Available rules are: {list(NAME_TO_RULE)}"
                     )
                 rule_cls = NAME_TO_RULE[transform_spec["type"]]
-                input_path = transform_spec["input_path"]
+                input_path = transform_spec.get("input_path")
+                if input_path is None and rule_cls.REQUIRES_INPUT_PATH:  # type: ignore[attr-defined]
+                    raise ValueError(
+                        f"Transformation rule '{transform_spec['type']}' requires "
+                        f"an 'input_path' field."
+                    )
                 rule_kwargs = {
                     k: v
                     for k, v in transform_spec.items()
@@ -1277,12 +1445,30 @@ class IntrinsicsResultProcessor(ChatCompletionResultProcessor):
                 }
                 self.rules.append(rule_cls(self.config, input_path, **rule_kwargs))
 
+        self.raw_mode = any(not rule.REQUIRES_JSON for rule in self.rules)
+        if self.raw_mode and self.rules and self.rules[0].REQUIRES_JSON:
+            # A raw-mode rule must be first so that any later rules see its
+            # dict output rather than an unparsed string.
+            first_raw = next(r for r in self.rules if not r.REQUIRES_JSON)
+            raise ValueError(
+                f"Transformation rule '{first_raw.rule_name()}' does not read "
+                f"JSON output and must be the first transformation in the "
+                f"list, so later rules receive its dict output."
+            )
+
     # pylint: disable=unused-argument
     def _transform_impl(
         self,
         chat_completion_response: ChatCompletionResponse,
         chat_completion: ChatCompletion | None = None,
     ) -> ChatCompletionResponse:
+        if self.raw_mode and len(chat_completion_response.choices) > 1:
+            raise ValueError(
+                f"A {self.rules[0].rule_name() if self.rules else 'raw-mode'} "
+                f"readout requires exactly one choice, but the response "
+                f"carried {len(chat_completion_response.choices)}. Do not "
+                f"pass n > 1 on a one-token decision call."
+            )
         transformed_choices = [
             self._transform_choice(c, chat_completion)
             for c in chat_completion_response.choices
@@ -1322,12 +1508,21 @@ class IntrinsicsResultProcessor(ChatCompletionResultProcessor):
         # Parse JSON output twice: Once to verify valid JSON and once to compute offsets
         # Note that we don't currently check schema, as that would require an additional
         # library dependency.
-        parsed_json = json.loads(content)
-        reparsed_json = _json_util.reparse_json_with_offsets(content)
-        for rule in self.rules:
-            parsed_json = rule.apply(
-                parsed_json, reparsed_json, logprobs, chat_completion
-            )
+        if self.raw_mode:
+            # A rule declared REQUIRES_JSON = False (e.g. `first_token`):
+            # skip both json.loads and the offset reparse and hand the first
+            # rule the raw output string. Its dict output is what later rules
+            # (and the JSON round-trip below) see.
+            parsed_json: Any = content
+            for rule in self.rules:
+                parsed_json = rule.apply(parsed_json, None, logprobs, chat_completion)
+        else:
+            parsed_json = json.loads(content)
+            reparsed_json = _json_util.reparse_json_with_offsets(content)
+            for rule in self.rules:
+                parsed_json = rule.apply(
+                    parsed_json, reparsed_json, logprobs, chat_completion
+                )
         updated_message = choice.message.model_copy(
             update={"content": json.dumps(parsed_json)}
         )

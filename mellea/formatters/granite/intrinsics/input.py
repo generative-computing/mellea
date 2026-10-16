@@ -6,15 +6,61 @@
 # Standard
 import json
 import pathlib
+import string
+
+# Where AloraActivationError lives without creating an import cycle: the
+# adapters package imports formatters for other purposes, but not this module.
+from ....backends.adapters._core import AloraActivationError
+from ....core.utils import MelleaLogger
 
 # First Party
 from ..base.io import ChatCompletionRewriter
 from ..base.optional import import_optional
-from ..base.types import ChatCompletion, DocumentMessage, UserMessage, VLLMExtraBody
+from ..base.types import (
+    ChatCompletion,
+    DocumentMessage,
+    SystemMessage,
+    UserMessage,
+    VLLMExtraBody,
+)
 
 # Local
-from .constants import TOP_LOGPROBS
+from .constants import TOP_LOGPROBS, TOP_LOGPROBS_MAX
 from .util import make_config_dict
+
+_MISSING_STATE = object()
+"""Sentinel distinguishing "no `state` kwarg passed" from `state=None`."""
+
+_SYSTEM_REPLACEMENT_WARNED: set[tuple[str, str]] = set()
+"""(adapter name, dropped system prompt) pairs already warned about.
+
+The rewriter is constructed per call and has no backend identity, so "warn
+once per backend" is approximated by warning once per distinct
+(adapter, replaced prompt) pair per process."""
+
+
+class _InvocationMarkerError(AloraActivationError):
+    """The invocation marker does not occur exactly once in the rewritten request.
+
+    A private subclass so the marker-count guard (D6) raises the existing
+    "declared invocation sequence absent" class; every catch site for
+    `AloraActivationError` and `ValueError` keeps working; while carrying
+    the marker-count message the PEFT-flavoured base `__str__` cannot. The
+    base class's four PEFT-specific attributes are present but empty; the
+    single-string `args` shape keeps pickle/deepcopy working.
+    """
+
+    def __init__(self, message: str) -> None:
+        """Initialize with the marker-count message."""
+        self.capability_name = ""
+        self.base_model_name = ""
+        self.qualified_name = ""
+        self.invocation_tokens = ()
+        ValueError.__init__(self, message)
+
+    def __str__(self) -> str:
+        """Return the marker-count message."""
+        return str(self.args[0])
 
 
 def _needs_logprobs(transformations: list | None) -> bool:
@@ -33,7 +79,63 @@ def _needs_logprobs(transformations: list | None) -> bool:
     """
     if transformations is None:
         return False
-    return any(t["type"] == "likelihood" for t in transformations)
+    return any(t["type"] in ("likelihood", "first_token") for t in transformations)
+
+
+def _first_token_labels(transformations: list | None) -> list[str] | None:
+    """Extract the configured label pool of a `first_token` transformation.
+
+    Args:
+        transformations (list | None): Contents of the `transformations` field from
+            the intrinsic's YAML configuration.
+
+    Returns:
+        list[str] | None: The `labels` list of the first `first_token`
+        transformation, or `None` when the config declares none.
+    """
+    if transformations is None:
+        return None
+    for t in transformations:
+        if t["type"] == "first_token":
+            labels = t.get("labels")
+            return labels if isinstance(labels, list) else None
+    return None
+
+
+def _format_fields(template: str) -> set[str]:
+    """Return the names of the placeholders a format template references.
+
+    Args:
+        template (str): A `str.format`-style template.
+
+    Returns:
+        set[str]: Names of all `{name}` placeholders in *template*.
+    """
+    return {
+        field_name
+        for _, field_name, _, _ in string.Formatter().parse(template)
+        if field_name is not None
+    }
+
+
+def _render_state_value(state: object) -> str:
+    """Render a decision `state` value the way the trained layout expects.
+
+    Mirrors the reference implementation's `text_of` plus empty sentinel:
+    strings pass through; dicts and lists render as compact JSON with
+    `ensure_ascii=False`; `""`, `None`, `{}`, and `[]` render as `"(empty)"`.
+
+    Args:
+        state (object): The state value passed by the caller.
+
+    Returns:
+        str: Rendered state text.
+    """
+    if state in ("", None, {}, []):
+        return "(empty)"
+    if isinstance(state, (dict, list)):
+        return json.dumps(state, ensure_ascii=False)
+    return str(state)
 
 
 def sentence_delimiter(tag: str, sentence_num: int) -> str:
@@ -201,6 +303,14 @@ class IntrinsicsRewriter(ChatCompletionRewriter):
             documents from `extra_body/documents` to a user message at the
             start of the messages list. Value must be `"string"`, `"json"`,
             or `"roles"`.
+        system_prompt (str | None): Optional trained system prompt. When
+            present, all system-role messages in the incoming request are
+            dropped and this prompt is inserted as the first message.
+        state_template (str | None): Optional template for the state turn,
+            rendered as a user message immediately before the instruction
+            message from the reserved `state` format kwarg.
+        invocation_text (str | None): Optional activation marker. When present,
+            the marker must occur exactly once across the final messages.
     """
 
     config: dict
@@ -235,6 +345,15 @@ class IntrinsicsRewriter(ChatCompletionRewriter):
     user message at the beginning of the messages list. Value specifies how to serialize
     the documents into the message: "string" or "json".
     """
+
+    system_prompt: str | None
+    """Optional trained system prompt; replaces all incoming system messages."""
+
+    state_template: str | None
+    """Optional template for the state turn, taking the reserved `state` kwarg."""
+
+    invocation_text: str | None
+    """Optional activation marker that must appear exactly once per request."""
 
     def __init__(
         self,
@@ -274,8 +393,35 @@ class IntrinsicsRewriter(ChatCompletionRewriter):
         # Compute additional parameters we need to add to every request
         if _needs_logprobs(self.config["transformations"]):
             self.parameters["logprobs"] = True
-            self.parameters["top_logprobs"] = TOP_LOGPROBS
+            if "top_logprobs" not in self.parameters:
+                # Size the request to the label pool for one-token readouts,
+                # capped at the deployment maximum; a value configured in the
+                # io.yaml `parameters` always wins over our sizing.
+                labels = _first_token_labels(self.config["transformations"])
+                self.parameters["top_logprobs"] = (
+                    min(len(labels), TOP_LOGPROBS_MAX) if labels else TOP_LOGPROBS
+                )
         self.instruction = self.config["instruction"]
+
+        # Trained prompt layout of one-token decision capabilities.
+        self.system_prompt = self.config["system_prompt"]
+        self.state_template = self.config["state_template"]
+        self.invocation_text = self.config["invocation_text"]
+        self._first_token = (
+            _first_token_labels(self.config["transformations"]) is not None
+        )
+
+        # `state` is a reserved format kwarg: it is consumed by
+        # `state_template` rendering, never by the instruction template. Reject
+        # an instruction that references it at construction time, so the
+        # mismatch surfaces on load rather than as a per-call format error.
+        if self.instruction is not None and "state" in _format_fields(self.instruction):
+            raise ValueError(
+                "The intrinsic's 'instruction' template references the reserved "
+                "placeholder '{state}'. State content is rendered by the "
+                "'state_template' field instead; remove '{state}' from the "
+                "instruction template."
+            )
 
         if self.config["response_format"] is not None:
             self.extra_body_parameters["structured_outputs"] = {
@@ -411,10 +557,84 @@ class IntrinsicsRewriter(ChatCompletionRewriter):
 
         return chat_completion
 
+    def _reject_decision_incompatibilities(
+        self, chat_completion: ChatCompletion
+    ) -> None:
+        """Reject tools and documents on one-token decision calls.
+
+        Both would be appended to the trained system prompt by the chat
+        template of a Switch-style model, changing the layout the decision
+        adapter was trained on.
+
+        Args:
+            chat_completion (ChatCompletion): Argument to `_transform()`.
+
+        Raises:
+            ValueError: If the request carries tools or RAG documents.
+        """
+        if chat_completion.tools:
+            raise ValueError(
+                "Decision calls do not support tools: a tool list would be "
+                "appended to the trained system prompt by the chat template "
+                "and break the one-token readout. Remove tools from the "
+                "context and model options before calling a decision "
+                "helper."
+            )
+        documents = (
+            chat_completion.extra_body.documents
+            if chat_completion.extra_body is not None
+            else None
+        )
+        if documents:
+            raise ValueError(
+                "Decision calls do not support documents: a document list "
+                "would be appended to the trained system prompt by the chat "
+                "template and break the one-token readout. Pass the document "
+                "text as the state instead."
+            )
+
+    def _replace_system_messages(self, messages: list, system_prompt: str) -> list:
+        """Drop all system-role messages and insert the configured one at index 0.
+
+        Args:
+            messages (list): Incoming messages.
+            system_prompt (str): The configured system prompt to insert.
+
+        Returns:
+            list: New message list with the configured system prompt first.
+        """
+        dropped = [m for m in messages if m.role == "system"]
+        if dropped:
+            self._warn_system_replacement(dropped)
+        kept = [m for m in messages if m.role != "system"]
+        return [SystemMessage(content=system_prompt), *kept]
+
+    def _warn_system_replacement(self, dropped: list) -> None:
+        """Warn, once per adapter and replaced prompt, that a system prompt was replaced.
+
+        Args:
+            dropped (list): The system messages that are being dropped.
+        """
+        adapter_key = str(self.parameters.get("model") or "unknown")
+        for message in dropped:
+            key = (adapter_key, message.content)
+            if key in _SYSTEM_REPLACEMENT_WARNED:
+                continue
+            _SYSTEM_REPLACEMENT_WARNED.add(key)
+            MelleaLogger.get_logger().warning(
+                "Intrinsic '%s' replaced a caller-supplied system prompt with "
+                "the trained system prompt from its configuration. The "
+                "caller's system prompt is ignored for this capability.",
+                adapter_key,
+            )
+
     def _transform(
         self, chat_completion: ChatCompletion, /, **kwargs
     ) -> ChatCompletion:
         edits: dict = {}
+
+        if self._first_token:
+            self._reject_decision_incompatibilities(chat_completion)
 
         if self.sentence_boundaries:
             chat_completion = self._mark_sentence_boundaries(chat_completion)
@@ -426,21 +646,74 @@ class IntrinsicsRewriter(ChatCompletionRewriter):
                 chat_completion, self.docs_as_message
             )
 
-        if self.instruction is not None:
+        # The reserved `state` kwarg is consumed by `state_template` rendering
+        # and never reaches the instruction template's format arguments.
+        state = kwargs.pop("state", _MISSING_STATE)
+        if state is not _MISSING_STATE and self.state_template is None:
+            raise ValueError(
+                "A 'state' argument was passed, but the intrinsic's "
+                "configuration declares no 'state_template' to render it. This "
+                "is a configuration error: add a 'state_template' field or "
+                "stop passing 'state'."
+            )
+
+        if (
+            self.instruction is not None
+            or self.state_template is not None
+            or self.system_prompt is not None
+        ):
             # Generate and append new user message of instructions
             messages = chat_completion.messages.copy()  # Do not modify input!
+            if self.system_prompt is not None:
+                messages = self._replace_system_messages(messages, self.system_prompt)
             format_args = kwargs.copy()
             if len(messages) > 0:
                 format_args["last_message"] = messages[-1].content
-            try:
-                instruction_str = self.instruction.format(**format_args)
-            except KeyError as e:
-                raise ValueError(
-                    f"Missing argument for intrinsic's instruction string: {e}"
-                ) from e
-            messages.append(UserMessage(content=instruction_str))
+            if state is not _MISSING_STATE:
+                try:
+                    state_str = self.state_template.format(  # type: ignore[union-attr]
+                        state=_render_state_value(state)
+                    )
+                except KeyError as e:
+                    raise ValueError(
+                        f"Missing argument for intrinsic's state template: {e}"
+                    ) from e
+                messages.append(UserMessage(content=state_str))
+            if self.instruction is not None:
+                try:
+                    instruction_str = self.instruction.format(**format_args)
+                except KeyError as e:
+                    raise ValueError(
+                        f"Missing argument for intrinsic's instruction string: {e}"
+                    ) from e
+                messages.append(UserMessage(content=instruction_str))
             edits["messages"] = messages
         edits.update(self.parameters)
+
+        # Marker guard: the activation marker must occur exactly once across
+        # the final messages. A count of zero means the adapter would never
+        # activate; a count above one (usually state, question, or option
+        # content containing the marker) means it would activate at the wrong
+        # position.
+        final_messages = edits.get("messages", chat_completion.messages)
+        if self.state_template is not None and not final_messages:
+            raise ValueError(
+                "The intrinsic's rewriter produced no messages. A "
+                "state_template capability requires at least the state and "
+                "instruction turns."
+            )
+        if self.invocation_text is not None:
+            marker_count = sum(
+                m.content.count(self.invocation_text) for m in final_messages
+            )
+            if marker_count != 1:
+                raise _InvocationMarkerError(
+                    f"Invocation marker {self.invocation_text!r} appears "
+                    f"{marker_count} times across the final messages, expected "
+                    f"exactly 1. The adapter would not activate correctly. "
+                    f"State, question, or option content containing the marker "
+                    f"is the usual cause."
+                )
 
         extra_body_dict = (
             chat_completion.extra_body.model_dump()

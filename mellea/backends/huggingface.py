@@ -621,6 +621,15 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             `hf` extra.
         adapter_source (str | None): Local checkpoint directory or Hugging Face
             Hub repository used to discover embedded adapter functions.
+        adapter_revision (str): Git revision for embedded-adapter discovery
+            from the Hugging Face Hub; pin it to the commit whose weights you
+            are serving. Note: model weights themselves are always loaded
+            from the Hub's default revision (`from_pretrained` takes no
+            revision here), so a pinned adapter revision that differs from
+            the weights' current `main` would produce a weights/config
+            mismatch. Only used when *adapter_source* (or *model_id*) is a
+            Hub repo ID; local directories are read as-is. Defaults to
+            `"main"`.
         model_options (dict | None): Default model options for generation requests.
 
     Attributes:
@@ -650,6 +659,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         default_to_constraint_checking_alora: bool = True,
         load_embedded_adapters: bool = False,
         adapter_source: str | None = None,
+        adapter_revision: str = "main",
         model_options: dict | None = None,
     ):
         """Load model weights from the given model ID, or from a custom config if provided."""
@@ -772,6 +782,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         # time, unlike the LocalFile case (see _intrinsic_adapter_name_and_config).
         self._composed_adapter_configs: dict[str, dict] = {}
         self._adapter_source = adapter_source
+        self._adapter_revision = adapter_revision
         self._uses_embedded_adapters = load_embedded_adapters
 
         self._generation_lock = threading.RLock()
@@ -794,7 +805,9 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         """
 
         if load_embedded_adapters:
-            self.register_embedded_adapter_model(self._adapter_source or self._model_id)
+            self.register_embedded_adapter_model(
+                self._adapter_source or self._model_id, revision=self._adapter_revision
+            )
 
     def _make_dc_cache(self, toks, **model_options):
         dc = DynamicCache()
@@ -3306,12 +3319,17 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         # under the lock `add_adapter()`'s composed-LocalFileBinding branch
         # briefly takes around its dict writes.
         with self._adapter_resolve_lock():
-            discovered = _discover_embedded_adapters(
+            discovered, skip_reasons = _discover_embedded_adapters(
                 source,
                 revision=revision,
                 cache_dir=cache_dir,
                 intrinsic_name=intrinsic_name,
             )
+            if skip_reasons:
+                self._adapter_skip_reasons = {
+                    **self._adapter_skip_reasons,
+                    **skip_reasons,
+                }
             names = []
             for adapter, config in discovered:
                 key = _composed_adapter_key(adapter)
