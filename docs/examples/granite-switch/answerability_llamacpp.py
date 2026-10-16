@@ -1,4 +1,4 @@
-# pytest: e2e, qualitative
+# pytest: e2e, llamacpp_switch, qualitative
 
 """Example: Granite Switch adapter functions against a local llama.cpp server.
 
@@ -46,10 +46,10 @@ To run this script from the root of the Mellea source tree:
 uv run python docs/examples/granite-switch/answerability_llamacpp.py
 ```
 
-This example carries the `e2e` marker only, deliberately not `llamacpp`: that
-marker's conftest gate probes `LLAMACPP_BASE_URL` (default 8080) for the
-base-Granite server, so it would wrongly skip this example when the Switch
-server is up on 8081.
+This example carries the `llamacpp_switch` marker, deliberately not `llamacpp`:
+that marker's conftest gate probes `LLAMACPP_BASE_URL` (default 8080) for the
+base-Granite server, while `llamacpp_switch` probes `LLAMACPP_SWITCH_BASE_URL`
+(default 8081), the server `scripts/start_llamacpp_switch.sh` starts.
 """
 
 import os

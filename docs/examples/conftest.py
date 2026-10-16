@@ -62,6 +62,7 @@ def get_system_capabilities():
             "has_api_keys": {},
             "has_ollama": False,
             "has_llamacpp": False,
+            "has_llamacpp_switch": False,
         }
         return _capabilities_cache
 
@@ -284,6 +285,13 @@ def _should_skip_collection(markers, config=None):
                 True,
                 "llama.cpp server not reachable (start scripts/start_llamacpp.sh, "
                 "or set LLAMACPP_BASE_URL)",
+            )
+    if "llamacpp_switch" in markers:
+        if not capabilities.get("has_llamacpp_switch", False):
+            return (
+                True,
+                "llama.cpp Switch server not reachable (start "
+                "scripts/start_llamacpp_switch.sh, or set LLAMACPP_SWITCH_BASE_URL)",
             )
 
     # Skip tests requiring API keys
