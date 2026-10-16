@@ -879,7 +879,8 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 parse tool-call responses.
 
         Raises:
-            ValueError: If `action` is an `ALoraRequirement` but `ctx` renders no
+            ValueError: If `action` is an `ALoraRequirement` and its adapter is
+                unavailable (not registered on this backend), or `ctx` renders no
                 conversation, leaving the requirement-check adapter nothing to judge.
             ValueError: If no user-role message has non-whitespace text,
                 images, audio, or documents.
@@ -928,11 +929,11 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 )
                 alora_req_adapter = self._find_adapter(adapter_name, search_types)
                 if alora_req_adapter is None:
-                    if reroute_to_alora and isinstance(action, ALoraRequirement):
-                        MelleaLogger.get_logger().warning(
-                            f"attempted to use an AloraRequirement but backend {self} "
-                            f"doesn't have the specified adapter added {adapter_name}; "
-                            f"defaulting to regular generation"
+                    if isinstance(action, ALoraRequirement):
+                        raise ValueError(
+                            f"cannot validate an ALoraRequirement: backend {self} has "
+                            f"no {adapter_name!r} adapter registered. Register one with "
+                            "backend.add_adapter(), or use a plain Requirement."
                         )
                     reroute_to_alora = False
 
@@ -1381,8 +1382,6 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         # Convert our linearized context into a sequence of chat messages. Template formatters have a standard way of doing this.
         messages: list[Message] = self.formatter.to_chat_messages(linearized_context)
         messages.extend(self.formatter.to_chat_messages([action]))
-        # ALoraRequirement may arrive here when no adapter is registered;
-        # _generate is responsible for logging a warning in that case.
 
         # Issue #1597: refuse to send an empty user prompt; see
         # `has_user_content` for why whitespace-only text still counts as empty.

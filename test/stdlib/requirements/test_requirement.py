@@ -441,8 +441,7 @@ async def test_alora_validate_surfaces_schema_mismatch_as_error(mock_intrinsic_i
     `validate()` catches the parse error, stores it on `result.error`, and
     returns a fail-closed result rather than propagating. This lets callers
     distinguish "requirement not met" from "adapter produced unrecognizable
-    output" (issue #1358). The LLMaJ fallback in ALoraRequirement still covers
-    only generation errors, not output-parsing schema mismatches.
+    output" (issue #1358).
     """
     mock_intrinsic_init.return_value = None
     req = ALoraRequirement("must satisfy requirement")

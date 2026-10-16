@@ -36,15 +36,9 @@ backend = LocalHFBackend(model_id=model_ids.IBM_GRANITE_4_1_3B, use_caches=False
 m = MelleaSession(backend=backend, ctx=ChatContext())
 
 # Register the aLoRA variant of the catalog's requirement-check adapter. Without
-# this, ALoraRequirement logs a warning and falls back to regular generation,
-# whose prompt asks for a plain "yes"/"no" answer — but the result is still
-# parsed as JSON by requirement_check_to_bool: a plain yes/no reply raises
-# json.JSONDecodeError (it is not JSON), and a JSON reply that doesn't match
-# the schema raises AdapterSchemaMismatchError — either way validate() surfaces
-# the error on ValidationResult.error and fails the check closed rather than
-# returning an ordinary failed check or propagating the exception. The ALORA
-# type is also load-bearing here: routing only looks up ("alora",), so
-# registering the LORA variant instead would hit the same failure.
+# it, validating an ALoraRequirement raises ValueError. The ALORA type matters:
+# routing only looks up ("alora",), so registering the LORA variant would raise
+# the same ValueError.
 _requirement_check_metadata = fetch_intrinsic_metadata("requirement-check")
 backend.add_adapter(
     Adapter(
