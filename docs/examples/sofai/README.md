@@ -4,7 +4,7 @@ This directory contains examples of the SOFAI sampling strategy - a two-tier app
 
 ## Files
 
-### sofai_graph_coloring.py
+### [sofai_graph_coloring.py](./sofai_graph_coloring.py)
 Complete example using SOFAI for constraint satisfaction problems (graph coloring).
 
 **Key Features:**

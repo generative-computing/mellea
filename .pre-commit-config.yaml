@@ -21,6 +21,16 @@ repos:
 
   - repo: local
     hooks:
+      # A SHA-pinned action's comment must name the exact release (`# v7.0.1`). A moving
+      # tag like `# v7` trips zizmor's ref-version-mismatch on every PR once upstream re-tags it.
+      - id: action-pin-full-version
+        name: Action pin comments name an exact release
+        entry: '@[0-9a-f]{40} +# v[0-9]+(\.[0-9]+)?\s*$'
+        language: pygrep
+        files: ^\.github/.*\.ya?ml$
+
+  - repo: local
+    hooks:
       # Moving ruff hooks to the local version allows for different behavior locally and in ci/cd pipelines.
       - id: ruff-format
         name: "Ruff formatter"

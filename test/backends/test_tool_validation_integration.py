@@ -51,6 +51,26 @@ def optional_tool(required: str, optional: str | None = None) -> str:
     return f"{required}:{optional or 'none'}"
 
 
+def limit_tool(count: int, limit: int | None = None) -> int:
+    """Tool with a required int and an optional int.
+
+    Args:
+        count: How many items to return
+        limit: An optional upper bound
+    """
+    return count if limit is None else min(count, limit)
+
+
+def paged_tool(query: str, page_size: int = 10) -> str:
+    """Tool with a non-nullable defaulted parameter.
+
+    Args:
+        query: The search query
+        page_size: Results per page
+    """
+    return f"{query}:{page_size}"
+
+
 def union_tool(value: str | int) -> str:
     """Tool with union type parameter.
 
@@ -156,14 +176,46 @@ class TestValidationModes:
     """Test strict vs. lenient validation modes."""
 
     def test_lenient_mode_with_invalid_type(self):
-        """Test that lenient mode returns original args on validation failure."""
+        """Test that lenient mode returns an invalid argument as given."""
         args = {"name": "Test", "age": "not_a_number", "score": 95.5, "active": True}
         tool = MelleaTool.from_callable(typed_tool)
         validated = validate_tool_arguments(tool, args, strict=False)
 
-        # Should return original args
+        # The invalid argument comes back as given; the rest were already typed
         assert validated == args
         assert validated["age"] == "not_a_number"
+
+    def test_lenient_mode_coerces_the_arguments_that_validate(self):
+        """One invalid argument is passed through as given; the rest are still coerced."""
+        args = {
+            "name": "Test",
+            "age": "not_a_number",
+            "score": "95.5",
+            "active": "true",
+        }
+        tool = MelleaTool.from_callable(typed_tool)
+        validated = validate_tool_arguments(tool, args, strict=False)
+
+        assert validated == {
+            "name": "Test",
+            "age": "not_a_number",
+            "score": 95.5,
+            "active": True,
+        }
+
+    def test_lenient_mode_keeps_unknown_args_when_another_fails(self):
+        """Extra arguments survive the per-argument fallback, as on success."""
+        args = {"name": "Test", "age": "x", "score": "1", "active": "1", "extra": "e"}
+        tool = MelleaTool.from_callable(typed_tool)
+        validated = validate_tool_arguments(tool, args, strict=False)
+
+        assert validated == {
+            "name": "Test",
+            "age": "x",
+            "score": 1.0,
+            "active": True,
+            "extra": "e",
+        }
 
     def test_strict_mode_with_invalid_type(self):
         """Test that strict mode raises ValidationError on failure."""
@@ -179,7 +231,7 @@ class TestValidationModes:
         tool = MelleaTool.from_callable(optional_tool)
         validated = validate_tool_arguments(tool, args, strict=False)
 
-        # Should return original args
+        # The missing argument stays missing; the rest come back validated
         assert validated == args
 
     def test_strict_mode_with_missing_required(self):
@@ -252,13 +304,36 @@ class TestOptionalParameters:
         assert "optional" not in validated
 
     def test_optional_param_none(self):
-        """Test validation when optional parameter is explicitly None."""
+        """Explicit None for `str | None` validates (strict, so no fallback)."""
         args = {"required": "value1", "optional": None}
         tool = MelleaTool.from_callable(optional_tool)
+        validated = validate_tool_arguments(tool, args, strict=True)
+
+        assert validated == {"required": "value1", "optional": None}
+
+    def test_optional_int_none_strict(self):
+        """An explicit None for `int | None` validates."""
+        args = {"count": 3, "limit": None}
+        tool = MelleaTool.from_callable(limit_tool)
+        validated = validate_tool_arguments(tool, args, strict=True)
+
+        assert validated == {"count": 3, "limit": None}
+
+    def test_null_for_non_nullable_default_rejected_strict(self):
+        """A real default (`page_size: int = 10`) still rejects None."""
+        args = {"query": "q", "page_size": None}
+        tool = MelleaTool.from_callable(paged_tool)
+        with pytest.raises(ValidationError, match="page_size"):
+            validate_tool_arguments(tool, args, strict=True)
+
+    def test_optional_none_keeps_other_coercions(self):
+        """A None must not make lenient mode drop the other coercions."""
+        args = {"count": "3", "limit": None}
+        tool = MelleaTool.from_callable(limit_tool)
         validated = validate_tool_arguments(tool, args)
 
-        assert validated["required"] == "value1"
-        assert validated["optional"] is None
+        assert validated == {"count": 3, "limit": None}
+        assert type(validated["count"]) is int
 
 
 class TestDefaultedParameters:
@@ -375,8 +450,47 @@ class TestUnionTypes:
         assert validated["value"] in ["42", 42]
 
 
+def _external_tool(value_schema: Any) -> MelleaTool:
+    """Build a tool whose single `value` parameter uses a raw JSON schema."""
+    as_json_tool = {
+        "type": "function",
+        "function": {
+            "name": "external",
+            "description": "An externally defined tool.",
+            "parameters": {
+                "type": "object",
+                "properties": {"value": value_schema},
+                "required": ["value"],
+            },
+        },
+    }
+    return MelleaTool("external", lambda value: value, as_json_tool)
+
+
+# Boolean sub-schemas are valid JSON Schema (e.g. from MCP) but broke the validator.
+BOOLEAN_SUBSCHEMAS = [
+    pytest.param(True, 1, id="property_true"),
+    pytest.param({"type": "object", "properties": {"a": True}}, {"a": 1}, id="nested"),
+    pytest.param({"anyOf": [True, {"type": "null"}]}, 1, id="anyof"),
+]
+
+
 class TestEdgeCases:
     """Test edge cases."""
+
+    @pytest.mark.parametrize(("value_schema", "value"), BOOLEAN_SUBSCHEMAS)
+    def test_unsupported_schema_lenient_returns_original_args(
+        self, value_schema, value
+    ):
+        """An unbuildable schema falls back to the original args, not a raise."""
+        tool = _external_tool(value_schema)
+        assert validate_tool_arguments(tool, {"value": value}) == {"value": value}
+
+    @pytest.mark.parametrize(("value_schema", "value"), BOOLEAN_SUBSCHEMAS)
+    def test_unsupported_schema_strict_raises(self, value_schema, value):
+        tool = _external_tool(value_schema)
+        with pytest.raises(Exception):
+            validate_tool_arguments(tool, {"value": value}, strict=True)
 
     def test_no_parameters_tool(self):
         """Test validation with no-parameter tool."""

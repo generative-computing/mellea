@@ -17,7 +17,7 @@ import mellea.backends.huggingface as hf_backend
 from mellea.backends import ModelOption
 from mellea.backends.huggingface import LocalHFBackend, _split_think_tags
 from mellea.core.base import CBlock, ModelOutputThunk
-from test.backends.test_huggingface_filter_options import (
+from test.backends._granite_tokenizer import (
     _GRANITE_THINKING_MODEL_ID,
     _try_load_granite_tokenizer,
 )
@@ -160,6 +160,47 @@ async def test_post_processing_splits_thinking_before_tool_scan(monkeypatch) -> 
     assert mot.thinking == "reasoning here"
     assert mot.value == "call get_weather(city='Boston')"
     assert recorded_text == ["call get_weather(city='Boston')"]
+
+
+async def test_post_processing_registers_granite_xml_tool_call() -> None:
+    """A Granite 4.2 XML tool call after a thinking block becomes a ModelToolCall (#1689)."""
+    from mellea.backends.tools import MelleaTool
+
+    def get_weather(city: str) -> str:
+        """Get the weather.
+
+        Args:
+            city: the city name
+        """
+        return f"sunny in {city}"
+
+    backend = _make_backend()
+    mot = ModelOutputThunk(
+        value=(
+            "<think>I should call the weather tool.</think>"
+            "<tool_call>\n<function=get_weather>\n<parameter=city>\nBoston\n"
+            "</parameter>\n</function>\n</tool_call>"
+        )
+    )
+    mot._call.action = CBlock("What's the weather in Boston?")
+    mot._call.model_options = {}
+
+    await backend.post_processing(
+        mot,
+        conversation=[],
+        _format=None,
+        tool_calls=True,
+        tools={"get_weather": MelleaTool.from_callable(get_weather)},
+        seed=None,
+        input_ids=None,
+    )
+
+    assert mot.thinking == "I should call the weather tool."
+    assert mot.tool_calls is not None
+    assert [(c.name, c.args) for c in mot.tool_calls] == [
+        ("get_weather", {"city": "Boston"})
+    ]
+    assert mot.tool_calls[0].call_func() == "sunny in Boston"
 
 
 async def test_post_processing_skips_split_when_streaming() -> None:

@@ -73,4 +73,4 @@ print(response.content)
 
 ## Files
 
-- **`audio_examples.py`** — Downloads sample audio from OpenAI CDN, demonstrates both `session.instruct()` and `session.chat()`
+- **[`audio_examples.py`](./audio_examples.py)** — Downloads sample audio from OpenAI CDN, demonstrates both `session.instruct()` and `session.chat()`

@@ -42,6 +42,7 @@ from ..helpers import (
     chat_completion_delta_merge,
     extract_model_tool_requests,
     get_current_event_loop,
+    has_user_content,
     message_to_openai_message,
     prefetch_audio_urls,
     send_to_queue,
@@ -198,6 +199,11 @@ class LiteLLMBackend(FormatterBackend):
                 backend's defaults.
             tool_calls (bool): If `True`, expose available tools to the model and
                 parse tool-call responses.
+
+        Raises:
+            NotImplementedError: If `ctx` is not a chat context.
+            ValueError: If no user-role message has non-whitespace text,
+                images, audio, or documents.
 
         Returns:
             tuple[ModelOutputThunk[C], Context]: A thunk holding the (lazy) model output
@@ -370,6 +376,16 @@ class LiteLLMBackend(FormatterBackend):
             case _:
                 messages.extend(self.formatter.to_chat_messages([action]))
 
+        # Issue #1597: refuse to send an empty user prompt; see
+        # `has_user_content` for why whitespace-only text still counts as empty.
+        if not has_user_content(messages):
+            raise ValueError(
+                "Refusing to call the model: no user-role content in the assembled "
+                "conversation. This usually means a stateless context (e.g. "
+                "SimpleContext) was combined with an empty or whitespace-only "
+                "action; recorded turns are not forwarded to the model."
+            )
+
         # TODO: the supports_vision function is not reliably predicting if models support vision. E.g., ollama/llava is not a vision model?
         # if any(m.images is not None for m in messages):
         #     # check if model can handle images
@@ -395,9 +411,9 @@ class LiteLLMBackend(FormatterBackend):
         if self._default_extra_body:
             # Seed from the construction-time tier (below the per-call
             # THINKING resolution below, and below caller-supplied extra_body
-            # further down); `_merge_extra_body` gives back a fresh dict (and
+            # further down); `merge_extra_body` gives back a fresh dict (and
             # a fresh `chat_template_kwargs` sub-dict) safe to mutate below.
-            extra_params["extra_body"] = ModelOption._merge_extra_body(
+            extra_params["extra_body"] = ModelOption.merge_extra_body(
                 {}, self._default_extra_body
             )
         if _format is not None:
@@ -458,17 +474,10 @@ class LiteLLMBackend(FormatterBackend):
         # caller's dict; popping from the originals would silently corrupt reused
         # model_options on the next call.
         user_extra_body = model_specific_options.pop("extra_body", None)
-        if user_extra_body:
-            user_extra_body = dict(user_extra_body)
-            eb = dict(extra_params.get("extra_body") or {})
-            user_ctk = user_extra_body.pop("chat_template_kwargs", None)
-            eb.update(user_extra_body)
-            if user_ctk is not None:
-                eb["chat_template_kwargs"] = {
-                    **eb.get("chat_template_kwargs", {}),
-                    **user_ctk,
-                }
-            extra_params["extra_body"] = eb
+        if user_extra_body is not None:
+            extra_params["extra_body"] = ModelOption.merge_extra_body(
+                extra_params.get("extra_body") or {}, user_extra_body
+            )
 
         # Pop api_base from model_specific_options before the call so an explicit
         # user-supplied value doesn't collide with the positional api_base kwarg;
@@ -519,6 +528,10 @@ class LiteLLMBackend(FormatterBackend):
         # Set model/provider early so they are available in the error path
         output.generation.model = self._model_id
         output.generation.provider = self._provider
+        (
+            output.generation.prompt_template,
+            output.generation.prompt_template_variables,
+        ) = self.formatter.prompt_template_for(action)
 
         try:
             # To support lazy computation, will need to remove this create_task and store just the unexecuted coroutine.

@@ -162,6 +162,24 @@ def set_mellea_attrs(span: Any, mot: Any) -> None:
     span.set_attribute("mellea.request.context_size", len(ctx) if ctx else 0)
 
 
+def set_prompt_template_attrs(span: Any, gen: GenerationMetadata) -> None:
+    """Emit OpenInference `llm.prompt_template.*` attributes from `gen`.
+
+    The template text is always emitted; the variables are recorded only when
+    content capture is enabled (they may contain user data) and are length-bounded.
+
+    Args:
+        span: The span object.
+        gen: The generation metadata carrying the prompt template and variables.
+    """
+    set_attribute_safe(span, "llm.prompt_template.template", gen.prompt_template)
+    set_attribute_safe(
+        span,
+        "llm.prompt_template.variables",
+        get_capture_content_value(_serialize_mapping(gen.prompt_template_variables)),
+    )
+
+
 def set_conversation_id(span: Any) -> None:
     """Emit `gen_ai.conversation.id` from the current telemetry context, if set."""
     from mellea.telemetry.context import get_session_id
@@ -171,17 +189,17 @@ def set_conversation_id(span: Any) -> None:
         span.set_attribute("gen_ai.conversation.id", session_id)
 
 
-def _serialize_arguments(arguments: Mapping[str, Any] | None) -> str | None:
-    """Return a stable, key-sorted JSON string of tool arguments, or `None`.
+def _serialize_mapping(mapping: Mapping[str, Any] | None) -> str | None:
+    """Return a stable, key-sorted JSON string of a mapping, or `None`.
 
     Falls back to `str()` for values JSON cannot serialize.
     """
-    if not arguments:
+    if not mapping:
         return None
     try:
-        return json.dumps(arguments, sort_keys=True, default=str)
+        return json.dumps(mapping, sort_keys=True, default=str)
     except Exception:
-        return str(arguments)
+        return str(mapping)
 
 
 def _tool_schema_attrs(tool_call: Any) -> tuple[str | None, str | None]:
@@ -221,7 +239,7 @@ def get_tool_call_attrs(tool_call: Any) -> dict[str, Any]:
         Span attributes keyed by attribute name.
     """
     tool_type, tool_description = _tool_schema_attrs(tool_call)
-    serialized = _serialize_arguments(getattr(tool_call, "args", None))
+    serialized = _serialize_mapping(getattr(tool_call, "args", None))
     arguments_hash = (
         hashlib.sha256(serialized.encode("utf-8")).hexdigest()[:16]
         if serialized is not None

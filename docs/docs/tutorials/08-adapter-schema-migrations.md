@@ -40,7 +40,7 @@ from mellea.backends.adapters.catalog import fetch_intrinsic_metadata
 
 metadata = fetch_intrinsic_metadata("requirement-check")
 print(metadata.repo_id, metadata.revision)
-# ibm-granite/granitelib-core-r1.0 d0a2a96a4cd07e96f0fe7ca29a42bfe088299d43
+# ibm-granite/granitelib-core-r1.0 c4b4fc6ec4fa05b6c8f02b25ac8822da085962b5
 ```
 
 `LocalFileBinding.resolved_revision()` uses this pinned value whenever you

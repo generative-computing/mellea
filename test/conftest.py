@@ -84,6 +84,51 @@ def _check_ollama_available():
         return False
 
 
+# Default matches scripts/start_llamacpp.sh, which serves Granite 4.2 3b on 8080.
+LLAMACPP_DEFAULT_BASE_URL = "http://127.0.0.1:8080/v1"
+
+# Property keys llama-server returns from /props. Both predate its OpenAI-compatible
+# endpoints, so fingerprinting on them holds across llama.cpp versions. Pinned in
+# test/test_llamacpp_detection.py against a captured /props payload.
+LLAMACPP_PROPS_KEYS = ("default_generation_settings", "total_slots")
+
+
+def _check_llamacpp_available():
+    """Check whether a local llama.cpp server is loaded and ready to serve.
+
+    Reads `LLAMACPP_BASE_URL` (default `http://127.0.0.1:8080/v1`) and probes
+    `/props`, requiring a 200 whose JSON body carries `LLAMACPP_PROPS_KEYS`. One
+    request settles both halves of the gate:
+
+    - Ready, not merely bound. llama-server accepts connections while it is still
+      downloading and loading weights, answering every endpoint 503 "Loading model"
+      until the weights are in, so a socket check (what `_check_ollama_available`
+      does) reports ready long before anything can be served.
+    - llama.cpp, not just something on the port. Port 8080 is contended, and a 200
+      from `/health` is a weak signal there: vLLM, TGI, and plenty of unrelated
+      services answer it too, and the OpenAI-compatible ones would then hand the
+      tests an entirely different model. `/props` is llama.cpp's own endpoint, so a
+      foreign server on the port fails the gate instead.
+
+    Still not verified: which weights llama-server loaded. It ignores the `model`
+    field in a request and serves whatever it was launched with, so a test needing
+    a specific model can still fail against a server that passes this check.
+    """
+    import json
+    import urllib.request
+
+    base_url = os.environ.get("LLAMACPP_BASE_URL", LLAMACPP_DEFAULT_BASE_URL)
+    props_url = base_url.rstrip("/").removesuffix("/v1") + "/props"
+    try:
+        with urllib.request.urlopen(props_url, timeout=2) as resp:
+            props = json.loads(resp.read())
+    except Exception:
+        # Refused connection, the 503 while loading (urlopen raises on non-2xx), a
+        # timeout, a non-JSON body from some other service: none of them are usable.
+        return False
+    return isinstance(props, dict) and all(k in props for k in LLAMACPP_PROPS_KEYS)
+
+
 _capabilities_cache: dict | None = None
 
 
@@ -99,6 +144,7 @@ def get_system_capabilities():
         "ram_gb": 0,
         "has_api_keys": {},
         "has_ollama": False,
+        "has_llamacpp": False,
     }
 
     # Detect GPU (CUDA for NVIDIA, MPS for Apple Silicon)
@@ -161,6 +207,9 @@ def get_system_capabilities():
 
     # Detect Ollama availability
     capabilities["has_ollama"] = _check_ollama_available()
+
+    # Detect a local llama.cpp server (started by scripts/start_llamacpp.sh)
+    capabilities["has_llamacpp"] = _check_llamacpp_available()
 
     _capabilities_cache = capabilities
     return capabilities
@@ -496,6 +545,10 @@ def pytest_collection_modifyitems(config, items):
         reason="Ollama not available (port 11434 not listening)"
     )
     skip_vllm = pytest.mark.skip(reason="vLLM disabled by WITH_VLLM=0")
+    skip_llamacpp = pytest.mark.skip(
+        reason="llama.cpp server not reachable (start scripts/start_llamacpp.sh, "
+        "or set LLAMACPP_BASE_URL)"
+    )
 
     # Auto-apply 'unit' marker to tests without explicit granularity markers.
     # This enables `pytest -m unit` without per-file maintenance burden.
@@ -520,6 +573,9 @@ def pytest_collection_modifyitems(config, items):
 
         if os.environ.get("WITH_VLLM") == "0" and item.get_closest_marker("vllm"):
             item.add_marker(skip_vllm)
+
+        if item.get_closest_marker("llamacpp") and not capabilities["has_llamacpp"]:
+            item.add_marker(skip_llamacpp)
 
         # Auto-apply unit marker
         if not any(item.get_closest_marker(m) for m in _NON_UNIT):

@@ -211,6 +211,9 @@ def call_intrinsic(
             non-object element of an array-shaped contract).
         AdapterSchemaMismatchError: When the model output is missing a field required
             by the resolved adapter's output contract.
+        AloraActivationError: When the resolved adapter is an aLoRA whose
+            declared activation sequence is absent from the assembled prompt
+            (LocalFile/PEFT backends only).
     """
     _assert_context_forwards_history(intrinsic_name, context)
 

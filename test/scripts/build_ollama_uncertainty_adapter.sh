@@ -21,7 +21,7 @@ fi
 BASE_MODEL="${OLLAMA_BASE_MODEL:-granite4.1:3b}"
 OUTPUT_MODEL="${MELLEA_OLLAMA_UNCERTAINTY_MODEL:-mellea-test/uncertainty-alora:latest}"
 ADAPTER_REPO="ibm-granite/granitelib-core-r1.0"
-ADAPTER_REVISION="d0a2a96a4cd07e96f0fe7ca29a42bfe088299d43"
+ADAPTER_REVISION="c4b4fc6ec4fa05b6c8f02b25ac8822da085962b5"
 ADAPTER_PATH="uncertainty/granite-4.1-3b/alora"
 BASE_REPO="ibm-granite/granite-4.1-3b"
 BASE_REVISION="c0650403e44e78ec0262dab1c90914c65b196c4e"

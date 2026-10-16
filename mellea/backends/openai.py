@@ -45,6 +45,7 @@ from ..helpers import (
     chat_completion_delta_merge,
     extract_model_tool_requests,
     get_current_event_loop,
+    has_user_content,
     is_vllm_server_with_structured_output,
     message_to_openai_message,
     messages_to_docs,
@@ -244,7 +245,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         # `extra_body` (#1617).
         construction_extra_body = self.model_options.get("extra_body")
         if isinstance(construction_extra_body, dict):
-            self._default_extra_body = ModelOption._merge_extra_body(
+            self._default_extra_body = ModelOption.merge_extra_body(
                 construction_extra_body, self._default_extra_body
             )
 
@@ -815,7 +816,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 reasoning_params["reasoning_effort"] = "medium"
             elif self._server_type != _ServerType.OPENAI:
                 reasoning_params["reasoning_effort"] = "none"
-        else:
+        elif thinking != "none" or self._server_type != _ServerType.OPENAI:
             reasoning_params["reasoning_effort"] = thinking
         return reasoning_params
 
@@ -845,37 +846,13 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             a new dict; `base`, `user`, and `self._default_extra_body` are
             left unmodified.
         """
-        # Start from construction-time defaults, then overlay Mellea-built values.
-        # Work on copies throughout so no caller dict is mutated.
-        merged = dict(self._default_extra_body)
-        default_ctk = merged.pop("chat_template_kwargs", None)
-
-        base = dict(base) if base else {}
-        base_ctk = base.pop("chat_template_kwargs", None)
-        merged.update(base)
-
-        # Merge chat_template_kwargs from default and base layers.
-        merged_ctk: dict = {}
-        if default_ctk is not None:
-            merged_ctk.update(default_ctk)
-        if base_ctk is not None:
-            merged_ctk.update(base_ctk)
-        if merged_ctk:
-            merged["chat_template_kwargs"] = merged_ctk
-
+        # Delegate to the canonical helper — work on copies throughout so no
+        # caller dict is mutated.  Two chained calls encode the three-tier order:
+        #   1. construction defaults (lowest)  →  2. Mellea-assembled  →  3. caller (highest)
+        merged = ModelOption.merge_extra_body(self._default_extra_body, base or {})
         if user is None:
             return merged
-
-        # Overlay caller-supplied values last (highest priority).
-        user = dict(user)
-        user_ctk = user.pop("chat_template_kwargs", None)
-        merged.update(user)
-        if user_ctk is not None:
-            merged["chat_template_kwargs"] = {
-                **merged.get("chat_template_kwargs", {}),
-                **user_ctk,
-            }
-        return merged
+        return ModelOption.merge_extra_body(merged, user)
 
     async def _generate_from_context(
         self,
@@ -902,8 +879,11 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 parse tool-call responses.
 
         Raises:
-            ValueError: If `action` is an `ALoraRequirement` but `ctx` renders no
+            ValueError: If `action` is an `ALoraRequirement` and its adapter is
+                unavailable (not registered on this backend), or `ctx` renders no
                 conversation, leaving the requirement-check adapter nothing to judge.
+            ValueError: If no user-role message has non-whitespace text,
+                images, audio, or documents.
 
         Returns:
             tuple[ModelOutputThunk[C], Context]: A thunk holding the (lazy) model output
@@ -949,11 +929,11 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 )
                 alora_req_adapter = self._find_adapter(adapter_name, search_types)
                 if alora_req_adapter is None:
-                    if reroute_to_alora and isinstance(action, ALoraRequirement):
-                        MelleaLogger.get_logger().warning(
-                            f"attempted to use an AloraRequirement but backend {self} "
-                            f"doesn't have the specified adapter added {adapter_name}; "
-                            f"defaulting to regular generation"
+                    if isinstance(action, ALoraRequirement):
+                        raise ValueError(
+                            f"cannot validate an ALoraRequirement: backend {self} has "
+                            f"no {adapter_name!r} adapter registered. Register one with "
+                            "backend.add_adapter(), or use a plain Requirement."
                         )
                     reroute_to_alora = False
 
@@ -1282,7 +1262,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 await _fire_embedded_invocation_complete(
                     identity=identity, outcome="schema_error", error=e
                 )
-                raise Exception(
+                raise ValueError(
                     f"Intrinsic did not return a JSON: "
                     f"{chunk.choices[0].message.content}"
                 ) from e
@@ -1366,6 +1346,10 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         Returns:
             tuple[ModelOutputThunk[C], Context]: A thunk holding the (lazy) model output
                 and an updated context that includes `action` and the new output.
+
+        Raises:
+            ValueError: If no user-role message has non-whitespace text,
+                images, audio, or documents.
         """
         await self.do_generate_walk(action)
 
@@ -1398,8 +1382,16 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         # Convert our linearized context into a sequence of chat messages. Template formatters have a standard way of doing this.
         messages: list[Message] = self.formatter.to_chat_messages(linearized_context)
         messages.extend(self.formatter.to_chat_messages([action]))
-        # ALoraRequirement may arrive here when no adapter is registered;
-        # _generate is responsible for logging a warning in that case.
+
+        # Issue #1597: refuse to send an empty user prompt; see
+        # `has_user_content` for why whitespace-only text still counts as empty.
+        if not has_user_content(messages):
+            raise ValueError(
+                "Refusing to call the model: no user-role content in the assembled "
+                "conversation. This usually means a stateless context (e.g. "
+                "SimpleContext) was combined with an empty or whitespace-only "
+                "action; recorded turns are not forwarded to the model."
+            )
 
         conversation: list[dict] = []
 
@@ -1525,6 +1517,10 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         # Set model/provider early so they are available in the error path
         output.generation.model = self._model_id
         output.generation.provider = self._provider
+        (
+            output.generation.prompt_template,
+            output.generation.prompt_template_variables,
+        ) = self.formatter.prompt_template_for(action)
 
         try:
             # To support lazy computation, will need to remove this create_task and store just the unexecuted coroutine.

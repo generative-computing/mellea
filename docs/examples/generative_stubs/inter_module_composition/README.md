@@ -4,13 +4,13 @@ This subdirectory demonstrates how to compose multiple generative functions toge
 
 ## Files
 
-### summarizers.py
+### [summarizers.py](./summarizers.py)
 Defines reusable summarization functions that can be composed with other modules.
 
-### decision_aides.py
+### [decision_aides.py](./decision_aides.py)
 Implements decision-making functions that can work with summarized content.
 
-### summarize_and_decide.py
+### [summarize_and_decide.py](./summarize_and_decide.py)
 Shows how to compose summarizers and decision aides into a complete workflow.
 
 ## Concepts Demonstrated
