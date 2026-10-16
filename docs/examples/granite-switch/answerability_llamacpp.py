@@ -62,9 +62,11 @@ BASE_URL = os.environ.get("LLAMACPP_SWITCH_BASE_URL", "http://127.0.0.1:8081/v1"
 try:
     response = requests.get(f"{BASE_URL}/models", timeout=5)
     response.raise_for_status()
-except requests.RequestException:
-    # Covers both "nothing listening" and "still loading weights": llama-server
-    # answers 503 from every endpoint until the model is in. Detected by
+    served = {model["id"] for model in response.json()["data"]}
+except (requests.RequestException, ValueError, KeyError, TypeError):
+    # Covers "nothing listening", "still loading weights" (llama-server answers
+    # 503 from every endpoint until the model is in), and a foreign server whose
+    # /models reply is not an OpenAI model list. Detected by
     # docs/examples/conftest.py subprocess runner as a skip.
     print(
         f"Skipped: no llama-server ready at {BASE_URL} "
@@ -83,7 +85,6 @@ from mellea.stdlib.context import ChatContext
 SWITCH_MODEL_ID = IBM_GRANITE_SWITCH_4_1_3B_PREVIEW.hf_model_name
 assert SWITCH_MODEL_ID is not None
 
-served = {model["id"] for model in response.json()["data"]}
 if SWITCH_MODEL_ID not in served:
     # Detected by docs/examples/conftest.py subprocess runner as a skip.
     print(

@@ -1198,9 +1198,10 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         # `chat_template_kwargs` so both server families render them; vLLM
         # folds both shapes into the same template context, so the duplicate
         # is harmless there. A caller's own `chat_template_kwargs.documents`
-        # wins on llama-server; on vLLM, `build_chat_params` merges the
-        # top-level field over it, so such an override only takes effect on
-        # servers that read `chat_template_kwargs` alone.
+        # wins on llama-server. On vLLM, which copy wins depends on the
+        # version (current `build_chat_params` merges the top-level field over
+        # it; 0.11 and earlier let `chat_template_kwargs` win), so don't rely
+        # on such an override there.
         documents = extra_body.get("documents")
         if documents:
             kwargs = dict(extra_body.get("chat_template_kwargs") or {})
