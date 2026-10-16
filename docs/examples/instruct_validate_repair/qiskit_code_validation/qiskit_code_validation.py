@@ -28,7 +28,11 @@ Example:
 
 import time
 
-from validation_helpers import validate_qiskit_migration
+from validation_helpers import (
+    extract_code_from_markdown,
+    validate_lintq,
+    validate_qiskit_migration,
+)
 
 from mellea import MelleaSession, start_session
 from mellea.backends import ModelOption
@@ -184,6 +188,29 @@ qc.measure_all()
     # RepairTemplateStrategy: Adds validation failure reasons to the instruction and retries
     use_multiturn_strategy = False
 
+    # Setting use_lintq to True also rejects code flagged by the LintQ CodeQL queries.
+    # Requires the codeql CLI and LINTQ_DIR (see README.md → LintQ setup)
+    use_lintq = False
+
+    # LintQ report of each generation, so the final one is not recomputed below.
+    lintq_reports: list[str] = []
+
+    def lintq_check(output: str) -> tuple[bool, str]:
+        passed, report = validate_lintq(extract_code_from_markdown(output))
+        lintq_reports.append(report)
+        return passed, report
+
+    extra_requirements = (
+        [
+            req(
+                "Code must raise no LintQ warnings",
+                validation_fn=simple_validate(lintq_check),
+            )
+        ]
+        if use_lintq
+        else None
+    )
+
     # Initialize the required context
     ctx = ChatContext() if use_multiturn_strategy else SimpleContext()
     if use_multiturn_strategy:
@@ -202,7 +229,11 @@ qc.measure_all()
         start_time = time.time()
 
         code, success, attempts = generate_validated_qiskit_code(
-            m, prompt, strategy, system_prompt=system_prompt
+            m,
+            prompt,
+            strategy,
+            system_prompt=system_prompt,
+            extra_requirements=extra_requirements,
         )
         elapsed = time.time() - start_time
 
@@ -211,11 +242,18 @@ qc.measure_all()
     print("======================\n")
 
     if success:
-        print("✓ Code passes Qiskit migration validation")
+        if use_lintq:
+            print(
+                "✓ Code passes Qiskit migration validation and it is code smells free"
+            )
+        else:
+            print("✓ Code passes Qiskit migration validation")
     else:
         _, error_msg = validate_qiskit_migration(code)
+        # The returned code is the last generation, so its LintQ report is the last one.
+        errors = [error_msg, lintq_reports[-1] if lintq_reports else ""]
         print("✗ Validation errors:")
-        print(error_msg)
+        print("\n".join(e for e in errors if e))
 
 
 if __name__ == "__main__":
