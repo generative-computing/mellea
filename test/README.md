@@ -195,6 +195,8 @@ runs (`pytest -m ollama`) and drive auto-skip logic. **Only apply to `e2e` and
 | `watsonx` | IBM Watsonx API | API calls, requires credentials |
 | `huggingface` | HuggingFace transformers | Local, GPU required (VRAM varies) |
 | `vllm` | vLLM via an OpenAI-compatible server | Local, GPU required (combine with `openai`) |
+| `llamacpp` | llama-server (`LLAMACPP_BASE_URL`, default `:8080`), started by `scripts/start_llamacpp.sh` | Local, light; no GPU required |
+| `llamacpp_switch` | llama-server serving a Granite Switch model (`LLAMACPP_SWITCH_BASE_URL`, default `:8081`), started by `scripts/start_llamacpp_switch.sh` | Local; f16 3b needs ~9 GB RAM |
 | `litellm` | LiteLLM (wraps other backends) | Depends on underlying backend |
 | `bedrock` | AWS Bedrock | API calls, requires credentials |
 
