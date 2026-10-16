@@ -206,6 +206,10 @@ def validate_correctness(problem: dict[str, Any], code: str) -> tuple[bool, str]
         finally:
             timer.cancel()
             os.chdir(cwd)
+            if mpl_backend is None:
+                os.environ.pop("MPLBACKEND", None)
+            else:
+                os.environ["MPLBACKEND"] = mpl_backend
 
 
 def validate_lintq(code: str) -> tuple[bool, str]:
