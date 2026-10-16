@@ -209,9 +209,8 @@ formatter = LLMONFormatter(
 
 ## The `llmon` library dependency
 
-`LLMONFormatter` uses the `llmon` converter library (distribution name `llmon`,
-**import root `lang`**) to sanitize content and read replies. It is an optional
-dependency:
+`LLMONFormatter` uses the `llmon` converter library (`llmon.lang`) to sanitize
+content and read replies. It is an optional dependency:
 
 ```bash
 pip install "mellea[llmon]"

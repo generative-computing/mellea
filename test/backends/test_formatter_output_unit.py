@@ -16,7 +16,9 @@ from typing import Any
 import pydantic
 import pytest
 
-pytest.importorskip("lang.json.llmon_converters", reason='install "mellea[llmon]"')
+pytest.importorskip(
+    "llmon.lang.json.llmon_converters", reason='install "mellea[llmon]"'
+)
 
 from mellea.backends.backend import FormatterBackend
 from mellea.backends.model_ids import ModelIdentifier

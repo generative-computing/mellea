@@ -109,8 +109,7 @@ switch = [
 ]
 
 # LLMON (LLM Object Notation, arXiv:2603.22519) prompt rendering and reply parsing,
-# used by `LLMONFormatter`. The distribution is named `llmon` but its import root
-# is `lang` (see mellea/formatters/llmon_formatter.py).
+# used by `LLMONFormatter` (see mellea/formatters/llmon_formatter.py).
 llmon = [
     "llmon",
 ]
@@ -354,9 +353,9 @@ module = "cpex.*"
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-# `lang` is the import root of the `llmon` library (the `llmon` extra), an
-# optional dependency absent from environments that install mellea without it.
-module = "lang.*"
+# The `llmon` library (the `llmon` extra), an optional dependency absent from
+# environments that install mellea without it.
+module = "llmon.*"
 ignore_missing_imports = true
 
 

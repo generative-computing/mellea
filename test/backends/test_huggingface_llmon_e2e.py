@@ -28,7 +28,9 @@ from test.predicates import require_gpu
 
 pytest.importorskip("torch", reason="torch not installed — install mellea[hf]")
 # LLMON support is an optional extra (`pip install "mellea[llmon]"`).
-pytest.importorskip("lang.json.llmon_converters", reason='install "mellea[llmon]"')
+pytest.importorskip(
+    "llmon.lang.json.llmon_converters", reason='install "mellea[llmon]"'
+)
 
 # The weights are float32: about 14 GB.
 pytestmark = [pytest.mark.huggingface, pytest.mark.e2e, require_gpu(min_vram_gb=18)]

@@ -219,8 +219,8 @@ class LLMONFormatter(ChatFormatter):
             ImportError: If the `llmon` library is not installed.
         """
         try:
-            from lang.common import common
-            from lang.json.llmon_converters import LLMONConverters
+            from llmon.lang.common import common
+            from llmon.lang.json.llmon_converters import LLMONConverters
         except ImportError as e:
             raise ImportError(
                 "LLMONFormatter requires the `llmon` library. "
@@ -393,8 +393,9 @@ class LLMONFormatter(ChatFormatter):
             reply = self._assistant_value(
                 json.loads(converter.llmon_str_to_json_str(text))
             )
-        except Exception:
-            # The converter is strict, so a partial or garbled generation raises.
+        except (Exception, SystemExit):
+            # The converter is strict, so a partial or garbled generation raises; the
+            # `llmon` library reports malformed markup with `sys.exit`.
             reply = None
         if reply is not None:
             return reply

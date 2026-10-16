@@ -13,9 +13,11 @@ tests pin down what is sanitized rather than how the library spells it.
 import pytest
 
 # LLMON support is an optional extra (`pip install "mellea[llmon]"`).
-pytest.importorskip("lang.json.llmon_converters", reason='install "mellea[llmon]"')
+pytest.importorskip(
+    "llmon.lang.json.llmon_converters", reason='install "mellea[llmon]"'
+)
 
-from lang.json.llmon_converters import LLMONConverters
+from llmon.lang.json.llmon_converters import LLMONConverters
 
 from mellea.backends.model_ids import ModelIdentifier
 from mellea.backends.tools import MelleaTool
