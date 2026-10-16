@@ -102,9 +102,10 @@ def _check_llamacpp_available(
 ):
     """Check whether a local llama.cpp server is loaded and ready to serve.
 
-    Reads `env_var` (default `LLAMACPP_BASE_URL`, falling back to `default_url`,
-    `http://127.0.0.1:8080/v1`) and probes `/props`, requiring a 200 whose JSON body carries `LLAMACPP_PROPS_KEYS`. One
-    request settles both halves of the gate:
+    Reads the base URL from `env_var` (default `LLAMACPP_BASE_URL`), falling back
+    to `default_url` (default `LLAMACPP_DEFAULT_BASE_URL`), and probes `/props`,
+    requiring a 200 whose JSON body carries `LLAMACPP_PROPS_KEYS`. One request
+    settles both halves of the gate:
 
     - Ready, not merely bound. llama-server accepts connections while it is still
       downloading and loading weights, answering every endpoint 503 "Loading model"
