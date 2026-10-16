@@ -11,9 +11,9 @@
 #
 # Why this exists alongside scripts/start_llamacpp.sh: the plain-Granite script
 # serves a prebuilt GGUF, but IBM publishes no Switch GGUF. llama.cpp's
-# converter handles GraniteSwitchForCausalLM directly (ggml-org/llama.cpp#25107,
-# in releases since v0.1.0; this script is tested against v0.6.0), so this
-# script converts from the HF checkpoint.
+# converter handles GraniteSwitchForCausalLM directly (ggml-org/llama.cpp#25107;
+# see LLAMA_CPP_REVISION below for the revision current checkpoints need), so
+# this script converts from the HF checkpoint. The server is tested on v0.6.0.
 #
 # Usage:
 #   ./scripts/start_llamacpp_switch.sh                      # 3b, port 8081
@@ -57,11 +57,13 @@ LLAMACPP_SWITCH_CTX_SIZE="${LLAMACPP_SWITCH_CTX_SIZE:-32768}"
 LLAMACPP_SWITCH_READY_TIMEOUT="${LLAMACPP_SWITCH_READY_TIMEOUT:-600}"
 LLAMACPP_BIN="${LLAMACPP_BIN:-$(command -v llama-server 2>/dev/null || true)}"
 
-# Pinned llama.cpp revision used only for convert_hf_to_gguf.py. It must
-# understand GraniteSwitchForCausalLM (any tag from v0.1.0 on); this is the
-# v0.6.0 tag, matching what Homebrew shipped at the time this script was
-# written, so the converter and a v0.6.0 server agree on the GGUF layout.
-LLAMA_CPP_REVISION="${LLAMA_CPP_REVISION:-d81235049384534c167caea52b85a694f6103d14}"
+# Pinned llama.cpp revision used only for convert_hf_to_gguf.py. This is build
+# b11675, the first with ggml-org/llama.cpp#30621: current Switch checkpoints
+# (MultiSwitch, which reserves two cache slots) need it, and every earlier
+# converter, v0.7.0 included, writes a block count one too high, so the GGUF
+# converts but llama-server refuses to load it. The GGUFs it writes load in a
+# v0.6.0 server.
+LLAMA_CPP_REVISION="${LLAMA_CPP_REVISION:-2851b3bcbf8d993a2243ae751c0a7dfa8e944a40}"
 
 BUILD_CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/mellea/llamacpp-switch-build"
 GGUF="$BUILD_CACHE/$(basename "$LLAMACPP_SWITCH_MODEL")-$LLAMACPP_SWITCH_QUANT.gguf"
