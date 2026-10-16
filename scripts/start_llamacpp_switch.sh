@@ -101,7 +101,7 @@ stop_server() {
     fi
     SERVER_PID=""
 }
-trap 'stop_server; rm -f "$BUILD_CACHE"/*.gguf.partial' EXIT
+trap 'stop_server; rm -f "$GGUF.partial"' EXIT
 # Route signal kills through the EXIT trap so the server is always torn down.
 trap 'exit 130' INT
 trap 'exit 143' TERM
@@ -138,7 +138,16 @@ if [[ ! -f "$GGUF" ]]; then
     # huggingface_hub is installed explicitly: the checkpoint download below
     # runs on this venv, and the requirements file only pulls it in
     # transitively through transformers.
-    uv pip install --python "$CONVERTER_VENV/bin/python" \
+    # The requirements file pins transformers==4.57.6, which cannot load
+    # current Switch tokenizers (their tokenizer_class, TokenizersBackend, is a
+    # transformers 5 class), so override it to the range Mellea itself tests.
+    # Running from the build cache keeps a surrounding project's uv settings
+    # (mellea's own [tool.uv] override-dependencies, say) out of the resolve,
+    # so the result is the same whatever directory the script is run from.
+    CONVERTER_OVERRIDES="$BUILD_CACHE/converter-overrides.txt"
+    echo 'transformers>5.5.0,<6.0.0' > "$CONVERTER_OVERRIDES"
+    uv --directory "$BUILD_CACHE" pip install --python "$CONVERTER_VENV/bin/python" \
+        --override "$CONVERTER_OVERRIDES" \
         -r "$LLAMA_CPP_DIR/requirements/requirements-convert_hf_to_gguf.txt" \
         huggingface_hub
 
@@ -181,7 +190,8 @@ PY
     # Write to a .partial file and move it into place on success: the converter
     # writes its output directly, so a Ctrl-C, full disk, or OOM kill midway
     # would otherwise leave a truncated GGUF that the cache check above accepts
-    # on every later run. The EXIT trap removes leftover .partial files.
+    # on every later run. The EXIT trap removes this run's leftover .partial
+    # file, and only that one, so a concurrent run for another model keeps its own.
     "$CONVERTER_VENV/bin/python" "$LLAMA_CPP_DIR/convert_hf_to_gguf.py" \
         "$SHADOW_DIR" \
         --outtype "$LLAMACPP_SWITCH_QUANT" \
