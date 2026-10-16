@@ -216,7 +216,7 @@ Passing the QKT rules only shows that the code uses current Qiskit APIs, not tha
 | Validator | What it checks | Repair reason fed back to the model |
 |-----------|----------------|-------------------------------------|
 | **QKT rules** | `flake8-qiskit-migration`, as in the single-prompt example | The QKT rule messages |
-| **Test suite** | Executes the code against the problem's own tests: `check(candidate)` for Qiskit HumanEval, `test_<entry_point>()` for QuantumKatas (30s timeout) | The assertion message or full traceback |
+| **Test suite** | Executes the code against the problem's own tests: `check(candidate)` for Qiskit HumanEval, `test_<entry_point>()` for QuantumKatas (best-effort 30s time limit, see below) | The assertion message or full traceback |
 | **LintQ** | Runs the [LintQ](https://github.com/sola-st/LintQ) CodeQL queries (double measurement, operations after measurement, unused qubits, ...) | `[rule-id] message` per finding |
 
 Both plug into the same `generate_validated_qiskit_code()` loop through its `extra_requirements` parameter. Running LintQ only once the tests pass avoids linting code that does not run, and saves time: each LintQ run builds a CodeQL database (around 20s).
@@ -250,7 +250,9 @@ code, success, attempts = generate_validated_qiskit_code(
 )
 ```
 
-> ⚠️ **Security**: the test-suite validator runs `exec()` on model-generated code and on the dataset's test code, with a timeout but **not** in a sandbox. Run it only on datasets you trust, on a machine where running arbitrary Python is acceptable.
+> ⚠️ **Security**: the test-suite validator runs `exec()` on model-generated code and on the dataset's test code, in the current process and **not** in a sandbox. Run it only on datasets you trust, on a machine where running arbitrary Python is acceptable.
+>
+> The 30s time limit is best effort: it is only checked between Python bytecodes, so code blocked inside a C call (a simulator run, `time.sleep`) is stopped only once that call returns, and a bare `except:` in the generated code can swallow it.
 
 ### Setup
 

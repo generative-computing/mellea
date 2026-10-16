@@ -120,6 +120,10 @@ def validate_input_code(prompt: str) -> tuple[bool, str]:
     return True, ""
 
 
+# Time limit for running a candidate against its tests.
+TIMEOUT_SECONDS = 30
+
+
 class _Timeout(BaseException):
     """Raised into the validating thread when the code runs too long.
 
@@ -137,12 +141,61 @@ _SAFE_BUILTINS = {
 }
 
 
+def _run_tests(program: str, entry: str, test_name: str) -> tuple[bool, str]:
+    """Execute `program` and call its test function, stopping it after the time limit."""
+    # Mellea validates on a worker thread, so the timeout is raised via the C API.
+    tid = ctypes.c_ulong(threading.get_ident())
+    timer = threading.Timer(
+        TIMEOUT_SECONDS,
+        ctypes.pythonapi.PyThreadState_SetAsyncExc,
+        (tid, ctypes.py_object(_Timeout)),
+    )
+    try:
+        try:
+            timer.start()
+            ns: dict[str, Any] = {"__builtins__": _SAFE_BUILTINS}
+            exec(program, ns)
+            if entry not in ns:
+                return False, f"Entry point `{entry}` not defined"
+            if test_name == "check":
+                ns["check"](ns[entry])
+            else:
+                ns[test_name]()
+            return True, ""
+        finally:
+            timer.cancel()
+            timer.join()
+            # cancel() cannot recall a _Timeout the timer already raised into this
+            # thread: clear it, so it cannot surface later inside Mellea. If it is
+            # delivered first, the except below still catches it.
+            ctypes.pythonapi.PyThreadState_SetAsyncExc(tid, None)
+    except _Timeout:
+        print(f"Validation failed: Execution timed out after {TIMEOUT_SECONDS}s")
+        return False, f"Execution timed out after {TIMEOUT_SECONDS}s"
+    except SystemExit as e:
+        # Not an Exception: left uncaught, it would stop the repair loop.
+        print(f"Validation failed: the code called sys.exit({e.code!r})")
+        return False, f"The code called sys.exit({e.code!r}) instead of returning"
+    except AssertionError as e:
+        print(f"Validation failed: Test assertion failed: {e}")
+        return False, f"Test assertion failed: {e}"
+    except Exception as e:
+        print(f"{type(e).__name__}: {e}\n{traceback.format_exc()}")
+        return False, f"{type(e).__name__}: {e}\n{traceback.format_exc()}"
+
+
 def validate_correctness(problem: dict[str, Any], code: str) -> tuple[bool, str]:
     """Run `code` against a benchmark problem's own test suite.
 
     Adapted from the Qiskit HumanEval test harness (Copyright IBM, Apache-2.0).
     Supports Qiskit HumanEval (`check(candidate)`) and QuantumKatas
-    (`test_<entry_point>()`). Warning: this `exec()`s untrusted code; it is not a sandbox.
+    (`test_<entry_point>()`).
+
+    Warning: this `exec()`s untrusted code in the current process; it is not a
+    sandbox. The time limit is best effort: it is only checked between Python
+    bytecodes, so code blocked inside a C call (a simulator run, `time.sleep`) is
+    stopped only once that call returns, and a bare `except:` in the code can
+    swallow it.
 
     Args:
         problem: Problem dict with `prompt`, `test` and `entry_point` keys
@@ -168,43 +221,15 @@ def validate_correctness(problem: dict[str, Any], code: str) -> tuple[bool, str]
     if test_name not in test_fns:
         return False, f"No check() or test_{entry}() in the test code"
 
-    # Mellea validates on a worker thread, so the timeout is raised via the C API.
-    tid = ctypes.c_ulong(threading.get_ident())
-    timer = threading.Timer(
-        30,
-        ctypes.pythonapi.PyThreadState_SetAsyncExc,
-        (tid, ctypes.py_object(_Timeout)),
-    )
-    cwd = os.getcwd()
+    # Run in a scratch directory (some tasks write files) with a non-interactive
+    # matplotlib backend, and restore both afterwards.
+    cwd, mpl_backend = os.getcwd(), os.environ.get("MPLBACKEND")
     os.environ["MPLBACKEND"] = "Agg"
     with tempfile.TemporaryDirectory() as tmp:
-        os.chdir(tmp)  # some tasks write files
-        timer.start()
+        os.chdir(tmp)
         try:
-            ns: dict[str, Any] = {"__builtins__": _SAFE_BUILTINS}
-            exec(program, ns)
-            if entry not in ns:
-                return False, f"Entry point `{entry}` not defined"
-            if test_name == "check":
-                ns["check"](ns[entry])
-            else:
-                ns[test_name]()
-            return True, ""
-        except _Timeout:
-            print("Validation failed: Execution timed out after 30s")
-            return False, "Execution timed out after 30s"
-        except SystemExit as e:
-            # Not an Exception: left uncaught, it would stop the repair loop.
-            print(f"Validation failed: the code called sys.exit({e.code!r})")
-            return False, f"The code called sys.exit({e.code!r}) instead of returning"
-        except AssertionError as e:
-            print(f"Validation failed: Test assertion failed: {e}")
-            return False, f"Test assertion failed: {e}"
-        except Exception as e:
-            print(f"{type(e).__name__}: {e}\n{traceback.format_exc()}")
-            return False, f"{type(e).__name__}: {e}\n{traceback.format_exc()}"
+            return _run_tests(program, entry, test_name)
         finally:
-            timer.cancel()
             os.chdir(cwd)
             if mpl_backend is None:
                 os.environ.pop("MPLBACKEND", None)
