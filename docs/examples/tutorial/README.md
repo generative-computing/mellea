@@ -4,35 +4,32 @@ This directory contains Python script versions of the tutorial notebooks, suitab
 
 ## Files
 
-### example.py
+### [example.py](./example.py)
 General introduction to Mellea with basic examples.
 
-### simple_email.py
+### [simple_email.py](./simple_email.py)
 Email generation example - the classic "Hello World" of Mellea.
 
-### instruct_validate_repair.py
+### [instruct_validate_repair.py](./instruct_validate_repair.py)
 Walkthrough of the instruct-validate-repair paradigm.
 
-### compositionality_with_generative_stubs.py
+### [compositionality_with_generative_stubs.py](./compositionality_with_generative_stubs.py)
 Tutorial on composing generative functions.
 
-### context_example.py
+### [context_example.py](./context_example.py)
 Working with contexts and context management.
 
-### document_mobject.py
+### [document_mobject.py](./document_mobject.py)
 Using document MObjects for text processing.
 
-### table_mobject.py
+### [table_mobject.py](./table_mobject.py)
 Working with table data structures.
 
-### model_options_example.py
+### [model_options_example.py](./model_options_example.py)
 Configuring model options and parameters.
 
-### sentiment_classifier.py
+### [sentiment_classifier.py](./sentiment_classifier.py)
 Building a sentiment classification system.
-
-### mcp_example.py
-Model Context Protocol integration examples.
 
 ## Relationship to Notebooks
 
@@ -56,15 +53,14 @@ uv run docs/examples/tutorial/simple_email.py
 
 Recommended order for learning Mellea:
 
-1. **simple_email.py** - Start here for basic concepts
-2. **instruct_validate_repair.py** - Core paradigm
-3. **compositionality_with_generative_stubs.py** - Building blocks
-4. **context_example.py** - Context management
-5. **model_options_example.py** - Configuration
-6. **sentiment_classifier.py** - Complete application
-7. **document_mobject.py** - Working with documents
-8. **table_mobject.py** - Working with structured data
-9. **mcp_example.py** - Advanced integration
+1. **[simple_email.py](./simple_email.py)** - Start here for basic concepts
+2. **[instruct_validate_repair.py](./instruct_validate_repair.py)** - Core paradigm
+3. **[compositionality_with_generative_stubs.py](./compositionality_with_generative_stubs.py)** - Building blocks
+4. **[context_example.py](./context_example.py)** - Context management
+5. **[model_options_example.py](./model_options_example.py)** - Configuration
+6. **[sentiment_classifier.py](./sentiment_classifier.py)** - Complete application
+7. **[document_mobject.py](./document_mobject.py)** - Working with documents
+8. **[table_mobject.py](./table_mobject.py)** - Working with structured data
 
 ## Key Concepts Covered
 

@@ -4,7 +4,7 @@ This directory demonstrates the `@mify` decorator for making custom Python objec
 
 ## Files
 
-### mify.py
+### [mify.py](./mify.py)
 Comprehensive examples of using `@mify` to integrate custom classes with Mellea.
 
 **Key Features:**
@@ -15,10 +15,10 @@ Comprehensive examples of using `@mify` to integrate custom classes with Mellea.
 - Field selection with `fields_include`
 - Function exposure as tools with `funcs_include`
 
-### rich_document_advanced.py
+### [rich_document_advanced.py](./rich_document_advanced.py)
 Advanced examples using mify with rich document types.
 
-### rich_table_execute_basic.py
+### [rich_table_execute_basic.py](./rich_table_execute_basic.py)
 Examples of mifying table objects for data manipulation.
 
 ## Concepts Demonstrated

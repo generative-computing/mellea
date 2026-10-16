@@ -137,6 +137,7 @@ Use the tool's common name (e.g., GitHub Copilot, Cursor, etc.).
 | Telemetry import errors | Run `uv sync` to install OpenTelemetry deps |
 | Silent empty strings from async backends | Check for `asyncio.gather(..., return_exceptions=True)` — exceptions become values silently; use `return_exceptions=False` unless callers explicitly handle `BaseException` values |
 | GitHub Actions workflow injection warning | Never use `${{ expression }}` directly inside `run:` shell commands — always route through `env:` (`env: MY_VAR: ${{ expr }}` then `"$MY_VAR"` in the script). This rule applies only to `run:` steps; `${{ }}` in `if:` conditions and `with:` action inputs is fine. |
+| zizmor `ref-version-mismatch` on a workflow your PR didn't touch | A SHA pin's comment names a moving tag (`# v7`) that upstream has re-pointed. Comment with the exact release the SHA is tagged as (`@<sha> # v7.0.1`); the `action-pin-full-version` pre-commit hook enforces this. |
 
 ## 10. Self-Review (before notifying user)
 1. `uv run pytest test/ -m "not qualitative"` passes?

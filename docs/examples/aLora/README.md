@@ -127,7 +127,7 @@ backend.add_adapter(stembolt_adapter(base_model_name="granite-4.1-3b"))
 
 ## Example Files
 
-### 101_example.py
+### [101_example.py](./101_example.py)
 Comparing aLoRA-backed requirement validation against LLM-as-a-judge, using the
 catalog-native `requirement-check` adapter (not a custom one — see
 `stembolts_intrinsic.py` for loading your own).
@@ -137,7 +137,7 @@ Demonstrates:
 - `ALoraRequirement` vs `LLMaJRequirement` routing
 - Timing both validation paths
 
-### 102_example.py
+### [102_example.py](./102_example.py)
 Interactive loop that exercises the custom `stembolts` adapter — skip-marked
 because it blocks on stdin in an infinite loop.
 
@@ -148,7 +148,7 @@ Demonstrates:
 - Loading a fully custom, non-catalog adapter via `stembolts_intrinsic.py`
 - Running the adapter-backed intrinsic repeatedly with a fresh `ChatContext`
 
-### make_training_data.py
+### [make_training_data.py](./make_training_data.py)
 Utility for preparing training datasets for adapter training.
 
 Demonstrates:
@@ -156,7 +156,7 @@ Demonstrates:
 - Data validation
 - Preprocessing for training
 
-### stembolts_intrinsic.py
+### [stembolts_intrinsic.py](./stembolts_intrinsic.py)
 Helper module for loading and calling the fully custom `stembolts` adapter
 (no standalone entry point — `102_example.py` consumes it).
 
@@ -165,7 +165,7 @@ Demonstrates:
 - Registering the adapter on a backend, guarded by qualified name
 - Calling the intrinsic directly via `mfuncs.act`
 
-### example_readme_generator.py
+### [example_readme_generator.py](./example_readme_generator.py)
 Programmatic README generation for adapters.
 
 Demonstrates:

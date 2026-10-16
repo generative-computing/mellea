@@ -184,7 +184,7 @@ async def test_invocation_complete_fires_schema_error_on_malformed_json():
         mot, _ = await mfuncs.aact(
             Intrinsic("answerability"), ctx, backend, strategy=None
         )
-        with pytest.raises(Exception, match="did not return a JSON"):
+        with pytest.raises(ValueError, match="did not return a JSON"):
             await mot.avalue()
 
     payloads = _invocation_complete_payloads(mock_invoke)

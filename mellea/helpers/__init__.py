@@ -24,6 +24,7 @@ from .openai_compatible_helpers import (
     OPENAI_COMPATIBLE_WIRE_PROVIDERS,
     chat_completion_delta_merge,
     extract_model_tool_requests,
+    has_user_content,
     merge_provider_fields,
     message_to_openai_message,
     messages_to_docs,

@@ -11,18 +11,6 @@
 
 rules:
 
-  # --- template-injection -----------------------------------------------------
-  # workflow_dispatch inputs used directly in run: blocks in
-  # dispatch-to-contribs.yml. The workflow is dispatch-only (requires
-  # maintainer write access); no external attacker trigger path exists.
-  # The fix is to route inputs through env vars per AGENTS.md convention.
-  # Fix tracked in: https://github.com/generative-computing/mellea/issues/1532
-  template-injection:
-    ignore:
-      - dispatch-to-contribs.yml:33
-      - dispatch-to-contribs.yml:34
-      - dispatch-to-contribs.yml:60
-
   # --- cache-poisoning --------------------------------------------------------
   # astral-sh/setup-uv and actions/setup-node use caching in the
   # docs-publish build-and-validate job, which is triggered on push to main.
