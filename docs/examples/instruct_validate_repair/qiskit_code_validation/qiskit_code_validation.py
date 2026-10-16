@@ -236,7 +236,9 @@ qc.measure_all()
 
     if success:
         if use_lintq:
-            print("✓ Code passes Qiskit migration validation and it is code smells free")
+            print(
+                "✓ Code passes Qiskit migration validation and it is code smells free"
+            )
         else:
             print("✓ Code passes Qiskit migration validation")
     else:
