@@ -416,6 +416,17 @@ Hub repo (rather than one already-known name) still goes through
 `register_embedded_adapter_model`, which builds the composed `Adapter`
 instances for you.
 
+`OpenAIBackend` also serves Granite Switch checkpoints from
+[llama-server](https://github.com/ggml-org/llama.cpp) (v0.1.0 or newer, which
+carries the granite-switch architecture; tested on v0.6.0): start it with
+`--jinja`, point `base_url` at it, and adapter activation works the same way
+as under vLLM, including the document-based adapter functions and the
+constrained decoding each adapter's `io.yaml` asks for.
+`scripts/start_llamacpp_switch.sh` converts a Switch checkpoint to GGUF and
+serves it locally on port 8081 (the base-Granite server keeps 8080, so both can
+run side by side); `docs/examples/granite-switch/answerability_llamacpp.py` is
+a runnable example that skips with a reason when no such server is reachable.
+
 ---
 
 ## Guardian adapter functions

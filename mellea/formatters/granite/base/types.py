@@ -468,16 +468,29 @@ class GraniteChatCompletion(ChatCompletion):
             and self.extra_body.chat_template_kwargs
             and hasattr(self.extra_body.chat_template_kwargs, "documents")
         ):
-            if self.extra_body.documents is not None:
-                raise ValueError(
-                    "Conflicting values of documents found in top-level "
-                    "'documents' parameter and inside "
-                    "'chat_template_kwargs'"
-                )
             if not isinstance(self.extra_body.chat_template_kwargs.documents, list):
                 raise ValueError(
                     "'documents' parameter inside 'chat_template_kwargs' is not a list"
                 )
+            if self.extra_body.documents is not None:
+                # OpenAIBackend sends identical copies in both places, because
+                # llama-server reads documents only from chat_template_kwargs.
+                # Keep the top-level copy and drop the duplicate.
+                if [
+                    Document.model_validate(d)
+                    for d in self.extra_body.chat_template_kwargs.documents
+                ] != self.extra_body.documents:
+                    raise ValueError(
+                        "Conflicting values of documents found in top-level "
+                        "'documents' parameter and inside "
+                        "'chat_template_kwargs'"
+                    )
+                args = self.extra_body.chat_template_kwargs.model_dump()
+                del args["documents"]
+                self.extra_body.chat_template_kwargs = (
+                    ChatTemplateKwargs.model_validate(args)
+                )
+                return self
 
             # Round-trip through dict so that documents field disappears from JSON
             # representation.

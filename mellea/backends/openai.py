@@ -1013,9 +1013,12 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         Applies the intrinsic's I/O rewriter to transform the conversation,
         injects `intrinsic_name` into `chat_template_kwargs` so that the
-        Granite Switch chat template activates the correct adapter, and
-        post-processes the model output through the intrinsic's result
-        processor.
+        Granite Switch chat template activates the correct adapter, mirrors
+        `documents` into `chat_template_kwargs` so servers without a
+        first-class documents field still render them, sends the io.yaml
+        schema as `response_format` as well as vLLM's `structured_outputs`
+        so every server constrains decoding, and post-processes the model
+        output through the intrinsic's result processor.
 
         Intrinsics default to options provided by `io.yaml`. Model options
         override these defaults. All model options besides streaming are
@@ -1185,6 +1188,44 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         api_params.update(self._map_thinking_option(thinking, extra_body))
 
         extra_body = self._merge_user_extra_body(extra_body, user_extra_body)
+
+        # vLLM reads documents from its first-class request field, but other
+        # OpenAI-compatible servers (llama-server is the tested one) drop
+        # unknown top-level fields and only reach chat-template variables
+        # through `chat_template_kwargs` — there, the Granite Switch
+        # template's `documents` variable never renders and every RAG
+        # adapter sees an empty document set. Mirror documents into
+        # `chat_template_kwargs` so both server families render them; vLLM
+        # folds both shapes into the same template context, so the duplicate
+        # is harmless there. A caller's own `chat_template_kwargs.documents`
+        # wins on llama-server. On vLLM, which copy wins depends on the
+        # version (current `build_chat_params` merges the top-level field over
+        # it; 0.11 and earlier let `chat_template_kwargs` win), so don't rely
+        # on such an override there.
+        documents = extra_body.get("documents")
+        if documents:
+            kwargs = dict(extra_body.get("chat_template_kwargs") or {})
+            if "documents" not in kwargs:
+                kwargs["documents"] = documents
+                extra_body["chat_template_kwargs"] = kwargs
+
+        # The same split applies to constrained decoding: the io.yaml schema
+        # arrives as vLLM's own `structured_outputs` field, which llama-server
+        # ignores, so adapters would decode unconstrained there. Also send it
+        # as the OpenAI-standard `response_format`, which both servers honour;
+        # vLLM folds it back into the same `structured_outputs.json`. A
+        # caller's own `response_format` wins.
+        structured_outputs = extra_body.get("structured_outputs")
+        schema = (
+            structured_outputs.get("json")
+            if isinstance(structured_outputs, dict)
+            else None
+        )
+        if isinstance(schema, dict) and "response_format" not in api_params:
+            api_params["response_format"] = {
+                "type": "json_schema",
+                "json_schema": {"name": action.intrinsic_name, "schema": schema},
+            }
 
         # Embedded adapters activate via control tokens in the chat template;
         # the binding owns the final request edit so callers cannot override
