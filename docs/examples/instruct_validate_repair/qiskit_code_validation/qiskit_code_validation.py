@@ -191,13 +191,20 @@ qc.measure_all()
     # Setting use_lintq to True also rejects code flagged by the LintQ CodeQL queries.
     # Requires the codeql CLI and LINTQ_DIR (see README.md → LintQ setup)
     use_lintq = False
+
+    # LintQ report of each generation, so the final one is not recomputed below.
+    lintq_reports: list[str] = []
+
+    def lintq_check(output: str) -> tuple[bool, str]:
+        passed, report = validate_lintq(extract_code_from_markdown(output))
+        lintq_reports.append(report)
+        return passed, report
+
     extra_requirements = (
         [
             req(
                 "Code must raise no LintQ warnings",
-                validation_fn=simple_validate(
-                    lambda output: validate_lintq(extract_code_from_markdown(output))
-                ),
+                validation_fn=simple_validate(lintq_check),
             )
         ]
         if use_lintq
@@ -243,10 +250,10 @@ qc.measure_all()
             print("✓ Code passes Qiskit migration validation")
     else:
         _, error_msg = validate_qiskit_migration(code)
+        # The returned code is the last generation, so its LintQ report is the last one.
+        errors = [error_msg, lintq_reports[-1] if lintq_reports else ""]
         print("✗ Validation errors:")
-        print(error_msg)
-        if use_lintq:
-            print(validate_lintq(extract_code_from_markdown(code))[1])
+        print("\n".join(e for e in errors if e))
 
 
 if __name__ == "__main__":
