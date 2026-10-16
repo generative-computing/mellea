@@ -16,7 +16,6 @@ import subprocess
 import tempfile
 import threading
 import traceback
-from collections.abc import Iterator
 from typing import Any
 
 try:
