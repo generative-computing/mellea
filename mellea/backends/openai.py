@@ -105,6 +105,12 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             repo ID from which to load embedded adapter configs. When `None`,
             falls back to *model_id*. Use this when the vLLM served model name
             differs from the adapter config location.
+        adapter_revision (str): Git revision for embedded-adapter discovery
+            from the Hugging Face Hub. Pin this to the same commit your
+            server loaded to avoid a mid-flight Hub update silently
+            changing the adapter configuration. Only used when
+            *adapter_source* (or *model_id*) is a Hub repo ID; local
+            directories are read as-is. Defaults to `"main"`.
         api_key (str | None): API key; falls back to `OPENAI_API_KEY` env var.
         default_extra_body (dict | None): Construction-time `extra_body` fields
             that are merged into every request this backend makes. Per-call
@@ -144,6 +150,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         default_to_constraint_checking_alora: bool = True,
         load_embedded_adapters: bool = False,
         adapter_source: str | None = None,
+        adapter_revision: str = "main",
         api_key: str | None = None,
         default_extra_body: dict | None = None,
         **kwargs,
@@ -252,6 +259,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         self._provider: str = "openai"
 
         self._adapter_source = adapter_source
+        self._adapter_revision = adapter_revision
 
         # Use provided parameters or fall back to environment variables
         self._api_key = api_key
@@ -328,7 +336,9 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         # OpenAI Backends only support embedded_adapters.
         self._uses_embedded_adapters = True
         if load_embedded_adapters:
-            self.register_embedded_adapter_model(self._adapter_source or self._model_id)
+            self.register_embedded_adapter_model(
+                self._adapter_source or self._model_id, revision=self._adapter_revision
+            )
 
     def __repr__(self) -> str:
         """Mask the API key to prevent accidental exposure in logs."""
@@ -565,12 +575,17 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         # discovery call) must not run under the lock `add_adapter()` briefly
         # takes around its dict writes.
         with self._adapter_resolve_lock():
-            discovered = _discover_embedded_adapters(
+            discovered, skip_reasons = _discover_embedded_adapters(
                 source,
                 revision=revision,
                 cache_dir=cache_dir,
                 intrinsic_name=intrinsic_name,
             )
+            if skip_reasons:
+                self._adapter_skip_reasons = {
+                    **self._adapter_skip_reasons,
+                    **skip_reasons,
+                }
             names = []
             for adapter, config in discovered:
                 key = _composed_adapter_key(adapter)
@@ -1137,6 +1152,11 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         }
 
         rewritten = rewriter.transform(request_json, **action.intrinsic_kwargs)
+        MelleaLogger.get_logger().debug(
+            "Intrinsic '%s' rendered messages: %s",
+            action.intrinsic_name,
+            [m.content for m in rewritten.messages],
+        )
 
         # --- prepare extra_body and api_params --------------------------------
         extra_body = {}
