@@ -69,7 +69,7 @@ class BaseMBRDSampling(RejectionSamplingStrategy):
             before majority vote.
         loop_budget (int): Inner rejection-sampling loop count. Must be > 0.
         requirements (list[Requirement] | None): Requirements to validate
-            against. If `None`, uses per-call requirements.
+            against, merged with any per-call requirements.
 
     Attributes:
         symmetric (bool): Whether the similarity metric is symmetric, allowing

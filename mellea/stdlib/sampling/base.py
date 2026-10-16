@@ -124,7 +124,7 @@ class BaseSamplingStrategy(SamplingStrategy):
             (potentially causing rate-limiting issues depending on the provider)
             and the returned order of results will no longer be deterministic.
         requirements (list[Requirement] | None): Global requirements evaluated
-            on every sample. When set, overrides per-call requirements.
+            on every sample, merged with any per-call requirements.
 
     Examples:
         - `loop_budget=1`: no repair strategies are used.
