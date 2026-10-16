@@ -11,7 +11,7 @@ import json
 import uuid
 from typing import TYPE_CHECKING, Any, Literal, TypedDict
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ..core.base import AudioBlock, AudioUrlBlock, ImageUrlBlock
 from ..core.utils import MelleaLogger
@@ -647,3 +647,210 @@ def has_user_content(messages: list[Message]) -> bool:
         )
         for m in messages
     )
+
+
+# ---------------------------------------------------------------------------
+# Responses API helpers — models defined here to avoid cli → mellea import cycle
+# ---------------------------------------------------------------------------
+
+
+class InputTokensDetails(BaseModel):
+    """Prompt-side token usage details for a Responses API response."""
+
+    cached_tokens: int = 0
+    """Tokens served from the provider prompt cache; zero when unreported."""
+
+
+class OutputTokensDetails(BaseModel):
+    """Completion-side token usage details for a Responses API response."""
+
+    reasoning_tokens: int = 0
+    """Tokens spent on reasoning; zero when unreported."""
+
+
+class ResponseUsage(BaseModel):
+    """Token usage for a Responses API response, including reasoning tokens.
+
+    Mirrors the OpenAI Responses API usage shape: both details objects are
+    always present, with zeros when the backend reports no breakdown. The
+    top-level `reasoning_tokens` field is a Mellea extension and stays
+    `None` when the backend does not report reasoning tokens.
+    """
+
+    input_tokens: int
+    output_tokens: int
+    total_tokens: int
+    reasoning_tokens: int | None = None
+    input_tokens_details: InputTokensDetails = Field(default_factory=InputTokensDetails)
+    output_tokens_details: OutputTokensDetails = Field(
+        default_factory=OutputTokensDetails
+    )
+
+
+class ResponseOutputItem(BaseModel):
+    """Base output item returned in a Responses API response."""
+
+    id: str
+    type: Literal[
+        "message",
+        "function_call",
+        "web_search_call",
+        "file_search_call",
+        "code_interpreter_call",
+    ]
+    status: Literal["completed", "in_progress", "failed", "incomplete"]
+
+
+class OutputTextContent(BaseModel):
+    """A text content block in a Responses API output message."""
+
+    type: Literal["output_text"]
+    text: str
+
+
+class ResponseOutputMessage(ResponseOutputItem):
+    """An assistant message output item."""
+
+    type: Literal["message"]  # type: ignore[assignment]
+    role: Literal["assistant"]
+    content: list[OutputTextContent]
+
+
+class ResponseFunctionCall(ResponseOutputItem):
+    """Function call used with Responses API."""
+
+    type: Literal["function_call"]  # type: ignore[assignment]
+    name: str
+    arguments: str
+    call_id: str
+
+
+def _detail_tokens(
+    usage: dict[str, Any], details_key: str, value_key: str
+) -> int | None:
+    """Read a token count from a nested usage details dict, if present."""
+    details = usage.get(details_key)
+    if isinstance(details, dict):
+        value = details.get(value_key)
+        if value is not None:
+            return value
+    return None
+
+
+def build_response_usage(output: ModelOutputThunk) -> ResponseUsage | None:
+    """Build a Responses API usage object from a model output, if available.
+
+    Maps the Chat Completions usage shape that backends store onto the
+    Responses API shape: reasoning tokens are read from top-level
+    `reasoning_tokens`, falling back to
+    `completion_tokens_details.reasoning_tokens`; cached tokens from
+    `input_tokens_details.cached_tokens`, falling back to
+    `prompt_tokens_details.cached_tokens`. Both details objects are always
+    emitted, with zeros when the backend reports no breakdown.
+
+    Args:
+        output: Model output object whose `generation.usage` mapping contains
+            token counts.
+
+    Returns:
+        A `ResponseUsage` object when usage metadata is present, otherwise
+        `None`.
+    """
+    if output.generation is None or output.generation.usage is None:
+        return None
+
+    usage = output.generation.usage
+    prompt_tokens = usage.get("prompt_tokens", 0)
+    completion_tokens = usage.get("completion_tokens", 0)
+    total_tokens = usage.get("total_tokens", prompt_tokens + completion_tokens)
+
+    # Reasoning tokens: prefer a top-level value, fall back to the
+    # Chat Completions location that the OpenAI and LiteLLM backends write.
+    reasoning_tokens = usage.get("reasoning_tokens")
+    if reasoning_tokens is None:
+        reasoning_tokens = _detail_tokens(
+            usage, "completion_tokens_details", "reasoning_tokens"
+        )
+
+    # Cached tokens: prefer a Responses-shaped value, fall back to the
+    # Chat Completions location.
+    cached_tokens = _detail_tokens(usage, "input_tokens_details", "cached_tokens")
+    if cached_tokens is None:
+        cached_tokens = _detail_tokens(usage, "prompt_tokens_details", "cached_tokens")
+
+    return ResponseUsage(
+        input_tokens=prompt_tokens,
+        output_tokens=completion_tokens,
+        total_tokens=total_tokens,
+        reasoning_tokens=reasoning_tokens,
+        input_tokens_details=InputTokensDetails(cached_tokens=cached_tokens or 0),
+        output_tokens_details=OutputTokensDetails(
+            reasoning_tokens=reasoning_tokens or 0
+        ),
+    )
+
+
+def build_response_output_items(
+    output: ModelOutputThunk,
+    tool_calls_list: list[ToolCallDict] | None,
+    message_id: str | None = None,
+    function_call_ids: list[str] | None = None,
+    message_text: str | None = None,
+) -> list[ResponseOutputItem]:
+    """Build typed Responses API output items from a model output.
+
+    Creates a `ResponseOutputMessage` for any text content and a
+    `ResponseFunctionCall` for each tool call.
+
+    Args:
+        output: Model output thunk containing the generated text and metadata.
+        tool_calls_list: List of `ToolCallDict` objects from `build_tool_calls`,
+            or `None`.
+        message_id: Optional ID for the message item. If not provided, a new ID
+            is generated with a `msg_` prefix.
+        function_call_ids: Optional list of IDs for function call items, one per
+            tool call in `tool_calls_list`. If not provided or shorter than the
+            tool call list, missing IDs are generated with an `fc_` prefix.
+        message_text: Optional text for the message item. When `None`, the
+            message item is derived from `output.value` (created iff truthy).
+            When a non-empty string, it replaces `output.value` as the message
+            text. When an empty string, no message item is created even if
+            `output.value` is set — for callers that build the message item
+            separately from streamed text.
+
+    Returns:
+        A list of `ResponseOutputItem` subclass instances.
+    """
+    items: list[ResponseOutputItem] = []
+
+    text = output.value if message_text is None else message_text
+    if text:
+        items.append(
+            ResponseOutputMessage(
+                id=message_id or f"msg_{uuid.uuid4().hex[:24]}",
+                type="message",
+                role="assistant",
+                status="completed",
+                content=[OutputTextContent(type="output_text", text=text)],
+            )
+        )
+
+    if tool_calls_list:
+        for i, tool_call in enumerate(tool_calls_list):
+            fc_id = (
+                function_call_ids[i]
+                if function_call_ids is not None and i < len(function_call_ids)
+                else f"fc_{uuid.uuid4().hex[:24]}"
+            )
+            items.append(
+                ResponseFunctionCall(
+                    id=fc_id,
+                    type="function_call",
+                    status="completed",
+                    name=tool_call["function"]["name"],
+                    arguments=tool_call["function"]["arguments"],
+                    call_id=tool_call["id"],
+                )
+            )
+
+    return items

@@ -1,0 +1,2049 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+"""Unit tests for the Responses API endpoint and related helpers."""
+
+import json
+from unittest.mock import AsyncMock, Mock
+
+import pytest
+from pydantic import ValidationError
+
+from cli.serve.app import (
+    _build_model_options_from_response_request,
+    _convert_response_input_to_messages,
+    _response_store,
+    make_responses_endpoint,
+)
+from cli.serve.models import InputContent, Response, ResponseInputItem, ResponseRequest
+from cli.serve.streaming import stream_response_chunks
+from mellea.backends.model_options import ModelOption
+from mellea.core.base import ModelOutputThunk
+from mellea.helpers.openai_compatible_helpers import (
+    ResponseUsage,
+    build_response_output_items,
+    build_response_usage,
+)
+
+# ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def mock_module():
+    """Mock module with a synchronous serve function."""
+    module = Mock()
+    module.__name__ = "test_responses_module"
+    return module
+
+
+@pytest.fixture
+def async_mock_module():
+    """Mock module with an async serve function."""
+    module = Mock()
+    module.__name__ = "test_responses_async_module"
+    module.serve = AsyncMock()
+    return module
+
+
+@pytest.fixture
+def simple_request():
+    """Minimal ResponseRequest with a string input."""
+    return ResponseRequest(model="test-model", input="Hello!")
+
+
+@pytest.fixture
+def message_request():
+    """ResponseRequest with a message-array input."""
+    return ResponseRequest(
+        model="test-model",
+        input=[ResponseInputItem(role="user", content="What is 2+2?")],
+    )
+
+
+PERSON_SCHEMA: dict = {
+    "type": "object",
+    "properties": {"name": {"type": "string"}, "age": {"type": "integer"}},
+    "required": ["name", "age"],
+}
+
+
+# ---------------------------------------------------------------------------
+# _build_model_options_from_response_request
+# ---------------------------------------------------------------------------
+
+
+class TestBuildModelOptionsFromResponseRequest:
+    """Tests for model_options extraction from ResponseRequest."""
+
+    def test_temperature_mapped(self):
+        req = ResponseRequest(model="m", input="hi", temperature=0.5)
+        opts = _build_model_options_from_response_request(req)
+        assert opts[ModelOption.TEMPERATURE] == 0.5
+
+    def test_max_output_tokens_mapped_to_max_new_tokens(self):
+        req = ResponseRequest(model="m", input="hi", max_output_tokens=200)
+        opts = _build_model_options_from_response_request(req)
+        assert opts[ModelOption.MAX_NEW_TOKENS] == 200
+
+    def test_excluded_fields_not_present(self):
+        req = ResponseRequest(
+            model="m",
+            input="hi",
+            store=True,
+            conversation="conv-123",
+            previous_response_id="resp-abc",
+            background=False,
+            include=["reasoning"],
+            parallel_tool_calls=True,
+            requirements=["Be terse."],
+        )
+        opts = _build_model_options_from_response_request(req)
+        for excluded in (
+            "input",
+            "model",
+            "store",
+            "conversation",
+            "previous_response_id",
+            "background",
+            "include",
+            "parallel_tool_calls",
+            "requirements",
+        ):
+            assert excluded not in opts
+
+    def test_tools_mapped(self):
+        req = ResponseRequest(
+            model="m",
+            input="hi",
+            tools=[{"type": "function", "function": {"name": "f", "parameters": {}}}],
+        )
+        opts = _build_model_options_from_response_request(req)
+        assert ModelOption.TOOLS in opts
+
+    def test_tool_choice_mapped(self):
+        req = ResponseRequest(model="m", input="hi", tool_choice="auto")
+        opts = _build_model_options_from_response_request(req)
+        assert opts[ModelOption.TOOL_CHOICE] == "auto"
+
+    def test_stream_true_sets_model_option_stream(self):
+        """stream=True must reach the backend so it streams from the provider."""
+        req = ResponseRequest(model="m", input="hi", stream=True)
+        opts = _build_model_options_from_response_request(req)
+        assert opts.get(ModelOption.STREAM) is True
+
+    def test_stream_false_omits_model_option_stream(self):
+        """stream=False (the default) must not forward ModelOption.STREAM."""
+        req = ResponseRequest(model="m", input="hi", stream=False)
+        opts = _build_model_options_from_response_request(req)
+        assert ModelOption.STREAM not in opts
+
+    @pytest.mark.parametrize(
+        "tool_type", ["web_search", "file_search", "mcp", "code_interpreter"]
+    )
+    def test_unsupported_native_tool_types_raise(self, tool_type):
+        req = ResponseRequest(model="m", input="hi", tools=[{"type": tool_type}])
+        with pytest.raises(ValueError, match=tool_type):
+            _build_model_options_from_response_request(req)
+
+    def test_mixed_function_and_unsupported_tool_raises(self):
+        req = ResponseRequest(
+            model="m",
+            input="hi",
+            tools=[
+                {"type": "function", "function": {"name": "f", "parameters": {}}},
+                {"type": "web_search"},
+            ],
+        )
+        with pytest.raises(ValueError, match="web_search"):
+            _build_model_options_from_response_request(req)
+
+    def test_flat_sdk_function_tool_normalized_to_nested(self):
+        """The SDK's flat function tool shape must reach serve() as nested."""
+        parameters = {"type": "object", "properties": {"city": {"type": "string"}}}
+        req = ResponseRequest(
+            model="m",
+            input="hi",
+            tools=[
+                {
+                    "type": "function",
+                    "name": "get_weather",
+                    "description": "Get the weather",
+                    "parameters": parameters,
+                    "strict": True,
+                }
+            ],
+        )
+        opts = _build_model_options_from_response_request(req)
+        assert opts[ModelOption.TOOLS] == [
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_weather",
+                    "description": "Get the weather",
+                    "parameters": parameters,
+                    "strict": True,
+                },
+            }
+        ]
+
+    def test_flat_function_tool_without_parameters_defaults_to_empty(self):
+        req = ResponseRequest(
+            model="m", input="hi", tools=[{"type": "function", "name": "f"}]
+        )
+        opts = _build_model_options_from_response_request(req)
+        assert opts[ModelOption.TOOLS] == [
+            {"type": "function", "function": {"name": "f", "parameters": {}}}
+        ]
+
+    def test_nested_function_tool_still_accepted(self):
+        """The nested Chat Completions shape remains a working alias."""
+        req = ResponseRequest(
+            model="m",
+            input="hi",
+            tools=[{"type": "function", "function": {"name": "f", "parameters": {}}}],
+        )
+        opts = _build_model_options_from_response_request(req)
+        assert opts[ModelOption.TOOLS] == [
+            {"type": "function", "function": {"name": "f", "parameters": {}}}
+        ]
+
+    def test_flat_tool_choice_normalized_to_nested(self):
+        """The SDK's flat tool_choice must reach serve() in nested form."""
+        req = ResponseRequest(
+            model="m",
+            input="hi",
+            tool_choice={"type": "function", "name": "get_weather"},
+        )
+        opts = _build_model_options_from_response_request(req)
+        assert opts[ModelOption.TOOL_CHOICE] == {
+            "type": "function",
+            "function": {"name": "get_weather"},
+        }
+
+    def test_nested_tool_choice_passthrough(self):
+        req = ResponseRequest(
+            model="m",
+            input="hi",
+            tool_choice={"type": "function", "function": {"name": "f"}},
+        )
+        opts = _build_model_options_from_response_request(req)
+        assert opts[ModelOption.TOOL_CHOICE] == {
+            "type": "function",
+            "function": {"name": "f"},
+        }
+
+    def test_empty_request_produces_minimal_options(self):
+        req = ResponseRequest(model="m", input="hi")
+        opts = _build_model_options_from_response_request(req)
+        # Only temperature (default 1.0) should survive after exclusions
+        assert ModelOption.TEMPERATURE in opts
+        assert "model" not in opts
+        assert "input" not in opts
+
+    def test_format_excluded_from_model_options(self):
+        """Verify format parameter is excluded from model_options (handled separately)."""
+        from cli.serve.models import ResponseFormat
+
+        req = ResponseRequest(model="m", input="hi", format=ResponseFormat(type="text"))
+        opts = _build_model_options_from_response_request(req)
+        assert "format" not in opts
+
+    def test_text_format_lifted_to_top_level_format(self):
+        """The SDK's flat text.format shape must lift into the canonical format."""
+        req = ResponseRequest(
+            model="m",
+            input="hi",
+            text={
+                "format": {
+                    "type": "json_schema",
+                    "name": "Person",
+                    "schema": PERSON_SCHEMA,
+                    "strict": True,
+                },
+                "verbosity": "low",
+            },
+        )
+        assert req.format is not None
+        assert req.format.type == "json_schema"
+        assert req.format.json_schema is not None
+        assert req.format.json_schema.name == "Person"
+        assert req.format.json_schema.schema_ == PERSON_SCHEMA
+        assert req.format.json_schema.strict is True
+
+    def test_text_excluded_from_model_options(self):
+        """The SDK's text key must not leak into model_options as a raw key."""
+        req = ResponseRequest(
+            model="m",
+            input="hi",
+            text={
+                "format": {
+                    "type": "json_schema",
+                    "name": "Person",
+                    "schema": PERSON_SCHEMA,
+                }
+            },
+        )
+        opts = _build_model_options_from_response_request(req)
+        assert "text" not in opts
+        assert "format" not in opts
+
+    def test_text_verbosity_only_accepted_and_ignored(self):
+        """text={"verbosity": ...} alone parses and is not forwarded."""
+        req = ResponseRequest(model="m", input="hi", text={"verbosity": "low"})
+        assert req.format is None
+        opts = _build_model_options_from_response_request(req)
+        assert "text" not in opts
+
+    def test_flat_top_level_format_normalized_to_nested(self):
+        """The flat json_schema shape must fold into the nested canonical form."""
+        req = ResponseRequest(
+            model="m",
+            input="hi",
+            format={
+                "type": "json_schema",
+                "name": "Person",
+                "schema": PERSON_SCHEMA,
+                "strict": True,
+            },
+        )
+        assert req.format is not None
+        assert req.format.json_schema is not None
+        assert req.format.json_schema.name == "Person"
+        # Serialization carries only the nested shape (flat fields excluded,
+        # schema_ serialized under its "schema" alias).
+        assert req.model_dump()["format"] == {
+            "type": "json_schema",
+            "json_schema": {"name": "Person", "schema": PERSON_SCHEMA, "strict": True},
+        }
+
+    def test_nested_top_level_format_still_accepted(self):
+        """The nested Chat Completions shape remains a working alias."""
+        req = ResponseRequest(
+            model="m",
+            input="hi",
+            format={
+                "type": "json_schema",
+                "json_schema": {"name": "Person", "schema": PERSON_SCHEMA},
+            },
+        )
+        assert req.format is not None
+        assert req.format.json_schema is not None
+        assert req.format.json_schema.name == "Person"
+        assert req.format.json_schema.schema_ == PERSON_SCHEMA
+
+    def test_top_level_format_wins_over_text_format(self):
+        """When both are sent, the top-level format wins (text.format ignored)."""
+        req = ResponseRequest(
+            model="m",
+            input="hi",
+            format={"type": "json_schema", "name": "Top", "schema": PERSON_SCHEMA},
+            text={
+                "format": {
+                    "type": "json_schema",
+                    "name": "Lifted",
+                    "schema": PERSON_SCHEMA,
+                }
+            },
+        )
+        assert req.format is not None
+        assert req.format.json_schema is not None
+        assert req.format.json_schema.name == "Top"
+
+    def test_invalid_text_verbosity_rejected(self):
+        with pytest.raises(ValidationError):
+            ResponseRequest(model="m", input="hi", text={"verbosity": "ultra"})
+
+
+# ---------------------------------------------------------------------------
+# _convert_response_input_to_messages
+# ---------------------------------------------------------------------------
+
+
+class TestConvertResponseInputToMessages:
+    """Tests for input/instructions → ChatMessage conversion."""
+
+    def test_string_input_becomes_user_message(self):
+        msgs = _convert_response_input_to_messages("Hello", None)
+        assert len(msgs) == 1
+        assert msgs[0].role == "user"
+        assert msgs[0].content == "Hello"
+
+    def test_message_array_preserved(self):
+        items = [
+            ResponseInputItem(role="user", content="Hi"),
+            ResponseInputItem(role="assistant", content="Hello"),
+        ]
+        msgs = _convert_response_input_to_messages(items, None)
+        assert len(msgs) == 2
+        assert msgs[0].role == "user"
+        assert msgs[1].role == "assistant"
+
+    def test_developer_role_mapped_to_system(self):
+        items = [ResponseInputItem(role="developer", content="Be helpful.")]
+        msgs = _convert_response_input_to_messages(items, None)
+        assert msgs[0].role == "system"
+
+    def test_system_role_mapped_to_system(self):
+        items = [ResponseInputItem(role="system", content="Be concise.")]
+        msgs = _convert_response_input_to_messages(items, None)
+        assert msgs[0].role == "system"
+
+    def test_string_instructions_prepended_as_system(self):
+        msgs = _convert_response_input_to_messages("Hello", "You are helpful.")
+        assert len(msgs) == 2
+        assert msgs[0].role == "system"
+        assert msgs[0].content == "You are helpful."
+        assert msgs[1].role == "user"
+
+    def test_message_instructions_prepended(self):
+        instructions = [ResponseInputItem(role="developer", content="Be brief.")]
+        items = [ResponseInputItem(role="user", content="Hello")]
+        msgs = _convert_response_input_to_messages(items, instructions)
+        assert len(msgs) == 2
+        assert msgs[0].role == "system"
+        assert msgs[1].role == "user"
+
+    def test_instructions_come_before_input(self):
+        msgs = _convert_response_input_to_messages(
+            [ResponseInputItem(role="user", content="Q")], "Instruction"
+        )
+        assert msgs[0].role == "system"
+        assert msgs[1].role == "user"
+
+    def test_function_call_output_becomes_tool_message(self):
+        """SDK tool results (function_call_output) become tool-role messages."""
+        items = [
+            ResponseInputItem(role="user", content="Weather in Paris?"),
+            ResponseInputItem(
+                type="function_call_output", call_id="call_123", output="Sunny, 25C"
+            ),
+        ]
+        msgs = _convert_response_input_to_messages(items, None)
+        assert len(msgs) == 2
+        assert msgs[0].role == "user"
+        assert msgs[1].role == "tool"
+        assert msgs[1].tool_call_id == "call_123"
+        assert msgs[1].content == "Sunny, 25C"
+
+    def test_function_call_output_with_content_blocks(self):
+        items = [
+            ResponseInputItem(
+                type="function_call_output",
+                call_id="call_1",
+                output=[{"type": "input_text", "text": "42"}],
+            )
+        ]
+        msgs = _convert_response_input_to_messages(items, None)
+        assert msgs[0].role == "tool"
+        assert msgs[0].tool_call_id == "call_1"
+        assert msgs[0].get_text_content() == "42"
+
+    def test_message_item_tool_call_id_preserved(self):
+        """Chat Completions-style tool messages keep their tool_call_id."""
+        items = [
+            ResponseInputItem(role="user", content="Weather in Paris?"),
+            ResponseInputItem(role="tool", tool_call_id="call_abc", content="Sunny"),
+        ]
+        msgs = _convert_response_input_to_messages(items, None)
+        assert msgs[1].role == "tool"
+        assert msgs[1].tool_call_id == "call_abc"
+        assert msgs[1].content == "Sunny"
+
+    def test_input_item_without_role_or_type_rejected(self):
+        with pytest.raises(ValidationError, match="role"):
+            ResponseInputItem(content="hi")
+
+    def test_message_item_with_explicit_type_accepted(self):
+        item = ResponseInputItem(type="message", role="user", content="hi")
+        msgs = _convert_response_input_to_messages([item], None)
+        assert msgs[0].role == "user"
+
+    def test_tool_message_item_preserves_tool_call_id(self):
+        """Chat Completions-style tool message preserves tool_call_id."""
+        item = ResponseInputItem(
+            role="tool", content="Sunny, 25C", tool_call_id="call_abc"
+        )
+        msgs = _convert_response_input_to_messages([item], None)
+        assert len(msgs) == 1
+        assert msgs[0].role == "tool"
+        assert msgs[0].content == "Sunny, 25C"
+        assert msgs[0].tool_call_id == "call_abc"
+
+    def test_multimodal_text_content_converted(self):
+        """Content blocks (multimodal) are converted to MessageContent list."""
+        items = [
+            ResponseInputItem(
+                role="user",
+                content=[
+                    InputContent(type="input_text", text="What's in this image?"),
+                    InputContent(
+                        type="input_image", image_url="https://example.com/img.jpg"
+                    ),
+                ],
+            )
+        ]
+        msgs = _convert_response_input_to_messages(items, None)
+        assert len(msgs) == 1
+        assert msgs[0].role == "user"
+        assert isinstance(msgs[0].content, list)
+        assert len(msgs[0].content) == 2
+        # First block: text
+        assert msgs[0].content[0].type == "text"
+        assert msgs[0].content[0].text == "What's in this image?"
+        # Second block: image
+        assert msgs[0].content[1].type == "image_url"
+        assert msgs[0].content[1].image_url == {"url": "https://example.com/img.jpg"}
+
+    def test_multimodal_image_only_content(self):
+        """Image-only content is converted properly."""
+        items = [
+            ResponseInputItem(
+                role="user",
+                content=[
+                    InputContent(
+                        type="input_image", image_url="data:image/png;base64,ABC123"
+                    )
+                ],
+            )
+        ]
+        msgs = _convert_response_input_to_messages(items, None)
+        assert len(msgs) == 1
+        assert isinstance(msgs[0].content, list)
+        assert len(msgs[0].content) == 1
+        assert msgs[0].content[0].type == "image_url"
+        assert msgs[0].content[0].image_url == {"url": "data:image/png;base64,ABC123"}
+
+    def test_multimodal_instructions(self):
+        """Multimodal instructions are converted properly."""
+        instructions = [
+            ResponseInputItem(
+                role="developer",
+                content=[
+                    InputContent(
+                        type="input_text", text="Analyze this image carefully."
+                    ),
+                    InputContent(
+                        type="input_image", image_url="https://example.com/ref.jpg"
+                    ),
+                ],
+            )
+        ]
+        items = [ResponseInputItem(role="user", content="Hello")]
+        msgs = _convert_response_input_to_messages(items, instructions)
+        assert len(msgs) == 2
+        assert msgs[0].role == "system"
+        assert isinstance(msgs[0].content, list)
+        assert len(msgs[0].content) == 2
+        assert msgs[0].content[0].type == "text"
+        assert msgs[0].content[0].text == "Analyze this image carefully."
+        assert msgs[0].content[1].type == "image_url"
+        assert msgs[0].content[1].image_url == {"url": "https://example.com/ref.jpg"}
+        assert msgs[1].role == "user"
+        assert msgs[1].content == "Hello"
+
+    def test_mixed_string_and_multimodal(self):
+        """String content and multimodal content can coexist."""
+        items = [
+            ResponseInputItem(role="user", content="Just text"),
+            ResponseInputItem(
+                role="user",
+                content=[
+                    InputContent(type="input_text", text="Text with image"),
+                    InputContent(
+                        type="input_image", image_url="https://example.com/test.png"
+                    ),
+                ],
+            ),
+        ]
+        msgs = _convert_response_input_to_messages(items, None)
+        assert len(msgs) == 2
+        assert msgs[0].content == "Just text"
+        assert isinstance(msgs[1].content, list)
+        assert len(msgs[1].content) == 2
+
+    def test_file_content_block_raises(self):
+        """File content blocks are rejected with a ValueError (→ 400)."""
+        items = [
+            ResponseInputItem(
+                role="user",
+                content=[
+                    InputContent(type="input_text", text="Here is a file:"),
+                    InputContent(type="input_file", file_id="file-123"),
+                ],
+            )
+        ]
+        with pytest.raises(ValueError, match="input_file"):
+            _convert_response_input_to_messages(items, None)
+
+    def test_unknown_content_block_raises(self):
+        """Blocks that parse but carry no convertible payload are rejected."""
+        # input_text without text falls through to the unsupported branch.
+        # (A truly unknown type string is rejected earlier, at pydantic
+        # validation of the Literal field.)
+        items = [
+            ResponseInputItem(role="user", content=[InputContent(type="input_text")])
+        ]
+        with pytest.raises(ValueError, match="Unsupported or empty content block"):
+            _convert_response_input_to_messages(items, None)
+
+    def test_empty_content_list_returns_none(self):
+        """Empty content list results in None content."""
+        items = [ResponseInputItem(role="user", content=[])]
+        msgs = _convert_response_input_to_messages(items, None)
+        assert msgs[0].content is None
+
+
+# ---------------------------------------------------------------------------
+# make_responses_endpoint — non-streaming
+# ---------------------------------------------------------------------------
+
+
+class TestResponsesEndpointNonStreaming:
+    """Tests for the /v1/responses endpoint (non-streaming path)."""
+
+    def setup_method(self):
+        _response_store.clear()
+
+    def teardown_method(self):
+        _response_store.clear()
+
+    @pytest.mark.asyncio
+    async def test_basic_response_structure(self, mock_module, simple_request):
+        mock_output = ModelOutputThunk("The answer is 42.")
+        mock_module.serve.return_value = mock_output
+
+        endpoint = make_responses_endpoint(mock_module)
+        response = await endpoint(simple_request)
+
+        assert isinstance(response, Response)
+        assert response.model == "test-model"
+        assert response.status == "completed"
+        assert response.output_text == "The answer is 42."
+
+    @pytest.mark.asyncio
+    async def test_response_id_format(self, mock_module, simple_request):
+        mock_module.serve.return_value = ModelOutputThunk("hi")
+        endpoint = make_responses_endpoint(mock_module)
+        response = await endpoint(simple_request)
+        assert response.id.startswith("resp_")
+        assert len(response.id) > len("resp_")
+
+    @pytest.mark.asyncio
+    async def test_created_at_is_positive_int(self, mock_module, simple_request):
+        mock_module.serve.return_value = ModelOutputThunk("hi")
+        endpoint = make_responses_endpoint(mock_module)
+        response = await endpoint(simple_request)
+        assert isinstance(response.created_at, int)
+        assert response.created_at > 0
+
+    @pytest.mark.asyncio
+    async def test_output_items_include_message(self, mock_module, simple_request):
+        mock_module.serve.return_value = ModelOutputThunk("Hello!")
+        endpoint = make_responses_endpoint(mock_module)
+        response = await endpoint(simple_request)
+
+        messages = [item for item in response.output if item.type == "message"]
+        assert len(messages) == 1
+        assert messages[0].role == "assistant"  # type: ignore[union-attr]
+
+    @pytest.mark.asyncio
+    async def test_usage_populated_when_available(self, mock_module, simple_request):
+        mock_output = ModelOutputThunk("hi")
+        mock_output.generation.usage = {
+            "prompt_tokens": 10,
+            "completion_tokens": 5,
+            "total_tokens": 15,
+        }
+        mock_module.serve.return_value = mock_output
+        endpoint = make_responses_endpoint(mock_module)
+        response = await endpoint(simple_request)
+
+        assert response.usage.input_tokens == 10
+        assert response.usage.output_tokens == 5
+        assert response.usage.total_tokens == 15
+
+    @pytest.mark.asyncio
+    async def test_usage_details_populated_from_chat_completions_usage(
+        self, mock_module, simple_request
+    ):
+        """Nested Chat Completions usage surfaces at the spec locations."""
+        mock_output = ModelOutputThunk("hi")
+        mock_output.generation.usage = {
+            "prompt_tokens": 10,
+            "completion_tokens": 5,
+            "total_tokens": 15,
+            "completion_tokens_details": {"reasoning_tokens": 7},
+            "prompt_tokens_details": {"cached_tokens": 4},
+        }
+        mock_module.serve.return_value = mock_output
+        endpoint = make_responses_endpoint(mock_module)
+        response = await endpoint(simple_request)
+
+        assert response.usage.reasoning_tokens == 7
+        assert response.usage.output_tokens_details.reasoning_tokens == 7
+        assert response.usage.input_tokens_details.cached_tokens == 4
+
+    @pytest.mark.asyncio
+    async def test_usage_zero_when_unavailable(self, mock_module, simple_request):
+        mock_module.serve.return_value = ModelOutputThunk("hi")
+        endpoint = make_responses_endpoint(mock_module)
+        response = await endpoint(simple_request)
+
+        assert response.usage.input_tokens == 0
+        assert response.usage.output_tokens == 0
+        assert response.usage.total_tokens == 0
+        # Details objects must exist even on the zero fallback, or SDK
+        # clients reading usage.output_tokens_details.reasoning_tokens crash.
+        assert response.usage.output_tokens_details.reasoning_tokens == 0
+        assert response.usage.input_tokens_details.cached_tokens == 0
+
+    @pytest.mark.asyncio
+    async def test_conversation_echoed(self, mock_module):
+        req = ResponseRequest(model="m", input="hi", conversation="conv-abc")
+        mock_module.serve.return_value = ModelOutputThunk("ok")
+        endpoint = make_responses_endpoint(mock_module)
+        response = await endpoint(req)
+        assert response.conversation == "conv-abc"
+
+    @pytest.mark.asyncio
+    async def test_conversation_object_echoed_as_id(self, mock_module):
+        """The SDK's conversation={"id": ...} shape is accepted, echoed as the id."""
+        req = ResponseRequest(model="m", input="hi", conversation={"id": "conv-obj"})
+        mock_module.serve.return_value = ModelOutputThunk("ok")
+        endpoint = make_responses_endpoint(mock_module)
+        response = await endpoint(req)
+        assert response.conversation == "conv-obj"
+
+    def test_context_management_sdk_list_shape_accepted(self):
+        """The SDK sends context_management as a list; it must not 422."""
+        req = ResponseRequest(
+            model="m",
+            input="hi",
+            context_management=[{"type": "compaction", "compact_threshold": 5}],
+        )
+        assert req.context_management is not None
+
+    def test_context_management_dict_shape_still_accepted(self):
+        req = ResponseRequest(
+            model="m", input="hi", context_management={"strategy": "auto"}
+        )
+        assert req.context_management is not None
+
+    @pytest.mark.asyncio
+    async def test_requirements_passed_to_serve(self, mock_module):
+        """Requirements reach serve() as a list, not as a raw model_options key."""
+        received: dict = {}
+
+        def capture_requirements(input, requirements=None, model_options=None):
+            received["requirements"] = requirements
+            received["model_options"] = model_options
+            return ModelOutputThunk("ok")
+
+        mock_module.serve = capture_requirements
+        endpoint = make_responses_endpoint(mock_module)
+
+        req = ResponseRequest(model="m", input="hi", requirements=["Be terse."])
+        response = await endpoint(req)
+        assert isinstance(response, Response)
+
+        assert received["requirements"] == ["Be terse."]
+        assert "requirements" not in (received["model_options"] or {})
+
+    @pytest.mark.asyncio
+    async def test_previous_response_id_echoed(self, mock_module):
+        mock_module.serve.return_value = ModelOutputThunk("ok")
+        endpoint = make_responses_endpoint(mock_module)
+
+        # First request — store a response so it can be referenced.
+        first_response = await endpoint(ResponseRequest(model="m", input="first"))
+        prior_id = first_response.id
+        assert prior_id in _response_store
+
+        # Second request — chain via previous_response_id.
+        req = ResponseRequest(
+            model="m", input="follow-up", previous_response_id=prior_id
+        )
+        mock_module.serve.return_value = ModelOutputThunk("ok2")
+        response = await endpoint(req)
+        assert response.previous_response_id == prior_id
+
+    @pytest.mark.asyncio
+    async def test_background_true_returns_400(self, mock_module):
+        req = ResponseRequest(model="m", input="hi", background=True)
+        mock_module.serve.return_value = ModelOutputThunk("ok")
+        endpoint = make_responses_endpoint(mock_module)
+        resp = await endpoint(req)
+        # Returns a JSONResponse error, not a Response model
+        assert hasattr(resp, "status_code")
+        assert resp.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_serve_receives_converted_messages(self, mock_module):
+        req = ResponseRequest(
+            model="m", input="Tell me a joke.", instructions="Be funny."
+        )
+        mock_module.serve.return_value = ModelOutputThunk("Why did...")
+        endpoint = make_responses_endpoint(mock_module)
+        await endpoint(req)
+
+        call_kwargs = mock_module.serve.call_args.kwargs
+        messages = call_kwargs["input"]
+        assert messages[0].role == "system"
+        assert messages[0].content == "Be funny."
+        assert messages[1].role == "user"
+        assert messages[1].content == "Tell me a joke."
+
+    @pytest.mark.asyncio
+    async def test_sdk_shapes_reach_serve_normalized(self, mock_module):
+        """SDK wire shapes (flat tools, flat tool_choice, function_call_output)
+        are normalized before reaching serve()."""
+        req = ResponseRequest(
+            model="m",
+            input=[
+                ResponseInputItem(role="user", content="Weather in Paris?"),
+                ResponseInputItem(
+                    type="function_call_output", call_id="call_123", output="Sunny, 25C"
+                ),
+            ],
+            tools=[{"type": "function", "name": "get_weather", "parameters": {}}],
+            tool_choice={"type": "function", "name": "get_weather"},
+        )
+        mock_module.serve.return_value = ModelOutputThunk("It is sunny.")
+        endpoint = make_responses_endpoint(mock_module)
+        await endpoint(req)
+
+        call_kwargs = mock_module.serve.call_args.kwargs
+        # Tool result converted to a tool message paired by tool_call_id.
+        messages = call_kwargs["input"]
+        assert messages[-1].role == "tool"
+        assert messages[-1].tool_call_id == "call_123"
+        assert messages[-1].content == "Sunny, 25C"
+        # Flat tool/tool_choice normalized to the nested shape.
+        model_options = call_kwargs["model_options"]
+        assert model_options[ModelOption.TOOLS] == [
+            {"type": "function", "function": {"name": "get_weather", "parameters": {}}}
+        ]
+        assert model_options[ModelOption.TOOL_CHOICE] == {
+            "type": "function",
+            "function": {"name": "get_weather"},
+        }
+
+    @pytest.mark.asyncio
+    async def test_async_serve_function(self, async_mock_module, simple_request):
+        async_mock_module.serve.return_value = ModelOutputThunk("async result")
+        endpoint = make_responses_endpoint(async_mock_module)
+        response = await endpoint(simple_request)
+        assert isinstance(response, Response)
+        assert response.output_text == "async result"
+
+    @pytest.mark.asyncio
+    async def test_serve_exception_returns_500(self, mock_module, simple_request):
+        mock_module.serve.side_effect = RuntimeError("backend exploded")
+        endpoint = make_responses_endpoint(mock_module)
+        resp = await endpoint(simple_request)
+        assert resp.status_code == 500
+
+    @pytest.mark.asyncio
+    async def test_value_error_returns_400(self, mock_module, simple_request):
+        mock_module.serve.side_effect = ValueError("bad input")
+        endpoint = make_responses_endpoint(mock_module)
+        resp = await endpoint(simple_request)
+        assert resp.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_input_file_message_returns_400(self, mock_module):
+        """A message containing only an input_file block is rejected, not emptied."""
+        req = ResponseRequest(
+            model="m",
+            input=[
+                ResponseInputItem(
+                    role="user",
+                    content=[InputContent(type="input_file", file_id="file-123")],
+                )
+            ],
+        )
+        endpoint = make_responses_endpoint(mock_module)
+        resp = await endpoint(req)
+        assert resp.status_code == 400
+        # serve() was never called with an empty turn
+        mock_module.serve.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_client_options_passed_when_declared(
+        self, mock_module, simple_request
+    ):
+        """serve(client_options=...) receives the full raw request dict."""
+
+        def serve_with_co(
+            input, requirements=None, model_options=None, client_options=None
+        ):
+            return ModelOutputThunk("ok")
+
+        mock_module.serve = serve_with_co
+        endpoint = make_responses_endpoint(mock_module)
+        # Should not raise — just verifying the code path executes cleanly
+        response = await endpoint(simple_request)
+        assert isinstance(response, Response)
+
+    @pytest.mark.asyncio
+    async def test_format_text_passed_to_serve(self, mock_module, simple_request):
+        """Verify format=text is handled and format=None is passed to serve()."""
+        from cli.serve.models import ResponseFormat
+
+        received_format = None
+
+        def capture_format(input, requirements=None, model_options=None, format=None):
+            nonlocal received_format
+            received_format = format
+            return ModelOutputThunk("ok")
+
+        mock_module.serve = capture_format
+        endpoint = make_responses_endpoint(mock_module)
+
+        # Test with format=text (should result in format_model=None)
+        request_with_format = ResponseRequest(
+            model="m", input="hi", format=ResponseFormat(type="text")
+        )
+        response = await endpoint(request_with_format)
+        assert isinstance(response, Response)
+        assert received_format is None
+
+    @pytest.mark.asyncio
+    async def test_format_json_schema_invalid_returns_400(self, mock_module):
+        """Verify invalid JSON schema in format parameter returns 400 error."""
+        from cli.serve.models import ResponseFormat
+
+        endpoint = make_responses_endpoint(mock_module)
+
+        # Invalid schema (recursive $ref)
+        request_with_invalid_schema = ResponseRequest(
+            model="m",
+            input="hi",
+            format=ResponseFormat(
+                type="json_schema",
+                json_schema={
+                    "name": "Invalid",
+                    "schema": {
+                        "$ref": "#/definitions/Node",
+                        "definitions": {
+                            "Node": {
+                                "type": "object",
+                                "properties": {"child": {"$ref": "#/definitions/Node"}},
+                            }
+                        },
+                    },
+                    "strict": True,
+                },
+            ),
+        )
+        response = await endpoint(request_with_invalid_schema)
+        assert response.status_code == 400  # type: ignore[union-attr]
+
+    @pytest.mark.asyncio
+    async def test_text_format_json_schema_reaches_serve_as_model(self, mock_module):
+        """The SDK's text.format json_schema must reach serve() as a Pydantic model."""
+        from pydantic import BaseModel
+
+        received: dict = {}
+
+        def capture_format(input, requirements=None, model_options=None, format=None):
+            received["format"] = format
+            received["model_options"] = model_options
+            return ModelOutputThunk('{"name": "Alice", "age": 30}')
+
+        mock_module.serve = capture_format
+        endpoint = make_responses_endpoint(mock_module)
+
+        request = ResponseRequest(
+            model="m",
+            input="hi",
+            text={
+                "format": {
+                    "type": "json_schema",
+                    "name": "Person",
+                    "schema": PERSON_SCHEMA,
+                    "strict": True,
+                },
+                "verbosity": "low",
+            },
+        )
+        response = await endpoint(request)
+        assert isinstance(response, Response)
+
+        assert received["format"] is not None
+        assert issubclass(received["format"], BaseModel)
+        assert "name" in received["format"].model_fields
+        assert "age" in received["format"].model_fields
+        # The SDK's text key must not leak into model_options
+        assert "text" not in (received["model_options"] or {})
+
+    @pytest.mark.asyncio
+    async def test_text_format_text_type_passes_none_to_serve(self, mock_module):
+        """text={"format": {"type": "text"}} behaves like format=text (None to serve)."""
+        received_format = None
+
+        def capture_format(input, requirements=None, model_options=None, format=None):
+            nonlocal received_format
+            received_format = format
+            return ModelOutputThunk("ok")
+
+        mock_module.serve = capture_format
+        endpoint = make_responses_endpoint(mock_module)
+
+        request = ResponseRequest(
+            model="m", input="hi", text={"format": {"type": "text"}}
+        )
+        response = await endpoint(request)
+        assert isinstance(response, Response)
+        assert received_format is None
+
+
+# ---------------------------------------------------------------------------
+# make_responses_endpoint — streaming path
+# ---------------------------------------------------------------------------
+
+
+class TestResponsesEndpointStreaming:
+    """Tests for the /v1/responses endpoint (streaming path)."""
+
+    def setup_method(self):
+        _response_store.clear()
+
+    def teardown_method(self):
+        _response_store.clear()
+
+    @pytest.mark.asyncio
+    async def test_stream_true_returns_streaming_response(self, mock_module):
+        from fastapi.responses import StreamingResponse
+
+        req = ResponseRequest(model="m", input="hi", stream=True)
+        mock_module.serve.return_value = ModelOutputThunk("streamed content")
+        endpoint = make_responses_endpoint(mock_module)
+        response = await endpoint(req)
+        assert isinstance(response, StreamingResponse)
+        assert response.media_type == "text/event-stream"
+
+    @pytest.mark.asyncio
+    async def test_streamed_response_is_stored_when_store_true(self, mock_module):
+        """A completed stream is stored for previous_response_id chaining."""
+        from fastapi.responses import StreamingResponse
+
+        req = ResponseRequest(model="m", input="hi", stream=True)
+        mock_module.serve.return_value = ModelOutputThunk("streamed content")
+        endpoint = make_responses_endpoint(mock_module)
+        response = await endpoint(req)
+        assert isinstance(response, StreamingResponse)
+
+        # The store is populated only after the stream is consumed to completion.
+        assert len(_response_store) == 0
+        async for _chunk in response.body_iterator:
+            pass
+        assert len(_response_store) == 1
+        stored = next(iter(_response_store.values()))
+        assert stored.response.output_text == "streamed content"
+        assert stored.response.status == "completed"
+        assert stored.history == [
+            {"role": "user", "content": "hi"},
+            {"role": "assistant", "content": "streamed content"},
+        ]
+
+    @pytest.mark.asyncio
+    async def test_streamed_response_not_stored_when_store_false(self, mock_module):
+        """No entry is written when store=False, even after the stream completes."""
+        from fastapi.responses import StreamingResponse
+
+        req = ResponseRequest(model="m", input="hi", stream=True, store=False)
+        mock_module.serve.return_value = ModelOutputThunk("ephemeral")
+        endpoint = make_responses_endpoint(mock_module)
+        response = await endpoint(req)
+        assert isinstance(response, StreamingResponse)
+
+        async for _chunk in response.body_iterator:
+            pass
+        assert len(_response_store) == 0
+
+    @pytest.mark.asyncio
+    async def test_streamed_response_stored_id_matches_stream(self, mock_module):
+        """The stored response id is the id the client saw in the stream events."""
+        from fastapi.responses import StreamingResponse
+
+        req = ResponseRequest(model="m", input="hi", stream=True)
+        mock_module.serve.return_value = ModelOutputThunk("streamed content")
+        endpoint = make_responses_endpoint(mock_module)
+        response = await endpoint(req)
+        assert isinstance(response, StreamingResponse)
+
+        streamed_ids = []
+        async for chunk in response.body_iterator:
+            for line in chunk.split("\n"):
+                line = line.strip()
+                if line.startswith("data:"):
+                    data = json.loads(line.split(":", 1)[1].strip())
+                    if data.get("response") and "id" in data["response"]:
+                        streamed_ids.append(data["response"]["id"])
+        assert streamed_ids and len(set(streamed_ids)) == 1
+        assert streamed_ids[0] in _response_store
+
+
+# ---------------------------------------------------------------------------
+# stream_response_chunks
+# ---------------------------------------------------------------------------
+
+
+class TestStreamResponseChunks:
+    """Tests for the semantic SSE event generator."""
+
+    async def _collect(self, output, **kwargs) -> list[dict]:
+        """Collect all SSE events as parsed dicts.
+
+        Each yielded chunk may contain multiple lines (event: / data: / blank).
+        Parse them together so event_name is always set before data is read.
+        """
+        events = []
+        async for chunk in stream_response_chunks(output, **kwargs):
+            event_name = None
+            for line in chunk.split("\n"):
+                line = line.strip()
+                if line.startswith("event:"):
+                    event_name = line.split(":", 1)[1].strip()
+                elif line.startswith("data:") and event_name is not None:
+                    data = json.loads(line.split(":", 1)[1].strip())
+                    events.append({"event": event_name, "data": data})
+                    event_name = None
+        return events
+
+    @pytest.mark.asyncio
+    async def test_emits_created_event_first(self):
+        output = ModelOutputThunk("hello")
+        events = await self._collect(
+            output, response_id="resp_1", model="m", created=1234
+        )
+        assert events[0]["event"] == "response.created"
+        assert events[0]["data"]["type"] == "response.created"
+        assert events[0]["data"]["sequence_number"] == 0
+        assert events[0]["data"]["response"]["id"] == "resp_1"
+        assert events[0]["data"]["response"]["status"] == "in_progress"
+
+    @pytest.mark.asyncio
+    async def test_in_progress_event_carries_full_response_shape(self):
+        """response.in_progress follows created and carries the full Response model."""
+        output = ModelOutputThunk("hello")
+        events = await self._collect(
+            output, response_id="resp_1", model="m", created=1234
+        )
+        assert events[1]["event"] == "response.in_progress"
+        assert events[1]["data"]["type"] == "response.in_progress"
+        assert events[1]["data"]["sequence_number"] == 1
+        response = events[1]["data"]["response"]
+        assert response["id"] == "resp_1"
+        assert response["status"] == "in_progress"
+        assert response["model"] == "m"
+        assert response["created_at"] == 1234
+        assert response["expires_at"] == 1234 + 1800
+        assert response["output"] == []
+        assert response["output_text"] == ""
+        # Full shape: required usage field present (not null) for SDK parsing
+        assert response["usage"]["total_tokens"] == 0
+
+    @pytest.mark.asyncio
+    async def test_emits_output_text_delta(self):
+        output = ModelOutputThunk("hello world")
+        events = await self._collect(
+            output, response_id="resp_1", model="m", created=1234
+        )
+        delta_events = [e for e in events if e["event"] == "response.output_text.delta"]
+        assert len(delta_events) >= 1
+        assert delta_events[0]["data"]["delta"] == "hello world"
+
+    @pytest.mark.asyncio
+    async def test_emits_output_text_done(self):
+        output = ModelOutputThunk("hello world")
+        events = await self._collect(
+            output, response_id="resp_1", model="m", created=1234
+        )
+        done_events = [e for e in events if e["event"] == "response.output_text.done"]
+        assert len(done_events) == 1
+        assert done_events[0]["data"]["text"] == "hello world"
+
+    @pytest.mark.asyncio
+    async def test_message_item_lifecycle_events(self):
+        """Text output emits output_item.added/done and content_part.added/done."""
+        output = ModelOutputThunk("hello world")
+        events = await self._collect(
+            output, response_id="resp_1", model="m", created=1234
+        )
+
+        item_added = next(
+            e for e in events if e["event"] == "response.output_item.added"
+        )
+        item = item_added["data"]["item"]
+        delta_event = next(
+            e for e in events if e["event"] == "response.output_text.delta"
+        )
+        assert item_added["data"]["output_index"] == 0
+        assert item["id"] == delta_event["data"]["item_id"]
+        assert item["type"] == "message"
+        assert item["status"] == "in_progress"
+        assert item["role"] == "assistant"
+        assert item["content"] == []
+
+        part_added = next(
+            e for e in events if e["event"] == "response.content_part.added"
+        )
+        assert part_added["data"]["item_id"] == item["id"]
+        assert part_added["data"]["output_index"] == 0
+        assert part_added["data"]["content_index"] == 0
+        assert part_added["data"]["part"] == {
+            "type": "output_text",
+            "text": "",
+            "annotations": [],
+        }
+
+        part_done = next(
+            e for e in events if e["event"] == "response.content_part.done"
+        )
+        assert part_done["data"]["part"] == {
+            "type": "output_text",
+            "text": "hello world",
+            "annotations": [],
+        }
+
+        item_done = next(e for e in events if e["event"] == "response.output_item.done")
+        done_item = item_done["data"]["item"]
+        assert item_done["data"]["output_index"] == 0
+        assert done_item["id"] == item["id"]
+        assert done_item["status"] == "completed"
+        assert done_item["content"] == [{"type": "output_text", "text": "hello world"}]
+        # The done item must match the corresponding item in response.completed
+        completed = next(e for e in events if e["event"] == "response.completed")
+        assert done_item == completed["data"]["response"]["output"][0]
+
+    @pytest.mark.asyncio
+    async def test_streaming_event_order_with_tool_call(self):
+        """Full event sequence follows the spec item/content-part lifecycle."""
+        from mellea.core.base import ModelToolCall
+
+        output = ModelOutputThunk("ok")
+        tc = Mock(spec=ModelToolCall)
+        tc.name = "get_weather"
+        tc.args = {"location": "Paris"}
+        tc.tool_call_id = "call_abc"
+        output.tool_calls = [tc]
+
+        events = await self._collect(
+            output, response_id="resp_tc", model="m", created=1234
+        )
+
+        names = [e["event"] for e in events]
+        assert names == [
+            "response.created",
+            "response.in_progress",
+            "response.output_item.added",
+            "response.content_part.added",
+            "response.output_text.delta",
+            "response.output_text.done",
+            "response.content_part.done",
+            "response.output_item.done",
+            "response.output_item.added",
+            "response.function_call_arguments.delta",
+            "response.function_call_arguments.done",
+            "response.output_item.done",
+            "response.completed",
+        ]
+
+    @pytest.mark.asyncio
+    async def test_sequence_numbers_are_sequential(self):
+        """sequence_number starts at 0 and increments by one on every event."""
+        from mellea.core.base import ModelToolCall
+
+        output = ModelOutputThunk("ok")
+        tc = Mock(spec=ModelToolCall)
+        tc.name = "get_weather"
+        tc.args = {"location": "Paris"}
+        tc.tool_call_id = "call_abc"
+        output.tool_calls = [tc]
+
+        events = await self._collect(
+            output, response_id="resp_tc", model="m", created=1234
+        )
+
+        sequence_numbers = [e["data"]["sequence_number"] for e in events]
+        assert sequence_numbers == list(range(len(events)))
+
+    @pytest.mark.asyncio
+    async def test_emits_completed_event_last(self):
+        output = ModelOutputThunk("hello")
+        events = await self._collect(
+            output, response_id="resp_1", model="m", created=1234
+        )
+        assert events[-1]["event"] == "response.completed"
+        assert events[-1]["data"]["type"] == "response.completed"
+        assert events[-1]["data"]["response"]["status"] == "completed"
+
+    @pytest.mark.asyncio
+    async def test_completed_event_output_item_id_matches_stream_item_id(self):
+        output = ModelOutputThunk("hello")
+        events = await self._collect(
+            output, response_id="resp_1", model="m", created=1234
+        )
+        delta_event = next(
+            e for e in events if e["event"] == "response.output_text.delta"
+        )
+        stream_item_id = delta_event["data"]["item_id"]
+        completed_event = next(e for e in events if e["event"] == "response.completed")
+        completed_output_items = completed_event["data"]["response"]["output"]
+        assert len(completed_output_items) == 1
+        assert completed_output_items[0]["id"] == stream_item_id
+
+    @pytest.mark.asyncio
+    async def test_conversation_echoed_in_created_event(self):
+        output = ModelOutputThunk("hi")
+        events = await self._collect(
+            output,
+            response_id="resp_1",
+            model="m",
+            created=1234,
+            conversation="conv-99",
+        )
+        assert events[0]["data"]["response"]["conversation"] == "conv-99"
+
+    @pytest.mark.asyncio
+    async def test_true_streaming_accumulates_deltas(self):
+        """Incremental astream() calls each yield a delta event; done text is the sum."""
+        output = Mock()
+        tokens = ["He", "ll", "o"]
+        call_count = 0
+
+        def is_computed():
+            return call_count >= len(tokens)
+
+        async def astream():
+            nonlocal call_count
+            token = tokens[call_count]
+            call_count += 1
+            return token
+
+        output.is_computed = is_computed
+        output.astream = astream
+        output.tool_calls = None
+        output.generation = Mock()
+        output.generation.usage = None
+
+        events = await self._collect(
+            output, response_id="resp_s", model="m", created=1234
+        )
+
+        delta_events = [e for e in events if e["event"] == "response.output_text.delta"]
+        assert len(delta_events) == 3
+        assert [e["data"]["delta"] for e in delta_events] == ["He", "ll", "o"]
+
+        done_events = [e for e in events if e["event"] == "response.output_text.done"]
+        assert done_events[0]["data"]["text"] == "Hello"
+
+    @pytest.mark.asyncio
+    async def test_streamed_text_wins_over_postprocessed_value(self):
+        """Events and completed response carry the streamed text, not a rewritten value.
+
+        Post-processing may rewrite `output.value` after the last delta; the
+        close events and `response.completed` must agree with the deltas the
+        client already saw.
+        """
+        output = Mock()
+        tokens = ["He", "ll", "o"]
+        call_count = 0
+
+        def is_computed():
+            return call_count >= len(tokens)
+
+        async def astream():
+            nonlocal call_count
+            token = tokens[call_count]
+            call_count += 1
+            return token
+
+        output.is_computed = is_computed
+        output.astream = astream
+        output.tool_calls = None
+        # Simulate a backend whose post-processing rewrote the value after
+        # the deltas were already streamed.
+        output.value = "Post-processed text"
+        output.generation = Mock()
+        output.generation.usage = None
+
+        events = await self._collect(
+            output, response_id="resp_s", model="m", created=1234
+        )
+
+        part_done = next(
+            e for e in events if e["event"] == "response.content_part.done"
+        )
+        assert part_done["data"]["part"]["text"] == "Hello"
+
+        item_done = next(e for e in events if e["event"] == "response.output_item.done")
+        assert item_done["data"]["item"]["content"] == [
+            {"type": "output_text", "text": "Hello"}
+        ]
+
+        completed = next(e for e in events if e["event"] == "response.completed")
+        assert completed["data"]["response"]["output_text"] == "Hello"
+        assert completed["data"]["response"]["output"][0]["content"] == [
+            {"type": "output_text", "text": "Hello"}
+        ]
+
+    @pytest.mark.asyncio
+    async def test_tool_item_failure_closes_message_item(self):
+        """If function-call item construction fails, the message item is closed
+        and carried in the failed envelope."""
+        from mellea.core.base import ModelToolCall
+
+        output = Mock()
+        tokens = ["Hi"]
+        call_count = 0
+
+        def is_computed():
+            return call_count >= len(tokens)
+
+        async def astream():
+            nonlocal call_count
+            token = tokens[call_count]
+            call_count += 1
+            return token
+
+        # A tool call with an invalid name (None) makes function-call item
+        # construction raise after the message item was already streamed.
+        tc = Mock(spec=ModelToolCall)
+        tc.name = None
+        tc.args = {"location": "Paris"}
+        tc.tool_call_id = "call_abc"
+
+        output.is_computed = is_computed
+        output.astream = astream
+        output.tool_calls = [tc]
+        output.generation = Mock()
+        output.generation.usage = None
+
+        events = await self._collect(
+            output, response_id="resp_fail", model="m", created=1234
+        )
+
+        # The message item was closed before the failure.
+        item_done_events = [
+            e for e in events if e["event"] == "response.output_item.done"
+        ]
+        assert len(item_done_events) == 1
+        assert item_done_events[0]["data"]["item"]["content"] == [
+            {"type": "output_text", "text": "Hi"}
+        ]
+
+        # The failed envelope carries the closed message item.
+        failed = next(e for e in events if e["event"] == "response.failed")
+        assert failed["data"]["response"]["output"] == [
+            item_done_events[0]["data"]["item"]
+        ]
+
+    @pytest.mark.asyncio
+    async def test_tool_calls_emit_function_call_arguments_done(self):
+        """Tool calls on the output produce function_call_arguments.done events."""
+        from mellea.core.base import ModelToolCall
+
+        output = ModelOutputThunk("ok")
+        tc = Mock(spec=ModelToolCall)
+        tc.name = "get_weather"
+        tc.args = {"location": "Paris"}
+        tc.tool_call_id = "call_abc"
+        output.tool_calls = [tc]
+
+        events = await self._collect(
+            output, response_id="resp_tc", model="m", created=1234
+        )
+
+        fc_events = [
+            e for e in events if e["event"] == "response.function_call_arguments.done"
+        ]
+        assert len(fc_events) == 1
+        # Spec fields only: no `name` on the done event (it lives on the item).
+        assert "name" not in fc_events[0]["data"]
+        assert fc_events[0]["data"]["arguments"] == '{"location": "Paris"}'
+        assert fc_events[0]["data"]["call_id"] == "call_abc"
+        assert fc_events[0]["data"]["output_index"] == 1
+
+    @pytest.mark.asyncio
+    async def test_function_call_events_have_type_and_sequence_number(self):
+        """Function call events include type and sequence_number per spec."""
+        from mellea.core.base import ModelToolCall
+
+        output = ModelOutputThunk("ok")
+        tc = Mock(spec=ModelToolCall)
+        tc.name = "get_weather"
+        tc.args = {"location": "Paris"}
+        tc.tool_call_id = "call_abc"
+        output.tool_calls = [tc]
+
+        events = await self._collect(
+            output, response_id="resp_tc", model="m", created=1234
+        )
+
+        delta_events = [
+            e for e in events if e["event"] == "response.function_call_arguments.delta"
+        ]
+        assert len(delta_events) == 1
+        assert (
+            delta_events[0]["data"]["type"] == "response.function_call_arguments.delta"
+        )
+        assert "sequence_number" in delta_events[0]["data"]
+
+        done_events = [
+            e for e in events if e["event"] == "response.function_call_arguments.done"
+        ]
+        assert len(done_events) == 1
+        assert done_events[0]["data"]["type"] == "response.function_call_arguments.done"
+        assert "sequence_number" in done_events[0]["data"]
+
+        # sequence_number should be monotonically increasing
+        assert (
+            done_events[0]["data"]["sequence_number"]
+            > delta_events[0]["data"]["sequence_number"]
+        )
+
+    @pytest.mark.asyncio
+    async def test_function_call_item_id_matches_completed_output_item_id(self):
+        """item_id in function_call_arguments events matches the id in completed output."""
+        from mellea.core.base import ModelToolCall
+
+        output = ModelOutputThunk("ok")
+        tc = Mock(spec=ModelToolCall)
+        tc.name = "get_weather"
+        tc.args = {"location": "Paris"}
+        tc.tool_call_id = "call_abc"
+        output.tool_calls = [tc]
+
+        events = await self._collect(
+            output, response_id="resp_tc", model="m", created=1234
+        )
+
+        # Get item_id from the delta event
+        delta_events = [
+            e for e in events if e["event"] == "response.function_call_arguments.delta"
+        ]
+        assert len(delta_events) == 1
+        stream_fc_item_id = delta_events[0]["data"]["item_id"]
+
+        # Get item_id from the done event
+        done_events = [
+            e for e in events if e["event"] == "response.function_call_arguments.done"
+        ]
+        assert len(done_events) == 1
+        assert done_events[0]["data"]["item_id"] == stream_fc_item_id
+
+        # Verify the completed response's function_call item has the same id
+        completed_event = next(e for e in events if e["event"] == "response.completed")
+        completed_output = completed_event["data"]["response"]["output"]
+        fc_items = [
+            item for item in completed_output if item["type"] == "function_call"
+        ]
+        assert len(fc_items) == 1
+        assert fc_items[0]["id"] == stream_fc_item_id
+
+    @pytest.mark.asyncio
+    async def test_function_call_item_lifecycle_events(self):
+        """Tool calls emit output_item.added before and output_item.done after
+        the argument events."""
+        from mellea.core.base import ModelToolCall
+
+        output = ModelOutputThunk("ok")
+        tc = Mock(spec=ModelToolCall)
+        tc.name = "get_weather"
+        tc.args = {"location": "Paris"}
+        tc.tool_call_id = "call_abc"
+        output.tool_calls = [tc]
+
+        events = await self._collect(
+            output, response_id="resp_tc", model="m", created=1234
+        )
+
+        # Two output_item.added events: the message, then the function call.
+        item_added_events = [
+            e for e in events if e["event"] == "response.output_item.added"
+        ]
+        assert len(item_added_events) == 2
+        fc_added = item_added_events[1]
+        item = fc_added["data"]["item"]
+        delta_event = next(
+            e for e in events if e["event"] == "response.function_call_arguments.delta"
+        )
+        assert fc_added["data"]["output_index"] == 1
+        assert item["id"] == delta_event["data"]["item_id"]
+        assert item["type"] == "function_call"
+        assert item["status"] == "in_progress"
+        assert item["name"] == "get_weather"
+        assert item["arguments"] == ""
+        assert item["call_id"] == "call_abc"
+
+        item_done_events = [
+            e for e in events if e["event"] == "response.output_item.done"
+        ]
+        assert len(item_done_events) == 2
+        done_item = item_done_events[1]["data"]["item"]
+        assert item_done_events[1]["data"]["output_index"] == 1
+        assert done_item["id"] == item["id"]
+        assert done_item["status"] == "completed"
+        assert done_item["arguments"] == '{"location": "Paris"}'
+        # The done item must match the corresponding item in response.completed
+        completed = next(e for e in events if e["event"] == "response.completed")
+        completed_fc = next(
+            i
+            for i in completed["data"]["response"]["output"]
+            if i["type"] == "function_call"
+        )
+        assert done_item == completed_fc
+
+    @pytest.mark.asyncio
+    async def test_tool_call_output_index_zero_without_text(self):
+        """Tool call output_index is 0 and no output_text events are emitted when there's no text output."""
+        from mellea.core.base import ModelToolCall
+
+        output = ModelOutputThunk("")
+        tc = Mock(spec=ModelToolCall)
+        tc.name = "get_weather"
+        tc.args = {"location": "Paris"}
+        tc.tool_call_id = "call_abc"
+        output.tool_calls = [tc]
+
+        events = await self._collect(
+            output, response_id="resp_tc", model="m", created=1234
+        )
+
+        text_events = [
+            e for e in events if e["event"].startswith("response.output_text")
+        ]
+        assert len(text_events) == 0
+
+        fc_events = [
+            e for e in events if e["event"] == "response.function_call_arguments.done"
+        ]
+        assert len(fc_events) == 1
+        assert fc_events[0]["data"]["output_index"] == 0
+
+    @pytest.mark.asyncio
+    async def test_stream_without_text_emits_no_output_text_events(self):
+        """When astream yields no text, no response.output_text.* events are emitted."""
+        from mellea.core.base import ModelToolCall
+
+        output = Mock()
+        call_count = 0
+
+        def is_computed():
+            return call_count >= 1
+
+        async def astream():
+            nonlocal call_count
+            call_count += 1
+            return None
+
+        tc = Mock(spec=ModelToolCall)
+        tc.name = "get_weather"
+        tc.args = {"location": "Paris"}
+        tc.tool_call_id = "call_abc"
+
+        output.is_computed = is_computed
+        output.astream = astream
+        output.tool_calls = [tc]
+        output.value = None
+        output.generation = Mock()
+        output.generation.usage = None
+
+        events = await self._collect(
+            output, response_id="resp_tc_stream", model="m", created=1234
+        )
+
+        text_events = [
+            e for e in events if e["event"].startswith("response.output_text")
+        ]
+        assert len(text_events) == 0
+
+        fc_events = [
+            e for e in events if e["event"] == "response.function_call_arguments.done"
+        ]
+        assert len(fc_events) == 1
+        assert fc_events[0]["data"]["output_index"] == 0
+
+    @pytest.mark.asyncio
+    async def test_tool_only_stream_has_no_message_lifecycle_events(self):
+        """Without text output there are no message item or content part events."""
+        from mellea.core.base import ModelToolCall
+
+        output = ModelOutputThunk("")
+        tc = Mock(spec=ModelToolCall)
+        tc.name = "get_weather"
+        tc.args = {"location": "Paris"}
+        tc.tool_call_id = "call_abc"
+        output.tool_calls = [tc]
+
+        events = await self._collect(
+            output, response_id="resp_tc", model="m", created=1234
+        )
+
+        item_added_events = [
+            e for e in events if e["event"] == "response.output_item.added"
+        ]
+        assert len(item_added_events) == 1
+        assert item_added_events[0]["data"]["item"]["type"] == "function_call"
+        assert item_added_events[0]["data"]["output_index"] == 0
+
+        part_events = [
+            e for e in events if e["event"].startswith("response.content_part")
+        ]
+        assert len(part_events) == 0
+
+    @pytest.mark.asyncio
+    async def test_error_emits_failed_event(self):
+        """An exception mid-stream emits response.failed."""
+        output = Mock()
+        output.is_computed.return_value = False
+        output.astream = AsyncMock(side_effect=RuntimeError("oops"))
+        output.generation = Mock()
+        output.generation.usage = None
+
+        events = await self._collect(
+            output, response_id="resp_err", model="m", created=1234
+        )
+
+        failed = [e for e in events if e["event"] == "response.failed"]
+        assert len(failed) == 1
+        assert failed[0]["data"]["type"] == "response.failed"
+        assert "sequence_number" in failed[0]["data"]
+        response = failed[0]["data"]["response"]
+        assert response["status"] == "failed"
+        assert response["id"] == "resp_err"
+        assert response["model"] == "m"
+        assert response["created_at"] == 1234
+        assert response["output"] == []
+        assert response["error"]["code"] == "server_error"
+        # Full Response shape: required fields present for SDK parsing
+        assert response["usage"]["total_tokens"] == 0
+        assert response["usage"]["output_tokens_details"]["reasoning_tokens"] == 0
+
+    @pytest.mark.asyncio
+    async def test_usage_always_included_in_completed(self):
+        """Usage is always present in response.completed (new OpenAI SDK format)."""
+        output = ModelOutputThunk("hello")
+        output.generation.usage = {
+            "prompt_tokens": 5,
+            "completion_tokens": 3,
+            "total_tokens": 8,
+        }
+        events = await self._collect(
+            output, response_id="resp_1", model="m", created=1234
+        )
+        completed = next(e for e in events if e["event"] == "response.completed")
+        # In the new format, usage is in the response object
+        assert completed["data"]["response"]["usage"] is not None
+        assert completed["data"]["response"]["usage"]["input_tokens"] == 5
+        assert completed["data"]["response"]["usage"]["output_tokens"] == 3
+        assert completed["data"]["response"]["usage"]["total_tokens"] == 8
+
+    @pytest.mark.asyncio
+    async def test_usage_details_included_in_completed(self):
+        """Nested Chat Completions usage details surface in response.completed."""
+        output = ModelOutputThunk("hello")
+        output.generation.usage = {
+            "prompt_tokens": 5,
+            "completion_tokens": 3,
+            "total_tokens": 8,
+            "completion_tokens_details": {"reasoning_tokens": 7},
+            "prompt_tokens_details": {"cached_tokens": 4},
+        }
+        events = await self._collect(
+            output, response_id="resp_1", model="m", created=1234
+        )
+        completed = next(e for e in events if e["event"] == "response.completed")
+        usage = completed["data"]["response"]["usage"]
+        assert usage["output_tokens_details"]["reasoning_tokens"] == 7
+        assert usage["input_tokens_details"]["cached_tokens"] == 4
+
+    @pytest.mark.asyncio
+    async def test_endpoint_streams_with_openai_sdk_format(self, mock_module):
+        """The endpoint streams responses in OpenAI SDK-compatible format."""
+        from fastapi.responses import StreamingResponse
+
+        req = ResponseRequest(model="m", input="hi", stream=True)
+        output = ModelOutputThunk("streamed")
+        output.generation.usage = {
+            "prompt_tokens": 2,
+            "completion_tokens": 1,
+            "total_tokens": 3,
+        }
+        mock_module.serve.return_value = output
+        endpoint = make_responses_endpoint(mock_module)
+        response = await endpoint(req)
+        assert isinstance(response, StreamingResponse)
+
+        events = []
+        async for chunk in response.body_iterator:
+            event_name = None
+            for line in chunk.split("\n"):
+                line = line.strip()
+                if line.startswith("event:"):
+                    event_name = line.split(":", 1)[1].strip()
+                elif line.startswith("data:") and event_name is not None:
+                    data = json.loads(line.split(":", 1)[1].strip())
+                    events.append({"event": event_name, "data": data})
+                    event_name = None
+
+        # Verify OpenAI SDK format: completed event has response object with usage
+        completed = next(e for e in events if e["event"] == "response.completed")
+        assert completed["data"]["type"] == "response.completed"
+        assert completed["data"]["response"]["usage"] is not None
+        assert completed["data"]["response"]["usage"]["input_tokens"] == 2
+
+
+# ---------------------------------------------------------------------------
+# build_response_usage
+# ---------------------------------------------------------------------------
+
+
+class TestBuildResponseUsage:
+    """Tests for the ResponseUsage helper."""
+
+    def test_returns_none_when_no_usage(self):
+        output = ModelOutputThunk("hi")
+        assert build_response_usage(output) is None
+
+    def test_returns_none_when_generation_is_none(self):
+        """Handles case where output.generation is None (defensive check)."""
+        output = ModelOutputThunk("hi")
+        output.generation = None
+        assert build_response_usage(output) is None
+
+    def test_maps_prompt_to_input_tokens(self):
+        output = ModelOutputThunk("hi")
+        output.generation.usage = {
+            "prompt_tokens": 10,
+            "completion_tokens": 5,
+            "total_tokens": 15,
+        }
+        usage = build_response_usage(output)
+        assert usage is not None
+        assert usage.input_tokens == 10
+        assert usage.output_tokens == 5
+        assert usage.total_tokens == 15
+
+    def test_reasoning_tokens_extracted(self):
+        output = ModelOutputThunk("hi")
+        output.generation.usage = {
+            "prompt_tokens": 10,
+            "completion_tokens": 5,
+            "total_tokens": 15,
+            "reasoning_tokens": 3,
+        }
+        usage = build_response_usage(output)
+        assert usage is not None
+        assert usage.reasoning_tokens == 3
+
+    def test_reasoning_tokens_none_when_absent(self):
+        output = ModelOutputThunk("hi")
+        output.generation.usage = {
+            "prompt_tokens": 1,
+            "completion_tokens": 1,
+            "total_tokens": 2,
+        }
+        usage = build_response_usage(output)
+        assert usage is not None
+        assert usage.reasoning_tokens is None
+
+    def test_total_tokens_inferred_when_missing(self):
+        output = ModelOutputThunk("hi")
+        output.generation.usage = {"prompt_tokens": 4, "completion_tokens": 6}
+        usage = build_response_usage(output)
+        assert usage is not None
+        assert usage.total_tokens == 10
+
+    def test_reasoning_tokens_from_completion_tokens_details(self):
+        """Reasoning tokens arrive nested, the way OpenAI/LiteLLM backends store them."""
+        output = ModelOutputThunk("hi")
+        output.generation.usage = {
+            "prompt_tokens": 10,
+            "completion_tokens": 5,
+            "total_tokens": 15,
+            "completion_tokens_details": {"reasoning_tokens": 7},
+        }
+        usage = build_response_usage(output)
+        assert usage is not None
+        assert usage.reasoning_tokens == 7
+        assert usage.output_tokens_details.reasoning_tokens == 7
+
+    def test_cached_tokens_from_prompt_tokens_details(self):
+        """Cached tokens arrive nested under prompt_tokens_details."""
+        output = ModelOutputThunk("hi")
+        output.generation.usage = {
+            "prompt_tokens": 10,
+            "completion_tokens": 5,
+            "total_tokens": 15,
+            "prompt_tokens_details": {"cached_tokens": 4},
+        }
+        usage = build_response_usage(output)
+        assert usage is not None
+        assert usage.input_tokens_details.cached_tokens == 4
+
+    def test_details_zero_when_usage_has_no_breakdown(self):
+        """Flat usage dicts (Ollama/HF style) still get spec-shaped details."""
+        output = ModelOutputThunk("hi")
+        output.generation.usage = {
+            "prompt_tokens": 1,
+            "completion_tokens": 1,
+            "total_tokens": 2,
+        }
+        usage = build_response_usage(output)
+        assert usage is not None
+        assert usage.input_tokens_details.cached_tokens == 0
+        assert usage.output_tokens_details.reasoning_tokens == 0
+        assert usage.reasoning_tokens is None
+
+    def test_top_level_reasoning_tokens_preferred_over_details(self):
+        """A top-level reasoning_tokens wins over the nested location."""
+        output = ModelOutputThunk("hi")
+        output.generation.usage = {
+            "prompt_tokens": 10,
+            "completion_tokens": 5,
+            "total_tokens": 15,
+            "reasoning_tokens": 3,
+            "completion_tokens_details": {"reasoning_tokens": 9},
+        }
+        usage = build_response_usage(output)
+        assert usage is not None
+        assert usage.reasoning_tokens == 3
+
+    def test_zero_usage_includes_details_objects(self):
+        """The zero-fallback construction still emits the details objects."""
+        usage = ResponseUsage(input_tokens=0, output_tokens=0, total_tokens=0)
+        assert usage.input_tokens_details.cached_tokens == 0
+        assert usage.output_tokens_details.reasoning_tokens == 0
+        assert usage.model_dump()["input_tokens_details"] == {"cached_tokens": 0}
+        assert usage.model_dump()["output_tokens_details"] == {"reasoning_tokens": 0}
+
+
+# ---------------------------------------------------------------------------
+# build_response_output_items
+# ---------------------------------------------------------------------------
+
+
+class TestBuildResponseOutputItems:
+    """Tests for the output items builder."""
+
+    def test_text_output_creates_message_item(self):
+        output = ModelOutputThunk("Hello!")
+        items = build_response_output_items(output, None)
+        assert len(items) == 1
+        assert items[0].type == "message"
+        assert items[0].role == "assistant"  # type: ignore[union-attr]
+
+    def test_message_item_contains_output_text_content(self):
+        output = ModelOutputThunk("Hi there")
+        items = build_response_output_items(output, None)
+        msg = items[0]
+        assert msg.content[0].type == "output_text"  # type: ignore[union-attr]
+        assert msg.content[0].text == "Hi there"  # type: ignore[union-attr]
+
+    def test_empty_value_produces_no_message_item(self):
+        output = ModelOutputThunk(None)
+        items = build_response_output_items(output, None)
+        assert all(item.type != "message" for item in items)
+
+    def test_tool_calls_produce_function_call_items(self):
+        output = ModelOutputThunk("ok")
+        tool_calls = [
+            {
+                "id": "call_1",
+                "type": "function",
+                "function": {"name": "get_weather", "arguments": '{"location":"NYC"}'},
+            }
+        ]
+        items = build_response_output_items(output, tool_calls)
+        fc_items = [i for i in items if i.type == "function_call"]
+        assert len(fc_items) == 1
+        assert fc_items[0].name == "get_weather"  # type: ignore[union-attr]
+        assert fc_items[0].call_id == "call_1"  # type: ignore[union-attr]
+
+    def test_multiple_tool_calls_all_present(self):
+        output = ModelOutputThunk("ok")
+        tool_calls = [
+            {
+                "id": "c1",
+                "type": "function",
+                "function": {"name": "f1", "arguments": "{}"},
+            },
+            {
+                "id": "c2",
+                "type": "function",
+                "function": {"name": "f2", "arguments": "{}"},
+            },
+        ]
+        items = build_response_output_items(output, tool_calls)
+        fc_items = [i for i in items if i.type == "function_call"]
+        assert len(fc_items) == 2
+
+    def test_message_item_id_has_msg_prefix(self):
+        output = ModelOutputThunk("hi")
+        items = build_response_output_items(output, None)
+        assert items[0].id.startswith("msg_")
+
+    def test_message_item_id_uses_provided_id(self):
+        output = ModelOutputThunk("hi")
+        items = build_response_output_items(output, None, message_id="msg_custom_123")
+        assert items[0].id == "msg_custom_123"
+
+    def test_function_call_item_id_has_fc_prefix(self):
+        output = ModelOutputThunk(None)
+        tool_calls = [
+            {
+                "id": "c1",
+                "type": "function",
+                "function": {"name": "f", "arguments": "{}"},
+            }
+        ]
+        items = build_response_output_items(output, tool_calls)
+        assert items[0].id.startswith("fc_")
+
+    def test_function_call_ids_uses_provided_ids(self):
+        output = ModelOutputThunk(None)
+        tool_calls = [
+            {
+                "id": "c1",
+                "type": "function",
+                "function": {"name": "f1", "arguments": "{}"},
+            },
+            {
+                "id": "c2",
+                "type": "function",
+                "function": {"name": "f2", "arguments": "{}"},
+            },
+        ]
+        items = build_response_output_items(
+            output, tool_calls, function_call_ids=["fc_custom_1", "fc_custom_2"]
+        )
+        assert items[0].id == "fc_custom_1"
+        assert items[1].id == "fc_custom_2"
+
+    def test_message_text_overrides_value(self):
+        """A non-empty message_text replaces output.value as the message text."""
+        output = ModelOutputThunk("rewritten value")
+        items = build_response_output_items(output, None, message_text="streamed text")
+        assert len(items) == 1
+        msg = items[0]
+        assert msg.type == "message"
+        assert msg.content[0].text == "streamed text"  # type: ignore[union-attr]
+
+    def test_empty_message_text_suppresses_message_item(self):
+        """An empty message_text skips the message item even when value is set."""
+        output = ModelOutputThunk("some value")
+        tool_calls = [
+            {
+                "id": "c1",
+                "type": "function",
+                "function": {"name": "f", "arguments": "{}"},
+            }
+        ]
+        items = build_response_output_items(output, tool_calls, message_text="")
+        assert [i.type for i in items] == ["function_call"]
