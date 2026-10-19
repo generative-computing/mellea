@@ -113,6 +113,42 @@ class TestBuildModelOptionsFromResponseRequest:
         ):
             assert excluded not in opts
 
+    def test_standard_openai_params_not_forwarded(self):
+        """Unimplemented standard OpenAI request parameters are metadata/routing,
+        not generation parameters — they must not reach model_options."""
+        req = ResponseRequest(
+            model="m",
+            input="hi",
+            user="user-123",
+            reasoning={"effort": "low"},
+            truncation="auto",
+            metadata={"session": "abc"},
+            service_tier="auto",
+            max_tool_calls=3,
+            prompt_cache_key="cache-key",
+            safety_identifier="sid",
+            stream_options={"include_usage": True},
+            top_logprobs=5,
+        )
+        opts = _build_model_options_from_response_request(req)
+        for excluded in (
+            "user",
+            "reasoning",
+            "truncation",
+            "metadata",
+            "service_tier",
+            "max_tool_calls",
+            "prompt",
+            "prompt_cache_key",
+            "prompt_cache_retention",
+            "safety_identifier",
+            "stream_options",
+            "top_logprobs",
+        ):
+            assert excluded not in opts, f"{excluded} leaked into model_options"
+        # Temperature is still mapped as before.
+        assert opts[ModelOption.TEMPERATURE] == 1.0
+
     def test_tools_mapped(self):
         req = ResponseRequest(
             model="m",

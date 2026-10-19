@@ -296,6 +296,22 @@ def _build_model_options_from_response_request(request: ResponseRequest) -> dict
         "extra",
         # Not-yet-implemented
         "top_p",
+        # Standard OpenAI request parameters we do not implement. They are
+        # metadata/routing, not generation parameters — drop them instead of
+        # forwarding them to the backend, where strict providers reject
+        # unknown options (the chat endpoint does the same for 'user').
+        "user",
+        "reasoning",
+        "truncation",
+        "metadata",
+        "service_tier",
+        "max_tool_calls",
+        "prompt",
+        "prompt_cache_key",
+        "prompt_cache_retention",
+        "safety_identifier",
+        "stream_options",
+        "top_logprobs",
     }
     openai_to_model_option = {
         "max_output_tokens": ModelOption.MAX_NEW_TOKENS,
