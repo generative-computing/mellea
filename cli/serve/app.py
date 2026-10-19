@@ -542,7 +542,17 @@ def _build_history_from_messages(
     """
     history: list[dict[str, Any]] = []
     for m in messages:
-        entry: dict[str, Any] = {"role": m.role, "content": m.content}
+        content = m.content
+        if isinstance(content, list):
+            # Multimodal content arrives as pydantic model instances
+            # (TextContent/ImageUrlContent); store plain dicts so the
+            # history matches its documented type and is JSON-serializable
+            # (e.g. for cross-restart persistence). ChatMessage re-validates
+            # the dicts back into models on replay.
+            content = [
+                c.model_dump() if isinstance(c, BaseModel) else c for c in content
+            ]
+        entry: dict[str, Any] = {"role": m.role, "content": content}
         if m.tool_call_id is not None:
             entry["tool_call_id"] = m.tool_call_id
         if m.tool_calls:

@@ -125,6 +125,52 @@ class TestBuildHistoryFromMessages:
         assert history[0] == {"role": "user", "content": "Hi"}
         assert history[1] == {"role": "assistant", "content": "Hello!"}
 
+    def test_multimodal_content_stored_as_plain_dicts(self):
+        """Multimodal content is stored as plain dicts, matching the history's
+        documented type and staying JSON-serializable."""
+        import json
+
+        from mellea.serve.models import ChatMessage, ImageUrlContent, TextContent
+
+        msgs = [
+            ChatMessage(
+                role="user",
+                content=[
+                    TextContent(type="text", text="What is in this image?"),
+                    ImageUrlContent(
+                        type="image_url",
+                        image_url={"url": "https://example.com/cat.png"},
+                    ),
+                ],
+            )
+        ]
+        history = _build_history_from_messages(msgs, "A cat.")
+
+        content = history[0]["content"]
+        assert content == [
+            {"type": "text", "text": "What is in this image?"},
+            {"type": "image_url", "image_url": {"url": "https://example.com/cat.png"}},
+        ]
+        assert all(isinstance(c, dict) for c in content)
+        # The property the plain-dict format exists for: serializability.
+        json.dumps(history)
+
+    def test_multimodal_history_replays_as_models(self):
+        """Replayed history dicts re-validate into content models."""
+        from mellea.serve.models import ChatMessage, ImageUrlContent, TextContent
+
+        msgs = [
+            ChatMessage(
+                role="user", content=[TextContent(type="text", text="describe this")]
+            )
+        ]
+        history = _build_history_from_messages(msgs, "A cat.")
+
+        replayed = ChatMessage(**history[0])
+        assert isinstance(replayed.content, list)
+        assert isinstance(replayed.content[0], TextContent)
+        assert replayed.content[0].text == "describe this"
+
 
 # ---------------------------------------------------------------------------
 # _StoredResponse
