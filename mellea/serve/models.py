@@ -65,6 +65,9 @@ class ChatMessage(BaseModel):
     content: str | list[MessageContent] | None = None
     name: str | None = None
     tool_call_id: str | None = None
+    tool_calls: list[dict[str, Any]] | None = None
+    """Tool calls on an assistant turn, in the OpenAI Chat Completions wire
+    shape: `[{"id", "type": "function", "function": {"name", "arguments"}}]`."""
     function_call: dict[str, Any] | None = None  # For function/tool messages
 
     def get_text_content(self) -> str:

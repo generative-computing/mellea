@@ -410,9 +410,14 @@ class OpenAIErrorResponse(BaseModel):
 
 
 class InputContent(BaseModel):
-    """Content part in a Responses API input item."""
+    """Content part in a Responses API input item.
 
-    type: Literal["input_text", "input_image", "input_file"]
+    `output_text` blocks appear when a client replays a previous
+    response's output (the `store=False` pattern: `input=response.output
+    + [...]`); their `annotations` are ignored.
+    """
+
+    type: Literal["input_text", "input_image", "input_file", "output_text"]
     text: str | None = None
     image_url: str | None = None
     file_id: str | None = None
@@ -422,26 +427,33 @@ class ResponseInputItem(BaseModel):
     """A single input item for the Responses API.
 
     Accepts message items (`{"role": ..., "content": ...}`, optionally with
-    an explicit `type: "message"`) and tool-result items
-    (`{"type": "function_call_output", "call_id": ..., "output": ...}`) as
-    sent by the OpenAI SDK.
+    an explicit `type: "message"`), tool-result items
+    (`{"type": "function_call_output", "call_id": ..., "output": ...}`),
+    and replayed assistant function calls
+    (`{"type": "function_call", "call_id", "name", "arguments"}`) as sent
+    by the OpenAI SDK.
     """
 
-    type: Literal["message", "function_call_output"] | None = None
+    type: Literal["message", "function_call", "function_call_output"] | None = None
     role: Literal["user", "assistant", "developer", "system", "tool"] | None = None
     content: str | list[InputContent] | None = None
     tool_call_id: str | None = None
     tool_calls: list[Any] | None = None
-    # function_call_output shape:
+    # function_call / function_call_output shapes:
     call_id: str | None = None
+    name: str | None = None
+    arguments: str | None = None
     output: str | list[InputContent] | None = None
 
     @model_validator(mode="after")
-    def _require_role_or_function_call_output(self) -> "ResponseInputItem":
-        if self.role is None and self.type != "function_call_output":
+    def _require_role_or_item_type(self) -> "ResponseInputItem":
+        if self.role is None and self.type not in (
+            "function_call",
+            "function_call_output",
+        ):
             raise ValueError(
                 "Input item requires a 'role' (message item) or "
-                "type='function_call_output' (tool result)."
+                "type='function_call' / type='function_call_output'."
             )
         return self
 

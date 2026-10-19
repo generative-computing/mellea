@@ -43,6 +43,20 @@ PERSON_SCHEMA: dict = {
     "required": ["name", "age"],
 }
 
+# Flat (Responses API / SDK) function tool declaration.
+TOOLS_FLAT: list[dict] = [
+    {
+        "type": "function",
+        "name": "get_weather",
+        "description": "Get the weather in a location",
+        "parameters": {
+            "type": "object",
+            "properties": {"location": {"type": "string"}},
+            "required": ["location"],
+        },
+    }
+]
+
 
 class MockWeatherTool(AbstractMelleaTool):
     """Mock weather tool for the tool round-trip test."""
@@ -276,6 +290,142 @@ class TestResponsesSdkIntegration:
         assert len(tool_messages) == 1
         assert tool_messages[0].tool_call_id == "call_123"
         assert tool_messages[0].content == "Sunny, 25C"
+
+    def test_tool_round_trip_without_store(self, mock_module):
+        """The SDK's store=False pattern: input=response.output + [function_call_output]."""
+        serve_inputs: list[list] = []
+
+        def serve(input, requirements=None, model_options=None):
+            serve_inputs.append(list(input))
+            if len(serve_inputs) == 1:
+                thunk = ModelOutputThunk("")
+                thunk.tool_calls = [
+                    ModelToolCall(
+                        name="get_weather",
+                        func=MockWeatherTool(),
+                        args={"location": "Paris"},
+                        tool_call_id="call_123",
+                    )
+                ]
+                return thunk
+            return ModelOutputThunk("It is sunny in Paris.")
+
+        mock_module.serve = serve
+
+        with _sdk_client(mock_module) as client:
+            first = client.responses.create(
+                model="test-model",
+                input="What's the weather in Paris?",
+                tools=TOOLS_FLAT,
+                tool_choice="auto",
+                store=False,
+            )
+            function_calls = [
+                item for item in first.output if item.type == "function_call"
+            ]
+            assert len(function_calls) == 1
+
+            second = client.responses.create(
+                model="test-model",
+                # The documented store=False replay: resend the previous
+                # output items plus the tool result, no previous_response_id.
+                input=[
+                    *first.output,
+                    {
+                        "type": "function_call_output",
+                        "call_id": function_calls[0].call_id,
+                        "output": "Sunny, 25C",
+                    },
+                ],
+                store=False,
+            )
+            assert second.output_text == "It is sunny in Paris."
+
+        # serve()'s second input replays the assistant's function call
+        # (paired tool_calls) alongside the tool result.
+        second_input = serve_inputs[1]
+        assistant_calls = [
+            m
+            for m in second_input
+            if getattr(m, "role", None) == "assistant" and m.tool_calls
+        ]
+        assert len(assistant_calls) == 1
+        assert assistant_calls[0].tool_calls[0]["id"] == "call_123"
+        tool_messages = [m for m in second_input if getattr(m, "role", None) == "tool"]
+        assert len(tool_messages) == 1
+        assert tool_messages[0].tool_call_id == "call_123"
+
+    def test_parallel_tool_calls_merged_on_replay(self, mock_module):
+        """Parallel calls replay as ONE assistant message with both tool_calls,
+        so each tool result directly follows the declaring assistant turn."""
+        serve_inputs: list[list] = []
+
+        def serve(input, requirements=None, model_options=None):
+            serve_inputs.append(list(input))
+            if len(serve_inputs) == 1:
+                thunk = ModelOutputThunk("")
+                thunk.tool_calls = [
+                    ModelToolCall(
+                        name="get_weather",
+                        func=MockWeatherTool(),
+                        args={"location": "Paris"},
+                        tool_call_id="call_1",
+                    ),
+                    ModelToolCall(
+                        name="get_stock_price",
+                        func=MockWeatherTool(),
+                        args={"symbol": "AAPL"},
+                        tool_call_id="call_2",
+                    ),
+                ]
+                return thunk
+            return ModelOutputThunk("Sunny and $175.")
+
+        mock_module.serve = serve
+
+        with _sdk_client(mock_module) as client:
+            first = client.responses.create(
+                model="test-model",
+                input="Weather and AAPL price?",
+                tools=TOOLS_FLAT,
+                tool_choice="auto",
+                store=False,
+            )
+            call_ids = [
+                item.call_id for item in first.output if item.type == "function_call"
+            ]
+            assert call_ids == ["call_1", "call_2"]
+
+            second = client.responses.create(
+                model="test-model",
+                # Stateless replay: the question is resent alongside the
+                # previous output items and both tool results.
+                input=[
+                    {"role": "user", "content": "Weather and AAPL price?"},
+                    *first.output,
+                    {
+                        "type": "function_call_output",
+                        "call_id": "call_1",
+                        "output": "Sunny",
+                    },
+                    {
+                        "type": "function_call_output",
+                        "call_id": "call_2",
+                        "output": "$175",
+                    },
+                ],
+                store=False,
+            )
+            assert second.output_text == "Sunny and $175."
+
+        second_input = serve_inputs[1]
+        roles = [m.role for m in second_input]
+        # user, ONE assistant (both calls), two tool results — in order.
+        assert roles == ["user", "assistant", "tool", "tool"]
+        assistant = second_input[1]
+        assert [tc["id"] for tc in assistant.tool_calls] == ["call_1", "call_2"]
+        assert second_input[2].tool_call_id == "call_1"
+        assert second_input[3].tool_call_id == "call_2"
 
     def test_previous_response_id_after_streamed_turn(self, mock_module):
         """A streamed turn is stored, retrievable, and chainable."""

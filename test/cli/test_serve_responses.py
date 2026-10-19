@@ -460,6 +460,117 @@ class TestConvertResponseInputToMessages:
         msgs = _convert_response_input_to_messages([item], None)
         assert msgs[0].role == "user"
 
+    def test_function_call_item_becomes_assistant_tool_calls(self):
+        """A replayed function_call item (store=False pattern) pairs with the
+        following function_call_output via Chat Completions-shaped tool_calls."""
+        items = [
+            ResponseInputItem(role="user", content="Weather in Paris?"),
+            ResponseInputItem(
+                type="function_call",
+                call_id="call_9",
+                name="get_weather",
+                arguments='{"location": "Paris"}',
+            ),
+            ResponseInputItem(
+                type="function_call_output", call_id="call_9", output="Sunny, 25C"
+            ),
+        ]
+        msgs = _convert_response_input_to_messages(items, None)
+        assert len(msgs) == 3
+        assert msgs[1].role == "assistant"
+        assert msgs[1].tool_calls == [
+            {
+                "id": "call_9",
+                "type": "function",
+                "function": {
+                    "name": "get_weather",
+                    "arguments": '{"location": "Paris"}',
+                },
+            }
+        ]
+        # The tool result pairs with the call above.
+        assert msgs[2].role == "tool"
+        assert msgs[2].tool_call_id == "call_9"
+
+    def test_output_text_content_blocks_accepted(self):
+        """Replayed assistant message content (output_text blocks) converts to text."""
+        items = [
+            ResponseInputItem(
+                role="assistant",
+                content=[
+                    {"type": "output_text", "text": "Let me check.", "annotations": []}
+                ],
+            )
+        ]
+        msgs = _convert_response_input_to_messages(items, None)
+        assert msgs[0].role == "assistant"
+        assert msgs[0].get_text_content() == "Let me check."
+
+    def test_parallel_function_calls_merged_into_one_assistant_message(self):
+        """Consecutive function_call items share one assistant message, so each
+        tool result directly follows the assistant turn that declared it."""
+        items = [
+            ResponseInputItem(role="user", content="Weather and stocks?"),
+            ResponseInputItem(
+                type="function_call",
+                call_id="call_1",
+                name="get_weather",
+                arguments='{"location": "Paris"}',
+            ),
+            ResponseInputItem(
+                type="function_call",
+                call_id="call_2",
+                name="get_stock_price",
+                arguments='{"symbol": "AAPL"}',
+            ),
+            ResponseInputItem(
+                type="function_call_output", call_id="call_1", output="Sunny"
+            ),
+            ResponseInputItem(
+                type="function_call_output", call_id="call_2", output="$175"
+            ),
+        ]
+        msgs = _convert_response_input_to_messages(items, None)
+        assert [m.role for m in msgs] == ["user", "assistant", "tool", "tool"]
+        # One assistant message declaring both calls...
+        assert [tc["id"] for tc in msgs[1].tool_calls] == ["call_1", "call_2"]
+        # ...followed directly by both tool results, each paired by id.
+        assert msgs[2].tool_call_id == "call_1"
+        assert msgs[3].tool_call_id == "call_2"
+
+    def test_function_call_after_text_message_starts_new_assistant_message(self):
+        """A function_call following a non-tool_calls assistant message does
+        not merge into it."""
+        items = [
+            ResponseInputItem(role="assistant", content="Let me check."),
+            ResponseInputItem(
+                type="function_call",
+                call_id="call_1",
+                name="get_weather",
+                arguments="{}",
+            ),
+        ]
+        msgs = _convert_response_input_to_messages(items, None)
+        assert len(msgs) == 2
+        assert msgs[0].content == "Let me check."
+        assert msgs[0].tool_calls is None
+        assert msgs[1].tool_calls[0]["id"] == "call_1"
+
+    def test_chat_completions_tool_calls_passthrough(self):
+        """A Chat-Completions-shaped assistant item's tool_calls are carried
+        through instead of being silently dropped."""
+        tool_calls = [
+            {
+                "id": "call_5",
+                "type": "function",
+                "function": {"name": "get_weather", "arguments": "{}"},
+            }
+        ]
+        items = [ResponseInputItem(role="assistant", content="", tool_calls=tool_calls)]
+        msgs = _convert_response_input_to_messages(items, None)
+        assert msgs[0].role == "assistant"
+        assert msgs[0].tool_calls == tool_calls
+
     def test_tool_message_item_preserves_tool_call_id(self):
         """Chat Completions-style tool message preserves tool_call_id."""
         item = ResponseInputItem(

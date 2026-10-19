@@ -351,7 +351,10 @@ def _convert_input_content_to_message_content(
     # Convert list of InputContent to list of MessageContent
     message_content: list = []
     for block in content:
-        if block.type == "input_text" and block.text is not None:
+        if block.type in ("input_text", "output_text") and block.text is not None:
+            # output_text blocks appear when a client replays a previous
+            # response's output (store=False pattern); annotations are
+            # ignored at parse time.
             message_content.append(TextContent(type="text", text=block.text))
         elif block.type == "input_image" and block.image_url is not None:
             message_content.append(
@@ -432,6 +435,29 @@ def _convert_response_input_to_messages(
                 messages.append(
                     ChatMessage(role="tool", content=content, tool_call_id=item.call_id)
                 )
+            elif item.type == "function_call":
+                # Replayed assistant function call (the store=False pattern:
+                # input=response.output + [function_call_output]): an
+                # assistant message whose tool_calls use the Chat
+                # Completions wire shape the backends speak. Parallel calls
+                # arrive as consecutive function_call items and must share
+                # ONE assistant message — a role:"tool" result must directly
+                # follow the assistant message that declared its call, so
+                # one-message-per-call breaks the pairing.
+                tool_call = {
+                    "id": item.call_id,
+                    "type": "function",
+                    "function": {"name": item.name, "arguments": item.arguments or ""},
+                }
+                prev = messages[-1] if messages else None
+                if prev is not None and prev.role == "assistant" and prev.tool_calls:
+                    prev.tool_calls.append(tool_call)
+                else:
+                    messages.append(
+                        ChatMessage(
+                            role="assistant", content="", tool_calls=[tool_call]
+                        )
+                    )
             else:
                 content = _convert_input_content_to_message_content(item.content)
                 messages.append(
@@ -439,6 +465,7 @@ def _convert_response_input_to_messages(
                         role=_role(item.role),
                         content=content,
                         tool_call_id=item.tool_call_id,
+                        tool_calls=item.tool_calls,
                     )
                 )
 
