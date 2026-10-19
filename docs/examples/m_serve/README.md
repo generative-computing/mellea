@@ -341,7 +341,7 @@ The server supports structured output via the `text` parameter (Responses API, `
 ```python
 import openai
 
-client = openai.OpenAI(api_key="na", base_url="http://0.0.0.0:8080/v1")
+client = openai.OpenAI(api_key="na", base_url="http://localhost:8080/v1")
 
 # Define a schema for structured output
 person_schema = {
@@ -375,7 +375,7 @@ print(response.choices[0].message.content)
 ```python
 import openai
 
-client = openai.OpenAI(api_key="na", base_url="http://0.0.0.0:8080/v1")
+client = openai.OpenAI(api_key="na", base_url="http://localhost:8080/v1")
 
 response = client.responses.create(
     input="Generate a person named Alice",
@@ -436,7 +436,7 @@ not token-by-token streaming.
 ```python
 import openai
 
-client = openai.OpenAI(api_key="na", base_url="http://0.0.0.0:8080/v1")
+client = openai.OpenAI(api_key="na", base_url="http://localhost:8080/v1")
 
 # Enable streaming with stream=True
 stream = client.chat.completions.create(
@@ -464,7 +464,7 @@ request and the server reconstructs the full history automatically.
 ```python
 import openai
 
-client = openai.OpenAI(api_key="na", base_url="http://0.0.0.0:8080/v1")
+client = openai.OpenAI(api_key="na", base_url="http://localhost:8080/v1")
 
 # Turn 1
 r1 = client.responses.create(model="granite4.1:3b", input="My name is Alice.")
@@ -491,7 +491,7 @@ r = client.responses.create(model="granite4.1:3b", input="...", store=False)
 Stored responses can also be retrieved by ID:
 
 ```bash
-curl http://0.0.0.0:8080/v1/responses/resp_abc123
+curl http://localhost:8080/v1/responses/resp_abc123
 ```
 
 Sessions expire after 30 minutes by default.  Pass `--response-ttl <seconds>`

@@ -20,7 +20,7 @@ import openai
 
 PORT = 8080
 
-client = openai.OpenAI(api_key="na", base_url=f"http://0.0.0.0:{PORT}/v1")
+client = openai.OpenAI(api_key="na", base_url=f"http://localhost:{PORT}/v1")
 
 MODEL = "granite4.1:3b"
 
@@ -68,7 +68,7 @@ print()
 
 import httpx
 
-retrieved = httpx.get(f"http://0.0.0.0:{PORT}/v1/responses/{response1.id}")
+retrieved = httpx.get(f"http://localhost:{PORT}/v1/responses/{response1.id}")
 print(f"Retrieved response1 via GET /v1/responses/{response1.id}:")
 print(f"  Status : {retrieved.json()['status']}")
 print(f"  Text   : {retrieved.json()['output_text']}")

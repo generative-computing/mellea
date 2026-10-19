@@ -16,7 +16,7 @@ Run the server first:
 import openai
 
 PORT = 8080
-client = openai.OpenAI(api_key="na", base_url=f"http://0.0.0.0:{PORT}/v1")
+client = openai.OpenAI(api_key="na", base_url=f"http://localhost:{PORT}/v1")
 
 print("=== Pattern A: standard model field routes via client_options ===")
 # The standard `model` field is read by the server via

@@ -13,7 +13,7 @@ import openai
 
 PORT = 8080
 
-client = openai.OpenAI(api_key="na", base_url=f"http://0.0.0.0:{PORT}/v1")
+client = openai.OpenAI(api_key="na", base_url=f"http://localhost:{PORT}/v1")
 
 response = client.responses.create(
     model="granite4.1:3b", input="Find all the real roots of x^3 + 1."
