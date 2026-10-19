@@ -1228,6 +1228,54 @@ class TestResponsesEndpointStreaming:
         ]
 
     @pytest.mark.asyncio
+    async def test_streamed_history_uses_post_processed_value(self, mock_module):
+        """The stored history's assistant turn uses the post-processed
+        output.value — the same value the non-streaming path stores — not the
+        raw deltas the client saw streamed."""
+        from fastapi.responses import StreamingResponse
+
+        # An uncomputed thunk: astream yields a raw delta, and by the time the
+        # thunk resolves, post-processing has rewritten the value (e.g.
+        # json_schema validation).
+        output = Mock()
+        state = {"computed": False}
+
+        def _is_computed():
+            return state["computed"]
+
+        async def _astream():
+            # The generation finishes behind this delta; the thunk resolves
+            # with the post-processed value.
+            state["computed"] = True
+            return "raw delta text"
+
+        output.is_computed = _is_computed
+        output.astream = _astream
+        output.value = "processed final text"
+        output.tool_calls = None
+        output.generation = Mock()
+        output.generation.usage = None
+
+        req = ResponseRequest(model="m", input="hi", stream=True)
+        mock_module.serve.return_value = output
+        endpoint = make_responses_endpoint(mock_module)
+        response = await endpoint(req)
+        assert isinstance(response, StreamingResponse)
+
+        async for _chunk in response.body_iterator:
+            pass
+
+        stored = next(iter(_response_store.values()))
+        # The client-visible completed response keeps the streamed text...
+        assert stored.response.output_text == "raw delta text"
+        # ...but the stored history carries the post-processed value, matching
+        # the non-streaming path.
+        assert stored.history[-1] == {
+            "role": "assistant",
+            "content": "processed final text",
+        }
+
+    @pytest.mark.asyncio
     async def test_streamed_response_not_stored_when_store_false(self, mock_module):
         """No entry is written when store=False, even after the stream completes."""
         from fastapi.responses import StreamingResponse

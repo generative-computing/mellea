@@ -696,11 +696,21 @@ def make_responses_endpoint(module):
                             for fc in response.output
                             if isinstance(fc, ResponseFunctionCall)
                         ] or None
+                        # Store the post-processed output.value as the
+                        # assistant turn — the same value the non-streaming
+                        # path stores. response.output_text is the raw
+                        # accumulated deltas the client saw streamed, which
+                        # can differ when post-processing rewrites the value
+                        # (e.g. json_schema validation); the stream envelope
+                        # keeps the streamed text, the stored history keeps
+                        # the final one. The thunk is computed by the time
+                        # this callback runs (it fires after the stream
+                        # completed).
                         _response_store[response.id] = _StoredResponse(
                             response=response,
                             history=_build_history_from_messages(
                                 conversation_messages,
-                                response.output_text,
+                                output.value or "",
                                 tool_calls=streamed_tool_calls,
                             ),
                         )
