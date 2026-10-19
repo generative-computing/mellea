@@ -5,26 +5,27 @@
 
 Introduces the composable `Adapter` dataclass and its three parts:
 
-- :class:`Identity` — name, adapter_type, optional capability
-- :class:`IOContract` — ABC for prompt building and output parsing
-- :class:`WeightsBinding` — pluggable ABC for weights lifecycle management
+- `Identity` — name, adapter_type, optional capability
+- `IOContract` — ABC for prompt building and output parsing
+- `WeightsBinding` — pluggable ABC for weights lifecycle management
 
 Also provides:
 
-- :class:`LocalFileBinding`
-- :class:`EmbeddedBinding` — Embedded/Granite Switch binding; `apply_activation`,
+- `LocalFileBinding`
+- `PromptBinding` — weightless prompt-fallback binding
+- `EmbeddedBinding` — Embedded/Granite Switch binding; `apply_activation`,
   no weights lifecycle (issue #1142)
-- :class:`ServerMediatedBinding` — stub :class:`WeightsBinding` subclass
-- :class:`AdapterSchemaMismatchError`
-- :class:`_DictContract`, :class:`_ListContract` — generic, capability-agnostic
-  :class:`IOContract` implementations that validate required keys on a JSON
+- `ServerMediatedBinding` — stub `WeightsBinding` subclass
+- `AdapterSchemaMismatchError`
+- `_DictContract`, `_ListContract` — generic, capability-agnostic
+  `IOContract` implementations that validate required keys on a JSON
   object or a JSON array of objects, respectively. Capability-*specific*
   contracts (e.g. the guardian adapters' nested-key shapes) live in
-  :mod:`~mellea.backends.adapters.io_contracts` instead, alongside the
+  `mellea.backends.adapters.io_contracts` instead, alongside the
   registry that maps every catalogued adapter function to its contract.
 
 Note:
-    The existing :class:`~mellea.backends.adapters.adapter.Adapter` ABC in
+    The existing `mellea.backends.adapters.adapter.Adapter` ABC in
     `adapter.py` is not modified here.  This module introduces a new
     `Adapter` *dataclass* that is re-exported from
     `mellea.backends.adapters`.  Both coexist until shim removal in 4.1.
@@ -350,6 +351,10 @@ class WeightsBinding(abc.ABC):
     """
 
     binding_type: ClassVar[str] = "unknown"
+
+    def resolved_revision(self) -> str | None:
+        """Return the git revision this binding resolves to, or `None` if it has none."""
+        return None
 
     @abc.abstractmethod
     def prepare(self) -> None:
@@ -841,16 +846,16 @@ class PromptBinding(WeightsBinding):
 
     Args:
         name (str): Adapter function name (e.g. `"answerability"`).
-        adapter_type (AdapterType): Always `AdapterType.PROMPT`.
         repo_id (str): Hugging Face Hub repository holding the prompt `io.yaml`.
         revision (str | None): Git revision, or `None` to resolve the catalogue's
             pinned revision lazily.
         target_model_name (str): Slot the prompt resolved under — a base model
-            name, or `"any"`. With `repo_id`/`revision`, used only when a bare
-            `add_adapter(PromptBinding)` self-fetches its `io.yaml`; resolution
-            passes the parsed config instead.
+            name, or `"any"`. With `repo_id`/`revision`, used only when a composed
+            `Adapter` wrapping this binding is added without `config=` and
+            self-fetches its `io.yaml`; resolution passes the parsed config instead.
 
     Attributes:
+        adapter_type (AdapterType): Always `AdapterType.PROMPT`.
         binding_type (ClassVar[str]): `"prompt"`.
     """
 
@@ -859,14 +864,13 @@ class PromptBinding(WeightsBinding):
     def __init__(
         self,
         name: str = "",
-        adapter_type: AdapterType = AdapterType.PROMPT,
         repo_id: str = "",
         revision: str | None = None,
         target_model_name: str = "any",
     ) -> None:
         """Constructs a PromptBinding."""
         self.name = name
-        self.adapter_type = adapter_type
+        self.adapter_type = AdapterType.PROMPT
         self.repo_id = repo_id
         self.revision = revision
         self.target_model_name = target_model_name
@@ -1067,8 +1071,7 @@ class EmbeddedBinding:
 async def _afire_invocation_complete(
     *,
     identity: Identity,
-    binding_type: str,
-    revision: str | None = None,
+    weights: "WeightsBinding | EmbeddedBinding",
     outcome: Literal["success", "schema_error", "error"],
     error: BaseException | None,
 ) -> None:
@@ -1091,10 +1094,7 @@ async def _afire_invocation_complete(
 
     Args:
         identity: Identifies the adapter that was invoked.
-        binding_type: The weights-binding reality that ran (e.g. `"embedded"`,
-            `"prompt"`).
-        revision: Git revision the adapter resolved to, or `None` if unpinned or
-            not applicable.
+        weights: The adapter's weights binding.
         outcome: The resolved invocation outcome.
         error: The exception raised during generation/parsing, or `None` on
             success.
@@ -1106,11 +1106,18 @@ async def _afire_invocation_complete(
         AdapterFunctionInvocationCompletePayload,
     )
 
+    revision: str | None = None
+    if isinstance(weights, WeightsBinding):
+        try:
+            revision = weights.resolved_revision()
+        except Exception:
+            revision = None
+
     try:
         payload = AdapterFunctionInvocationCompletePayload(
             name=identity.name,
             revision=revision,
-            binding_type=binding_type,
+            binding_type=weights.binding_type,
             adapter_type=identity.adapter_type,
             outcome=outcome,
             error=error,
@@ -1126,7 +1133,7 @@ async def _afire_invocation_complete(
 
 
 async def _await_generation_reporting_error(
-    coro: Any, identity: Identity, binding_type: str, revision: str | None = None
+    coro: Any, identity: Identity, weights: "WeightsBinding | EmbeddedBinding"
 ) -> Any:
     """Awaits `coro`, firing `outcome="error"` if generation itself fails.
 
@@ -1149,10 +1156,7 @@ async def _await_generation_reporting_error(
         coro: The backend's generation call (e.g. the OpenAI SDK coroutine, or
             an `asyncio.to_thread` call wrapping local generation).
         identity: Identifies the adapter being invoked.
-        binding_type: The weights-binding reality that ran (e.g. `"embedded"`,
-            `"prompt"`).
-        revision: Git revision the adapter resolved to, or `None` if unpinned or
-            not applicable.
+        weights: The adapter's weights binding.
 
     Returns:
         `coro`'s result, unchanged.
@@ -1161,11 +1165,7 @@ async def _await_generation_reporting_error(
         return await coro
     except BaseException as e:
         await _afire_invocation_complete(
-            identity=identity,
-            binding_type=binding_type,
-            revision=revision,
-            outcome="error",
-            error=e,
+            identity=identity, weights=weights, outcome="error", error=e
         )
         raise
 

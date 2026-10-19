@@ -59,6 +59,7 @@ from ._options import resolve_model_options
 from .adapters import EmbeddedActivationRequest, EmbeddedBinding, Identity
 from .adapters._core import (
     Adapter as _AdapterCore,
+    WeightsBinding,
     _afire_invocation_complete,
     _await_generation_reporting_error,
 )
@@ -1220,7 +1221,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 **api_params,
             ),
             adapter.identity,
-            adapter.weights.binding_type,
+            adapter.weights,
         )
 
         # --- wire up ModelOutputThunk with intrinsic post-processing ------
@@ -1236,7 +1237,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             rewritten: granite_formatters.ChatCompletion,
             result_processor: granite_formatters.IntrinsicsResultProcessor,
             identity: Identity,
-            binding_type: str,
+            weights: "WeightsBinding | EmbeddedBinding",
         ):
             """Accumulate content and apply intrinsic result processing."""
             import json as _json
@@ -1269,7 +1270,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             finally:
                 await _afire_invocation_complete(
                     identity=identity,
-                    binding_type=binding_type,
+                    weights=weights,
                     outcome=(
                         "success"
                         if error is None
@@ -1287,7 +1288,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             rewritten=rewritten,
             result_processor=result_processor,
             identity=adapter.identity,
-            binding_type=adapter.weights.binding_type,
+            weights=adapter.weights,
         )
 
         output._gen.post_process = functools.partial(

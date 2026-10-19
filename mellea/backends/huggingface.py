@@ -1289,8 +1289,9 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         binding has no weights, so this fetch is the only I/O its registration does.
         It reads from the binding's resolved model slot (`binding.target_model_name`,
         a base model name or the literal `"any"`) under the `prompt` subdir. Only
-        used for a bare `add_adapter(PromptBinding)` call; `resolve_adapter` passes
-        the already-parsed config via `config=` and this is never reached.
+        used when a composed `Adapter` wrapping a `PromptBinding` is added without
+        `config=`; `resolve_adapter` passes the already-parsed config via `config=`
+        and this is never reached.
 
         Args:
             binding: The `PromptBinding` to load `io.yaml` for.
@@ -1649,7 +1650,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                     other_input,
                 ),
                 adapter.identity,
-                adapter.weights.binding_type,
+                adapter.weights,
             )
         elif isinstance(adapter, IntrinsicAdapter):
             chat_response = asyncio.to_thread(
@@ -1675,8 +1676,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                     other_input,
                 ),
                 adapter.identity,
-                adapter.weights.binding_type,
-                adapter.weights.revision,
+                adapter.weights,
             )
         else:
             chat_response = asyncio.to_thread(
@@ -1741,12 +1741,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 if isinstance(adapter.weights, (EmbeddedBinding, PromptBinding)):
                     await _afire_invocation_complete(
                         identity=adapter.identity,
-                        binding_type=adapter.weights.binding_type,
-                        revision=(
-                            adapter.weights.revision
-                            if isinstance(adapter.weights, PromptBinding)
-                            else None
-                        ),
+                        weights=adapter.weights,
                         outcome=(
                             "success"
                             if error is None
@@ -3200,7 +3195,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                     )
             elif isinstance(adapter.weights, PromptBinding):
                 # config= is optional: resolve_adapter passes the fetched io.yaml;
-                # a bare add_adapter(PromptBinding) self-fetches it below.
+                # a composed Adapter added without it self-fetches below.
                 pass
             elif config is not None:
                 raise TypeError(

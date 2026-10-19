@@ -367,6 +367,17 @@ adapter to register and nothing to activate. A prompt fallback carries no weight
 is a `PromptBinding`; see below) and runs the intrinsic's instruction against the base
 model, parsing the response through the same output contract a trained adapter uses.
 
+Transparency is about interface, not accuracy: a model-specific prompt still runs the
+base model, so its output — a `requirement-check` score, say — reflects the model's own
+judgement rather than a trained adapter's calibrated one. The `any` prompt is weaker
+still. To see which rung served a capability, read the resolved binding's
+`binding_type`:
+
+```python
+# -> "local_file", "prompt", or "embedded"
+backend.resolve_adapter("requirement-check").weights.binding_type
+```
+
 ## Composable adapter construction (advanced)
 
 `Adapter` composes an `Identity`, an output contract (`IOContract`), and a

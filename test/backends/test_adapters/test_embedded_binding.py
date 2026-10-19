@@ -175,7 +175,7 @@ async def test_afire_invocation_complete_swallows_hook_dispatch_failure(outcome)
         # Must not raise despite the hook dispatch failing.
         await _afire_invocation_complete(
             identity=_identity("answerability"),
-            binding_type="embedded",
+            weights=EmbeddedBinding(),
             outcome=outcome,
             error=ValueError("boom") if outcome != "success" else None,
         )

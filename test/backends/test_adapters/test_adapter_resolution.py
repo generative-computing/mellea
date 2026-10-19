@@ -21,21 +21,29 @@ from mellea.backends.adapters.catalog import AdapterType, fetch_intrinsic_metada
 from mellea.formatters.granite.intrinsics import AdapterNotFoundError
 
 _ANSWERABILITY_META = fetch_intrinsic_metadata("answerability")
+_CONTEXT_ATTR_META = fetch_intrinsic_metadata(
+    "context-attribution"
+)  # catalogue (LORA,)-only
 _BASE_MODEL = "granite-4.2-8b"
 _INTRINSICS_MOD = "mellea.formatters.granite.intrinsics"
 
 
+_IO_YAML_CONFIG = {"model": None, "response_format": "{}", "transformations": None}
+
+
 def _write_io_yaml(tmp_path):
     p = tmp_path / "io.yaml"
-    p.write_text(yaml.safe_dump({"instruction": "Answer the question."}))
+    p.write_text(
+        yaml.safe_dump({**_IO_YAML_CONFIG, "instruction": "Answer the question."})
+    )
     return p
 
 
 def _obtain_io_yaml_stub(*, alora_found: bool, lora_found: bool):
     """Build a stub `obtain_io_yaml`; `alora_found`/`lora_found` pick which types resolve.
 
-    A found type returns a path; the rest raise `ValueError` — the not-found
-    signal the walk advances on.
+    A found type returns a path; the rest raise `AdapterNotFoundError` — the
+    not-found signal the walk advances on.
     """
 
     def stub(*args, **kwargs):
@@ -89,6 +97,31 @@ def test_lora_found_when_no_alora():
     mock_prompt.assert_not_called()
 
 
+def test_lora_only_catalogue_entry_skips_alora_probe():
+    """A `(LORA,)`-only catalogue entry never probes or registers an aLoRA, even
+    when one would resolve on the Hub — a stray `alora/` dir can't win a denied type.
+    """
+    with (
+        patch(
+            f"{_INTRINSICS_MOD}.obtain_io_yaml",
+            side_effect=_obtain_io_yaml_stub(alora_found=True, lora_found=True),
+        ) as mock_obtain,
+        patch(f"{_INTRINSICS_MOD}.resolve_prompt_io_yaml") as mock_prompt,
+    ):
+        self_mock = MagicMock()
+        _register_available_composed_adapter(
+            self_mock, "context-attribution", _BASE_MODEL, _CONTEXT_ATTR_META
+        )
+    self_mock.add_adapter.assert_called_once()
+    adapter = self_mock.add_adapter.call_args.args[0]
+    assert adapter.weights.adapter_type is AdapterType.LORA
+    # aLoRA is absent from the catalogue entry, so its rung is skipped outright —
+    # the probe is never attempted, not merely missed.
+    probed_types = {c.kwargs["adapter_type"] for c in mock_obtain.call_args_list}
+    assert probed_types == {"lora"}
+    mock_prompt.assert_not_called()
+
+
 def test_model_specific_prompt_when_no_trained_adapter(tmp_path, caplog):
     io_yaml = _write_io_yaml(tmp_path)
     with (
@@ -111,11 +144,38 @@ def test_model_specific_prompt_when_no_trained_adapter(tmp_path, caplog):
     assert adapter.weights.target_model_name == _BASE_MODEL
     assert adapter.identity.adapter_type == "prompt"
     # The parsed io.yaml is handed to add_adapter as config=.
-    assert self_mock.add_adapter.call_args.kwargs["config"] == {
-        "instruction": "Answer the question."
-    }
+    assert (
+        self_mock.add_adapter.call_args.kwargs["config"]["instruction"]
+        == "Answer the question."
+    )
     # No "any" warning for a model-specific prompt.
     assert not any("model-agnostic 'any'" in r.message for r in caplog.records)
+
+
+@pytest.mark.parametrize(
+    "config",
+    [_IO_YAML_CONFIG, {**_IO_YAML_CONFIG, "instruction": "   "}],
+    ids=["missing", "empty"],
+)
+def test_prompt_without_usable_instruction_raises(tmp_path, config):
+    """A prompt io.yaml whose 'instruction' is missing or empty fails loudly."""
+    p = tmp_path / "io.yaml"
+    p.write_text(yaml.safe_dump(config))
+    with (
+        patch(
+            f"{_INTRINSICS_MOD}.obtain_io_yaml",
+            side_effect=_obtain_io_yaml_stub(alora_found=False, lora_found=False),
+        ),
+        patch(f"{_INTRINSICS_MOD}.resolve_prompt_io_yaml", return_value=(p, False)),
+    ):
+        self_mock = MagicMock()
+        with pytest.raises(ValueError, match="instruction") as exc_info:
+            _register_available_composed_adapter(
+                self_mock, "answerability", _BASE_MODEL, _ANSWERABILITY_META
+            )
+    # A real failure, not the not-found signal the walk swallows — and nothing registered.
+    assert not isinstance(exc_info.value, AdapterNotFoundError)
+    self_mock.add_adapter.assert_not_called()
 
 
 def test_any_prompt_warns_and_registers_any_binding(tmp_path, caplog):
@@ -160,6 +220,29 @@ def test_hard_error_aborts_without_fallthrough():
     self_mock.add_adapter.assert_not_called()
 
 
+def test_plain_value_error_from_probe_propagates():
+    """A plain `ValueError` (not `AdapterNotFoundError`) from a probe propagates —
+    the walk advances only on the `AdapterNotFoundError` subclass, never a sibling.
+    """
+
+    def boom(*args, **kwargs):
+        raise ValueError("malformed")
+
+    with (
+        patch(f"{_INTRINSICS_MOD}.obtain_io_yaml", side_effect=boom),
+        patch(f"{_INTRINSICS_MOD}.resolve_prompt_io_yaml") as mock_prompt,
+    ):
+        self_mock = MagicMock()
+        with pytest.raises(ValueError) as exc:
+            _register_available_composed_adapter(
+                self_mock, "answerability", _BASE_MODEL, _ANSWERABILITY_META
+            )
+    assert not isinstance(exc.value, AdapterNotFoundError)
+    assert str(exc.value) == "malformed"
+    mock_prompt.assert_not_called()
+    self_mock.add_adapter.assert_not_called()
+
+
 def test_nothing_found_raises_value_error():
     with (
         patch(
@@ -172,7 +255,9 @@ def test_nothing_found_raises_value_error():
         ),
     ):
         self_mock = MagicMock()
-        with pytest.raises(ValueError, match=r"No adapter .* or prompt fallback"):
+        with pytest.raises(
+            ValueError, match=r"Could not resolve an adapter .* or prompt fallback"
+        ):
             _register_available_composed_adapter(
                 self_mock, "answerability", _BASE_MODEL, _ANSWERABILITY_META
             )

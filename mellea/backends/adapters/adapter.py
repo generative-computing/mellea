@@ -31,6 +31,7 @@ import yaml
 from ...core import Backend, MelleaLogger
 from ...formatters.granite import intrinsics as intrinsics
 from ...formatters.granite.intrinsics import AdapterNotFoundError
+from ...formatters.granite.intrinsics.util import make_config_dict
 from ...helpers.event_loop_helper import _run_async_in_thread
 from ...plugins.manager import has_plugins, invoke_hook
 from ...plugins.types import HookType
@@ -574,9 +575,9 @@ def _register_available_composed_adapter(
     Probes aLoRA, LoRA, a model-specific prompt, then the `"any"` prompt via a tiny
     `io.yaml` fetch — advancing only on the not-found `AdapterNotFoundError`, letting
     other errors propagate — and registers a `LocalFileBinding` (trained) or a
-    `PromptBinding` (prompt, warning on `"any"`) for the first hit. Trial-fetch is
-    the only per-model presence signal; the catalogue's `adapter_types` is
-    per-capability.
+    `PromptBinding` (prompt, warning on `"any"`) for the first hit. Trained probes are
+    limited to the catalogue's `adapter_types` for the capability; the trial-fetch is
+    the only per-model presence signal.
 
     Module-level, not a method, so a spec'd mock backend in tests drives the real
     walk.
@@ -586,6 +587,9 @@ def _register_available_composed_adapter(
             `base`.
     """
     for adapter_type in (AdapterType.ALORA, AdapterType.LORA):
+        # Skip a type the catalogue doesn't list, so a stray Hub dir can't win a denied type.
+        if adapter_type not in metadata.adapter_types:
+            continue
         try:
             intrinsics.obtain_io_yaml(
                 name,
@@ -620,8 +624,8 @@ def _register_available_composed_adapter(
         )
     except AdapterNotFoundError as e:
         raise AdapterNotFoundError(
-            f"No adapter (aLoRA/LoRA) or prompt fallback found for adapter "
-            f"function {name!r} on base model {base!r} in {metadata.repo_id}."
+            f"Could not resolve an adapter (aLoRA/LoRA) or prompt fallback for "
+            f"adapter function {name!r} on base model {base!r} from {metadata.repo_id}."
         ) from e
 
     target_model = "any" if used_any else base
@@ -632,12 +636,19 @@ def _register_available_composed_adapter(
             "model-agnostic 'any' prompt, which is sub-par relative to a "
             "model-specific one."
         )
-    with open(io_yaml_path, encoding="utf-8") as f:
-        prompt_config = yaml.safe_load(f)
-    if not isinstance(prompt_config, dict):
+    prompt_config = make_config_dict(config_file=io_yaml_path)
+    if prompt_config is None:
         raise ValueError(
-            f"Prompt io.yaml for {name!r} at {io_yaml_path} did not parse "
-            f"to a mapping (got {type(prompt_config).__name__})."
+            f"Prompt io.yaml for {name!r} at {io_yaml_path} is empty or did not "
+            f"parse to a mapping."
+        )
+    instruction = prompt_config.get("instruction")
+    if not isinstance(instruction, str) or not instruction.strip():
+        raise ValueError(
+            f"Prompt io.yaml for adapter function {name!r} on model slot "
+            f"{target_model!r} in {metadata.repo_id} at {io_yaml_path} has no "
+            f"usable 'instruction' (missing or empty), which a prompt fallback "
+            f"requires."
         )
     backend.add_adapter(
         _AdapterCore(
@@ -649,7 +660,6 @@ def _register_available_composed_adapter(
             io_contract=get_io_contract(name),
             weights=PromptBinding(
                 name=name,
-                adapter_type=AdapterType.PROMPT,
                 repo_id=metadata.repo_id,
                 revision=metadata.revision,
                 target_model_name=target_model,
@@ -1184,8 +1194,8 @@ class AdapterMixin(Backend, abc.ABC):
         # lazily-resolved binding (`revision=None`) still downloads and runs
         # against the catalogue's pinned SHA, so reporting the unresolved
         # `None` would mislabel an effectively-pinned invocation as unpinned.
-        # `resolved_revision()` only exists on `LocalFileBinding`, not the
-        # `WeightsBinding` base, so both the lookup and the call are guarded.
+        # `resolved_revision()` is not on the `WeightsBinding` base, so both the
+        # lookup and the call are guarded.
         revision: str | None
         if isinstance(adapter.weights, LocalFileBinding):
             try:

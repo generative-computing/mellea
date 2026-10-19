@@ -19,6 +19,7 @@ from mellea.backends.adapters._core import LocalFileBinding, PromptBinding
 from mellea.backends.adapters.adapter import _register_available_composed_adapter
 from mellea.backends.adapters.catalog import AdapterType, IntrinsicsCatalogEntry
 from mellea.formatters.granite.intrinsics.util import (
+    AdapterNotFoundError,
     obtain_io_yaml,
     resolve_prompt_io_yaml,
 )
@@ -26,7 +27,7 @@ from test.predicates import require_hf_token
 
 pytestmark = [pytest.mark.e2e, pytest.mark.huggingface, require_hf_token()]
 
-# TODO: temporary repo; replace with a public repo once it carries this layout.
+# TODO: temporary repo; replace with a public repo once it carries this layout (#1655).
 _TEST_REPO = "ajbozarth/granitelib-rag-r1.0"
 _TEST_SHA = "8bad850fc9855fd655cfd34deb44ddef1597255e"  # main @ 2026-09-21
 
@@ -85,10 +86,10 @@ def test_trained_io_yaml_resolves():
 def test_lora_only_io_yaml_resolves():
     """citations is LoRA-only on disk: the aLoRA probe misses, the LoRA resolves.
 
-    The absent type surfaces as the not-found `ValueError` the walk advances on;
-    the present type resolves normally.
+    The absent type surfaces as the not-found `AdapterNotFoundError` the walk advances
+    on; the present type resolves normally.
     """
-    with pytest.raises(ValueError):
+    with pytest.raises(AdapterNotFoundError):
         obtain_io_yaml(
             "citations",
             "granite-4.1-3b",

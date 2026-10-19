@@ -112,6 +112,7 @@ def adapter_subpath(
     target_model_name: str,
     repo_id: str,
     /,
+    *,
     adapter_type: str = "lora",
 ) -> str:
     """Return the Hugging Face Hub subpath where an intrinsic's adapter lives.
@@ -151,6 +152,7 @@ def obtain_lora(
     target_model_name: str,
     repo_id: str,
     /,
+    *,
     revision: str = "main",
     cache_dir: str | None = None,
     file_glob: str = "*",
@@ -215,6 +217,7 @@ def obtain_io_yaml(
     target_model_name: str,
     repo_id: str,
     /,
+    *,
     revision: str = "main",
     cache_dir: str | None = None,
     adapter_type: str = "lora",
@@ -259,6 +262,7 @@ def resolve_prompt_io_yaml(
     base_model_name: str,
     repo_id: str,
     /,
+    *,
     revision: str = "main",
     cache_dir: str | None = None,
 ) -> tuple[pathlib.Path, bool]:
