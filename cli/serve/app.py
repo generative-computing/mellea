@@ -448,7 +448,12 @@ def _convert_response_input_to_messages(
                 tool_call = {
                     "id": item.call_id,
                     "type": "function",
-                    "function": {"name": item.name, "arguments": item.arguments or ""},
+                    # A missing arguments value defaults to "{}" — an empty
+                    # string is not valid JSON for the backend.
+                    "function": {
+                        "name": item.name,
+                        "arguments": item.arguments or "{}",
+                    },
                 }
                 prev = messages[-1] if messages else None
                 if prev is not None and prev.role == "assistant" and prev.tool_calls:
@@ -466,7 +471,14 @@ def _convert_response_input_to_messages(
                         role=_role(item.role),
                         content=content,
                         tool_call_id=item.tool_call_id,
-                        tool_calls=item.tool_calls,
+                        # item.tool_calls is validated at parse time
+                        # (ChatCompletionMessageToolCall); dump to the dict
+                        # wire shape ChatMessage carries.
+                        tool_calls=(
+                            [tc.model_dump() for tc in item.tool_calls]
+                            if item.tool_calls
+                            else None
+                        ),
                     )
                 )
 

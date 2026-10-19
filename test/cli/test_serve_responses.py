@@ -455,6 +455,37 @@ class TestConvertResponseInputToMessages:
         with pytest.raises(ValidationError, match="role"):
             ResponseInputItem(content="hi")
 
+    def test_function_call_requires_call_id_and_name(self):
+        """A malformed function_call item is rejected at the edge, not turned
+        into a wire tool call with None fields."""
+        with pytest.raises(ValidationError, match="call_id"):
+            ResponseInputItem(type="function_call", name="get_weather")
+        with pytest.raises(ValidationError, match="name"):
+            ResponseInputItem(type="function_call", call_id="call_1")
+
+    def test_function_call_output_requires_call_id(self):
+        """A tool result with no call_id is rejected — providers reject a
+        tool message that pairs with no call."""
+        with pytest.raises(ValidationError, match="call_id"):
+            ResponseInputItem(type="function_call_output", output="Sunny")
+
+    def test_function_call_without_arguments_defaults_to_empty_object(self):
+        """A missing arguments value becomes "{}", valid JSON for the backend."""
+        items = [
+            ResponseInputItem(
+                type="function_call", call_id="call_1", name="get_weather"
+            )
+        ]
+        msgs = _convert_response_input_to_messages(items, None)
+        assert msgs[0].tool_calls[0]["function"]["arguments"] == "{}"
+
+    def test_malformed_tool_calls_rejected(self):
+        """tool_calls entries must match the Chat Completions wire shape."""
+        with pytest.raises(ValidationError):
+            ResponseInputItem(
+                role="assistant", content="", tool_calls=[{"id": "call_5"}]
+            )
+
     def test_message_item_with_explicit_type_accepted(self):
         item = ResponseInputItem(type="message", role="user", content="hi")
         msgs = _convert_response_input_to_messages([item], None)

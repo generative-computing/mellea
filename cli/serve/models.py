@@ -438,7 +438,8 @@ class ResponseInputItem(BaseModel):
     role: Literal["user", "assistant", "developer", "system", "tool"] | None = None
     content: str | list[InputContent] | None = None
     tool_call_id: str | None = None
-    tool_calls: list[Any] | None = None
+    tool_calls: list[ChatCompletionMessageToolCall] | None = None
+    """Assistant-turn tool calls in the Chat Completions wire shape."""
     # function_call / function_call_output shapes:
     call_id: str | None = None
     name: str | None = None
@@ -454,6 +455,13 @@ class ResponseInputItem(BaseModel):
             raise ValueError(
                 "Input item requires a 'role' (message item) or "
                 "type='function_call' / type='function_call_output'."
+            )
+        if self.type == "function_call" and (self.call_id is None or self.name is None):
+            raise ValueError("type='function_call' items require 'call_id' and 'name'.")
+        if self.type == "function_call_output" and self.call_id is None:
+            raise ValueError(
+                "type='function_call_output' items require 'call_id' — "
+                "providers reject a tool result that pairs with no call."
             )
         return self
 
