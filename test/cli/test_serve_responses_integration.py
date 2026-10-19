@@ -284,8 +284,14 @@ class TestResponsesSdkIntegration:
             )
             assert second.output_text == "It is sunny in Paris."
 
-        # serve()'s second call received the tool result as a tool message.
+        # serve()'s second call received the tool result as a tool message,
+        # preceded by the replayed assistant turn whose tool_calls declare
+        # it — the pairing providers require (would have caught finding A).
         second_input = serve_inputs[1]
+        assert [m.role for m in second_input] == ["user", "assistant", "tool"]
+        assistant = second_input[1]
+        assert [tc["id"] for tc in assistant.tool_calls] == ["call_123"]
+        assert assistant.tool_calls[0]["function"]["name"] == "get_weather"
         tool_messages = [m for m in second_input if getattr(m, "role", None) == "tool"]
         assert len(tool_messages) == 1
         assert tool_messages[0].tool_call_id == "call_123"

@@ -71,6 +71,60 @@ class TestBuildHistoryFromMessages:
         history = _build_history_from_messages(msgs, "answer")
         assert history[-1] == {"role": "assistant", "content": "answer"}
 
+    def test_tool_call_id_preserved(self):
+        """A tool message's tool_call_id survives the round trip."""
+        tool_msg = _make_chat_message("tool", "Sunny")
+        tool_msg.tool_call_id = "call_1"
+        history = _build_history_from_messages(
+            [_make_chat_message("user", "q"), tool_msg], "answer"
+        )
+        assert history[1] == {
+            "role": "tool",
+            "content": "Sunny",
+            "tool_call_id": "call_1",
+        }
+
+    def test_assistant_tool_calls_stored(self):
+        """The assistant reply's tool_calls are stored on its history entry."""
+        tool_calls = [
+            {
+                "id": "call_1",
+                "type": "function",
+                "function": {"name": "get_weather", "arguments": "{}"},
+            }
+        ]
+        history = _build_history_from_messages(
+            [_make_chat_message("user", "q")], "", tool_calls=tool_calls
+        )
+        assert history[-1] == {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": tool_calls,
+        }
+
+    def test_mid_conversation_tool_calls_preserved(self):
+        """An assistant message with tool_calls inside the message list keeps
+        them, so a replayed history stays pairable."""
+        assistant_msg = _make_chat_message("assistant", "")
+        assistant_msg.tool_calls = [
+            {
+                "id": "call_1",
+                "type": "function",
+                "function": {"name": "get_weather", "arguments": "{}"},
+            }
+        ]
+        history = _build_history_from_messages(
+            [_make_chat_message("user", "q"), assistant_msg], "answer"
+        )
+        assert history[1]["tool_calls"] == assistant_msg.tool_calls
+
+    def test_plain_turns_stay_two_key_dicts(self):
+        """Keys are only added when set, so plain turns keep their shape."""
+        msgs = [_make_chat_message("user", "Hi")]
+        history = _build_history_from_messages(msgs, "Hello!")
+        assert history[0] == {"role": "user", "content": "Hi"}
+        assert history[1] == {"role": "assistant", "content": "Hello!"}
+
 
 # ---------------------------------------------------------------------------
 # _StoredResponse

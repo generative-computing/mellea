@@ -33,6 +33,7 @@ except ImportError as e:
 from mellea.backends.model_options import ModelOption
 from mellea.core import MelleaLogger
 from mellea.helpers.openai_compatible_helpers import (
+    ResponseFunctionCall,
     build_completion_usage,
     build_response_output_items,
     build_response_usage,
@@ -473,18 +474,36 @@ def _convert_response_input_to_messages(
 
 
 def _build_history_from_messages(
-    messages: list, assistant_text: str
+    messages: list, assistant_text: str, tool_calls: list | None = None
 ) -> list[dict[str, Any]]:
     """Serialize a message list + assistant reply into a plain dict history.
 
     The history is stored in a format that both the responses and chat/completions
     endpoints can consume: a list of `{"role": str, "content": str}` dicts,
-    matching the ChatMessage wire format.
+    matching the ChatMessage wire format. Tool-turn fields are carried so a
+    replayed history stays valid for providers: tool messages keep their
+    `tool_call_id`, and an assistant turn that requested function calls keeps
+    its `tool_calls` (keys are included only when set, so plain turns stay
+    two-key dicts).
+
+    Args:
+        messages: The conversation messages to serialize.
+        assistant_text: The assistant reply text to append as the final turn.
+        tool_calls: The assistant reply's tool calls (Chat Completions wire
+            shape), when the turn requested function calls.
     """
-    history: list[dict[str, Any]] = [
-        {"role": m.role, "content": m.content} for m in messages
-    ]
-    history.append({"role": "assistant", "content": assistant_text})
+    history: list[dict[str, Any]] = []
+    for m in messages:
+        entry: dict[str, Any] = {"role": m.role, "content": m.content}
+        if m.tool_call_id is not None:
+            entry["tool_call_id"] = m.tool_call_id
+        if m.tool_calls:
+            entry["tool_calls"] = m.tool_calls
+        history.append(entry)
+    assistant_entry: dict[str, Any] = {"role": "assistant", "content": assistant_text}
+    if tool_calls:
+        assistant_entry["tool_calls"] = tool_calls
+    history.append(assistant_entry)
     return history
 
 
@@ -544,10 +563,10 @@ def make_responses_endpoint(module):
                     )
                 from mellea.serve.models import ChatMessage
 
-                prior_messages = [
-                    ChatMessage(role=m["role"], content=m["content"])
-                    for m in stored.history
-                ]
+                # Pass every stored field through: tool turns must replay
+                # with their tool_call_id / tool_calls so providers see the
+                # assistant call paired with its tool result.
+                prior_messages = [ChatMessage(**m) for m in stored.history]
 
             # New instructions lead the context, followed by the prior
             # conversation and then this request's new input. With no
@@ -613,10 +632,28 @@ def make_responses_endpoint(module):
                     # response.completed event has been sent (see
                     # stream_response_chunks), not on a failed stream.
                     def _save_streamed_response(response: Response) -> None:
+                        # Recover the assistant's function calls from the
+                        # completed response's function_call output items so
+                        # the stored history keeps the calls paired with
+                        # their results on chained turns.
+                        streamed_tool_calls = [
+                            {
+                                "id": fc.call_id,
+                                "type": "function",
+                                "function": {
+                                    "name": fc.name,
+                                    "arguments": fc.arguments,
+                                },
+                            }
+                            for fc in response.output
+                            if isinstance(fc, ResponseFunctionCall)
+                        ] or None
                         _response_store[response.id] = _StoredResponse(
                             response=response,
                             history=_build_history_from_messages(
-                                conversation_messages, response.output_text
+                                conversation_messages,
+                                response.output_text,
+                                tool_calls=streamed_tool_calls,
                             ),
                         )
                         _enforce_store_cap()
@@ -668,7 +705,9 @@ def make_responses_endpoint(module):
                 _response_store[response_id] = _StoredResponse(
                     response=response,
                     history=_build_history_from_messages(
-                        conversation_messages, output.value or ""
+                        conversation_messages,
+                        output.value or "",
+                        tool_calls=tool_calls_list,
                     ),
                 )
                 _enforce_store_cap()
