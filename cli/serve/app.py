@@ -123,6 +123,26 @@ def _enforce_store_cap() -> None:
         del _response_store[rid]
 
 
+def _get_unexpired_response(response_id: str) -> _StoredResponse | None:
+    """Return the stored entry for `response_id` if present and not past its
+    expiry, else `None`.
+
+    Shared by every read path (GET retrieval and the previous_response_id
+    lookup) so entries are rejected consistently after their expiry, even
+    before the background sweep has evicted them (the sweep runs at most
+    once a minute).
+    """
+    stored = _response_store.get(response_id)
+    if stored is None:
+        return None
+    expires_at = stored.response.expires_at
+    if expires_at is None:
+        expires_at = int(stored.stored_at + _response_ttl_seconds)
+    if time.time() > expires_at:
+        return None
+    return stored
+
+
 async def _evict_expired_responses() -> None:
     """Background task: evict store entries older than _response_ttl_seconds."""
     while True:
@@ -565,7 +585,7 @@ def make_responses_endpoint(module):
             # instructions do not carry over to the next response.
             prior_messages: list = []
             if request.previous_response_id:
-                stored = _response_store.get(request.previous_response_id)
+                stored = _get_unexpired_response(request.previous_response_id)
                 if stored is None:
                     return create_openai_error_response(
                         status_code=404,
@@ -892,19 +912,8 @@ async def get_response(response_id: str) -> Response | JSONResponse:
     `store=False`. The `expires_at` field on the response indicates
     the exact Unix timestamp when the entry will be evicted.
     """
-    stored = _response_store.get(response_id)
+    stored = _get_unexpired_response(response_id)
     if stored is None:
-        return create_openai_error_response(
-            status_code=404,
-            message=f"Response '{response_id}' not found or has expired.",
-            error_type="invalid_request_error",
-        )
-    # Reject entries past their expiry even before the background sweep
-    # has evicted them (the sweep runs at most once a minute).
-    expires_at = stored.response.expires_at
-    if expires_at is None:
-        expires_at = int(stored.stored_at + _response_ttl_seconds)
-    if time.time() > expires_at:
         return create_openai_error_response(
             status_code=404,
             message=f"Response '{response_id}' not found or has expired.",

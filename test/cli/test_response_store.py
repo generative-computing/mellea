@@ -314,6 +314,30 @@ class TestResponsesEndpointStore:
         assert result.status_code == 404
 
     @pytest.mark.asyncio
+    async def test_previous_response_id_rejected_after_expiry(self):
+        """A chained turn is rejected once the entry is past its expiry, even
+        before the background sweep has evicted it — matching GET."""
+        from fastapi.responses import JSONResponse
+
+        # Seed an expired-but-not-swept entry directly in the store.
+        _response_store["resp_old"] = _StoredResponse(
+            response=_make_response("resp_old"), history=[], stored_at=0.0
+        )
+        app_module._response_ttl_seconds = 1800
+
+        module = _make_mock_module()
+        endpoint = app_module.make_responses_endpoint(module)
+
+        request = ResponseRequest(
+            model="m", input="follow-up", previous_response_id="resp_old"
+        )
+        result = await endpoint(request)
+
+        assert isinstance(result, JSONResponse)
+        assert result.status_code == 404
+        module.serve.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_stored_history_includes_assistant_reply(self):
         """History written to the store includes the assistant's reply as last entry."""
         module = _make_mock_module("my answer")
