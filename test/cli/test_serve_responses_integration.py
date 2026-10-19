@@ -467,6 +467,70 @@ class TestResponsesSdkIntegration:
         assert "first question" in history_text
         assert "reply 1" in history_text
 
+    def test_previous_response_id_after_streamed_tool_call(self, mock_module):
+        """A streamed function-call turn stores its tool_calls, so a chained
+        tool result replays paired with the assistant call."""
+        serve_inputs: list[list] = []
+
+        def serve(input, requirements=None, model_options=None):
+            serve_inputs.append(list(input))
+            if len(serve_inputs) == 1:
+                thunk = ModelOutputThunk("")
+                thunk.tool_calls = [
+                    ModelToolCall(
+                        name="get_weather",
+                        func=MockWeatherTool(),
+                        args={"location": "Paris"},
+                        tool_call_id="call_123",
+                    )
+                ]
+                return thunk
+            return ModelOutputThunk("It is sunny in Paris.")
+
+        mock_module.serve = serve
+
+        with _sdk_client(mock_module) as client:
+            with client.responses.stream(
+                model="test-model",
+                input="What's the weather in Paris?",
+                tools=TOOLS_FLAT,
+                tool_choice="auto",
+            ) as stream:
+                first = stream.get_final_response()
+
+            function_calls = [
+                item for item in first.output if item.type == "function_call"
+            ]
+            assert [fc.call_id for fc in function_calls] == ["call_123"]
+
+            second = client.responses.create(
+                model="test-model",
+                input=[
+                    {
+                        "type": "function_call_output",
+                        "call_id": "call_123",
+                        "output": "Sunny, 25C",
+                    }
+                ],
+                previous_response_id=first.id,
+            )
+            assert second.output_text == "It is sunny in Paris."
+
+        second_input = serve_inputs[1]
+        assert [m.role for m in second_input] == ["user", "assistant", "tool"]
+        assistant = second_input[1]
+        assert assistant.tool_calls == [
+            {
+                "id": "call_123",
+                "type": "function",
+                "function": {
+                    "name": "get_weather",
+                    "arguments": '{"location": "Paris"}',
+                },
+            }
+        ]
+        assert second_input[2].tool_call_id == "call_123"
+
 
 class TestLifespan:
     """The app lifespan schedules and cancels the eviction task."""
