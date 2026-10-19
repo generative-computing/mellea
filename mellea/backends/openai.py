@@ -45,6 +45,7 @@ from ..helpers import (
     chat_completion_delta_merge,
     extract_model_tool_requests,
     get_current_event_loop,
+    has_user_content,
     is_vllm_server_with_structured_output,
     message_to_openai_message,
     messages_to_docs,
@@ -816,7 +817,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 reasoning_params["reasoning_effort"] = "medium"
             elif self._server_type != _ServerType.OPENAI:
                 reasoning_params["reasoning_effort"] = "none"
-        else:
+        elif thinking != "none" or self._server_type != _ServerType.OPENAI:
             reasoning_params["reasoning_effort"] = thinking
         return reasoning_params
 
@@ -879,8 +880,11 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 parse tool-call responses.
 
         Raises:
-            ValueError: If `action` is an `ALoraRequirement` but `ctx` renders no
+            ValueError: If `action` is an `ALoraRequirement` and its adapter is
+                unavailable (not registered on this backend), or `ctx` renders no
                 conversation, leaving the requirement-check adapter nothing to judge.
+            ValueError: If no user-role message has non-whitespace text,
+                images, audio, or documents.
 
         Returns:
             tuple[ModelOutputThunk[C], Context]: A thunk holding the (lazy) model output
@@ -926,11 +930,11 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 )
                 alora_req_adapter = self._find_adapter(adapter_name, search_types)
                 if alora_req_adapter is None:
-                    if reroute_to_alora and isinstance(action, ALoraRequirement):
-                        MelleaLogger.get_logger().warning(
-                            f"attempted to use an AloraRequirement but backend {self} "
-                            f"doesn't have the specified adapter added {adapter_name}; "
-                            f"defaulting to regular generation"
+                    if isinstance(action, ALoraRequirement):
+                        raise ValueError(
+                            f"cannot validate an ALoraRequirement: backend {self} has "
+                            f"no {adapter_name!r} adapter registered. Register one with "
+                            "backend.add_adapter(), or use a plain Requirement."
                         )
                     reroute_to_alora = False
 
@@ -1260,7 +1264,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 mot._underlying_value = res.choices[0].message.content
             except _json.JSONDecodeError as e:
                 error = e
-                raise Exception(
+                raise ValueError(
                     f"Intrinsic did not return a JSON: "
                     f"{chunk.choices[0].message.content}"
                 ) from e
@@ -1352,6 +1356,10 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         Returns:
             tuple[ModelOutputThunk[C], Context]: A thunk holding the (lazy) model output
                 and an updated context that includes `action` and the new output.
+
+        Raises:
+            ValueError: If no user-role message has non-whitespace text,
+                images, audio, or documents.
         """
         await self.do_generate_walk(action)
 
@@ -1384,8 +1392,16 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         # Convert our linearized context into a sequence of chat messages. Template formatters have a standard way of doing this.
         messages: list[Message] = self.formatter.to_chat_messages(linearized_context)
         messages.extend(self.formatter.to_chat_messages([action]))
-        # ALoraRequirement may arrive here when no adapter is registered;
-        # _generate is responsible for logging a warning in that case.
+
+        # Issue #1597: refuse to send an empty user prompt; see
+        # `has_user_content` for why whitespace-only text still counts as empty.
+        if not has_user_content(messages):
+            raise ValueError(
+                "Refusing to call the model: no user-role content in the assembled "
+                "conversation. This usually means a stateless context (e.g. "
+                "SimpleContext) was combined with an empty or whitespace-only "
+                "action; recorded turns are not forwarded to the model."
+            )
 
         conversation: list[dict] = []
 

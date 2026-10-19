@@ -37,6 +37,7 @@ from ..helpers import (
     DEFAULT_CHUNK_TIMEOUT,
     ClientCache,
     get_current_event_loop,
+    has_user_content,
     merge_provider_fields,
     message_to_openai_message,
     messages_to_docs,
@@ -868,7 +869,7 @@ class OllamaModelBackend(FormatterBackend, AdapterMixin):
                     _to_chat_completion_dict(chunk), rewritten
                 )
             except json.JSONDecodeError as e:
-                raise Exception(
+                raise ValueError(
                     f"Intrinsic did not return a JSON: {chunk.message.content}"
                 ) from e
 
@@ -922,6 +923,11 @@ class OllamaModelBackend(FormatterBackend, AdapterMixin):
                 backend's defaults.
             tool_calls (bool): If `True`, expose available tools to the model and
                 parse tool-call responses.
+
+        Raises:
+            ValueError: If `action` is an `ALoraRequirement` and its adapter is
+                unavailable (not registered on this backend, excluded by
+                `adapter_types`, unresolvable, or missing an Ollama model tag).
 
         Returns:
             tuple[ModelOutputThunk[C], Context]: A thunk holding the (lazy) model output
@@ -981,6 +987,11 @@ class OllamaModelBackend(FormatterBackend, AdapterMixin):
                     try:
                         await asyncio.to_thread(self.resolve_adapter, adapter_name)
                     except Exception as e:
+                        if isinstance(action, ALoraRequirement):
+                            raise ValueError(
+                                f"cannot validate an ALoraRequirement: the "
+                                f"{adapter_name!r} adapter could not be resolved: {e}"
+                            ) from e
                         MelleaLogger.get_logger().warning(
                             f"failed to resolve adapter {adapter_name!r} while "
                             f"attempting automatic requirement-check rerouting; "
@@ -994,12 +1005,20 @@ class OllamaModelBackend(FormatterBackend, AdapterMixin):
                 # matching adapter_models entry — the cold-resolve gate above
                 # only protects the not-yet-added case. Generating with it
                 # would hit the hard raise in _generate_from_intrinsic, so
-                # this best-effort reroute must degrade the same way the
-                # not-found case below does, not propagate out of validate().
+                # a plain Requirement's best-effort reroute must degrade the
+                # same way the not-found case below does, not propagate out
+                # of validate().
                 if (
                     alora_req_adapter is not None
                     and adapter_name not in self._adapter_models
                 ):
+                    if isinstance(action, ALoraRequirement):
+                        raise ValueError(
+                            f"cannot validate an ALoraRequirement: adapter "
+                            f"{adapter_name!r} is registered but has no Ollama model "
+                            "tag in `adapter_models`. Map it to a model tag, or use a "
+                            "plain Requirement."
+                        )
                     MelleaLogger.get_logger().warning(
                         f"adapter {adapter_name!r} is registered but has no Ollama "
                         "model tag in `adapter_models`; defaulting to regular "
@@ -1007,11 +1026,12 @@ class OllamaModelBackend(FormatterBackend, AdapterMixin):
                     )
                     alora_req_adapter = None
                 if alora_req_adapter is None:
-                    if reroute_to_alora and isinstance(action, ALoraRequirement):
-                        MelleaLogger.get_logger().warning(
-                            f"attempted to use an AloraRequirement but backend {self} "
-                            f"doesn't have the specified adapter added {adapter_name}; "
-                            f"defaulting to regular generation"
+                    if isinstance(action, ALoraRequirement):
+                        raise ValueError(
+                            f"cannot validate an ALoraRequirement: backend {self} has "
+                            f"no usable {adapter_name!r} adapter. Register one with "
+                            "backend.add_adapter() and map it to an Ollama model tag "
+                            "in `adapter_models`, or use a plain Requirement."
                         )
                     reroute_to_alora = False
 
@@ -1076,6 +1096,8 @@ class OllamaModelBackend(FormatterBackend, AdapterMixin):
                 cannot be downloaded or decoded.
             ValueError: If a message contains an `AudioBlock` or `AudioUrlBlock`;
                 Ollama does not support audio input.
+            ValueError: If no user-role message has non-whitespace text,
+                images, audio, or documents.
         """
         # Start by awaiting any necessary computation.
         await self.do_generate_walk(action)
@@ -1090,6 +1112,16 @@ class OllamaModelBackend(FormatterBackend, AdapterMixin):
         messages: list[Message] = self.formatter.to_chat_messages(linearized_context)
         # Add the final message.
         messages.extend(self.formatter.to_chat_messages([action]))
+
+        # Issue #1597: refuse to send an empty user prompt; see
+        # `has_user_content` for why whitespace-only text still counts as empty.
+        if not has_user_content(messages):
+            raise ValueError(
+                "Refusing to call the model: no user-role content in the assembled "
+                "conversation. This usually means a stateless context (e.g. "
+                "SimpleContext) was combined with an empty or whitespace-only "
+                "action; recorded turns are not forwarded to the model."
+            )
         # construct the conversation from our messages, adding a system prompt at the first message if one was provided.
         conversation: list[dict] = []
         # We use system prompt None/empty-string semantics in a way that is consistent with Hugging Face and other libraries.

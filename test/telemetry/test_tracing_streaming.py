@@ -220,10 +220,13 @@ def _streaming_backend(chunks, *, judge_reply="yes"):
 
 async def _run_streaming(backend, *, requirements=None):
     from mellea.stdlib.components import Message
-    from mellea.stdlib.context import SimpleContext
+    from mellea.stdlib.context import ChatContext
     from mellea.stdlib.streaming import stream
 
-    ctx = SimpleContext().add(Message(role="user", content="Count to three."))
+    # ChatContext keeps the user turn visible to generation. A SimpleContext
+    # would drop it here (the streamed assistant message is empty), and the
+    # empty-user-content guard (issue #1597) correctly refuses that call.
+    ctx = ChatContext().add(Message(role="user", content="Count to three."))
     async with await stream(
         Message(role="assistant", content=""), backend, ctx, requirements=requirements
     ) as streamer:

@@ -833,8 +833,10 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 parse tool-call responses.
 
         Raises:
-            ValueError: If `action` is an `ALoraRequirement` but `ctx` renders no
-                conversation, leaving the requirement-check adapter nothing to judge.
+            ValueError: If `action` is an `ALoraRequirement` and its adapter is
+                unavailable (not registered on this backend, or fails to activate),
+                or `ctx` renders no conversation, leaving the requirement-check
+                adapter nothing to judge.
 
         Returns:
             tuple[ModelOutputThunk[C], Context]: A thunk holding the (lazy) model output
@@ -881,10 +883,11 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 )
                 alora_req_adapter = self._find_adapter(adapter_name, search_types)
                 if alora_req_adapter is None:
-                    # Log a warning if using an AloraRequirement but no adapter fit.
-                    if reroute_to_alora and isinstance(action, ALoraRequirement):
-                        MelleaLogger.get_logger().warning(
-                            f"attempted to use an AloraRequirement but backend {self} doesn't have the specified adapter added {adapter_name}; defaulting to regular generation"
+                    if isinstance(action, ALoraRequirement):
+                        raise ValueError(
+                            f"cannot validate an ALoraRequirement: backend {self} has "
+                            f"no {adapter_name!r} adapter registered. Register one with "
+                            "backend.add_adapter(), or use a plain Requirement."
                         )
                     reroute_to_alora = False
 
@@ -938,16 +941,16 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                             tool_calls=tool_calls,
                         )
                     except AloraActivationError as exc:
-                        # The adapter was loaded and selected, but its own
-                        # generation-time guard has just proven it cannot
-                        # activate for this prompt (before any model call ran) —
-                        # treat that exactly like the adapter never having been
-                        # registered at all (the `alora_req_adapter is None`
-                        # branch above), not like a caller-input error. This
-                        # applies to an explicit `ALoraRequirement` too, same as
-                        # that branch: the empty-context case a few lines up is
-                        # the only one where an explicit opt-in raises instead
-                        # of falling back.
+                        # The adapter's guard proved it cannot activate for this
+                        # prompt. Only an auto-rerouted plain Requirement may
+                        # fall back to LLM-as-a-judge.
+                        if isinstance(action, ALoraRequirement):
+                            raise ValueError(
+                                f"cannot validate an ALoraRequirement: the "
+                                f"{adapter_name!r} adapter failed to activate "
+                                f"({exc}). Use a plain Requirement to fall back "
+                                "to LLM-as-a-judge automatically."
+                            ) from exc
                         warn_key = f"alora_activation_failed_{exc.qualified_name}"
                         if warn_key not in self._warned_about:
                             self._warned_about.add(warn_key)
@@ -1733,7 +1736,9 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 )
             except json.JSONDecodeError as e:
                 error = e
-                raise Exception(f"Intrinsic did not return a JSON: {chunk}") from e
+                raise ValueError(
+                    f"Intrinsic did not return a JSON: {chunk.choices[0].message.content}"
+                ) from e
             except BaseException as e:
                 error = e
                 raise
@@ -2686,14 +2691,6 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         if tool_calls:
             MelleaLogger.get_logger().warning(
                 "The raw endpoint does not support tool calling at the moment."
-            )
-
-        if self._model.device.type == "mps":
-            # TODO: Remove this when we are able to update the torch package.
-            #       Test this by ensuring all outputs from this call are populated when running on mps.
-            #       https://github.com/pytorch/pytorch/pull/157727
-            MelleaLogger.get_logger().warning(
-                "utilizing device mps with a `generate_from_raw` request; you may see issues when submitting batches of prompts to a Hugging Face backend; ensure all ModelOutputThunks have non-empty values."
             )
 
         model_opts = self._simplify_and_merge(model_options)

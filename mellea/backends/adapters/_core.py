@@ -111,13 +111,14 @@ class AloraActivationError(ValueError):
     model call is wasted on it.
 
     A direct adapter-function call (e.g. `core.check_certainty`) has no
-    fallback mechanism and lets this propagate. `Requirement.validate()`'s
-    automatic aLoRA routing catches it and falls back to LLM-as-a-judge,
-    exactly as it already does when the adapter is not registered at all
-    (see "How automatic routing works" in
-    `docs/docs/advanced/lora-and-alora-adapters.md`) — this is that same
-    "adapter unavailable" case, just detected one step later, once the
-    adapter is loaded but proven unable to switch on for this call.
+    fallback mechanism and lets this propagate. For an automatic reroute of
+    a plain `Requirement`, `_generate_from_context` catches this and falls
+    back to LLM-as-a-judge — the reroute is only an optimisation (see "How
+    automatic routing works" in `docs/docs/advanced/lora-and-alora-adapters.md`).
+    For an explicit `ALoraRequirement`, `_generate_from_context` re-raises
+    as `ValueError` (with this error chained as the cause): the adapter was
+    explicitly requested and its output parser cannot handle a plain yes/no
+    LLM-as-a-judge answer.
 
     Attributes:
         capability_name (str): Adapter-function name that could not activate.

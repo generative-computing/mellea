@@ -4,7 +4,7 @@ This directory contains examples of implementing agent patterns with Mellea, spe
 
 ## Files
 
-### react.py
+### [react.py](./react/react_from_scratch/react.py)
 A complete implementation of the ReACT agent pattern that combines reasoning and action in an iterative loop. The agent:
 - Thinks about what to do next
 - Selects an appropriate tool/action
@@ -20,10 +20,10 @@ A complete implementation of the ReACT agent pattern that combines reasoning and
 
 **Usage:**
 ```python
-python docs/examples/agents/react.py
+python docs/examples/agents/react/react_from_scratch/react.py
 ```
 
-### react_instruct.py
+### [react_instruct.py](./react/react_from_scratch/react_instruct.py)
 An alternative implementation of the ReACT pattern using Mellea's instruct-validate-repair paradigm.
 
 ## Concepts Demonstrated
