@@ -48,6 +48,7 @@ to run.
 | Category | What it shows |
 | -------- | ------------- |
 | `agents/` | ReACT reasoning-and-acting loop, multi-turn tool workflows |
+| `primitives/` | Low-level functional primitives for manual tool execution (`call_tools()`) and execution hooks |
 | `tools/` | `@tool` definition, code interpreter integration, tool argument validation, safe `eval` patterns |
 | `mini_researcher/` | Complete research assistant: multi-model architecture, document retrieval, safety checks, custom validation pipeline |
 
