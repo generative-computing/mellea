@@ -109,6 +109,36 @@ def _label_mass(caplog) -> float:
     return min(masses)
 
 
+class TestExactLabelIds:
+    """On vLLM the labels are read by token id, not found in a top-K."""
+
+    def test_label_outside_a_tiny_top_k_is_still_read(self, backend, caplog):
+        """With top_logprobs=3 and ten options, a top-K-only readout sees only
+        a few labels; asking for the label ids reads all of them."""
+        import copy
+
+        original = backend._intrinsic_adapter_name_and_config
+
+        def small_top_k(adapter):
+            name, cfg = original(adapter)
+            if name == "decision":
+                cfg = copy.deepcopy(cfg)
+                cfg["parameters"] = {**(cfg.get("parameters") or {}), "top_logprobs": 3}
+            return name, cfg
+
+        options = {c: f"unrelated topic {c}" for c in "abcdefghi"}
+        options["payments"] = _REFERENCE_OPTIONS["payments"]
+        backend._intrinsic_adapter_name_and_config = small_top_k
+        try:
+            with caplog.at_level(logging.INFO):
+                answer = decisions.choose(_REFERENCE_STATE, backend, "Topic?", options)
+        finally:
+            backend._intrinsic_adapter_name_and_config = original
+        assert answer.choice == "payments"
+        logged = " ".join(r.getMessage() for r in caplog.records)
+        assert "missing_labels=[]" in logged
+
+
 class TestActivationProbe:
     """The deployment-time guard for the serving template's adapter-map miss."""
 

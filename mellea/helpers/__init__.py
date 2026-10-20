@@ -35,6 +35,8 @@ from .server_type import (
     _server_type,
     _ServerType,
     is_vllm_server_with_structured_output,
+    vllm_server_version,
+    vllm_tokenize_single_tokens,
 )
 
 __all__ = [
@@ -54,5 +56,7 @@ __all__ = [
     "prefetch_audio_urls",
     "send_to_queue",
     "should_replay_reasoning",
+    "vllm_server_version",
+    "vllm_tokenize_single_tokens",
     "wait_for_all_mots",
 ]

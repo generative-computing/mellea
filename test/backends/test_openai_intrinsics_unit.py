@@ -1122,3 +1122,183 @@ def test_register_embedded_adapter_model_refused_duplicate_does_not_clobber_cach
 
     assert names == []
     assert backend._composed_adapter_configs["answerability_alora"] is first_config
+
+
+# ---------------------------------------------------------------------------
+# One-token decisions: exact label ids on vLLM
+# ---------------------------------------------------------------------------
+
+_DECISION_CONFIG = {
+    "model": None,
+    "response_format": None,
+    "transformations": [{"type": "first_token", "labels": ["A", "B"]}],
+    "instruction": None,
+    "parameters": {"max_completion_tokens": 1, "temperature": 0.0},
+    "sentence_boundaries": None,
+}
+
+
+def _decision_chat_completion() -> ChatCompletion:
+    return ChatCompletion(
+        id="test-decision",
+        created=0,
+        model="granite-switch",
+        object="chat.completion",
+        choices=[
+            Choice(
+                index=0,
+                finish_reason="length",
+                message=ChatCompletionMessage(role="assistant", content="A"),
+                logprobs=ChoiceLogprobs(
+                    content=[
+                        ChatCompletionTokenLogprob(
+                            token="A",
+                            logprob=-0.1,
+                            bytes=[65],
+                            top_logprobs=[
+                                TopLogprob(token="A", logprob=-0.1, bytes=[65]),
+                                TopLogprob(token="B", logprob=-2.4, bytes=[66]),
+                            ],
+                        )
+                    ]
+                ),
+            )
+        ],
+        usage=CompletionUsage(prompt_tokens=10, completion_tokens=1, total_tokens=11),
+    )
+
+
+async def _run_decision_call(backend: OpenAIBackend) -> dict:
+    """Drive one decision intrinsic call and return the create() kwargs."""
+    mock_create = AsyncMock(return_value=_decision_chat_completion())
+    mock_client = MagicMock()
+    mock_client.chat.completions.create = mock_create
+    with patch.object(
+        OpenAIBackend,
+        "_async_client",
+        new_callable=PropertyMock,
+        return_value=mock_client,
+    ):
+        mot, _ = await mfuncs.aact(
+            Intrinsic("answerability"),
+            _make_context(),
+            backend,
+            strategy=None,
+            model_options={ModelOption.TEMPERATURE: 0.0},
+        )
+        await mot.avalue()
+    return dict(mock_create.call_args.kwargs)
+
+
+async def test_decision_requests_exact_label_ids_when_available():
+    """A server that can score exact token ids is asked for the label ids."""
+    backend = _make_backend_with_adapter(_DECISION_CONFIG)
+    with patch.object(
+        OpenAIBackend, "_vllm_label_token_ids", return_value=[32, 33]
+    ) as ids:
+        kwargs = await _run_decision_call(backend)
+    ids.assert_called_once_with(["A", "B"])
+    assert kwargs["extra_body"]["logprob_token_ids"] == [32, 33]
+    # top-K is still requested: it is the fallback for the sampled token.
+    assert kwargs["top_logprobs"] >= 1
+
+
+async def test_decision_falls_back_to_top_k_without_label_ids():
+    """No exact-id support (other server, old vLLM): the request is unchanged."""
+    backend = _make_backend_with_adapter(_DECISION_CONFIG)
+    with patch.object(OpenAIBackend, "_vllm_label_token_ids", return_value=None):
+        kwargs = await _run_decision_call(backend)
+    assert "logprob_token_ids" not in kwargs["extra_body"]
+    assert kwargs["logprobs"] is True
+
+
+async def test_non_decision_intrinsic_never_asks_for_label_ids():
+    backend = _make_backend_with_adapter(_SIMPLE_CONFIG)
+    with patch.object(OpenAIBackend, "_vllm_label_token_ids") as ids:
+        mock_create = AsyncMock(return_value=_simple_chat_completion())
+        mock_client = MagicMock()
+        mock_client.chat.completions.create = mock_create
+        with patch.object(
+            OpenAIBackend,
+            "_async_client",
+            new_callable=PropertyMock,
+            return_value=mock_client,
+        ):
+            mot, _ = await mfuncs.aact(
+                Intrinsic("answerability"), _make_context(), backend, strategy=None
+            )
+            await mot.avalue()
+    ids.assert_not_called()
+    assert "logprob_token_ids" not in mock_create.call_args.kwargs["extra_body"]
+
+
+def _label_id_backend() -> OpenAIBackend:
+    return OpenAIBackend(
+        model_id="granite-switch",
+        api_key="fake-key",
+        base_url="http://localhost:9999/v1",
+    )
+
+
+def test_label_ids_used_for_vllm_030_and_cached():
+    from packaging.version import Version
+
+    backend = _label_id_backend()
+    with (
+        patch(
+            "mellea.backends.openai.vllm_server_version", return_value=Version("0.30.0")
+        ) as ver,
+        patch(
+            "mellea.backends.openai.vllm_tokenize_single_tokens", return_value=[32, 33]
+        ) as tok,
+    ):
+        assert backend._vllm_label_token_ids(["A", "B"]) == [32, 33]
+        assert backend._vllm_label_token_ids(["A", "B"]) == [32, 33]
+    assert ver.call_count == 1 and tok.call_count == 1  # cached
+
+
+@pytest.mark.parametrize("version", [None, "0.29.0"], ids=["not-vllm", "old-vllm"])
+def test_label_ids_not_used_for_other_or_old_servers(version):
+    from packaging.version import Version
+
+    backend = _label_id_backend()
+    with (
+        patch(
+            "mellea.backends.openai.vllm_server_version",
+            return_value=Version(version) if version else None,
+        ),
+        patch("mellea.backends.openai.vllm_tokenize_single_tokens") as tok,
+    ):
+        assert backend._vllm_label_token_ids(["A", "B"]) is None
+    tok.assert_not_called()
+
+
+def test_label_ids_not_used_beyond_vllm_cap():
+    from packaging.version import Version
+
+    backend = _label_id_backend()
+    labels = [f"L{i}" for i in range(129)]
+    with (
+        patch(
+            "mellea.backends.openai.vllm_server_version", return_value=Version("0.30.0")
+        ),
+        patch("mellea.backends.openai.vllm_tokenize_single_tokens") as tok,
+    ):
+        assert backend._vllm_label_token_ids(labels) is None
+    tok.assert_not_called()
+
+
+def test_label_ids_fall_back_when_a_label_is_not_one_token():
+    from packaging.version import Version
+
+    backend = _label_id_backend()
+    with (
+        patch(
+            "mellea.backends.openai.vllm_server_version", return_value=Version("0.30.0")
+        ),
+        patch(
+            "mellea.backends.openai.vllm_tokenize_single_tokens",
+            side_effect=ValueError("encodes to [1, 2]"),
+        ),
+    ):
+        assert backend._vllm_label_token_ids(["AB"]) is None

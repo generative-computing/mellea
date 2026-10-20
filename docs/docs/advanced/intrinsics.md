@@ -157,7 +157,11 @@ Serve a checkpoint such as `ibm-granite/granite-switch-4.1-8b` via vLLM
 with `--max-logprobs 20` (the readout requests up to 20), installing the
 [granite-switch](https://pypi.org/project/granite-switch/) package alongside
 vLLM (the `GraniteSwitchForCausalLM` architecture is plugin-registered, not
-in upstream vLLM). Set up the backend as in
+in upstream vLLM). On vLLM 0.30.0 and later the backend also asks the server
+for the logprobs of the exact label token ids (`logprob_token_ids`, ids taken
+from the server's `/tokenize`), so a label outside the top 20 cannot be
+missed. Other servers, and older vLLM, keep the top-20 request. Set up the
+backend as in
 [Use a local Granite Switch checkpoint](#use-a-local-granite-switch-checkpoint).
 
 Decisions also work against [llama.cpp](https://github.com/ggml-org/llama.cpp)'s
