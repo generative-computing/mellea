@@ -6,7 +6,7 @@
 Stubs `mfuncs.act` and `backend.resolve_adapter` (the `test_core_contracts.py`
 pattern) and exercises the helper boundary: answer types and comparison
 semantics, the label-mass floor and its two error classes, pinned-parameter
-conflicts, alias resolution, and the state paths.
+conflicts, and the state paths.
 """
 
 import json
@@ -491,6 +491,28 @@ class TestOptionConflicts:
         backend.model_options = backend_options
         with pytest.raises(ValueError, match="backend's model_options"):
             decisions.decide(_STATE, backend, "q?")
+
+    @pytest.mark.parametrize(
+        "default_extra_body",
+        [
+            {"logit_bias": {"32": 5}},
+            {"repetition_penalty": 1.5},
+            {"chat_template_kwargs": {"enable_thinking": True}},
+        ],
+    )
+    def test_conflicting_default_extra_body_raises(
+        self, monkeypatch, default_extra_body
+    ):
+        """`default_extra_body` bypasses `model_options`, so it is checked too."""
+        backend = _stub_backend(_rule_output({"A": -1.0, "B": -1.0}), monkeypatch)
+        backend._default_extra_body = default_extra_body
+        with pytest.raises(ValueError, match="default_extra_body"):
+            decisions.decide(_STATE, backend, "q?")
+
+    def test_unrelated_default_extra_body_is_allowed(self, monkeypatch):
+        backend = _stub_backend(_rule_output({"A": -1.0, "B": -1.0}), monkeypatch)
+        backend._default_extra_body = {"documents": [], "custom_flag": True}
+        assert decisions.decide(_STATE, backend, "q?").probability is not None
 
     @pytest.mark.parametrize(
         "backend_options",

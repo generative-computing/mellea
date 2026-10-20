@@ -326,9 +326,6 @@ def _composed_adapter_key(adapter: "_AdapterCore") -> str:
     return f"{adapter.identity.name}_{adapter.identity.adapter_type}"
 
 
-_DECISION_CAPABILITY = DECISION_CAPABILITY
-"""Capability name of the one-token decision capability (see `capabilities.py`)."""
-
 _DECIDER_CONFIG_FIELDS = (
     "system_prompt",
     "state_template",
@@ -621,7 +618,7 @@ def _apply_carried_decider_config(
         invalid. The input config and None, unchanged, for any capability
         other than the decision capability.
     """
-    if name != _DECISION_CAPABILITY:
+    if name != DECISION_CAPABILITY:
         return config, None
 
     logger = MelleaLogger.get_logger()
@@ -796,7 +793,7 @@ def _discover_embedded_adapters(
             assert invalid_reason is not None
             skip_reasons[shim.identity.name] = invalid_reason
             continue
-        if shim.identity.name == _DECISION_CAPABILITY and isinstance(
+        if shim.identity.name == DECISION_CAPABILITY and isinstance(
             config.get("invocation_text"), str
         ):
             merged_invocation_text = config["invocation_text"]

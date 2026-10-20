@@ -59,10 +59,10 @@ def test_registry_has_no_orphan_keys():
     which pins Hub repos for local file adapters), so their contracts are
     keyed to names the catalog deliberately does not carry.
     """
-    from mellea.backends.adapters.adapter import _DECISION_CAPABILITY
+    from mellea.backends.adapters.capabilities import DECISION_CAPABILITY
 
     orphans = (
-        set(_INTRINSIC_IO_CONTRACTS) - _BUILTIN_INTRINSIC_NAMES - {_DECISION_CAPABILITY}
+        set(_INTRINSIC_IO_CONTRACTS) - _BUILTIN_INTRINSIC_NAMES - {DECISION_CAPABILITY}
     )
     assert orphans == set()
 

@@ -145,8 +145,7 @@ backend = OpenAIBackend(
 ## Decisions: typed one-token answers
 
 Some Granite Switch checkpoints embed a **decision** adapter function (named
-`decision`; Mellea
-resolves either name). It answers a fixed-answer question about some state
+`decision`). It answers a fixed-answer question about some state
 with a probability, a choice, or a score — read from the model's first
 generated token, so a decision costs one forward pass and is fast enough for
 control flow: `if` on a probability, route on a choice, threshold a score.

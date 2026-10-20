@@ -267,8 +267,8 @@ def _reject_conflicting_options(
         ),
         ModelOption.TOOLS: "decision calls send no tools",
         ModelOption.TEMPERATURE: (
-            f"the readout pins temperature={_PINNED_TEMPERATURE} because "
-            "probabilities are read after sampling settings are applied"
+            f"the readout pins temperature={_PINNED_TEMPERATURE} so the "
+            "sampled token is deterministic"
         ),
         "top_p": "the readout decodes greedily; sampling settings would change the answer",
         "top_k": "the readout decodes greedily; sampling settings would change the answer",
@@ -483,6 +483,14 @@ def _decide_raw(
     if isinstance(backend_options, dict):
         _reject_conflicting_options(
             backend_options, source="the backend's model_options"
+        )
+    # `default_extra_body` is merged into every request but lives outside
+    # `model_options`, so check it against the same extra_body pins.
+    default_extra_body = getattr(backend, "_default_extra_body", None)
+    if isinstance(default_extra_body, dict):
+        _reject_conflicting_options(
+            {"extra_body": default_extra_body},
+            source="the backend's default_extra_body",
         )
     # Re-assert the one-token and greedy pins as per-call options: per-call
     # options outrank backend-level defaults in every later merge, so a
