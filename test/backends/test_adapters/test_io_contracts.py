@@ -24,6 +24,12 @@ from mellea.backends.adapters.io_contracts import (
     _INTRINSIC_IO_CONTRACTS,
     get_io_contract,
 )
+from mellea.formatters.granite import (
+    ChatCompletion,
+    ChatCompletionResponse,
+    IntrinsicsResultProcessor,
+)
+from mellea.formatters.granite.intrinsics.output import DecodeSentences
 
 _INTRINSIC_TESTDATA = (
     pathlib.Path(__file__).resolve().parents[2]
@@ -31,6 +37,9 @@ _INTRINSIC_TESTDATA = (
     / "components"
     / "intrinsic"
     / "testdata"
+)
+_GRANITE_TESTDATA = (
+    pathlib.Path(__file__).resolve().parents[2] / "formatters" / "granite" / "testdata"
 )
 
 # ---------------------------------------------------------------------------
@@ -229,3 +238,400 @@ def test_policy_guardrails_contract_distinguishes_exclusivity_failures(output, r
 
     assert exc_info.value.reason == reason
     assert reason in str(exc_info.value)
+
+
+# ---------------------------------------------------------------------------
+# _HallucinationDetectionContract (issue #1719)
+# ---------------------------------------------------------------------------
+
+_BASE_HALLUCINATION_RECORD: dict[str, object] = {
+    "response_begin": 0,
+    "response_end": 31,
+    "response_text": "Purple bumble fish are yellow. ",
+    "faithfulness": "faithful",
+    "explanation": "Supported by the document.",
+}
+
+
+@pytest.fixture
+def hallucination_contract():
+    return _INTRINSIC_IO_CONTRACTS["hallucination_detection"]
+
+
+def test_hallucination_contract_unknown_faithfulness_label_raises(
+    hallucination_contract,
+):
+    bad = {**_BASE_HALLUCINATION_RECORD, "faithfulness": "hallucinated"}
+    with pytest.raises(AdapterSchemaMismatchError) as exc_info:
+        hallucination_contract.parse(json.dumps([bad]))
+    msg = str(exc_info.value)
+    assert "'hallucinated'" in msg
+    for valid_label in ("'faithful'", "'partial'", "'unfaithful'", "'NA'"):
+        assert valid_label in msg
+    assert "upgrade `mellea`" in msg
+
+
+def test_hallucination_contract_none_faithfulness_raises(hallucination_contract):
+    bad = {**_BASE_HALLUCINATION_RECORD, "faithfulness": None}
+    with pytest.raises(AdapterSchemaMismatchError):
+        hallucination_contract.parse(json.dumps([bad]))
+
+
+@pytest.mark.parametrize(
+    ("field", "bad_offset"),
+    [
+        ("response_begin", "0"),
+        ("response_end", "31"),
+        ("response_begin", 0.5),
+        ("response_end", None),
+    ],
+)
+def test_hallucination_contract_non_int_offset_raises(
+    hallucination_contract, field, bad_offset
+):
+    bad = {**_BASE_HALLUCINATION_RECORD, field: bad_offset}
+    with pytest.raises(AdapterSchemaMismatchError, match="must be `int`"):
+        hallucination_contract.parse(json.dumps([bad]))
+
+
+@pytest.mark.parametrize(
+    ("field", "bool_offset"),
+    [
+        ("response_begin", False),
+        ("response_begin", True),
+        ("response_end", False),
+        ("response_end", True),
+    ],
+)
+def test_hallucination_contract_bool_offset_raises(
+    hallucination_contract, field, bool_offset
+):
+    bad = {**_BASE_HALLUCINATION_RECORD, field: bool_offset}
+    with pytest.raises(AdapterSchemaMismatchError, match="not `bool`"):
+        hallucination_contract.parse(json.dumps([bad]))
+
+
+def test_hallucination_contract_begin_greater_than_end_raises(hallucination_contract):
+    bad = {**_BASE_HALLUCINATION_RECORD, "response_begin": 20, "response_end": 10}
+    with pytest.raises(AdapterSchemaMismatchError, match=r"response_begin.*<="):
+        hallucination_contract.parse(json.dumps([bad]))
+
+
+@pytest.mark.parametrize("bad_explanation", [None, 123, ["list"]])
+def test_hallucination_contract_non_str_explanation_raises(
+    hallucination_contract, bad_explanation
+):
+    bad = {**_BASE_HALLUCINATION_RECORD, "explanation": bad_explanation}
+    with pytest.raises(
+        AdapterSchemaMismatchError, match="`explanation` must be a `str`"
+    ):
+        hallucination_contract.parse(json.dumps([bad]))
+
+
+def test_hallucination_contract_conflicting_duplicate_span_raises(
+    hallucination_contract,
+):
+    first = {**_BASE_HALLUCINATION_RECORD, "faithfulness": "faithful"}
+    second = {**_BASE_HALLUCINATION_RECORD, "faithfulness": "unfaithful"}
+    with pytest.raises(AdapterSchemaMismatchError, match="conflicting `faithfulness`"):
+        hallucination_contract.parse(json.dumps([first, second]))
+
+
+def test_hallucination_contract_overlapping_records_raise(hallucination_contract):
+    rec_a = {
+        **_BASE_HALLUCINATION_RECORD,
+        "response_begin": 0,
+        "response_end": 20,
+        "faithfulness": "faithful",
+    }
+    rec_b = {
+        **_BASE_HALLUCINATION_RECORD,
+        "response_begin": 10,
+        "response_end": 30,
+        "faithfulness": "unfaithful",
+    }
+    with pytest.raises(AdapterSchemaMismatchError, match="overlapping response spans"):
+        hallucination_contract.parse(json.dumps([rec_a, rec_b]))
+
+
+def test_hallucination_contract_passes_adjacent_records_extra_fields_and_empty_list(
+    hallucination_contract,
+):
+    assert hallucination_contract.parse(json.dumps([])) == {"items": []}
+
+    records = [
+        {
+            "response_begin": 0,
+            "response_end": 10,
+            "response_text": "Sentence 0.",
+            "faithfulness": "faithful",
+            "explanation": "Supported.",
+            "extra_optional": 1,
+        },
+        {
+            "response_begin": 10,
+            "response_end": 25,
+            "response_text": "Sentence 1.",
+            "faithfulness": "partial",
+            "explanation": "Partially supported.",
+        },
+        {
+            "response_begin": 25,
+            "response_end": 40,
+            "response_text": "Sentence 2.",
+            "faithfulness": "unfaithful",
+            "explanation": "Not supported.",
+        },
+        {
+            "response_begin": 40,
+            "response_end": 50,
+            "response_text": "Hello!",
+            "faithfulness": "NA",
+            "explanation": "Greeting.",
+        },
+    ]
+    parsed = hallucination_contract.parse(json.dumps(records))
+    assert parsed == {"items": records}
+
+
+def test_hallucination_contract_deduplicates_matching_span_and_faithfulness(
+    hallucination_contract,
+):
+    first = {**_BASE_HALLUCINATION_RECORD, "explanation": "First explanation kept."}
+    duplicate = {
+        **_BASE_HALLUCINATION_RECORD,
+        "explanation": "Second explanation dropped.",
+    }
+    adjacent = {
+        "response_begin": 31,
+        "response_end": 65,
+        "response_text": "Green bumble fish are also yellow.",
+        "faithfulness": "unfaithful",
+        "explanation": "Unsupported.",
+    }
+    parsed = hallucination_contract.parse(json.dumps([first, duplicate, adjacent]))
+    assert parsed["items"] == [first, adjacent]
+
+
+# ---------------------------------------------------------------------------
+# DecodeSentences bounds and type checks (issue #1719)
+# ---------------------------------------------------------------------------
+
+_CITATIONS_CONFIG_DICT: dict = {
+    "model": None,
+    "response_format": None,
+    "instruction": "Split the last assistant response into individual sentences.",
+    "parameters": None,
+    "sentence_boundaries": {"documents": "c", "last_message": "r"},
+    "docs_as_message": None,
+    "transformations": [
+        {"type": "explode", "input_path": [], "target_field": "c"},
+        {
+            "type": "decode_sentences",
+            "input_path": [None, "r"],
+            "source": "last_message",
+            "output_names": {
+                "begin": "response_begin",
+                "end": "response_end",
+                "text": "response_text",
+            },
+        },
+        {
+            "type": "decode_sentences",
+            "input_path": [None, "c"],
+            "source": "documents",
+            "output_names": {
+                "document_id": "citation_doc_id",
+                "begin": "citation_begin",
+                "end": "citation_end",
+                "text": "citation_text",
+            },
+        },
+        {
+            "type": "project",
+            "input_path": [None],
+            "retained_fields": [
+                "response_begin",
+                "response_end",
+                "response_text",
+                "citation_doc_id",
+                "citation_begin",
+                "citation_end",
+                "citation_text",
+            ],
+        },
+        {
+            "type": "drop_duplicates",
+            "input_path": [],
+            "target_fields": ["response_begin", "citation_doc_id", "citation_begin"],
+        },
+    ],
+}
+
+_CONTEXT_ATTRIBUTION_CONFIG_DICT: dict = {
+    "model": None,
+    "response_format": None,
+    "instruction": "You provided the last assistant response above based on context.",
+    "parameters": None,
+    "sentence_boundaries": {
+        "documents": "c",
+        "all_but_last_message": "c",
+        "last_message": "r",
+    },
+    "docs_as_message": None,
+    "transformations": [
+        {"type": "explode", "input_path": [], "target_field": "c"},
+        {
+            "type": "decode_sentences",
+            "input_path": [None, "r"],
+            "source": "last_message",
+            "output_names": {
+                "begin": "response_begin",
+                "end": "response_end",
+                "text": "response_text",
+            },
+        },
+        {
+            "type": "decode_sentences",
+            "input_path": [None, "c"],
+            "source": ["documents", "all_but_last_message"],
+            "output_names": {
+                "document_id": "attribution_doc_id",
+                "message_index": "attribution_msg_index",
+                "begin": "attribution_begin",
+                "end": "attribution_end",
+                "text": "attribution_text",
+            },
+        },
+        {
+            "type": "project",
+            "input_path": [None],
+            "retained_fields": [
+                "response_begin",
+                "response_end",
+                "response_text",
+                "attribution_doc_id",
+                "attribution_msg_index",
+                "attribution_begin",
+                "attribution_end",
+                "attribution_text",
+            ],
+        },
+        {
+            "type": "drop_duplicates",
+            "input_path": [],
+            "target_fields": [
+                "response_begin",
+                "attribution_doc_id",
+                "attribution_msg_index",
+                "attribution_begin",
+            ],
+        },
+    ],
+}
+
+
+def _make_decode_sentences_rule() -> tuple[DecodeSentences, dict]:
+    rule = DecodeSentences(
+        {"docs_as_message": None},
+        [None, "r"],
+        source="last_message",
+        output_names={
+            "begin": "response_begin",
+            "end": "response_end",
+            "text": "response_text",
+        },
+    )
+    prepare_output = {
+        "begins": [0, 31],
+        "ends": [31, 65],
+        "texts": [
+            "Purple bumble fish are yellow. ",
+            "Green bumble fish are also yellow.",
+        ],
+        "document_ids": [None, None],
+        "message_indices": [None, None],
+    }
+    return rule, prepare_output
+
+
+@pytest.mark.parametrize("bool_index", [True, False])
+def test_decode_sentences_bool_index_raises_type_error(bool_index):
+    rule, prepare_output = _make_decode_sentences_rule()
+    with pytest.raises(TypeError, match="Expected integer sentence number"):
+        rule._transform(bool_index, (0, "r"), prepare_output)
+
+
+@pytest.mark.parametrize("bad_index", [-1, -2, 2, 5])
+def test_decode_sentences_out_of_range_index_raises_value_error(bad_index):
+    rule, prepare_output = _make_decode_sentences_rule()
+    with pytest.raises(ValueError) as exc_info:
+        rule._transform(bad_index, (0, "r"), prepare_output)
+    msg = str(exc_info.value)
+    assert str(bad_index) in msg
+    assert "2 sentence(s)" in msg
+
+
+def test_decode_sentences_valid_indices_decode_unchanged_citations():
+    processor = IntrinsicsResultProcessor(config_dict=_CITATIONS_CONFIG_DICT)
+    canned_in = ChatCompletion.model_validate_json(
+        (_GRANITE_TESTDATA / "test_canned_input" / "citations.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    model_out = ChatCompletionResponse.model_validate_json(
+        (
+            _GRANITE_TESTDATA / "test_canned_output" / "model_output" / "citations.json"
+        ).read_text(encoding="utf-8")
+    )
+    expected = ChatCompletionResponse.model_validate_json(
+        (
+            _GRANITE_TESTDATA
+            / "test_canned_output"
+            / "expected_result"
+            / "citations.json"
+        ).read_text(encoding="utf-8")
+    )
+
+    transformed = processor.transform(model_out, canned_in)
+    raw_content = transformed.choices[0].message.content
+    assert raw_content is not None
+    assert json.loads(raw_content) == json.loads(
+        expected.choices[0].message.content or "[]"
+    )
+    parsed = get_io_contract("citations").parse(raw_content)
+    assert len(parsed["items"]) == 3  # type: ignore[arg-type]
+
+
+def test_decode_sentences_valid_indices_decode_unchanged_context_attribution():
+    processor = IntrinsicsResultProcessor(config_dict=_CONTEXT_ATTRIBUTION_CONFIG_DICT)
+    canned_in = ChatCompletion.model_validate_json(
+        (
+            _GRANITE_TESTDATA / "test_canned_input" / "context-attribution.json"
+        ).read_text(encoding="utf-8")
+    )
+    model_out = ChatCompletionResponse.model_validate_json(
+        (
+            _GRANITE_TESTDATA
+            / "test_canned_output"
+            / "model_output"
+            / "context-attribution.json"
+        ).read_text(encoding="utf-8")
+    )
+    expected = ChatCompletionResponse.model_validate_json(
+        (
+            _GRANITE_TESTDATA
+            / "test_canned_output"
+            / "expected_result"
+            / "context-attribution.json"
+        ).read_text(encoding="utf-8")
+    )
+
+    transformed = processor.transform(model_out, canned_in)
+    raw_content = transformed.choices[0].message.content
+    assert raw_content is not None
+    assert json.loads(raw_content) == json.loads(
+        expected.choices[0].message.content or "[]"
+    )
+    parsed = get_io_contract("context-attribution").parse(raw_content)
+    assert len(parsed["items"]) == 5  # type: ignore[arg-type]
