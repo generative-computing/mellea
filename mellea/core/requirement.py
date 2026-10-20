@@ -432,6 +432,17 @@ class Requirement(Component[str]):
             )
             await llm_as_a_judge_result.avalue()
 
+            # A backend may reroute a plain Requirement to an ALoraRequirement; parse
+            # with the output_to_bool of the requirement that ran (recorded in val_ctx).
+            output_to_bool = self.output_to_bool
+            executed = val_ctx.previous_node
+            executed_action = executed.node_data if executed is not None else None
+            if (
+                isinstance(executed_action, Requirement)
+                and executed_action.output_to_bool is not None
+            ):
+                output_to_bool = executed_action.output_to_bool
+
             # LLM-as-a-Judge validation often returns only "yes"/"no" because the
             # prompt asks for binary classification. However, repair strategies
             # display the reason to guide the model during repair iterations.
@@ -445,7 +456,7 @@ class Requirement(Component[str]):
                     reason = self.description
 
             try:
-                result = self.output_to_bool(llm_as_a_judge_result)
+                result = output_to_bool(llm_as_a_judge_result)
             except Exception as exc:
                 # A custom output_to_bool (e.g. the adapter-backed
                 # requirement_check_to_bool) can raise on unparsable output.
