@@ -261,16 +261,19 @@ state, question, or option descriptions, the call raises
 | `score(state, backend, question, levels)` | `.score` (float) and `.probabilities` | Ratings, severity |
 
 All three accept a string, a dict or list, or a `ChatContext` as the
-state. All three take `model_options` for temperature (default 0.0);
-it has no effect on the returned answer, only on the sampled token
-shown in the log. The probabilities are read, by default, from the
-pre-temperature distribution.
+state. Any other `Context` type raises a `TypeError`.
 
-A few things are fixed and cannot be changed per call: the model always
-generates exactly one token, never streams, and is never given tools
-to call (the decision prompt has no tool block). If you pass a
-`model_options` key that conflicts with any of these, the call raises
-rather than silently producing a broken result.
+A few things are fixed and cannot be changed: the model always
+generates exactly one token, decodes greedily (`temperature` is pinned to
+0.0), never streams, and is never given tools to call (the decision
+prompt has no tool block). Logit-shaping options such as `logit_bias` and
+the repetition, frequency and presence penalties are rejected as well,
+because a served backend may take its logprobs after applying them. If a
+`model_options` key, whether passed per call or set on the backend,
+conflicts with any of these, the call raises rather than silently
+producing a broken result. On the local Hugging Face backend the
+probabilities are read from the raw logits at the label token ids, so
+generation options cannot move them.
 
 For the full API reference, see the
 [adapter-functions page](../advanced/intrinsics.md#decisions-typed-one-token-answers).

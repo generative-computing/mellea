@@ -10,10 +10,11 @@ against it.
 
 Prerequisites:
 - llama.cpp built from main (Granite Switch support merged 2026-08-10)
-- A Granite Switch GGUF file. The llama.cpp converter does not yet
-  handle these checkpoints correctly, so you will need a pre-converted
-  GGUF. If you have a GPU, the vLLM path (see `decisions.py`) is
-  simpler and works with the Hugging Face checkpoint directly.
+- A Granite Switch GGUF file. `scripts/start_llamacpp_switch.sh` converts
+  a checkpoint with the pinned converter and serves it; it comes with the
+  llama-server support PR (#1736). If you have a GPU, the vLLM path (see
+  `decisions.py`) is simpler and works with the Hugging Face checkpoint
+  directly.
 
 Serve the model, then point this example at it:
 

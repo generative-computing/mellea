@@ -213,14 +213,14 @@ class TestSanityBattery:
         )
         assert answer.probability > 0.5
 
-    def test_temperature_override_allowed(self, backend):
-        answer = decisions.decide(
-            _REFERENCE_STATE,
-            backend,
-            "Does this message require urgent human attention?",
-            model_options={ModelOption.TEMPERATURE: 0.0},
-        )
-        assert 0.0 <= answer.probability <= 1.0
+    def test_temperature_override_rejected(self, backend):
+        with pytest.raises(ValueError, match="temperature"):
+            decisions.decide(
+                _REFERENCE_STATE,
+                backend,
+                "Does this message require urgent human attention?",
+                model_options={ModelOption.TEMPERATURE: 0.0},
+            )
 
 
 class TestDiverseQuestions:

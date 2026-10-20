@@ -420,6 +420,18 @@ class TestOptionConflicts:
             {"n": 2},
             {"max_completion_tokens": 5},
             {"max_tokens": 5},
+            {ModelOption.TEMPERATURE: 0.0},
+            {ModelOption.TEMPERATURE: 0.7},
+            {"top_p": 0.9},
+            {"top_k": 5},
+            {"logit_bias": {"32": 5}},
+            {"frequency_penalty": 0.5},
+            {"presence_penalty": 0.5},
+            {"repetition_penalty": 1.5},
+            {"logits_processor": []},
+            {"extra_body": {"logit_bias": {"32": 5}}},
+            {"extra_body": {"repetition_penalty": 1.5}},
+            {"extra_body": {"chat_template_kwargs": {"enable_thinking": True}}},
         ],
     )
     def test_conflicting_options_raise(self, monkeypatch, options):
@@ -427,8 +439,15 @@ class TestOptionConflicts:
         with pytest.raises(ValueError, match="decision"):
             decisions.decide(_STATE, backend, "q?", model_options=options)
 
-    def test_temperature_is_allowed(self, monkeypatch):
+    def test_temperature_pin_overrides_backend_level_temperature(self, monkeypatch):
+        """A backend built with temperature=0.8 must still decode greedily.
+
+        The helper defaults temperature to 0.0 elsewhere, so asserting the
+        default alone would pass without the pin. A non-zero backend value
+        is what the pin has to defeat.
+        """
         backend = _stub_backend(_rule_output({"A": -1.0, "B": -1.0}), monkeypatch)
+        backend.model_options = {ModelOption.TEMPERATURE: 0.8}
         captured = {}
 
         def fake_act(intrinsic, context, _backend, *, model_options=None, **_kw):
@@ -440,10 +459,50 @@ class TestOptionConflicts:
             return thunk, context
 
         monkeypatch.setattr(_util.mfuncs, "act", fake_act)
-        decisions.decide(
-            _STATE, backend, "q?", model_options={ModelOption.TEMPERATURE: 0.7}
+        decisions.decide(_STATE, backend, "q?")
+        assert captured["model_options"][ModelOption.TEMPERATURE] == 0.0
+
+    def test_unrelated_caller_options_are_allowed(self, monkeypatch):
+        """The stricter checks do not reject ordinary Mellea options."""
+        backend = _stub_backend(_rule_output({"A": -1.0, "B": -1.0}), monkeypatch)
+        result = decisions.decide(
+            _STATE, backend, "q?", model_options={ModelOption.SEED: 7}
         )
-        assert captured["model_options"][ModelOption.TEMPERATURE] == 0.7
+        assert 0.0 <= result.probability <= 1.0
+
+    @pytest.mark.parametrize(
+        "backend_options",
+        [
+            {"logprobs": False},
+            {"top_logprobs": 5},
+            {"n": 2},
+            {"top_p": 0.9},
+            {"top_k": 5},
+            {ModelOption.TOOLS: {}},
+            {ModelOption.THINKING: True},
+            {ModelOption.STREAM: True},
+            {"logit_bias": {"32": 5}},
+            {"repetition_penalty": 1.5},
+            {"extra_body": {"frequency_penalty": 0.5}},
+        ],
+    )
+    def test_conflicting_backend_options_raise(self, monkeypatch, backend_options):
+        backend = _stub_backend(_rule_output({"A": -1.0, "B": -1.0}), monkeypatch)
+        backend.model_options = backend_options
+        with pytest.raises(ValueError, match="backend's model_options"):
+            decisions.decide(_STATE, backend, "q?")
+
+    @pytest.mark.parametrize(
+        "backend_options",
+        [{ModelOption.MAX_NEW_TOKENS: 256}, {ModelOption.TEMPERATURE: 0.8}],
+    )
+    def test_backend_token_and_temperature_defaults_are_overridden(
+        self, monkeypatch, backend_options
+    ):
+        """Per-call pins outrank these backend-level defaults, so they don't raise."""
+        backend = _stub_backend(_rule_output({"A": -1.0, "B": -1.0}), monkeypatch)
+        backend.model_options = backend_options
+        assert decisions.decide(_STATE, backend, "q?").probability is not None
 
 
 # ---------------------------------------------------------------------------
@@ -455,13 +514,18 @@ class TestCapabilityResolution:
     def test_capability_not_found_clear_error(self, monkeypatch):
         backend = MagicMock()
         backend.resolve_adapter.side_effect = ValueError("not found")
-        decisions._RESOLVED_CAPABILITY.clear()
         with pytest.raises(ValueError, match="No decision capability"):
             decisions.decide(_STATE, backend, "q?")
-        decisions._RESOLVED_CAPABILITY.clear()
 
 
 class TestStatePaths:
+    def test_non_chat_context_state_is_a_type_error(self, monkeypatch):
+        from mellea.stdlib.context import SimpleContext
+
+        backend = _stub_backend(_rule_output({"A": -1.0, "B": -1.0}), monkeypatch)
+        with pytest.raises(TypeError, match="ChatContext"):
+            decisions.decide(SimpleContext(), backend, "q?")
+
     def test_chat_context_state_forwards_messages(self, monkeypatch):
         backend = _stub_backend(_rule_output({"A": -1.0, "B": -1.0}), monkeypatch)
         captured = {}
@@ -559,11 +623,9 @@ class TestBackendDefaultOverrides:
             io_contract=get_io_contract("decision")
         )
         # A backend-level default of 256 must not survive to the call.
-        decisions.decide(
-            _STATE, backend, "q?", model_options={ModelOption.TEMPERATURE: 0.1}
-        )
+        decisions.decide(_STATE, backend, "q?")
         assert captured["model_options"][ModelOption.MAX_NEW_TOKENS] == 1
-        assert captured["model_options"][ModelOption.TEMPERATURE] == 0.1
+        assert captured["model_options"][ModelOption.TEMPERATURE] == 0.0
         # Decisions never expose tools to the model.
         assert captured["tool_calls"] is False
 

@@ -586,10 +586,18 @@ def generate_with_transformers(
     num_responses = generate_result.sequences.shape[0]
     generated_tokens = generate_result.sequences[:, num_prompt_tokens:]
 
+    # `scores` are post-processor (repetition penalty, bad words, sampling
+    # warpers, ...); `logits` are the raw LM-head output. A caller that needs
+    # the model's own distribution sets `raw_logprobs` (and `output_logits`).
+    step_scores = (
+        generate_result.logits
+        if other_input.get("raw_logprobs")
+        else generate_result.scores
+    )
     generated_scores = (
         None
-        if generate_result.scores is None
-        else (torch.stack(generate_result.scores).swapaxes(0, 1)[:num_responses])
+        if step_scores is None
+        else (torch.stack(step_scores).swapaxes(0, 1)[:num_responses])
     )
 
     # Iterate over the responses, stripping off EOS tokens
@@ -668,6 +676,27 @@ def generate_with_transformers(
                     ]
                     for strs, lps in zip(top_k_token_strs, top_k_values, strict=True)
                 ]
+            # vLLM's `logprob_token_ids`, emulated: also report these exact token
+            # ids, so a label outside the top-K is still read rather than missed.
+            requested_ids = other_input.get("logprob_token_ids") or []
+            if requested_ids:
+                for token_ix in range(len(token_strings)):
+                    already = (
+                        set(top_k_indices[token_ix].tolist())
+                        if "top_logprobs" in other_input
+                        else set()
+                    )
+                    for token_id in requested_ids:
+                        if token_id in already:
+                            continue
+                        s = str(tokenizer.decode(token_id))
+                        top_logprobs[token_ix].append(
+                            {
+                                "token": s,
+                                "bytes": list(s.encode("utf8")),
+                                "logprob": all_logprobs[token_ix][token_id].item(),
+                            }
+                        )
 
             logprobs_content = [
                 {

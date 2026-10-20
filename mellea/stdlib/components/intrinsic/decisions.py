@@ -24,7 +24,6 @@ import hashlib
 import json
 import math
 import time
-import weakref
 from collections.abc import Mapping, Sequence
 from typing import cast
 
@@ -32,8 +31,9 @@ import pydantic
 
 from ....backends import ModelOption
 from ....backends.adapters import AdapterMixin
-from ....backends.adapters.capabilities import DECIDER_CAPABILITY_NAMES
+from ....backends.adapters.capabilities import DECISION_CAPABILITY
 from ....backends.tools import add_tools_from_context_actions
+from ....core import Context
 from ....core.utils import MelleaLogger
 from ...context import ChatContext
 from ._util import _call_intrinsic_raw
@@ -60,20 +60,25 @@ _MISSING_LABEL_BOUND = 0.005
 """Worst-case probability shift tolerated before a missing label raises
 as a truncation/server-cap problem rather than being treated as zero."""
 
-_DECISION_ALIASES = ("decision",)
-"""Capability names of the decision capability, in resolution order.
-
-Must match `DECIDER_CAPABILITY_NAMES` (the single canonical set); the
-assertion below fails at import time if the two drift apart."""
-assert set(_DECISION_ALIASES) == DECIDER_CAPABILITY_NAMES
-
 _logger = MelleaLogger.get_logger()
 
-_RESOLVED_CAPABILITY: weakref.WeakKeyDictionary[AdapterMixin, str] = (
-    weakref.WeakKeyDictionary()
-)
-"""Per-backend cache of which decision alias name resolved, so the losing
-alias is not re-discovered from disk on every call."""
+_PINNED_TEMPERATURE = 0.0
+"""Decisions always decode greedily. On `LocalHFBackend` the label
+probabilities are read from the raw LM-head logits, so no generation option
+can move them; the pin keeps the sampled token deterministic and protects
+served backends whose logprobs may be taken after sampling settings."""
+
+_LOGIT_SHAPING_KEYS: dict[str, str] = {
+    "logit_bias": "it shifts token logits before the logprobs may be taken",
+    "frequency_penalty": "it reshapes token logits before the logprobs may be taken",
+    "presence_penalty": "it reshapes token logits before the logprobs may be taken",
+    "repetition_penalty": "it reshapes token logits before the logprobs may be taken",
+    "logits_processor": "a custom processor can alter the label probabilities",
+}
+"""Options that reshape the distribution on a served backend. Whether the
+returned logprobs reflect them depends on server configuration Mellea cannot
+see (for example vLLM's `--logprobs-mode`), so they are rejected rather than
+trusted. They are checked at the top level and inside `extra_body`."""
 
 
 class PredicateAnswer(pydantic.BaseModel):
@@ -237,11 +242,15 @@ def _render_options_block(labels: list[str], descriptions: Sequence[object]) -> 
     return "\n".join(lines)
 
 
-def _reject_conflicting_options(model_options: dict | None) -> None:
-    """Reject caller model options that would break the one-token readout.
+def _reject_conflicting_options(
+    model_options: dict | None, *, source: str = "model_options"
+) -> None:
+    """Reject model options that would break the one-token readout.
 
     Args:
-        model_options: Caller-supplied model options.
+        model_options: Model options to check: the caller's per-call options,
+            or the backend's own construction-time options.
+        source: Where the options came from, named in the error message.
 
     Raises:
         ValueError: When an option conflicts with a decision-critical
@@ -257,6 +266,12 @@ def _reject_conflicting_options(model_options: dict | None) -> None:
             "the decision capability pins enable_thinking=false for reference fidelity"
         ),
         ModelOption.TOOLS: "decision calls send no tools",
+        ModelOption.TEMPERATURE: (
+            f"the readout pins temperature={_PINNED_TEMPERATURE} because "
+            "probabilities are read after sampling settings are applied"
+        ),
+        "top_p": "the readout decodes greedily; sampling settings would change the answer",
+        "top_k": "the readout decodes greedily; sampling settings would change the answer",
         "logprobs": "the readout requests logprobs itself",
         "top_logprobs": ("the readout sizes top_logprobs to the label pool (up to 20)"),
         "n": "the one-token readout requires a single choice",
@@ -265,18 +280,44 @@ def _reject_conflicting_options(model_options: dict | None) -> None:
         ),
         "max_tokens": "the readout pins the completion length to one token",
     }
+    # Per-call, `_call_intrinsic_raw` re-asserts these two after this check,
+    # so a backend-level value is overridden rather than a conflict.
+    overridden_per_call = (
+        {ModelOption.MAX_NEW_TOKENS, ModelOption.TEMPERATURE}
+        if source != "model_options"
+        else set()
+    )
     for key, why in conflicts.items():
-        if key in model_options:
+        if key in model_options and key not in overridden_per_call:
             raise ValueError(
-                f"model_options key {key!r} conflicts with the decision "
-                f"readout: {why}. Remove it from model_options; temperature "
-                "stays caller-tunable."
+                f"{source} key {key!r} conflicts with the decision "
+                f"readout: {why}. Remove it from {source}."
             )
+    extra_body = model_options.get("extra_body")
+    for scope, options in (
+        ("", model_options),
+        ("extra_body.", extra_body if isinstance(extra_body, dict) else {}),
+    ):
+        for key, why in _LOGIT_SHAPING_KEYS.items():
+            if key in options:
+                raise ValueError(
+                    f"{source} key {scope + key!r} conflicts with the decision "
+                    f"readout: {why}. Remove it from {source}."
+                )
+    ctk = (
+        extra_body.get("chat_template_kwargs") if isinstance(extra_body, dict) else None
+    )
+    if isinstance(ctk, dict) and "enable_thinking" in ctk:
+        raise ValueError(
+            f"{source} key 'extra_body.chat_template_kwargs.enable_thinking' "
+            "conflicts with the decision readout: the decision capability "
+            f"pins enable_thinking=false. Remove it from {source}."
+        )
     if model_options.get(ModelOption.STREAM):
         raise ValueError(
-            "model_options requested streaming, but the one-token decision "
-            "readout requires the non-streaming response. Remove "
-            "ModelOption.STREAM from model_options."
+            f"{source} requested streaming, but the one-token decision "
+            f"readout requires the non-streaming response. Remove "
+            f"ModelOption.STREAM from {source}."
         )
 
 
@@ -300,38 +341,26 @@ def _reject_context_tools(context: ChatContext) -> None:
         )
 
 
-def _resolve_capability(backend: AdapterMixin) -> str:
-    """Find which decision alias name this backend serves.
+def _require_capability(backend: AdapterMixin) -> None:
+    """Check that this backend serves the decision capability.
 
     Args:
         backend: A backend that supports adapter functions.
 
-    Returns:
-        The alias name that resolved on this backend.
-
     Raises:
-        ValueError: When neither alias name resolves, with the underlying
-            errors wrapped in a clear message.
+        ValueError: When the capability does not resolve, with the underlying
+            error wrapped in a clear message.
     """
-    cached = _RESOLVED_CAPABILITY.get(backend)
-    if cached is not None:
-        return cached
-    errors: list[str] = []
-    for name in _DECISION_ALIASES:
-        try:
-            backend.resolve_adapter(name)
-        except (ValueError, KeyError) as e:
-            errors.append(f"{name!r}: {e}")
-            continue
-        _RESOLVED_CAPABILITY[backend] = name
-        return name
-    raise ValueError(
-        "No decision capability is registered on this backend (tried the "
-        f"alias names {list(_DECISION_ALIASES)}). Serve a Granite Switch "
-        "checkpoint that embeds the decision adapter function via vLLM "
-        "(with --max-logprobs 20) and register the model's embedded adapter "
-        "functions. Underlying errors: " + "; ".join(errors)
-    )
+    try:
+        backend.resolve_adapter(DECISION_CAPABILITY)
+    except (ValueError, KeyError) as e:
+        raise ValueError(
+            f"No decision capability ({DECISION_CAPABILITY!r}) is registered "
+            "on this backend. Serve a Granite Switch checkpoint that embeds "
+            "the decision adapter function via vLLM (with --max-logprobs 20) "
+            "and register the model's embedded adapter functions. "
+            f"Underlying error: {e}"
+        ) from e
 
 
 def _state_text_for_log(state: object) -> str:
@@ -411,9 +440,11 @@ def _decide_raw(
         question: The fixed-answer question.
         descriptions: Per-option descriptions, in call order (for `decide`,
             ordered `[false, true]`).
-        model_options: Optional model-option overrides. `temperature` is
-            caller-tunable (default 0.0); decision-critical settings are
-            pinned by the capability contract and conflicts raise.
+        model_options: Optional model-option overrides. Every
+            decision-critical setting, including `temperature` (pinned
+            to 0.0), is fixed by the capability contract and a conflict
+            raises. The backend's own `model_options` are checked the same
+            way.
 
     Returns:
         The raw decision: per-label probabilities over the used labels
@@ -430,6 +461,7 @@ def _decide_raw(
             (truncation/server-cap; an operations problem); or when the
             answer distribution did not concentrate on the options
             (a model/layout problem).
+        TypeError: When `state` is a `Context` other than a `ChatContext`.
         AdapterSchemaMismatchError: When the readout output does not match
             the capability's contract.
         AloraActivationError: When the invocation marker does not occur
@@ -444,15 +476,23 @@ def _decide_raw(
             "maximum from the model team."
         )
     _reject_conflicting_options(model_options)
-    # Re-assert the one-token pin as a per-call option: per-call options
-    # outrank backend-level defaults in every later merge, so a backend
-    # constructed with its own MAX_NEW_TOKENS cannot silently replace the
-    # readout's max_completion_tokens=1 (the conflict check above only sees
-    # caller-supplied options).
+    # The backend's own construction-time options reach the request too, so
+    # check them against the same pins. Mocks and third-party backends may
+    # not carry a plain dict.
+    backend_options = getattr(backend, "model_options", None)
+    if isinstance(backend_options, dict):
+        _reject_conflicting_options(
+            backend_options, source="the backend's model_options"
+        )
+    # Re-assert the one-token and greedy pins as per-call options: per-call
+    # options outrank backend-level defaults in every later merge, so a
+    # backend constructed with its own MAX_NEW_TOKENS or TEMPERATURE cannot
+    # silently replace them.
     forced_options = dict(model_options) if model_options else {}
     forced_options[ModelOption.MAX_NEW_TOKENS] = 1
+    forced_options[ModelOption.TEMPERATURE] = _PINNED_TEMPERATURE
 
-    capability = _resolve_capability(backend)
+    _require_capability(backend)
     labels = _LABEL_POOL[: len(descriptions)]
     kwargs: dict[str, object] = {
         "question": question,
@@ -461,6 +501,12 @@ def _decide_raw(
     if isinstance(state, ChatContext):
         _reject_context_tools(state)
         call_context = state
+    elif isinstance(state, Context):
+        raise TypeError(
+            f"A decision state must be plain data or a ChatContext, got "
+            f"{type(state).__name__}. Pass a ChatContext for conversational "
+            "state."
+        )
     else:
         kwargs["state"] = state
         call_context = ChatContext()
@@ -468,7 +514,7 @@ def _decide_raw(
     state_log_text = _state_text_for_log(state)
     started = time.monotonic()
     result, thunk = _call_intrinsic_raw(
-        capability,
+        DECISION_CAPABILITY,
         call_context,
         backend,
         kwargs=kwargs,
@@ -568,7 +614,7 @@ def _decide_raw(
         label_mass=label_mass,
         missing_labels=missing_labels,
         token=str(result["token"]),
-        capability=capability,
+        capability=DECISION_CAPABILITY,
         model=model,
         latency_ms=latency_ms,
         thunk=thunk,
@@ -642,11 +688,11 @@ def decide(
 
     The predicate form of a decision: the answer is a probability you
     threshold. Ordering operators delegate to `.probability`, so
-    `if decisions.decide(ticket, backend, "...") >= 0.7:` reads naturally;
-    `temperature` is caller-tunable (default 0.0; it has no effect on
-    the returned answer, only on the sampled token shown in the log)
-    and all other decision-critical settings are pinned by the
-    capability contract.
+    `if decisions.decide(ticket, backend, "...") >= 0.7:` reads naturally.
+    Decoding is pinned to greedy (`temperature=0.0`) along with every
+    other decision-critical setting. On `LocalHFBackend` the probabilities
+    come from the raw logits at the label token ids, so generation options
+    cannot move them.
 
     Args:
         state: The thing being judged; a string, a dict/list (rendered
@@ -656,16 +702,15 @@ def decide(
             state turn is rendered for it). A multi-turn context
             diverges from the trained single-state-turn layout.
         backend: A backend serving a Granite Switch model with the decision
-            capability (either alias name).
+            capability.
         question: The yes/no question, in plain English.
         true: Optional description of what "true" means for your domain
             (reference default: `"Yes / true"`).
         false: Optional description of what "false" means for your domain
             (reference default: `"No / false"`).
-        model_options: Optional model-option overrides (`temperature`
-            only; it has no effect on the returned answer, only on the
-            sampled token shown in the log. Conflicts with pinned
-            readout settings raise).
+        model_options: Optional model-option overrides. All
+            decision-critical settings, including `temperature`, are
+            pinned and a conflict raises.
 
     Returns:
         PredicateAnswer with `.probability` (P(true), unrounded) and
@@ -677,6 +722,7 @@ def decide(
             registered on the backend; when the answer distribution did
             not concentrate on the options; or when labels were not
             returned beyond the missing-label bound.
+        TypeError: When `state` is a `Context` other than a `ChatContext`.
         AdapterSchemaMismatchError: When the readout output does not match
             the capability's contract.
         AloraActivationError: When the invocation marker does not occur
@@ -722,13 +768,12 @@ def choose(
             state turn is rendered for it). A multi-turn context
             diverges from the trained single-state-turn layout.
         backend: A backend serving a Granite Switch model with the decision
-            capability (either alias name).
+            capability.
         question: The question, in plain English.
         options: Mapping of option key to description, with 2-10 entries.
-        model_options: Optional model-option overrides (`temperature`
-            only; it has no effect on the returned answer, only on the
-            sampled token shown in the log. Conflicts with pinned
-            readout settings raise).
+        model_options: Optional model-option overrides. All
+            decision-critical settings, including `temperature`, are
+            pinned and a conflict raises.
 
     Returns:
         ChoiceAnswer with `.choice` (best option key), `.probabilities`
@@ -742,6 +787,7 @@ def choose(
             when the answer distribution did not concentrate on the
             options; or when labels were not returned beyond the
             missing-label bound.
+        TypeError: When `state` is a `Context` other than a `ChatContext`.
         AdapterSchemaMismatchError: When the readout output does not match
             the capability's contract.
         AloraActivationError: When the invocation marker does not occur
@@ -795,13 +841,12 @@ def score(
             state turn is rendered for it). A multi-turn context
             diverges from the trained single-state-turn layout.
         backend: A backend serving a Granite Switch model with the decision
-            capability (either alias name).
+            capability.
         question: The question, in plain English.
         levels: Level descriptions, low to high, with 2-10 entries.
-        model_options: Optional model-option overrides (`temperature`
-            only; it has no effect on the returned answer, only on the
-            sampled token shown in the log. Conflicts with pinned
-            readout settings raise).
+        model_options: Optional model-option overrides. All
+            decision-critical settings, including `temperature`, are
+            pinned and a conflict raises.
 
     Returns:
         ScoreAnswer with `.score` (expected level in `[0, K-1]`, unrounded,
@@ -817,6 +862,7 @@ def score(
             when the answer distribution did not concentrate on the
             options; or when labels were not returned beyond the
             missing-label bound.
+        TypeError: When `state` is a `Context` other than a `ChatContext`.
         AdapterSchemaMismatchError: When the readout output does not match
             the capability's contract.
         AloraActivationError: When the invocation marker does not occur

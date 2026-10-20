@@ -34,6 +34,7 @@ from ...formatters.granite import intrinsics as intrinsics
 from ...helpers.event_loop_helper import _run_async_in_thread
 from ...plugins.manager import has_plugins, invoke_hook
 from ...plugins.types import HookType
+from ..model_options import ModelOption
 from ._core import (
     Adapter as _AdapterCore,
     AdapterSchemaMismatchError,
@@ -42,7 +43,7 @@ from ._core import (
     LocalFileBinding,
     WeightsBinding,
 )
-from .capabilities import DECIDER_CAPABILITY_NAMES
+from .capabilities import DECISION_CAPABILITY
 from .catalog import AdapterType, fetch_intrinsic_metadata, known_intrinsic_names
 from .io_contracts import get_io_contract
 
@@ -325,7 +326,7 @@ def _composed_adapter_key(adapter: "_AdapterCore") -> str:
     return f"{adapter.identity.name}_{adapter.identity.adapter_type}"
 
 
-_DECIDER_CAPABILITY_NAMES = DECIDER_CAPABILITY_NAMES
+_DECISION_CAPABILITY = DECISION_CAPABILITY
 """Capability name of the one-token decision capability (see `capabilities.py`)."""
 
 _DECIDER_CONFIG_FIELDS = (
@@ -618,9 +619,9 @@ def _apply_carried_decider_config(
         tuple[dict | None, str | None]: The configuration to register and
         None, or None and the skip reason when the merged config is
         invalid. The input config and None, unchanged, for any capability
-        outside the decision set.
+        other than the decision capability.
     """
-    if name not in _DECIDER_CAPABILITY_NAMES:
+    if name != _DECISION_CAPABILITY:
         return config, None
 
     logger = MelleaLogger.get_logger()
@@ -648,7 +649,42 @@ def _apply_carried_decider_config(
             )
 
     published_parameters = config.get("parameters") or {}
-    merged["parameters"] = {**carried["parameters"], **published_parameters}
+    merged_parameters = {**carried["parameters"], **published_parameters}
+    # `extra_body` is a nested dict: a shallow merge would let a published
+    # `extra_body` replace the carried one wholesale and silently drop
+    # `chat_template_kwargs.enable_thinking`. Published wins per key.
+    published_extra_body = published_parameters.get("extra_body")
+    if published_extra_body is None:
+        # An explicit `extra_body: null` means "nothing published", not "clear
+        # the carried pin": the flat merge above would otherwise store None.
+        merged_parameters["extra_body"] = carried["parameters"]["extra_body"]
+    elif isinstance(published_extra_body, dict):
+        try:
+            merged_parameters["extra_body"] = ModelOption.merge_extra_body(
+                carried["parameters"]["extra_body"], published_extra_body
+            )
+        except TypeError as exc:
+            reason = f"published parameters.extra_body is malformed: {exc}"
+            logger.error(
+                "Adapter function '%s' (decision capability) not registered: "
+                "%s. Other adapters from this source are unaffected.",
+                name,
+                reason,
+            )
+            return None, reason
+    else:
+        reason = (
+            "published parameters.extra_body must be a mapping, got "
+            f"{type(published_extra_body).__name__}"
+        )
+        logger.error(
+            "Adapter function '%s' (decision capability) not registered: %s. "
+            "Other adapters from this source are unaffected.",
+            name,
+            reason,
+        )
+        return None, reason
+    merged["parameters"] = merged_parameters
     if carried_fields_used:
         merged["provenance"] = (
             f"{_CARRIED_DECIDER_PROVENANCE}; carried fields applied: "
@@ -736,7 +772,7 @@ def _discover_embedded_adapters(
             assert invalid_reason is not None
             skip_reasons[shim.identity.name] = invalid_reason
             continue
-        if shim.identity.name in _DECIDER_CAPABILITY_NAMES and isinstance(
+        if shim.identity.name == _DECISION_CAPABILITY and isinstance(
             config.get("invocation_text"), str
         ):
             merged_invocation_text = config["invocation_text"]
@@ -1329,7 +1365,9 @@ class AdapterMixin(Backend, abc.ABC):
                 # for a third-party AdapterMixin subclass whose add_adapter
                 # predates config= (see that method's docstring).
                 discovered, skip_reasons = _discover_embedded_adapters(
-                    repo_id, intrinsic_name=name
+                    repo_id,
+                    revision=getattr(self, "_adapter_revision", "main"),
+                    intrinsic_name=name,
                 )
                 if skip_reasons:
                     self._adapter_skip_reasons = {

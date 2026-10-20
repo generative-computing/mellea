@@ -213,15 +213,21 @@ sev.probabilities   # {"0": 0.05, "1": 0.20, "2": 0.75}
 ```
 
 `state` (the first argument) is the thing being judged: a string, a dict or
-list (rendered as JSON), or a `ChatContext` for conversational state — a
+list (rendered as JSON), or a `ChatContext` for conversational state. A
 `ChatContext` forwards its own messages as the state (no separate state turn
-is rendered for it). All three helpers take `model_options`;
-`temperature` is caller-tunable (default 0.0; it has no effect on the
-returned answer, only on the sampled token shown in the log), while
-decision-critical settings (`max_completion_tokens=1`, logprobs, the
-sized `top_logprobs`, no streaming) are pinned by the capability
-contract — a conflicting caller option raises rather than silently
-breaking the readout. `choose` takes 2-10 options and `score` 2-10
+is rendered for it); any other `Context` type raises a `TypeError`.
+All three helpers take `model_options`, but every decision-critical
+setting (`max_completion_tokens=1`, greedy `temperature=0.0`, `top_p` and
+`top_k`, logprobs, the sized `top_logprobs`, no streaming) is pinned by
+the capability contract. Logit-shaping options (`logit_bias`, the
+frequency, presence and repetition penalties, a custom `logits_processor`)
+are rejected too. A conflicting option raises rather than silently
+breaking the readout, whether it is passed per call or set on the backend.
+On `LocalHFBackend` the label probabilities are read from the raw
+logits at the label token ids, so no generation option can move them. The
+probabilities are the model's own and are not calibrated against ground
+truth; fit a calibration on labelled data before acting on a threshold.
+`choose` takes 2-10 options and `score` 2-10
 levels. When serving with vLLM, do not enable
 `--logprobs-mode processed_logprobs`; the decision readout expects
 raw logprobs, and applying temperature before returning them would

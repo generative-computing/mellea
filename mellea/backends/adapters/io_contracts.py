@@ -34,7 +34,7 @@ from ._core import (
     _DictContract,
     _ListContract,
 )
-from .capabilities import DECIDER_CAPABILITY_NAMES
+from .capabilities import DECISION_CAPABILITY
 from .catalog import known_intrinsic_names
 
 
@@ -336,10 +336,9 @@ _INTRINSIC_IO_CONTRACTS: dict[str, IOContract] = {
         ),
     ),
 }
-# The decision capability carries its contract derived from the canonical
-# set (capabilities.py).
-for _decision_name in DECIDER_CAPABILITY_NAMES:
-    _INTRINSIC_IO_CONTRACTS[_decision_name] = _DecisionContract()
+# The decision capability's contract, keyed by the canonical name
+# (capabilities.py).
+_INTRINSIC_IO_CONTRACTS[DECISION_CAPABILITY] = _DecisionContract()
 # Canonical output contract for every built-in adapter function, keyed by its
 # catalog `name` (see module docstring). Capture the built-in names before
 # `CustomIntrinsicAdapter` can extend the global catalogue at runtime, then keep

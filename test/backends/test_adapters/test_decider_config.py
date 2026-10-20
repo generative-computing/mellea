@@ -12,6 +12,7 @@ capability with a reason), the merge's wiring into
 readout contract under the decision capability name.
 """
 
+import contextlib
 import json
 
 import pytest
@@ -227,6 +228,57 @@ class TestCarriedConfigMerge:
         # Carried-only keys (extra_body) still apply.
         assert merged["parameters"]["extra_body"] == {
             "chat_template_kwargs": {"enable_thinking": False}
+        }
+
+    def test_published_extra_body_is_deep_merged_with_carried(self):
+        """A published extra_body must not drop the carried enable_thinking pin."""
+        published = dict(_PUBLISHED_SHAPE)
+        published["parameters"] = {
+            "max_completion_tokens": 1,
+            "extra_body": {"top_k": 1},
+        }
+        merged = _merge("decision", published)
+        assert merged["parameters"]["extra_body"] == {
+            "top_k": 1,
+            "chat_template_kwargs": {"enable_thinking": False},
+        }
+
+    def test_published_null_extra_body_keeps_carried(self):
+        """`extra_body: null` means nothing published, not clear the carried pin."""
+        published = dict(_PUBLISHED_SHAPE)
+        published["parameters"] = {"max_completion_tokens": 1, "extra_body": None}
+        merged, reason = _apply_carried_decider_config("decision", published)
+        assert reason is None
+        assert merged["parameters"]["extra_body"] == {
+            "chat_template_kwargs": {"enable_thinking": False}
+        }
+
+    @pytest.mark.parametrize(
+        "extra_body", ["not-a-mapping", ["list"], 3], ids=["str", "list", "int"]
+    )
+    def test_published_non_mapping_extra_body_is_skipped_with_reason(self, extra_body):
+        published = dict(_PUBLISHED_SHAPE)
+        published["parameters"] = {"extra_body": extra_body}
+        merged, reason = _apply_carried_decider_config("decision", published)
+        assert merged is None
+        assert "extra_body must be a mapping" in reason
+
+    def test_published_malformed_chat_template_kwargs_is_skipped_with_reason(self):
+        published = dict(_PUBLISHED_SHAPE)
+        published["parameters"] = {"extra_body": {"chat_template_kwargs": "oops"}}
+        merged, reason = _apply_carried_decider_config("decision", published)
+        assert merged is None
+        assert "extra_body is malformed" in reason
+
+    def test_published_chat_template_kwargs_win_per_key(self):
+        published = dict(_PUBLISHED_SHAPE)
+        published["parameters"] = {
+            "extra_body": {"chat_template_kwargs": {"enable_thinking": True, "x": 1}}
+        }
+        merged = _merge("decision", published)
+        assert merged["parameters"]["extra_body"]["chat_template_kwargs"] == {
+            "enable_thinking": True,
+            "x": 1,
         }
 
     def test_no_published_parameters_gets_carried_defaults(self):
@@ -613,3 +665,28 @@ class TestAdapterRevision:
 
         sig = inspect.signature(LocalHFBackend.__init__)
         assert sig.parameters["adapter_revision"].default == "main"
+
+
+class TestLazyResolveRevision:
+    """`resolve_adapter` discovers an embedded adapter at the backend's revision."""
+
+    def test_resolve_adapter_passes_adapter_revision(self):
+        from unittest.mock import MagicMock, patch
+
+        from mellea.backends.adapters.adapter import AdapterMixin
+
+        backend = MagicMock()
+        backend.base_model_name = "ibm-granite/granite-switch-4.1-8b"
+        backend._adapter_resolve_lock.return_value = contextlib.nullcontext()
+        backend._uses_embedded_adapters = True
+        backend._adapter_source = "ibm-granite/granite-switch-4.1-8b"
+        backend._adapter_revision = "abc123"
+        backend._adapter_skip_reasons = {}
+        # Looked up before the lock, again under it, and once after discovery.
+        backend._find_adapter.side_effect = [None, None, MagicMock()]
+        with patch(
+            "mellea.backends.adapters.adapter._discover_embedded_adapters",
+            return_value=([], {}),
+        ) as discover:
+            AdapterMixin.resolve_adapter(backend, "decision")
+        assert discover.call_args.kwargs["revision"] == "abc123"

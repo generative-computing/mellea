@@ -374,6 +374,29 @@ def _compute_generate_kwargs_allowlist() -> frozenset[str]:
 
 
 _GENERATE_KWARGS_ALLOWLIST: frozenset[str] = _compute_generate_kwargs_allowlist()
+
+
+def _single_token_label_ids(
+    tokenizer: PreTrainedTokenizerBase, labels: list[str]
+) -> list[int]:
+    """Token ids of one-token decision labels.
+
+    Raises:
+        ValueError: A label does not encode to exactly one token, so a
+            one-token readout cannot represent it.
+    """
+    ids = []
+    for label in labels:
+        encoded = tokenizer(label, add_special_tokens=False)["input_ids"]
+        if len(encoded) != 1:
+            raise ValueError(
+                f"Decision label {label!r} encodes to {len(encoded)} tokens "
+                f"({encoded}); a one-token readout needs single-token labels."
+            )
+        ids.append(encoded[0])
+    return ids
+
+
 _SWITCH_TRANSFORMERS_WARNING_EMITTED = False
 
 
@@ -1526,6 +1549,29 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         if "stop_strings" in user_params and "tokenizer" not in user_params:
             user_params["tokenizer"] = self._tokenizer
         generate_input.update(user_params)
+
+        first_token_labels = intrinsics.input._first_token_labels(
+            intrinsic_config.get("transformations")
+        )
+        if first_token_labels is not None:
+            # One-token readouts must see the model's own next-token
+            # distribution: raw LM-head logits, not processor-adjusted scores,
+            # so no generate() option (penalties, bad words, sampling warpers)
+            # can move the label probabilities. Every label is read exactly,
+            # so the top-K cut cannot hide one.
+            if "logits_processor" in generate_input:
+                # generate() records the raw logits after the processors run,
+                # so a processor that edits its input in place would still
+                # reach the readout.
+                raise ValueError(
+                    "A one-token decision readout cannot take a custom "
+                    "logits_processor: it would alter the label probabilities."
+                )
+            generate_input["output_logits"] = True
+            other_input["raw_logprobs"] = True
+            other_input["logprob_token_ids"] = _single_token_label_ids(
+                self._tokenizer, first_token_labels
+            )
 
         want_scores = bool(
             model_options.get(ModelOption.LOGITS)
