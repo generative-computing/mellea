@@ -2914,36 +2914,12 @@ docker = [
 ]
 
 [[package]]
-name = "llmon"
-version = "0.0.1"
-source = { editable = "../llmon" }
-
-[package.metadata]
-requires-dist = [
-    { name = "huggingface-hub", marker = "extra == 'unstructured-text'", specifier = ">=0.23" },
-    { name = "mypy", marker = "extra == 'dev'" },
-    { name = "mypy-extensions", marker = "extra == 'dev'" },
-    { name = "pdm", marker = "extra == 'dev'", specifier = ">=2.24.0" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0" },
-    { name = "sphinx-autodoc-typehints", marker = "extra == 'sphinx'" },
-    { name = "sphinx-mdinclude", marker = "extra == 'sphinx'" },
-    { name = "sphinx-rtd-theme", marker = "extra == 'sphinx'" },
-    { name = "torch", marker = "extra == 'unstructured-text'", specifier = ">=2.1" },
-    { name = "transformers", marker = "extra == 'unstructured-text'", specifier = ">=4.48" },
-]
-provides-extras = ["unstructured-text", "dev", "sphinx"]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "mypy" },
-    { name = "mypy-extensions" },
-    { name = "pdm", specifier = ">=2.24.0" },
-    { name = "pytest", specifier = ">=7.0" },
-]
-sphinx = [
-    { name = "sphinx-autodoc-typehints" },
-    { name = "sphinx-mdinclude" },
-    { name = "sphinx-rtd-theme" },
+name = "llmon-core"
+version = "0.0.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/97/d9/619c28070a3bc874dd131877211a19ad7f428d55ba321fa4db929a057039/llmon_core-0.0.2.tar.gz", hash = "sha256:52236f7a37047bfbb80b170b563e7dd31cc317611c11d0c50293a552c52c338a", size = 340622, upload-time = "2026-10-19T22:00:02.434Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/4b/61/fe764aa09c8f3aafb652b89f23f9ad1f2fc34e3b349234a80d82061ee86d/llmon_core-0.0.2-py3-none-any.whl", hash = "sha256:d5e735ada5fb12e63098953ab0f660fd3baf4f86a08267b387b810f5d03a7a51", size = 443397, upload-time = "2026-10-19T22:00:00.146Z" },
 ]
 
 [[package]]
@@ -3288,7 +3264,7 @@ all = [
     { name = "litellm" },
     { name = "llguidance" },
     { name = "llm-sandbox", extra = ["docker"] },
-    { name = "llmon" },
+    { name = "llmon-core" },
     { name = "mcp" },
     { name = "omegaconf" },
     { name = "opencv-python-headless" },
@@ -3353,7 +3329,7 @@ litellm = [
     { name = "litellm" },
 ]
 llmon = [
-    { name = "llmon" },
+    { name = "llmon-core" },
 ]
 sandbox = [
     { name = "llm-sandbox", extra = ["docker"] },
@@ -3473,7 +3449,7 @@ requires-dist = [
     { name = "litellm", marker = "extra == 'litellm'", specifier = ">=1.95.0" },
     { name = "llguidance", marker = "extra == 'hf'" },
     { name = "llm-sandbox", extras = ["docker"], marker = "extra == 'sandbox'", specifier = ">=0.3.23" },
-    { name = "llmon", marker = "extra == 'llmon'", editable = "../llmon" },
+    { name = "llmon-core", marker = "extra == 'llmon'" },
     { name = "math-verify" },
     { name = "mcp", marker = "extra == 'tools'", specifier = ">=1.27.0" },
     { name = "mellea", extras = ["backends", "docling", "tools", "telemetry", "server", "sandbox", "switch", "granite-retriever", "hooks", "cli", "llmon"], marker = "extra == 'all'", editable = "." },

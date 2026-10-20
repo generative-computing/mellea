@@ -111,7 +111,7 @@ switch = [
 # LLMON (LLM Object Notation, arXiv:2603.22519) prompt rendering and reply parsing,
 # used by `LLMONFormatter` (see mellea/formatters/llmon_formatter.py).
 llmon = [
-    "llmon",
+    "llmon-core",
 ]
 
 backends = ["mellea[watsonx,hf,litellm]"]
@@ -464,6 +464,3 @@ override-dependencies = ["transformers>5.5.0,<6.0.0"]
 
 [tool.uv.sources]
 mellea = { workspace = true }
-# LLMON converter library. Pinned to a local sibling checkout for development;
-# replace with a published index or git URL before shipping beyond dev.
-llmon = { path = "../llmon", editable = true }
