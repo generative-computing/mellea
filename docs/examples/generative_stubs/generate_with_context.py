@@ -1,14 +1,18 @@
 # pytest: ollama, e2e
+"""Generative stubs with session context and role modification.
+
+Demonstrates using generative stubs within a session containing `ChatContext`,
+showing how injecting context blocks (such as personas) modifies the behavior
+and evaluation style of multiple generative functions without changing their signatures.
+
+Usage:
+    uv run python docs/examples/generative_stubs/generate_with_context.py
+"""
 
 from mellea import generative, start_session
 from mellea.backends import ModelOption
 from mellea.core import CBlock
 from mellea.stdlib.context import ChatContext
-
-# Generative stubs can be used with sessions that have context.
-# By utilizing context, you can change the results of several
-# functions at the same time. This lets you write a function
-# once but use it in different ways.
 
 
 @generative

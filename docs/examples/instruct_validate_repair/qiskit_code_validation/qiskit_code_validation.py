@@ -5,25 +5,14 @@
 #   "flake8-qiskit-migration",
 # ]
 # ///
-"""Qiskit Code Validation with Instruct-Validate-Repair Pattern.
+"""Qiskit code validation with Instruct-Validate-Repair pattern.
 
-This example demonstrates using Mellea's Instruct-Validate-Repair (IVR) pattern
-to generate Qiskit quantum computing code that automatically passes
-flake8-qiskit-migration validation rules (QKT rules).
+Demonstrates using Mellea's Instruct-Validate-Repair (IVR) pattern to generate
+Qiskit quantum computing code that automatically passes `flake8-qiskit-migration`
+validation rules (QKT rules).
 
-The pipeline follows these steps:
-1. **Pre-condition validation**: Validate prompt content and any input code
-2. **Instruction**: LLM generates code following structured requirements
-3. **Post-condition validation**: Validate generated code against QKT rules
-4. **Repair loop**: Automatically repair code that fails validation (up to 10 attempts)
-
-Requirements:
-    - flake8-qiskit-migration: Installed automatically when run via `uv run`
-    - Ollama backend running with a compatible model (e.g., mistral-small-3.2-24b-qiskit-GGUF)
-
-Example:
-    Run as a standalone script (dependencies installed automatically):
-        $ uv run docs/examples/instruct_validate_repair/qiskit_code_validation/qiskit_code_validation.py
+Usage:
+    uv run docs/examples/instruct_validate_repair/qiskit_code_validation/qiskit_code_validation.py
 """
 
 import time

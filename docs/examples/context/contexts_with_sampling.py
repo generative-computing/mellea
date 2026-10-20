@@ -1,10 +1,15 @@
 # pytest: ollama, e2e
+"""Inspecting context trees and validation contexts from sampling results.
+
+Demonstrates retrieving and inspecting generation contexts, validation contexts,
+and parent context trees across multiple rejection sampling attempts.
+
+Usage:
+    uv run python docs/examples/context/contexts_with_sampling.py
+"""
 
 from mellea.stdlib.sampling import RejectionSamplingStrategy
 from mellea.stdlib.session import start_session
-
-# You can retrieve context information when using SamplingStrategies
-# and validation.
 
 m = start_session()
 
