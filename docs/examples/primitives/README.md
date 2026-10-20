@@ -1,6 +1,6 @@
 # Primitives Examples
 
-Low-level functional primitives for fine-grained control over tool execution, context management, and plugin hooks without high-level session abstractions.
+Low-level functional primitives for fine-grained control over tool execution, context management, and plugin hooks.
 
 ## Examples
 
