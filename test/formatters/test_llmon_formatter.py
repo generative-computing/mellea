@@ -4,7 +4,7 @@
 """Unit tests for `LLMONFormatter`: messages for the LLMON chat template.
 
 An instruction's parts and a user message's documents are sent as the granite LLMON
-preview models' chat template fields, which each message declares in its
+models' chat template fields, which each message declares in its
 `provider_fields` for the HuggingFace backend; every turn's text is its content.
 Expected sanitized text is built with the `llmon` library's own `sanitize`, so these
 tests pin down what is sanitized rather than how the library spells it.
@@ -73,7 +73,7 @@ def _thunk(value: str, parsed_repr: object) -> ModelOutputThunk:
 
 @pytest.fixture
 def formatter() -> LLMONFormatter:
-    return LLMONFormatter("llmon95:latest")
+    return LLMONFormatter("ibm-granite/granite-4.1-3b-llmon-preview")
 
 
 class _Lookup(Component[str]):
@@ -444,11 +444,10 @@ class TestDefaultFormatter:
         for model_id in (
             "ibm-granite/granite-4.1-3b-llmon-preview",
             "ibm-granite/granite-4.1-8b-llmon-preview",
-            "llmon95:latest",
         ):
             assert isinstance(default_formatter(model_id), LLMONFormatter)
         assert isinstance(
-            default_formatter(ModelIdentifier(ollama_name="llmon95:latest")),
+            default_formatter(ModelIdentifier(ollama_name="ibm-granite/granite-4.1-3b-llmon-preview")),
             LLMONFormatter,
         )
         assert isinstance(default_formatter("granite4:micro"), TemplateFormatter)

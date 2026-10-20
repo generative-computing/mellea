@@ -554,7 +554,7 @@ LLM Object Notation ([arXiv:2603.22519](https://arxiv.org/abs/2603.22519)), an
 LLM-native markup that marks a prompt up with special-token blocks, so a model
 trained on it can tell what it should do (`instr`) from what it should only read
 (`data`, `doc`) and what its answer must satisfy (`req`). Mellea sends components
-to the granite LLMON preview models with `LLMONFormatter`, which fills the message
+to the granite LLMON models with `LLMONFormatter`, which fills the message
 fields their chat template turns into LLMON. Only `LocalHFBackend` supports it.
 
 See: [LLMON](../concepts/llmon.md)

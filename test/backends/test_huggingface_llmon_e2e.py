@@ -1,7 +1,7 @@
 # Copyright IBM Corp. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""E2E tests on a granite LLMON preview model with `LocalHFBackend`.
+"""E2E tests on a granite LLMON model with `LocalHFBackend`.
 
 The model's chat template writes each turn into its own LLMON blocks. An
 instruction's grounding context and requirements are sent as the template's message
@@ -15,8 +15,7 @@ calls a tool, Mellea parses the call and runs the tool, the result goes back, an
 the model answers from it. Each test's answer has to contain a made-up code the
 model cannot know, so an answer that contains it came from what Mellea sent.
 
-`LocalHFBackend` is the only backend that supports LLMON; the unit tests in
-`test/backends/test_formatter_output_unit.py` check that the others raise, and those
+`LocalHFBackend` is the only backend that supports LLMON; those
 in `test/formatters/test_llmon_formatter.py` cover the messages Mellea builds.
 """
 
@@ -59,7 +58,7 @@ _BLOCK = r"<\|open\|>{tag}<\|:\|>[^<]+<\|close\|>{text}<\|open_end\|>"
 
 @pytest.fixture(scope="module")
 def backend():
-    """Shared LLMON preview model for all tests in this module."""
+    """Shared LLMON model for all tests in this module."""
     with hf_skip():
         backend = LocalHFBackend(
             model_id=_MODEL_ID, formatter=LLMONFormatter(_MODEL_ID)

@@ -74,7 +74,7 @@ IMPORTS: dict[str, list[str]] = {
     ],
     # LLMONFormatter imports the `llmon` library when constructed, not on import.
     "llmon": [
-        'from mellea.formatters import LLMONFormatter; LLMONFormatter("llmon95:latest")'
+        'from mellea.formatters import LLMONFormatter; LLMONFormatter("ibm-granite/granite-4.1-3b-llmon-preview")'
     ],
 }
 

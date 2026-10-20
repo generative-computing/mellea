@@ -81,7 +81,6 @@ class TestOtherBackends:
         "model_id",
         [
             "ibm-granite/granite-4.1-3b-llmon-preview",
-            "llmon95:latest",
             # The preview model as a vLLM server serves it, under its HF name.
             ModelIdentifier(
                 hf_model_name="ibm-granite/granite-4.1-3b-llmon-preview",
@@ -122,7 +121,7 @@ async def test_called_tool_output_is_sent_as_plain_text():
     )
     (message,) = await acall_tools(
         ModelOutputThunk("", tool_calls=[call]),
-        _StubBackend(LLMONFormatter("llmon95:latest")),
+        _StubBackend(LLMONFormatter("ibm-granite/granite-4.1-3b-llmon-preview")),
     )
     assert message.role == "tool"
     assert message.content == "248171"
@@ -145,7 +144,7 @@ def test_tool_call_written_in_the_reply_round_trips_as_tool_calls():
 
     mot = ModelOutputThunk(call, tool_calls=calls)
     mot.parsed_repr = Message("assistant", call)
-    (sent,) = LLMONFormatter("llmon95:latest").to_chat_messages([mot])
+    (sent,) = LLMONFormatter("ibm-granite/granite-4.1-3b-llmon-preview").to_chat_messages([mot])
     assert sent.content == ""
     assert sent.tool_calls is not None
     assert sent.tool_calls[0]["function"]["name"] == "calculator"

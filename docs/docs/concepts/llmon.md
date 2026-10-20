@@ -15,7 +15,7 @@ into LLMON.
 
 ## Where the LLMONizing happens
 
-The granite LLMON preview models (`ibm-granite/granite-4.1-3b-llmon-preview` and
+The granite LLMON models (`ibm-granite/granite-4.1-3b-llmon-preview` and
 `ibm-granite/granite-4.1-8b-llmon-preview`) LLMONize in their **chat template**. It
 writes the blocks, their ids, and the `exec` block that tells the model what to act
 on, all from the fields of each chat message. `LLMONFormatter` fills those fields
@@ -55,7 +55,7 @@ print(result.value)  # Plain text, never LLMON markup.
 ```
 
 `LocalHFBackend` chooses `LLMONFormatter` automatically for a registered LLMON
-model, which both granite LLMON preview models are, so `formatter=` above can be
+model, which both granite LLMON models are, so `formatter=` above can be
 left out. A model that is neither registered nor given an `LLMONFormatter` is
 unaffected: it gets the usual `TemplateFormatter` prose.
 
@@ -122,7 +122,7 @@ with these fields:
 }
 ```
 
-The granite LLMON preview models' chat template renders that message as follows
+The granite LLMON models' chat template renders that message as follows
 (the template draws each `ID` at random; newlines added for readability):
 
 ```text

@@ -2,7 +2,7 @@
 
 """Example: `m.instruct` against an LLMON-trained model with `LocalHFBackend`.
 
-The granite LLMON preview models write LLMON in their chat template, from message
+The granite LLMON models write LLMON in their chat template, from message
 fields that only `LocalHFBackend` passes on, so LLMON runs on that backend alone:
 other backends raise `ValueError` for an LLMON model. Because the model is a
 registered LLMON model, `LocalHFBackend` renders with `LLMONFormatter` by default:
