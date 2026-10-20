@@ -1,4 +1,12 @@
 # pytest: ollama, e2e, qualitative
+"""ReACT agent using instruct-validate-repair.
+
+Demonstrates implementing the ReACT (Reasoning and Acting) loop using Mellea's
+instruct-validate-repair paradigm for robust tool calling and reasoning.
+
+Usage:
+    uv run python docs/examples/agents/react/react_from_scratch/react_instruct.py
+"""
 
 import datetime
 import inspect

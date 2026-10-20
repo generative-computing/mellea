@@ -1,21 +1,12 @@
 # pytest: e2e, qualitative, ollama
-"""Example demonstrating python_plotting_sampling() preset.
+"""Matplotlib plotting sampling preset with headless validation.
 
-Shows how the plotting preset bundles Python code generation requirements with
-matplotlib-specific constraints for headless rendering and file output validation.
+Demonstrates python_plotting_sampling(), which bundles Python code generation
+requirements with headless matplotlib backend configuration, savefig() output
+validation, and execution sandboxing.
 
-The preset validates:
-1. Python code extraction and syntax
-2. Matplotlib headless backend configuration (matplotlib.use('Agg'))
-3. Plot file output (savefig() call with expected path)
-4. Code execution with sandbox isolation (enabled by default)
-5. Import restrictions and output size limits
-
-Plotting typically requires more repair iterations and stricter sandboxing than
-general code generation, which this preset reflects in its defaults:
-- loop_budget=3 (vs. 2 for code generation)
-- use_sandbox=True (vs. False for code generation)
-- timeout_seconds=10 (vs. 5 for code generation)
+Usage:
+    uv run python docs/examples/sampling/python_plotting_preset.py
 """
 
 import tempfile
