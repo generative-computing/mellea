@@ -33,6 +33,7 @@ one is published (see the design doc's model-team ask).
 """
 
 import logging
+import math
 import os
 import re
 import statistics
@@ -143,7 +144,11 @@ class TestActivationProbe:
     """The deployment-time guard for the serving template's adapter-map miss."""
 
     def test_objectively_verifiable_case(self, backend, caplog):
-        """An obvious semantic case: an unactivated base model is position-biased."""
+        """A clear semantic case reads sensibly and concentrates on the labels.
+
+        This does not detect a missing adapter: on the 8b the unactivated base
+        model answers this case the same way. See `test_activation_changes_the_readout`.
+        """
         with caplog.at_level(logging.INFO):
             answer = decisions.decide(
                 "The ticket says: the server is on fire and customers cannot pay.",
@@ -156,8 +161,8 @@ class TestActivationProbe:
     def test_order_swap_consistency_on_choose(self, backend):
         """The same option must win regardless of presentation order.
 
-        An unactivated base model exhibits position bias (prefers the first
-        label); the activated adapter judges the option descriptions.
+        A consistency check on the readout. It does not detect a missing
+        adapter: the unactivated 8b is also order-consistent on this case.
         Deliberately not run on `decide`: swapping its options inverts the
         trained [false, true] order, where a gap is expected.
         """
@@ -174,6 +179,91 @@ class TestActivationProbe:
             {k: _REFERENCE_OPTIONS[k] for k in reversed(list(_REFERENCE_OPTIONS))},
         )
         assert forward.choice == swapped.choice
+
+    def test_activation_changes_the_readout(self, backend):
+        """Replay Mellea's own request with and without `adapter_name`.
+
+        A missing adapter-map entry, or a template that drops the control
+        token, makes the served model answer as the plain base model. On the
+        8b the base model is near one-hot on every case here (top label at
+        0.998 or higher), while the adapter gives real distributions, so the
+        two replays must differ clearly on at least one case. If activation
+        is lost, the request Mellea sent carries no adapter name, both
+        replays are the same request, and the difference collapses to batch
+        noise (about 0.04).
+        """
+        import copy
+
+        import requests
+        from openai.resources.chat.completions import AsyncCompletions
+
+        cases = [
+            lambda: decisions.decide(
+                "Payment page loads slowly for a few users.",
+                backend,
+                "Does this ticket describe a payment system outage?",
+            ),
+            lambda: decisions.decide(
+                "The server is on fire and customers cannot pay.",
+                backend,
+                "Does this ticket describe a payment system outage?",
+            ),
+            lambda: decisions.score(
+                "Production database is down for all customers.",
+                backend,
+                "How severe is this incident?",
+                {"0": "cosmetic", "1": "minor", "2": "major", "3": "critical"},
+            ),
+        ]
+        labels = "ABCDEFGHIJ"
+
+        def readout(payload: dict) -> dict[str, float]:
+            resp = requests.post(
+                f"{_BASE_URL}/chat/completions",
+                json=payload,
+                headers={"Authorization": f"Bearer {_API_KEY}"},
+                timeout=120,
+            )
+            resp.raise_for_status()
+            top = resp.json()["choices"][0]["logprobs"]["content"][0]["top_logprobs"]
+            mass = {
+                t["token"]: math.exp(t["logprob"]) for t in top if t["token"] in labels
+            }
+            total = sum(mass.values()) or 1.0
+            return {k: v / total for k, v in mass.items()}
+
+        gaps = []
+        for call in cases:
+            sent: dict = {}
+            create = AsyncCompletions.create
+
+            async def spy(self, _create=create, _sent=sent, **kwargs):
+                _sent.update(kwargs)
+                return await _create(self, **kwargs)
+
+            AsyncCompletions.create = spy  # type: ignore[method-assign]
+            try:
+                call()
+            finally:
+                AsyncCompletions.create = create  # type: ignore[method-assign]
+            extra = copy.deepcopy(sent["extra_body"])
+            body = {
+                k: v
+                for k, v in sent.items()
+                if k not in ("extra_body", "tools") and v is not None
+            }
+            as_sent = readout({**body, **extra})
+            stripped_extra = copy.deepcopy(extra)
+            stripped_extra.get("chat_template_kwargs", {}).pop("adapter_name", None)
+            stripped = readout({**body, **stripped_extra})
+            gaps.append(
+                max(abs(as_sent.get(k, 0.0) - stripped.get(k, 0.0)) for k in labels)
+            )
+        assert max(gaps) >= 0.15, (
+            "The readout with the adapter named is indistinguishable from the "
+            f"readout without it (gaps {gaps}); the adapter is probably not "
+            "being activated by the serving template."
+        )
 
 
 class TestReferenceExampleSmoke:

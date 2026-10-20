@@ -710,6 +710,30 @@ def _apply_carried_decider_config(
     return merged, None
 
 
+def _io_config_root(model_path: pathlib.Path) -> pathlib.Path:
+    """Directory an `io_config` file must resolve inside.
+
+    Normally the model directory itself, so a symlink cannot point outside it.
+    A Hugging Face cache snapshot (`<repo>/snapshots/<revision>/`) is the
+    exception: every file in it is a symlink into the sibling `<repo>/blobs/`
+    directory, so the allowed root is the repo's cache directory. Only that
+    exact layout is widened: the parent must be named `snapshots` and a
+    `blobs` directory must sit beside it. This matches the root the hub-id
+    download path already allows.
+
+    Args:
+        model_path: The model directory passed by the caller.
+
+    Returns:
+        The resolved directory that `io_config` files must stay within.
+    """
+    resolved = model_path.resolve()
+    repo_cache = resolved.parent.parent
+    if resolved.parent.name == "snapshots" and (repo_cache / "blobs").is_dir():
+        return repo_cache
+    return resolved
+
+
 def _discover_embedded_adapters(
     source: str,
     *,
@@ -1817,6 +1841,7 @@ class EmbeddedIntrinsicAdapter(_AdapterCore):
         with open(index_path, encoding="utf-8") as f:
             index = _json.load(f)
 
+        allowed_root = _io_config_root(model_path)
         adapters: list[EmbeddedIntrinsicAdapter] = []
         for entry in index.get("adapters", []):
             entry_name = entry.get("adapter_name")
@@ -1836,7 +1861,7 @@ class EmbeddedIntrinsicAdapter(_AdapterCore):
                     f"io.yaml for adapter function '{entry_name}' "
                     f"not found at {model_path / io_config_rel}"
                 )
-            if not io_config_path.is_relative_to(model_path.resolve()):
+            if not io_config_path.is_relative_to(allowed_root):
                 raise ValueError(
                     f"io_config path for adapter function '{entry_name}' "
                     f"escapes the model directory: {io_config_path}"
