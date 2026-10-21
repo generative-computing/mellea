@@ -260,6 +260,10 @@ rates, and tool call health — independent of the underlying LLM provider.
 | `mellea.sampling.successes` | Counter | `{sample}` | Sampling loops that produced a passing sample |
 | `mellea.sampling.failures` | Counter | `{failure}` | Sampling loops that exhausted the loop budget without success |
 
+Both non-streaming sampling (`instruct(..., strategy=...)`) and strategy-driven
+streaming (`stream(..., strategy=...)`) feed these counters; a plain `stream()`
+does not.
+
 All sampling metrics include:
 
 | Attribute | Description | Example Values |

@@ -332,6 +332,8 @@ class StreamingTracingPlugin(Plugin, name="streaming_tracing", priority=1042):
             has_requirements=payload.has_requirements,
             requirement_count=payload.requirement_count,
             chunking_strategy=payload.chunking_strategy,
+            strategy_type=payload.strategy_name,
+            loop_budget=payload.loop_budget,
             attach_context=_CONTEXT_ATTACH_SUPPORTED,
         )
 
@@ -348,6 +350,7 @@ class StreamingTracingPlugin(Plugin, name="streaming_tracing", priority=1042):
             ErrorEvent,
             FullValidationEvent,
             QuickCheckEvent,
+            RetryEvent,
             StreamingDoneEvent,
         )
         from mellea.telemetry.tracing import add_span_event
@@ -358,6 +361,7 @@ class StreamingTracingPlugin(Plugin, name="streaming_tracing", priority=1042):
                 payload.streaming_id,
                 event_name="quick_check",
                 attributes={
+                    "mellea.streaming.iteration": ev.attempt,
                     "mellea.streaming.chunk_index": ev.chunk_index,
                     "mellea.validation.passed": ev.passed,
                     "mellea.validation.requirement_count": len(ev.results),
@@ -368,6 +372,7 @@ class StreamingTracingPlugin(Plugin, name="streaming_tracing", priority=1042):
                 payload.streaming_id,
                 event_name="chunk",
                 attributes={
+                    "mellea.streaming.iteration": ev.attempt,
                     "mellea.streaming.chunk_index": ev.chunk_index,
                     "mellea.streaming.chunk_text_length": len(ev.text),
                 },
@@ -376,15 +381,33 @@ class StreamingTracingPlugin(Plugin, name="streaming_tracing", priority=1042):
             add_span_event(
                 payload.streaming_id,
                 event_name="streaming_done",
-                attributes={"mellea.streaming.full_text_length": len(ev.full_text)},
+                attributes={
+                    "mellea.streaming.iteration": ev.attempt,
+                    "mellea.streaming.full_text_length": len(ev.full_text),
+                },
             )
         elif isinstance(ev, FullValidationEvent):
             add_span_event(
                 payload.streaming_id,
                 event_name="full_validation",
                 attributes={
+                    "mellea.streaming.iteration": ev.attempt,
                     "mellea.validation.passed": ev.passed,
+                    "mellea.validation.valid_count": sum(
+                        1 for v in ev.results if v.as_bool()
+                    ),
                     "mellea.validation.requirement_count": len(ev.results),
+                },
+            )
+        elif isinstance(ev, RetryEvent):
+            add_span_event(
+                payload.streaming_id,
+                event_name="retry",
+                attributes={
+                    "mellea.streaming.iteration": ev.attempt,
+                    "mellea.streaming.failed_early": ev.failed_early,
+                    "mellea.validation.failed_count": ev.failed_count,
+                    "mellea.streaming.failure_reason": ev.reason,
                 },
             )
         elif isinstance(ev, ErrorEvent):
@@ -424,6 +447,7 @@ class StreamingTracingPlugin(Plugin, name="streaming_tracing", priority=1042):
             model=payload.model,
             provider=payload.provider,
             full_text_length=payload.full_text_length,
+            iterations_used=payload.attempts_used,
         )
 
 
