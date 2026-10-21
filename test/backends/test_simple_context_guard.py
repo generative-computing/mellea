@@ -506,15 +506,15 @@ async def test_simple_context_with_whitespace_action_raises_on_hf():
     backend._tokenizer.apply_chat_template.assert_not_called()
 
 
-def test_user_message_with_docs_passes_guard_on_hf():
+async def test_user_message_with_docs_passes_guard_on_hf():
     """P3 passthrough: a user message with documents must NOT raise.
 
     HF rejects images and audio upstream (`_check_no_multimodal_blocks`), so
     documents are the only non-text payload that can reach the guard on this
-    backend. The guard is exercised through `to_chat` directly: past it, the
-    mocked tokenizer/model would take the call into fake generation.
+    backend. Drives the full backend path and asserts the chat template was
+    rendered, so the pass is observed on the generate path rather than
+    inferred from the guard's return value.
     """
-    from mellea.backends.utils import to_chat
     from mellea.core import CBlock
     from mellea.stdlib.components import Message as MelleaMessage
     from mellea.stdlib.context import SimpleContext
@@ -523,22 +523,26 @@ def test_user_message_with_docs_passes_guard_on_hf():
     ctx = SimpleContext().add(CBlock("recorded-only"))
     action = MelleaMessage("user", "", documents=["product spec passage"])
 
-    conversation = to_chat(action, ctx, backend.formatter, None)
+    mot, _ = await backend.generate_from_context(action, ctx)
 
-    assert any(msg["role"] == "user" for msg in conversation), (
-        "User message with documents must pass the guard even when its text "
+    assert backend._tokenizer.apply_chat_template.called, (
+        "User message with documents must reach the model even when its text "
         "content is empty."
     )
+    # Retrieve the background generation task's outcome so a failure there
+    # surfaces in this test instead of as an unretrieved-task warning.
+    await mot._gen.generate
 
 
-def test_hf_guard_does_not_trigger_when_ctx_has_real_user_message():
+async def test_hf_guard_does_not_trigger_when_ctx_has_real_user_message():
     """Guardian-style regression: a chat context with real history is left alone.
 
     Counterpart of the Ollama test above: a `ChatContext` that already carries
     a real user turn must pass the guard even when the action itself is an
-    empty structural placeholder.
+    empty structural placeholder. Drives the full backend path and asserts the
+    chat template was rendered, so the pass is observed on the generate path
+    rather than inferred from the guard's return value.
     """
-    from mellea.backends.utils import to_chat
     from mellea.core import CBlock
     from mellea.stdlib.components import Message as MelleaMessage
     from mellea.stdlib.context import ChatContext
@@ -548,12 +552,15 @@ def test_hf_guard_does_not_trigger_when_ctx_has_real_user_message():
     gctx = gctx.add(MelleaMessage("user", "Is this code safe?"))
     gctx = gctx.add(MelleaMessage("assistant", "It looks fine."))
 
-    conversation = to_chat(CBlock(value=""), gctx, backend.formatter, None)
+    mot, _ = await backend.generate_from_context(CBlock(value=""), gctx)
 
-    assert any(msg["role"] == "user" for msg in conversation), (
-        "ChatContext with real user history must pass the guard even when "
+    assert backend._tokenizer.apply_chat_template.called, (
+        "ChatContext with real user history must reach the model even when "
         "the action is empty — see guardian-style usage pattern."
     )
+    # Retrieve the background generation task's outcome so a failure there
+    # surfaces in this test instead of as an unretrieved-task warning.
+    await mot._gen.generate
 
 
 if __name__ == "__main__":
