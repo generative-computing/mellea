@@ -218,7 +218,12 @@ sev.probabilities   # {"0": 0.05, "1": 0.20, "2": 0.75}
 `state` (the first argument) is the thing being judged: a string, a dict or
 list (rendered as JSON), or a `ChatContext` for conversational state. A
 `ChatContext` forwards its own messages as the state (no separate state turn
-is rendered for it); any other `Context` type raises a `TypeError`.
+is rendered for it); any other `Context` type raises a `TypeError`. A
+conversational state sends raw turns without the `State:` header that plain
+data gets, and it has not been measured against flattening the same
+conversation into one string, so treat it as unvalidated and check it on
+your own examples. A Pydantic model or dataclass is rendered as the JSON of
+its fields.
 All three helpers take `model_options`, but every decision-critical
 setting (`max_completion_tokens=1`, greedy `temperature=0.0`, `top_p` and
 `top_k`, logprobs, the sized `top_logprobs`, no streaming) is pinned by
@@ -226,6 +231,12 @@ the capability contract. Logit-shaping options (`logit_bias`, the
 frequency, presence and repetition penalties, a custom `logits_processor`)
 are rejected too. A conflicting option raises rather than silently
 breaking the readout, whether it is passed per call or set on the backend.
+`enable_thinking` is the exception: the decision template has no thinking
+branch, so any value you set is dropped and the call proceeds.
+Structural tokens in your text (strings of the form `<|name|>`, such as
+role markers or adapter control tokens) are split with an invisible word
+joiner, so state, question and option text cannot forge a turn or switch
+the adapter. Ordinary text and tag tokens such as `<think>` are unchanged.
 On `LocalHFBackend` the label probabilities are read from the raw
 logits at the label token ids, so no generation option can move them. The
 probabilities are the model's own and are not calibrated against ground
@@ -268,8 +279,12 @@ A bare `if answer:` is always `True` — test `answer.probability`, compare
 `answer.choice == "..."`, or compare a `PredicateAnswer`/`ScoreAnswer`
 directly against a number (ordering operators delegate to the primary
 field). `confidence` on choice and score answers is an uncalibrated
-distribution-shape statistic (`1 − H(p)/log K` for choice,
-`1 − Var(level)/Var_max` for score), not a probability of correctness.
+distribution-shape statistic, not a probability of correctness. For a
+choice it is the top probability rescaled so a uniform distribution reads 0
+and certainty reads 1, `(max(p) − 1/K) / (1 − 1/K)`. For a score it is 1
+minus the expected distance from the most likely level, divided by the mean
+distance every level has from the scale midpoint. Both follow the OpenAI
+decisions specification's formulas, and both reproduce its worked examples.
 
 ### Failure modes
 

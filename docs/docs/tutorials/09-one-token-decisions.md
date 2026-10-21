@@ -137,9 +137,9 @@ from lowest to highest. The score may land between levels (1.89 means
 "leaning toward today").
 
 The `confidence` field tells you how concentrated the model's answer
-was: 1.0 means the model was certain about a single level, 0.0 means
-it split its probability evenly between the extremes. It does not tell
-you whether the answer is correct.
+was: 1.0 means the model was certain about a single level, and 0.0 means
+it was no more certain than an even split across the scale. It does not
+tell you whether the answer is correct.
 
 ## Put it together
 
@@ -208,10 +208,13 @@ print(answer.probability)  # 0.940
 
 The conversation's messages go directly to the model as the state.
 Mellea still adds the trained system prompt and the decision turn
-around them, but no separate state block is inserted. One caveat: the adapter was trained to judge a single block of
-text, not a multi-turn dialogue. For long conversations, you may get
-better results by extracting the key facts into a summary string and
-passing that instead.
+around them, but no separate state block is inserted. One caveat: the
+adapter was trained to judge a single block of text, not a multi-turn
+dialogue, and this path has not been measured against flattening the
+conversation into one string. Treat the results as unvalidated and check
+them on your own examples. For long conversations, you may get better
+results by extracting the key facts into a summary string and passing
+that instead.
 
 ## What gets logged
 
@@ -263,6 +266,12 @@ state, question, or option descriptions, the call raises
 All three accept a string, a dict or list, or a `ChatContext` as the
 state. Any other `Context` type raises a `TypeError`.
 
+Structural tokens in your text (strings like `<|start_of_role|>`) are
+split with an invisible word joiner before they reach the model, so a
+state, question or option description cannot forge a turn or switch the
+adapter. A Pydantic model or dataclass passed as the state is rendered as
+JSON.
+
 A few things are fixed and cannot be changed: the model always
 generates exactly one token, decodes greedily (`temperature` is pinned to
 0.0), never streams, and is never given tools to call (the decision
@@ -271,7 +280,8 @@ the repetition, frequency and presence penalties are rejected as well,
 because a served backend may take its logprobs after applying them. If a
 `model_options` key, whether passed per call or set on the backend,
 conflicts with any of these, the call raises rather than silently
-producing a broken result. On the local Hugging Face backend the
+producing a broken result. `enable_thinking` is dropped rather than
+rejected. On the local Hugging Face backend the
 probabilities are read from the raw logits at the label token ids, so
 generation options cannot move them.
 

@@ -20,9 +20,12 @@ declared options the call raises rather than returning a plausible-looking
 wrong answer.
 """
 
+import copy
+import dataclasses
 import hashlib
 import json
 import math
+import re
 import time
 from collections.abc import Mapping, Sequence
 from typing import cast
@@ -131,16 +134,17 @@ class ChoiceAnswer(pydantic.BaseModel):
     instead. `==` between answers is model equality.
 
     `confidence` is a distribution-shape statistic, not a calibrated
-    probability of correctness: `1 - H(p)/log K` over the K option
-    probabilities (entropy ignores option order). The computation is
-    pluggable for future model-side calibration.
+    probability of correctness: the top probability rescaled so a uniform
+    distribution over the K options reads 0 and all mass on one option
+    reads 1, `(max(p) - 1/K) / (1 - 1/K)`. This is the formula the OpenAI
+    decisions specification uses.
 
     Attributes:
         choice (str): Key of the highest-probability option (first key on
             an exact tie).
         probabilities (dict[str, float]): Distribution over option keys,
             keyed as passed (unrounded; sums to 1.0).
-        confidence (float): `1 - H(p)/log K`, in `[0.0, 1.0]`.
+        confidence (float): `(max(p) - 1/K) / (1 - 1/K)`, in `[0.0, 1.0]`.
     """
 
     choice: str
@@ -157,13 +161,12 @@ class ScoreAnswer(pydantic.BaseModel):
 
     `score` is the expected level and may land between levels.
     `confidence` is a distribution-shape statistic, not a calibrated
-    probability of correctness: `1 - Var(level)/Var_max`, where
-    `Var(level) = sum p_i (i - E)^2` is the variance of the level
-    distribution and `Var_max = ((K-1)/2)^2` is the largest variance a
-    distribution over K levels can have (all mass on the two extremes).
-    Entropy ignores level order; this does not; a 50/50 split between
-    the lowest and highest levels reads as zero confidence. The
-    computation is pluggable for future model-side calibration.
+    probability of correctness: 1 minus the expected distance of the
+    level from the most likely level, divided by the mean distance every
+    level has from the scale midpoint (a uniform distribution's own
+    expected distance), floored at 0. It respects level order, so a
+    50/50 split between the lowest and highest levels reads low, and it
+    is the formula the OpenAI decisions specification uses.
 
     Attributes:
         score (float): Expected level, in `[0, K-1]` (unrounded; may land
@@ -171,7 +174,7 @@ class ScoreAnswer(pydantic.BaseModel):
         probabilities (dict[str, float]): Distribution over levels, keyed
             by level index as a string, `"0"` (lowest) to `"K-1"`
             (unrounded; sums to 1.0).
-        confidence (float): `1 - Var(level)/Var_max`, in `[0.0, 1.0]`.
+        confidence (float): Distance-from-mode confidence, in `[0.0, 1.0]`.
     """
 
     score: float
@@ -209,6 +212,8 @@ def _text_of(value: object) -> str:
     Mirrors the reference implementation's `text_of`: dicts and lists render
     as compact JSON with `ensure_ascii=False`; anything else as `str(x)`
     (`None` as the empty string, which callers map to their fallback).
+    Pydantic models and dataclass instances render as the JSON of their
+    fields, like a dict.
 
     Args:
         value: The description or state value.
@@ -216,9 +221,40 @@ def _text_of(value: object) -> str:
     Returns:
         Rendered text.
     """
+    if isinstance(value, pydantic.BaseModel):
+        value = value.model_dump(mode="json")
+    elif dataclasses.is_dataclass(value) and not isinstance(value, type):
+        value = dataclasses.asdict(value)
     if isinstance(value, (dict, list)):
-        return json.dumps(value, ensure_ascii=False)
+        return json.dumps(value, ensure_ascii=False, default=str)
     return "" if value is None else str(value)
+
+
+_STRUCTURAL_TOKEN = re.compile(r"<(\|[\w-]+\|>)")
+"""A `<|name|>` special-token string (roles, end of text, adapter control
+tokens, audio, fim). Tag tokens such as `<tool_call>` and `<think>` cannot
+close a turn or switch adapters, so they are not matched."""
+
+_TOKEN_BREAK = "\u2060"
+"""U+2060 WORD JOINER: invisible, and splits a special-token string so the
+tokenizer reads it as text rather than as the special token."""
+
+
+def _escape_structural_tokens(text: str) -> str:
+    """Break every `<|name|>` special-token string in caller text.
+
+    The chat template turns these strings into real special tokens, and the
+    adapter index is derived from the control tokens in the request, so
+    unescaped caller text could forge a turn or move the adapter. Ordinary
+    text, including `<` and `|` on their own, is unchanged.
+
+    Args:
+        text: Caller-supplied text.
+
+    Returns:
+        The text with each structural token split by a word joiner.
+    """
+    return _STRUCTURAL_TOKEN.sub(lambda m: "<" + _TOKEN_BREAK + m.group(1), text)
 
 
 def _render_options_block(labels: list[str], descriptions: Sequence[object]) -> str:
@@ -227,6 +263,7 @@ def _render_options_block(labels: list[str], descriptions: Sequence[object]) -> 
     Each line is `f"{label}: {description}"`, with an empty or `None`
     description falling back to the label and dict/list descriptions
     JSON-rendered; lines are joined with newlines and no trailing newline.
+    Structural tokens in a description are escaped.
 
     Args:
         labels: Label pool slice, one per option.
@@ -238,8 +275,26 @@ def _render_options_block(labels: list[str], descriptions: Sequence[object]) -> 
     lines = []
     for label, description in zip(labels, descriptions, strict=True):
         rendered = _text_of(description) if description not in (None, "") else label
-        lines.append(f"{label}: {rendered}")
+        lines.append(f"{label}: {_escape_structural_tokens(rendered)}")
     return "\n".join(lines)
+
+
+def _plain_state(state: object) -> object:
+    """Prepare a plain-data state for the request: rendered, then escaped.
+
+    Empty values (`""`, `None`, `{}`, `[]`) are returned unchanged so the
+    formatter still renders its `(empty)` sentinel. Anything else is
+    rendered to text and has its structural tokens escaped.
+
+    Args:
+        state: The caller's plain-data state.
+
+    Returns:
+        The state to pass to the formatter.
+    """
+    if state in ("", None, {}, []):
+        return state
+    return _escape_structural_tokens(_text_of(state))
 
 
 def _reject_conflicting_options(
@@ -261,9 +316,6 @@ def _reject_conflicting_options(
     conflicts: dict[object, str] = {
         ModelOption.MAX_NEW_TOKENS: (
             "the readout pins max_completion_tokens=1 (one answer token)"
-        ),
-        ModelOption.THINKING: (
-            "the decision capability pins enable_thinking=false for reference fidelity"
         ),
         ModelOption.TOOLS: "decision calls send no tools",
         ModelOption.TEMPERATURE: (
@@ -304,15 +356,6 @@ def _reject_conflicting_options(
                     f"{source} key {scope + key!r} conflicts with the decision "
                     f"readout: {why}. Remove it from {source}."
                 )
-    ctk = (
-        extra_body.get("chat_template_kwargs") if isinstance(extra_body, dict) else None
-    )
-    if isinstance(ctk, dict) and "enable_thinking" in ctk:
-        raise ValueError(
-            f"{source} key 'extra_body.chat_template_kwargs.enable_thinking' "
-            "conflicts with the decision readout: the decision capability "
-            f"pins enable_thinking=false. Remove it from {source}."
-        )
     if model_options.get(ModelOption.STREAM):
         raise ValueError(
             f"{source} requested streaming, but the one-token decision "
@@ -499,11 +542,25 @@ def _decide_raw(
     forced_options = dict(model_options) if model_options else {}
     forced_options[ModelOption.MAX_NEW_TOKENS] = 1
     forced_options[ModelOption.TEMPERATURE] = _PINNED_TEMPERATURE
+    # Thinking is overridden rather than rejected: the carried config pins
+    # `enable_thinking=false`, and the decision template has no thinking
+    # branch, so a chat-configured backend should not fail every decision.
+    # An explicit `None` outranks a backend-level `ModelOption.THINKING`.
+    forced_options[ModelOption.THINKING] = None
+    forced_extra_body = forced_options.get("extra_body")
+    if isinstance(forced_extra_body, dict):
+        forced_extra_body = copy.deepcopy(forced_extra_body)
+        ctk = forced_extra_body.get("chat_template_kwargs")
+        if isinstance(ctk, dict):
+            ctk.pop("enable_thinking", None)
+            if not ctk:
+                forced_extra_body.pop("chat_template_kwargs")
+        forced_options["extra_body"] = forced_extra_body
 
     _require_capability(backend)
     labels = _LABEL_POOL[: len(descriptions)]
     kwargs: dict[str, object] = {
-        "question": question,
+        "question": _escape_structural_tokens(question),
         "options_block": _render_options_block(labels, list(descriptions)),
     }
     if isinstance(state, ChatContext):
@@ -516,7 +573,7 @@ def _decide_raw(
             "state."
         )
     else:
-        kwargs["state"] = state
+        kwargs["state"] = _plain_state(state)
         call_context = ChatContext()
 
     state_log_text = _state_text_for_log(state)
@@ -786,7 +843,8 @@ def choose(
     Returns:
         ChoiceAnswer with `.choice` (best option key), `.probabilities`
         (keyed as passed, unrounded, sums to 1.0), and `.confidence`
-        (`1 - H(p)/log K`, an uncalibrated distribution-shape statistic).
+        (`(max(p) - 1/K) / (1 - 1/K)`, an uncalibrated distribution-shape
+        statistic).
 
     Raises:
         ValueError: When the option count is outside 2-10; when a caller
@@ -812,15 +870,20 @@ def choose(
         ```
     """
     keys = list(options)
-    descriptions = [options[key] for key in keys]
+    # An empty description falls back to the option key, which is the only
+    # meaningful text available; the label letter would just repeat itself.
+    descriptions = [
+        options[key] if options[key] not in (None, "") else key for key in keys
+    ]
     raw = _decide_raw(
         state, backend, question, descriptions, model_options=model_options
     )
     probs = [raw.probs.get(label, 0.0) for label in _LABEL_POOL[: len(keys)]]
     best = max(range(len(keys)), key=lambda i: probs[i])
     k = len(keys)
-    entropy = -sum(p * math.log(p) for p in probs if p > 0.0)
-    confidence = 1.0 - (entropy / math.log(k) if k > 1 else 0.0)
+    # jev's choice confidence: the top probability rescaled so a uniform
+    # distribution reads 0 and all mass on one option reads 1.
+    confidence = (probs[best] - 1.0 / k) / (1.0 - 1.0 / k)
     return ChoiceAnswer(
         choice=keys[best],
         probabilities=dict(zip(keys, probs, strict=True)),
@@ -860,8 +923,8 @@ def score(
         ScoreAnswer with `.score` (expected level in `[0, K-1]`, unrounded,
         may land between levels), `.probabilities` (keyed by level index as
         a string, unrounded, sums to 1.0), and `.confidence`
-        (`1 - Var(level)/Var_max`, an uncalibrated distribution-shape
-        statistic in `[0.0, 1.0]`).
+        (distance-from-mode, an uncalibrated distribution-shape statistic
+        in `[0.0, 1.0]`).
 
     Raises:
         ValueError: When the level count is outside 2-10; when a caller
@@ -891,14 +954,14 @@ def score(
     probs = [raw.probs.get(label, 0.0) for label in _LABEL_POOL[: len(levels)]]
     k = len(levels)
     expected = sum(i * p for i, p in enumerate(probs))
-    # Variance of the LEVEL distribution (the level index is the random
-    # variable), not of the probability values.
-    variance = sum(p * (i - expected) ** 2 for i, p in enumerate(probs))
-    # Largest variance a distribution over k levels can have: all mass on
-    # the two extremes. (Dividing by the uniform-distribution variance
-    # instead goes negative for a two-extremes split; this keeps [0, 1].)
-    var_max = ((k - 1) / 2.0) ** 2
-    confidence = 1.0 - (variance / var_max if var_max > 0.0 else 0.0)
+    # jev's score confidence: 1 minus the expected distance from the modal
+    # level, over the mean distance every level has from the scale midpoint
+    # (a uniform distribution's own expected distance).
+    mode = max(range(k), key=lambda i: probs[i])
+    distance_from_mode = sum(p * abs(i - mode) for i, p in enumerate(probs))
+    midpoint = (k - 1) / 2.0
+    uniform_distance = sum(abs(i - midpoint) for i in range(k)) / k
+    confidence = max(0.0, 1.0 - distance_from_mode / uniform_distance)
     return ScoreAnswer(
         score=expected,
         probabilities={str(i): p for i, p in enumerate(probs)},
