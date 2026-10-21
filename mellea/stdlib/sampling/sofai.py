@@ -7,8 +7,9 @@ This module implements a two-solver sampling strategy that uses:
 1. S1 Solver (fast model) - Iterative solving with feedback-based repair
 2. S2 Solver (slow model) - Single attempt escalation when S1 fails or shows no improvement
 
-The strategy leverages ValidationResult.reason fields to provide targeted
-feedback for repair, enabling more effective iterative improvement.
+The strategy feeds each failed requirement's description back to the solver as
+targeted feedback for repair, appending ValidationResult.reason as extra detail
+when it adds signal.
 """
 
 import re
@@ -62,8 +63,9 @@ class SOFAISamplingStrategy(SamplingStrategy):
     results. If S1 Solver fails after exhausting the budget or shows no
     improvement, escalates to a single attempt with S2 Solver (slow model).
 
-    The strategy leverages `ValidationResult.reason` fields to provide targeted
-    feedback for repair, enabling more effective iterative improvement.
+    The strategy feeds each failed requirement's description back to the solver
+    as targeted feedback for repair, appending `ValidationResult.reason` as extra
+    detail when it adds signal.
 
     Args:
         s1_solver_backend (Backend): Backend for the fast S1 solver used in the
