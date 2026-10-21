@@ -210,11 +210,9 @@ The conversation's messages go directly to the model as the state.
 Mellea still adds the trained system prompt and the decision turn
 around them, but no separate state block is inserted. One caveat: the
 adapter was trained to judge a single block of text, not a multi-turn
-dialogue, and this path has not been measured against flattening the
-conversation into one string. Treat the results as unvalidated and check
-them on your own examples. For long conversations, you may get better
-results by extracting the key facts into a summary string and passing
-that instead.
+dialogue, so check long conversations on your own examples. For those, you
+may get better results by extracting the key facts into a summary string
+and passing that instead.
 
 ## What gets logged
 

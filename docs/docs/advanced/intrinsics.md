@@ -219,11 +219,11 @@ sev.probabilities   # {"0": 0.05, "1": 0.20, "2": 0.75}
 list (rendered as JSON), or a `ChatContext` for conversational state. A
 `ChatContext` forwards its own messages as the state (no separate state turn
 is rendered for it); any other `Context` type raises a `TypeError`. A
-conversational state sends raw turns without the `State:` header that plain
-data gets, and it has not been measured against flattening the same
-conversation into one string, so treat it as unvalidated and check it on
-your own examples. A Pydantic model or dataclass is rendered as the JSON of
-its fields.
+conversational state sends the conversation's turns as they are, without the
+`State:` header that plain data gets. The adapter was trained on a single
+block of state, so check long or multi-turn conversations on your own
+examples. A Pydantic model or dataclass is rendered as the JSON of its
+fields.
 All three helpers take `model_options`, but every decision-critical
 setting (`max_completion_tokens=1`, greedy `temperature=0.0`, `top_p` and
 `top_k`, logprobs, the sized `top_logprobs`, no streaming) is pinned by
