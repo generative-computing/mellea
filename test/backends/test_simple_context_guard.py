@@ -11,9 +11,8 @@ backends used to ship this empty payload, which makes some models (e.g. Granite
 4.2, see issue #1587) spin on an empty prompt and burn tokens.
 
 The expected behaviour is a `ValueError` raised before any HTTP/SDK request is
-issued. These tests pin that contract for the three concrete backends covered
-by the fix; WatsonxAIBackend and LocalHFBackend are tracked as remaining work
-in the commit message.
+issued. These tests pin that contract for the four concrete backends covered
+by the fix; `WatsonxAIBackend` (deprecated) is out of scope.
 """
 
 from __future__ import annotations
@@ -425,6 +424,134 @@ async def test_ollama_guard_does_not_trigger_when_ctx_has_real_user_message():
 
     assert mock_chat.called, (
         "ChatContext with real user history must reach the model even when "
+        "the action is empty — see guardian-style usage pattern."
+    )
+
+
+# ---------------------------------------------------------------------------
+# HuggingFace backend (issue #1705)
+# ---------------------------------------------------------------------------
+
+
+def _make_hf_backend():
+    """Build a `LocalHFBackend` around mock tokenizer/model objects.
+
+    Same construction pattern as `test_huggingface_unit._make_backend`: the
+    `custom_config` triple bypasses any model download, and `llguidance` is
+    patched out of `__init__`. The mock tokenizer lands on `backend._tokenizer`,
+    where tests can assert on `apply_chat_template` calls.
+    """
+    torch = pytest.importorskip(
+        "torch", reason="torch not installed — install mellea[hf]"
+    )
+    pytest.importorskip(
+        "transformers", reason="transformers not installed — install mellea[hf]"
+    )
+    pytest.importorskip(
+        "llguidance", reason="llguidance not installed — install mellea[hf]"
+    )
+
+    from mellea.backends.huggingface import LocalHFBackend
+
+    mock_tok = MagicMock(eos_token_id=0, vocab_size=32000)
+    mock_tok._tokenizer = MagicMock()
+    mock_tok._tokenizer.get_vocab_size.return_value = 32000
+    mock_tok.__len__ = MagicMock(return_value=32000)
+    mock_model = MagicMock(vocab_size=32000)
+    with (
+        patch("mellea.backends.huggingface.llguidance") as mock_llg,
+        patch("mellea.backends.huggingface.set_seed"),
+    ):
+        mock_llg.hf.from_tokenizer.return_value = MagicMock(vocab_size=32000)
+        return LocalHFBackend(
+            model_id="ibm-granite/granite-3.3-8b-instruct",
+            custom_config=(mock_tok, mock_model, torch.device("cpu")),
+        )
+
+
+async def test_simple_context_with_empty_action_raises_on_hf():
+    """HF: SimpleContext + empty CBlock must raise before apply_chat_template.
+
+    Regression for issue #1705: both HF chat paths (standard and KV-cache)
+    assemble their conversation through the shared `to_chat` helper, which
+    had no user-content guard — the model was asked to answer a prompt the
+    caller never wrote.
+    """
+    from mellea.core import CBlock
+    from mellea.stdlib.context import SimpleContext
+
+    backend = _make_hf_backend()
+    ctx = SimpleContext().add(CBlock("recorded-only"))
+
+    with pytest.raises(ValueError, match="user"):
+        await backend.generate_from_context(CBlock(value=""), ctx)
+
+    assert not backend._tokenizer.apply_chat_template.called, (
+        "Empty-user-content request must be rejected before the chat template "
+        "is rendered. See issue #1705."
+    )
+
+
+async def test_simple_context_with_whitespace_action_raises_on_hf():
+    """HF: whitespace-only user content must also raise (issue #1587)."""
+    from mellea.core import CBlock
+    from mellea.stdlib.context import SimpleContext
+
+    backend = _make_hf_backend()
+    ctx = SimpleContext()
+
+    with pytest.raises(ValueError, match="user"):
+        await backend.generate_from_context(CBlock(value="   \n\t"), ctx)
+
+    backend._tokenizer.apply_chat_template.assert_not_called()
+
+
+def test_user_message_with_docs_passes_guard_on_hf():
+    """P3 passthrough: a user message with documents must NOT raise.
+
+    HF rejects images and audio upstream (`_check_no_multimodal_blocks`), so
+    documents are the only non-text payload that can reach the guard on this
+    backend. The guard is exercised through `to_chat` directly: past it, the
+    mocked tokenizer/model would take the call into fake generation.
+    """
+    from mellea.backends.utils import to_chat
+    from mellea.core import CBlock
+    from mellea.stdlib.components import Message as MelleaMessage
+    from mellea.stdlib.context import SimpleContext
+
+    backend = _make_hf_backend()
+    ctx = SimpleContext().add(CBlock("recorded-only"))
+    action = MelleaMessage("user", "", documents=["product spec passage"])
+
+    conversation = to_chat(action, ctx, backend.formatter, None)
+
+    assert any(msg["role"] == "user" for msg in conversation), (
+        "User message with documents must pass the guard even when its text "
+        "content is empty."
+    )
+
+
+def test_hf_guard_does_not_trigger_when_ctx_has_real_user_message():
+    """Guardian-style regression: a chat context with real history is left alone.
+
+    Counterpart of the Ollama test above: a `ChatContext` that already carries
+    a real user turn must pass the guard even when the action itself is an
+    empty structural placeholder.
+    """
+    from mellea.backends.utils import to_chat
+    from mellea.core import CBlock
+    from mellea.stdlib.components import Message as MelleaMessage
+    from mellea.stdlib.context import ChatContext
+
+    backend = _make_hf_backend()
+    gctx = ChatContext()
+    gctx = gctx.add(MelleaMessage("user", "Is this code safe?"))
+    gctx = gctx.add(MelleaMessage("assistant", "It looks fine."))
+
+    conversation = to_chat(CBlock(value=""), gctx, backend.formatter, None)
+
+    assert any(msg["role"] == "user" for msg in conversation), (
+        "ChatContext with real user history must pass the guard even when "
         "the action is empty — see guardian-style usage pattern."
     )
 
