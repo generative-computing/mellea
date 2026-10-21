@@ -264,11 +264,12 @@ state, question, or option descriptions, the call raises
 All three accept a string, a dict or list, or a `ChatContext` as the
 state. Any other `Context` type raises a `TypeError`.
 
-Structural tokens in your text (strings like `<|start_of_role|>`) are
-split with an invisible word joiner before they reach the model, so a
-state, question or option description cannot forge a turn or switch the
-adapter. A Pydantic model or dataclass passed as the state is rendered as
-JSON.
+Special-token strings in your text (like `<|start_of_role|>`, or the
+`<tool_call>` and `<think>` tags) are split with an invisible word joiner
+before they reach the model, so a state, question or option description
+cannot forge a turn or switch the adapter, and tool or reasoning markup in
+a state is read as plain text. A Pydantic model or dataclass passed as the
+state is rendered as JSON.
 
 A few things are fixed and cannot be changed: the model always
 generates exactly one token, decodes greedily (`temperature` is pinned to

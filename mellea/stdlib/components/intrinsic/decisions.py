@@ -230,31 +230,55 @@ def _text_of(value: object) -> str:
     return "" if value is None else str(value)
 
 
-_STRUCTURAL_TOKEN = re.compile(r"<(\|[\w-]+\|>)")
-"""A `<|name|>` special-token string (roles, end of text, adapter control
-tokens, audio, fim). Tag tokens such as `<tool_call>` and `<think>` cannot
-close a turn or switch adapters, so they are not matched."""
+_TAG_TOKENS = (
+    "<tool_call>",
+    "</tool_call>",
+    "<tool_response>",
+    "</tool_response>",
+    "<think>",
+    "</think>",
+    "<think_on>",
+    "<think_off>",
+    "<schema>",
+    "</schema>",
+    "<tools>",
+    "</tools>",
+    "<documents>",
+    "</documents>",
+)
+"""The tag-style added tokens of the Granite Switch checkpoints. Mellea has no
+tokenizer here, so the list is fixed; a live test checks it against a
+checkpoint's added vocabulary."""
+
+_SPECIAL_TOKEN = re.compile(
+    r"<\|[\w-]+\|>|" + "|".join(re.escape(token) for token in _TAG_TOKENS)
+)
+"""Every added-token string of the checkpoints: the `<|name|>` family (roles,
+end of text, adapter control tokens, audio, fim) and the tag tokens above."""
 
 _TOKEN_BREAK = "\u2060"
 """U+2060 WORD JOINER: invisible, and splits a special-token string so the
 tokenizer reads it as text rather than as the special token."""
 
 
-def _escape_structural_tokens(text: str) -> str:
-    """Break every `<|name|>` special-token string in caller text.
+def _escape_special_tokens(text: str) -> str:
+    """Break every added-token string in caller text with a word joiner.
 
-    The chat template turns these strings into real special tokens, and the
+    The tokenizer turns these strings into real special tokens, and the
     adapter index is derived from the control tokens in the request, so
-    unescaped caller text could forge a turn or move the adapter. Ordinary
-    text, including `<` and `|` on their own, is unchanged.
+    unescaped caller text could forge a turn or move the adapter. Tag tokens
+    such as `<think>` are split too, so tool and reasoning markup in a state
+    is read as text, as the serving plugin does. Ordinary text, including `<`
+    and `|` on their own, is unchanged.
 
     Args:
         text: Caller-supplied text.
 
     Returns:
-        The text with each structural token split by a word joiner.
+        The text with each special-token string split after its first
+        character by a word joiner.
     """
-    return _STRUCTURAL_TOKEN.sub(lambda m: "<" + _TOKEN_BREAK + m.group(1), text)
+    return _SPECIAL_TOKEN.sub(lambda m: "<" + _TOKEN_BREAK + m.group(0)[1:], text)
 
 
 def _render_options_block(labels: list[str], descriptions: Sequence[object]) -> str:
@@ -263,7 +287,7 @@ def _render_options_block(labels: list[str], descriptions: Sequence[object]) -> 
     Each line is `f"{label}: {description}"`, with an empty or `None`
     description falling back to the label and dict/list descriptions
     JSON-rendered; lines are joined with newlines and no trailing newline.
-    Structural tokens in a description are escaped.
+    Special-token strings in a description are escaped.
 
     Args:
         labels: Label pool slice, one per option.
@@ -275,7 +299,7 @@ def _render_options_block(labels: list[str], descriptions: Sequence[object]) -> 
     lines = []
     for label, description in zip(labels, descriptions, strict=True):
         rendered = _text_of(description) if description not in (None, "") else label
-        lines.append(f"{label}: {_escape_structural_tokens(rendered)}")
+        lines.append(f"{label}: {_escape_special_tokens(rendered)}")
     return "\n".join(lines)
 
 
@@ -284,7 +308,7 @@ def _plain_state(state: object) -> object:
 
     Empty values (`""`, `None`, `{}`, `[]`) are returned unchanged so the
     formatter still renders its `(empty)` sentinel. Anything else is
-    rendered to text and has its structural tokens escaped.
+    rendered to text and has its special-token strings escaped.
 
     Args:
         state: The caller's plain-data state.
@@ -294,7 +318,7 @@ def _plain_state(state: object) -> object:
     """
     if state in ("", None, {}, []):
         return state
-    return _escape_structural_tokens(_text_of(state))
+    return _escape_special_tokens(_text_of(state))
 
 
 def _reject_conflicting_options(
@@ -560,7 +584,7 @@ def _decide_raw(
     _require_capability(backend)
     labels = _LABEL_POOL[: len(descriptions)]
     kwargs: dict[str, object] = {
-        "question": _escape_structural_tokens(question),
+        "question": _escape_special_tokens(question),
         "options_block": _render_options_block(labels, list(descriptions)),
     }
     if isinstance(state, ChatContext):

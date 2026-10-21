@@ -233,10 +233,12 @@ are rejected too. A conflicting option raises rather than silently
 breaking the readout, whether it is passed per call or set on the backend.
 `enable_thinking` is the exception: the decision template has no thinking
 branch, so any value you set is dropped and the call proceeds.
-Structural tokens in your text (strings of the form `<|name|>`, such as
-role markers or adapter control tokens) are split with an invisible word
+Special-token strings in your text are split with an invisible word
 joiner, so state, question and option text cannot forge a turn or switch
-the adapter. Ordinary text and tag tokens such as `<think>` are unchanged.
+the adapter. That covers the `<|name|>` family (role markers, end of text,
+adapter control tokens) and the tag tokens of the Switch checkpoints
+(`<tool_call>`, `<think>`, `<schema>` and the like), so tool and reasoning
+markup in a state is read as plain text. Ordinary text is unchanged.
 On `LocalHFBackend` the label probabilities are read from the raw
 logits at the label token ids, so no generation option can move them. The
 probabilities are the model's own and are not calibrated against ground
