@@ -32,7 +32,7 @@ to run.
 | `context/` | Context inspection, sampling with context trees, parallel context branches |
 | `sessions/` | Custom session types and backend selection |
 | `async/` | How to utilize basic async capabilities |
-| `streaming/` | `stream()` with per-chunk validation, typed event vocabulary, early-exit on fail |
+| `streaming/` | `stream()` with per-chunk validation, typed event vocabulary, early-exit on fail, retry/repair via a sampling strategy |
 
 ### Data and documents
 
@@ -48,6 +48,7 @@ to run.
 | Category | What it shows |
 | -------- | ------------- |
 | `agents/` | ReACT reasoning-and-acting loop, multi-turn tool workflows |
+| `primitives/` | Low-level functional primitives for manual tool execution (`call_tools()`) and execution hooks |
 | `tools/` | `@tool` definition, code interpreter integration, tool argument validation, safe `eval` patterns |
 | `mini_researcher/` | Complete research assistant: multi-model architecture, document retrieval, safety checks, custom validation pipeline |
 

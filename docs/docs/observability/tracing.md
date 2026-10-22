@@ -203,14 +203,18 @@ validation.
 | `mellea.streaming.has_requirements` | Whether requirements were supplied |
 | `mellea.streaming.requirement_count` | Number of requirements supplied |
 | `mellea.streaming.chunking_strategy` | `ChunkingStrategy` class name (e.g., `SentenceChunking`) |
+| `mellea.streaming.strategy_type` | Sampling strategy class name driving retry/repair; omitted when the run has no strategy |
+| `mellea.streaming.loop_budget` | Maximum attempts the strategy may run; omitted without a strategy |
 | `mellea.streaming.full_text_length` | Length of the accumulated text at completion |
+| `mellea.streaming.iterations_used` | Number of attempts the run made (`1` without a strategy) |
 | `gen_ai.request.model` | Model ID, when known |
 | `gen_ai.provider.name` | Provider name, when known |
 
 It also records span events through the run: `quick_check` and `chunk` per
 validated chunk, `streaming_done` once the stream drains, `full_validation`
-after the final `validate()` calls, `error` on an unhandled exception, and
-`completed` when the run exits.
+after the final `validate()` calls, `retry` before each repaired re-attempt
+(strategy runs only), `error` on an unhandled exception, and `completed` when
+the run exits.
 
 ### Backend spans (`mellea.backend`)
 
