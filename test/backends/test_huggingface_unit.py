@@ -275,7 +275,7 @@ _EMBEDDED_STUB_CONFIG = {
 def _make_embedded_adapter_stub() -> _AdapterCore:
     """A composed embedded `Adapter` (EmbeddedBinding) for the Granite Switch path."""
     return _embedded_adapter_from_entry(
-        intrinsic_name="answerability", config=_EMBEDDED_STUB_CONFIG, technology="alora"
+        intrinsic_name="answerability", technology="alora"
     )
 
 

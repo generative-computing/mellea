@@ -169,7 +169,7 @@ def _make_backend_with_adapter(
         model_options=model_options,
     )
     adapter = _embedded_adapter_from_entry(
-        intrinsic_name="answerability", config=config, technology="alora"
+        intrinsic_name="answerability", technology="alora"
     )
     backend.add_adapter(adapter, config=config)
     return backend
@@ -389,9 +389,7 @@ def test_remove_adapter_frees_name_for_reuse():
     qualified_name = "answerability_alora"
     first = backend._added_adapters[qualified_name]
     replacement = _embedded_adapter_from_entry(
-        intrinsic_name="answerability",
-        config=deepcopy(_SIMPLE_CONFIG),
-        technology="alora",
+        intrinsic_name="answerability", technology="alora"
     )
 
     # While the name is occupied, the registration is refused.
@@ -913,9 +911,7 @@ def _make_backend_with_requirement_adapter() -> OpenAIBackend:
     )
     backend.add_adapter(
         _embedded_adapter_from_entry(
-            intrinsic_name="requirement-check",
-            config=deepcopy(_SIMPLE_CONFIG),
-            technology="alora",
+            intrinsic_name="requirement-check", technology="alora"
         ),
         config=deepcopy(_SIMPLE_CONFIG),
     )

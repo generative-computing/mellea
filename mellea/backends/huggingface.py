@@ -478,13 +478,10 @@ def _alora_qualified_name_for_activation_check(adapter: _AdapterCore) -> str | N
 
     Returning a qualified name here is necessary but not sufficient for the
     guard to actually see the adapter: the caller (`_generate_from_intrinsic`)
-    checks `peft_config` for it, which only holds the weights once they have
-    been loaded. `resolve_adapter()` calls `binding.prepare()` (and therefore
-    `load_peft_adapter`) at registration time, but an intervening
-    `unload_peft_adapter()` can drop the weights again while the registration
-    survives — so the caller reloads the name (when it is registered in
-    `_added_adapters` but absent from `_loaded_adapters`) immediately before
-    the guard runs, rather than relying on registration-time `prepare()` alone.
+    checks `peft_config` for it immediately, before the weights are
+    necessarily loaded. That is fine for the composed-`Adapter` path
+    (`resolve_adapter()` calls `binding.prepare()`, and therefore
+    `load_peft_adapter`, at registration time, well before generation).
 
     Args:
         adapter: The resolved composed `Adapter` about to generate.

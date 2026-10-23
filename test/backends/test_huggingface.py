@@ -34,6 +34,13 @@ pytestmark = [
 
 from mellea import MelleaSession
 from mellea.backends import ModelOption, model_ids
+from mellea.backends.adapters._core import (
+    Adapter as _AdapterCore,
+    Identity,
+    LocalFileBinding,
+)
+from mellea.backends.adapters.catalog import AdapterType, fetch_intrinsic_metadata
+from mellea.backends.adapters.io_contracts import get_io_contract
 from mellea.backends.cache import SimpleLRUCache
 from mellea.backends.huggingface import LocalHFBackend, _assert_correct_adapters
 from mellea.core import (
@@ -53,6 +60,35 @@ from mellea.stdlib.requirements import ALoraRequirement, LLMaJRequirement
 from test.conftest import hf_skip
 
 
+def _add_alora_intrinsic(backend: LocalHFBackend, name: str) -> None:
+    """Register an intrinsic's aLoRA on `backend` as a composed `Adapter`.
+
+    `resolve_adapter()` registers the LoRA by default (adapter.py), but the
+    constraint-checking path and `test_adapters` need the aLoRA (keyed
+    `"<name>_alora"`) — the behaviour the removed `IntrinsicAdapter` shim gave
+    by defaulting to `AdapterType.ALORA`. Build the composed aLoRA `Adapter`
+    directly and register it, rather than changing `resolve_adapter`'s default
+    (which would wrongly promote LoRA-only intrinsics like `uncertainty`).
+    """
+    metadata = fetch_intrinsic_metadata(name)
+    backend.add_adapter(
+        _AdapterCore(
+            identity=Identity(
+                name=name,
+                adapter_type="alora",
+                capability=metadata.effective_capability,
+            ),
+            io_contract=get_io_contract(name),
+            weights=LocalFileBinding(
+                name=name,
+                adapter_type=AdapterType.ALORA,
+                repo_id=metadata.repo_id,
+                revision=metadata.revision,
+            ),
+        )
+    )
+
+
 @pytest.fixture(scope="module")
 def backend():
     """Shared HuggingFace backend for all tests in this module.
@@ -64,8 +100,8 @@ def backend():
         backend = LocalHFBackend(
             model_id=model_ids.IBM_GRANITE_4_1_3B, cache=SimpleLRUCache(5)
         )
-        backend.resolve_adapter("requirement-check")
-        backend.resolve_adapter("answerability")
+        _add_alora_intrinsic(backend, "requirement-check")
+        _add_alora_intrinsic(backend, "answerability")
     yield backend
 
     from test.conftest import cleanup_gpu_backend
@@ -367,8 +403,8 @@ async def test_generate_with_lock(backend) -> None:
     b._loaded_adapters = {}
     b._composed_adapters = {}
     b._composed_adapter_configs = {}
-    b.resolve_adapter("requirement-check")
-    b.resolve_adapter("answerability")
+    _add_alora_intrinsic(b, "requirement-check")
+    _add_alora_intrinsic(b, "answerability")
 
     memoized: dict[torch.Tensor, str] = dict()  # type: ignore[name-defined]
     gen_func = model.generate
@@ -558,7 +594,7 @@ async def test_error_during_generate_with_lock(backend) -> None:
     b._loaded_adapters = {}
     b._composed_adapters = {}
     b._composed_adapter_configs = {}
-    b.resolve_adapter("requirement-check")
+    _add_alora_intrinsic(b, "requirement-check")
 
     regular_generate = b._model.generate
 
