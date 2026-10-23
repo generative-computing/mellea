@@ -65,7 +65,7 @@ def _backend_with_adapter(technology: str) -> OpenAIBackend:
     )
     backend.add_adapter(
         _embedded_adapter_from_entry(
-            intrinsic_name="answerability", config=_SIMPLE_CONFIG, technology=technology
+            intrinsic_name="answerability", technology=technology
         ),
         config=_SIMPLE_CONFIG,
     )

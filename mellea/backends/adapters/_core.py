@@ -691,6 +691,16 @@ class LocalFileBinding(WeightsBinding):
     def activate(self) -> None:
         """Selects already-loaded adapter weights for generation.
 
+        Resilient to the weights having been dropped from the backend's PEFT
+        model since `prepare()`: `prepare()` injects the weights once, but an
+        `unload_peft_adapter()` call (e.g. to free GPU memory, or as a test
+        teardown) deletes them from the PEFT model while leaving this binding's
+        registration intact. Re-injecting them here — rather than treating
+        `prepare()` as a one-time guarantee — lets a composed `Adapter` be
+        unloaded and later re-used on the same backend without a hard failure
+        (the resilience the removed `IntrinsicAdapter` shim gave by re-loading
+        on demand).
+
         Raises:
             RuntimeError: `prepare()` was not called first, or called but did
                 not complete (registered with the backend but the weights
@@ -706,7 +716,19 @@ class LocalFileBinding(WeightsBinding):
                 raise RuntimeError(
                     "LocalFileBinding.activate() requires prepare() to be called first."
                 )
-            backend.activate_peft_adapter(self.qualified_name)
+            try:
+                backend.activate_peft_adapter(self.qualified_name)
+            except ValueError:
+                # The weights were dropped from the PEFT model since prepare()
+                # (an intervening unload_peft_adapter), so set_adapter() cannot
+                # find the name. The registration in `_added_adapters` survives
+                # an unload, so load_peft_adapter() re-injects it; retry once.
+                # Both verbs mutate PEFT model state the activation lock already
+                # held here guards, so no new lock is taken — re-loading under
+                # `_lifecycle_lock` (as prepare() does) would invert the adapter
+                # lock order against a concurrent release().
+                backend.load_peft_adapter(self.qualified_name)
+                backend.activate_peft_adapter(self.qualified_name)
             self._active = True
 
     def deactivate(self) -> None:

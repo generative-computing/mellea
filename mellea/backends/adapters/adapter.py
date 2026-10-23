@@ -24,7 +24,6 @@ import time
 from collections.abc import Callable, Sequence
 from typing import Literal, TypeAlias, TypeVar, cast
 
-
 import yaml
 
 from ...core import Backend, MelleaLogger
@@ -128,14 +127,13 @@ def _composed_adapter_key(adapter: "_AdapterCore") -> str:
 
 
 def _embedded_adapter_from_entry(
-    intrinsic_name: str, config: dict, technology: str
+    intrinsic_name: str, technology: str
 ) -> "_AdapterCore":
     """Build a composed embedded `Adapter` from one `adapter_index.json` entry.
 
     Args:
         intrinsic_name (str): Adapter function name from the index entry
             (e.g. `"answerability"`).
-        config (dict): Parsed `io.yaml` transformation configuration.
         technology (str): Adapter technology in the switch model — `"lora"` or
             `"alora"`. Determines the `Identity.adapter_type`.
 
@@ -227,7 +225,7 @@ def _embedded_adapters_from_model_directory(
             config_dict = yaml.safe_load(f)
 
         adapter = _embedded_adapter_from_entry(
-            entry_name, config_dict, entry.get("technology", "lora")
+            entry_name, entry.get("technology", "lora")
         )
         adapters.append((adapter, config_dict))
 

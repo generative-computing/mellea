@@ -442,48 +442,31 @@ def _check_no_multimodal_blocks(action: Span | None, ctx: Context | None) -> Non
             )
 
 
-def _alora_qualified_name_for_activation_check(
-    adapter: IntrinsicAdapter | EmbeddedIntrinsicAdapter | _AdapterCore,
-) -> str | None:
+def _alora_qualified_name_for_activation_check(adapter: _AdapterCore) -> str | None:
     """Return `adapter`'s PEFT-loaded qualified name, iff it is a LocalFile/PEFT aLoRA.
 
     `None` for anything the activation guard does not apply to: an
-    `EmbeddedIntrinsicAdapter` (activated by the chat template, not PEFT
-    `set_adapter`, so `peft_config` never carries it; whether that reality
+    embedded adapter (an `EmbeddedBinding`, activated by the chat template, not
+    PEFT `set_adapter`, so `peft_config` never carries it; whether that reality
     needs its own check is still open), or a LoRA adapter (no
     invocation sequence to check).
 
     Returning a qualified name here is necessary but not sufficient for the
     guard to actually see the adapter: the caller (`_generate_from_intrinsic`)
     checks `peft_config` for it immediately, before the weights are
-    necessarily loaded. That is fine for the default composed-`Adapter` path
+    necessarily loaded. That is fine for the composed-`Adapter` path
     (`resolve_adapter()` calls `binding.prepare()`, and therefore
-    `load_peft_adapter`, at registration time, well before generation), but
-    the deprecated `IntrinsicAdapter` shim only loads inside
-    `_generate_intrinsic_with_adapter_scope`, which runs *after* this check
-    — so the guard silently no-ops on a shim adapter's first call. Not fixed
-    here: the shim is scheduled for removal (#1621), and
-    forcing an early load would mean triggering a Hub round trip from this
-    check rather than from generation.
+    `load_peft_adapter`, at registration time, well before generation).
 
     Args:
-        adapter: The resolved adapter about to generate.
+        adapter: The resolved composed `Adapter` about to generate.
 
     Returns:
         str | None: The qualified name PEFT loaded this adapter's weights
         under, or `None` if the activation guard does not apply.
     """
-    if isinstance(adapter, EmbeddedIntrinsicAdapter):
-        return None
-    # `.identity.adapter_type` (a `Literal["lora", "alora"]` string), not
-    # `.adapter_type` (an `AdapterType` enum member only `IntrinsicAdapter`
-    # carries): every adapter shape this method accepts — the shim and the
-    # composed `_AdapterCore` alike — sets `.identity`, so checking it once
-    # here covers both without a shape-specific attribute read.
     if adapter.identity.adapter_type != AdapterType.ALORA.value:
         return None
-    if isinstance(adapter, IntrinsicAdapter):
-        return adapter.qualified_name
     # Composed Adapter: LocalFile/PEFT reality only
     # — an EmbeddedBinding has no qualified_name in this sense (see the
     # docstring).
@@ -1370,15 +1353,10 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                     # error signal, for exactly the scenario this guard exists
                     # to catch. Mirrors `adapter_scope`'s own
                     # revision/binding_type derivation (`adapter.py`) so the
-                    # two emit consistent fields for the same adapter. The
-                    # legacy shim's own `weights` is an inert placeholder, so
-                    # report what its per-call `_IntrinsicPeftBinding` would.
+                    # two emit consistent fields for the same adapter.
                     revision: str | None
                     binding_type = adapter.weights.binding_type
-                    if isinstance(adapter, IntrinsicAdapter):
-                        revision = adapter.intrinsic_metadata.revision
-                        binding_type = _IntrinsicPeftBinding.binding_type
-                    elif isinstance(adapter.weights, LocalFileBinding):
+                    if isinstance(adapter.weights, LocalFileBinding):
                         try:
                             revision = adapter.weights.resolved_revision()
                         except Exception:

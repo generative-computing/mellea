@@ -524,10 +524,8 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         # to any other thread): this method is now also the documented
         # post-construction way to load embedded adapters from a Hub repo or
         # model directory on a live backend, so a caller here can race another
-        # thread's
-        # `add_adapter`/`resolve_adapter` — both `add_adapter`'s
-        # read-then-write across `_added_adapters` and `_discover_embedded_adapters`'
-        # mutation of global `warnings` filter state need the same lock
+        # thread's `add_adapter`/`resolve_adapter` — `add_adapter`'s
+        # read-then-write across `_added_adapters` needs the same lock
         # `add_adapter` itself would take via `resolve_adapter`.
         # `_adapter_resolve_lock()`, not `_adapter_activation_lock()`: see the
         # lock-order note on the latter — this method's own I/O (this Hub
