@@ -27,7 +27,7 @@ Note:
     The existing :class:`~mellea.backends.adapters.adapter.Adapter` ABC in
     `adapter.py` is not modified here.  This module introduces a new
     `Adapter` *dataclass* that is re-exported from
-    `mellea.backends.adapters`.  Both coexist until shim removal in 4.1.
+    `mellea.backends.adapters`.  Both coexist for now.
     The old ABC is not part of the public `__init__.py` surface, so there is
     no namespace collision on the public API.
 """
@@ -691,6 +691,16 @@ class LocalFileBinding(WeightsBinding):
     def activate(self) -> None:
         """Selects already-loaded adapter weights for generation.
 
+        Resilient to the weights having been dropped from the backend's PEFT
+        model since `prepare()`: `prepare()` injects the weights once, but an
+        `unload_peft_adapter()` call (e.g. to free GPU memory, or as a test
+        teardown) deletes them from the PEFT model while leaving this binding's
+        registration intact. Re-injecting them here — rather than treating
+        `prepare()` as a one-time guarantee — lets a composed `Adapter` be
+        unloaded and later re-used on the same backend without a hard failure
+        (the resilience the removed `IntrinsicAdapter` shim gave by re-loading
+        on demand).
+
         Raises:
             RuntimeError: `prepare()` was not called first, or called but did
                 not complete (registered with the backend but the weights
@@ -706,7 +716,19 @@ class LocalFileBinding(WeightsBinding):
                 raise RuntimeError(
                     "LocalFileBinding.activate() requires prepare() to be called first."
                 )
-            backend.activate_peft_adapter(self.qualified_name)
+            try:
+                backend.activate_peft_adapter(self.qualified_name)
+            except ValueError:
+                # The weights were dropped from the PEFT model since prepare()
+                # (an intervening unload_peft_adapter), so set_adapter() cannot
+                # find the name. The registration in `_added_adapters` survives
+                # an unload, so load_peft_adapter() re-injects it; retry once.
+                # Both verbs mutate PEFT model state the activation lock already
+                # held here guards, so no new lock is taken — re-loading under
+                # `_lifecycle_lock` (as prepare() does) would invert the adapter
+                # lock order against a concurrent release().
+                backend.load_peft_adapter(self.qualified_name)
+                backend.activate_peft_adapter(self.qualified_name)
             self._active = True
 
     def deactivate(self) -> None:
@@ -1129,11 +1151,7 @@ class Adapter:
     # (registration and the verbs key on the binding's `qualified_name`;
     # `_find_adapter` scans on the identity) and both return `None` on a miss,
     # so a disagreement surfaces as "adapter not found" far from its cause. It
-    # could not be enforced here because the deprecated shims carry a
-    # `_ShimWeightsBinding` with no `name`/`adapter_type` to compare at all
-    # (their identity tracks the configured name/type) — that no longer
-    # blocks the LocalFile/PEFT reality now that the shims retire in #1144, so
-    # `LocalHFBackend.add_adapter` enforces it there instead, at registration
-    # time. `EmbeddedBinding` has no `name`/`adapter_type` of its own, so the
-    # Embedded/Granite Switch reality still has nothing to cross-check
-    # against.
+    # is enforced not here but in `LocalHFBackend.add_adapter`, at registration
+    # time, so a construction that never reaches a backend isn't rejected.
+    # `EmbeddedBinding` has no `name`/`adapter_type` of its own, so the
+    # Embedded/Granite Switch reality has nothing to cross-check against.
