@@ -260,10 +260,18 @@ class _HallucinationDetectionContract(IOContract):
                 )
 
             faithfulness = item["faithfulness"]
-            if (
-                not isinstance(faithfulness, str)
-                or faithfulness not in _HALLUCINATION_FAITHFULNESS_LABELS
-            ):
+            if not isinstance(faithfulness, str):
+                valid_labels = ", ".join(
+                    repr(lbl) for lbl in _HALLUCINATION_FAITHFULNESS_LABELS
+                )
+                raise AdapterSchemaMismatchError(
+                    "hallucination_detection",
+                    observed,
+                    _HALLUCINATION_REQUIRED_KEYS,
+                    f"`faithfulness` must be a `str` (one of {valid_labels}), "
+                    f"got {type(faithfulness).__name__}",
+                )
+            if faithfulness not in _HALLUCINATION_FAITHFULNESS_LABELS:
                 valid_labels = ", ".join(
                     repr(lbl) for lbl in _HALLUCINATION_FAITHFULNESS_LABELS
                 )
@@ -277,18 +285,22 @@ class _HallucinationDetectionContract(IOContract):
                 )
 
             begin = item["response_begin"]
-            end = item["response_end"]
-            if (
-                isinstance(begin, bool)
-                or not isinstance(begin, int)
-                or isinstance(end, bool)
-                or not isinstance(end, int)
-            ):
+            if isinstance(begin, bool) or not isinstance(begin, int):
                 raise AdapterSchemaMismatchError(
                     "hallucination_detection",
                     observed,
                     _HALLUCINATION_REQUIRED_KEYS,
-                    "`response_begin` and `response_end` must be `int` (not `bool`)",
+                    f"`response_begin` must be `int` (not `bool`), "
+                    f"got {type(begin).__name__}",
+                )
+            end = item["response_end"]
+            if isinstance(end, bool) or not isinstance(end, int):
+                raise AdapterSchemaMismatchError(
+                    "hallucination_detection",
+                    observed,
+                    _HALLUCINATION_REQUIRED_KEYS,
+                    f"`response_end` must be `int` (not `bool`), "
+                    f"got {type(end).__name__}",
                 )
             if begin > end:
                 raise AdapterSchemaMismatchError(

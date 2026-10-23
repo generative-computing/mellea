@@ -258,6 +258,43 @@ def hallucination_contract():
     return _INTRINSIC_IO_CONTRACTS["hallucination_detection"]
 
 
+def test_hallucination_contract_build_prompt_raises(hallucination_contract):
+    with pytest.raises(NotImplementedError):
+        hallucination_contract.build_prompt()
+
+
+@pytest.mark.parametrize(
+    ("raw_payload", "match"),
+    [
+        ({"not": "a list"}, "must be a JSON array, got dict"),
+        ("just a string", "must be a JSON array, got str"),
+        (123, "must be a JSON array, got int"),
+        (["not_a_dict"], "must contain only JSON objects, got a str element"),
+        ([123], "must contain only JSON objects, got a int element"),
+        ([None], "must contain only JSON objects, got a NoneType element"),
+    ],
+)
+def test_hallucination_contract_rejects_non_array_or_non_object_elements(
+    hallucination_contract, raw_payload, match
+):
+    with pytest.raises(ValueError, match=match):
+        hallucination_contract.parse(json.dumps(raw_payload))
+
+
+@pytest.mark.parametrize(
+    "missing_key",
+    ["response_begin", "response_end", "response_text", "faithfulness", "explanation"],
+)
+def test_hallucination_contract_missing_required_key_raises(
+    hallucination_contract, missing_key
+):
+    bad = {k: v for k, v in _BASE_HALLUCINATION_RECORD.items() if k != missing_key}
+    with pytest.raises(AdapterSchemaMismatchError) as exc_info:
+        hallucination_contract.parse(json.dumps([bad]))
+    assert missing_key in exc_info.value.expected_keys
+    assert missing_key not in exc_info.value.observed_keys
+
+
 def test_hallucination_contract_unknown_faithfulness_label_raises(
     hallucination_contract,
 ):
@@ -271,27 +308,40 @@ def test_hallucination_contract_unknown_faithfulness_label_raises(
     assert "upgrade `mellea`" in msg
 
 
-def test_hallucination_contract_none_faithfulness_raises(hallucination_contract):
-    bad = {**_BASE_HALLUCINATION_RECORD, "faithfulness": None}
-    with pytest.raises(AdapterSchemaMismatchError):
+@pytest.mark.parametrize(
+    ("bad_faithfulness", "expected_type"),
+    [(None, "NoneType"), (123, "int"), (True, "bool")],
+)
+def test_hallucination_contract_non_str_faithfulness_raises_without_upgrade_hint(
+    hallucination_contract, bad_faithfulness, expected_type
+):
+    bad = {**_BASE_HALLUCINATION_RECORD, "faithfulness": bad_faithfulness}
+    with pytest.raises(AdapterSchemaMismatchError) as exc_info:
         hallucination_contract.parse(json.dumps([bad]))
+    msg = str(exc_info.value)
+    assert "`faithfulness` must be a `str`" in msg
+    assert f"got {expected_type}" in msg
+    assert "upgrade `mellea`" not in msg
 
 
 @pytest.mark.parametrize(
-    ("field", "bad_offset"),
+    ("field", "bad_offset", "expected_type"),
     [
-        ("response_begin", "0"),
-        ("response_end", "31"),
-        ("response_begin", 0.5),
-        ("response_end", None),
+        ("response_begin", "0", "str"),
+        ("response_end", "31", "str"),
+        ("response_begin", 0.5, "float"),
+        ("response_begin", None, "NoneType"),
+        ("response_end", None, "NoneType"),
     ],
 )
 def test_hallucination_contract_non_int_offset_raises(
-    hallucination_contract, field, bad_offset
+    hallucination_contract, field, bad_offset, expected_type
 ):
     bad = {**_BASE_HALLUCINATION_RECORD, field: bad_offset}
-    with pytest.raises(AdapterSchemaMismatchError, match="must be `int`"):
+    with pytest.raises(AdapterSchemaMismatchError) as exc_info:
         hallucination_contract.parse(json.dumps([bad]))
+    msg = str(exc_info.value)
+    assert f"`{field}` must be `int` (not `bool`), got {expected_type}" in msg
 
 
 @pytest.mark.parametrize(
@@ -307,8 +357,10 @@ def test_hallucination_contract_bool_offset_raises(
     hallucination_contract, field, bool_offset
 ):
     bad = {**_BASE_HALLUCINATION_RECORD, field: bool_offset}
-    with pytest.raises(AdapterSchemaMismatchError, match="not `bool`"):
+    with pytest.raises(AdapterSchemaMismatchError) as exc_info:
         hallucination_contract.parse(json.dumps([bad]))
+    msg = str(exc_info.value)
+    assert f"`{field}` must be `int` (not `bool`), got bool" in msg
 
 
 def test_hallucination_contract_begin_greater_than_end_raises(hallucination_contract):
