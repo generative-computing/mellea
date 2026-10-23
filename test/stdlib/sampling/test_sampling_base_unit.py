@@ -499,8 +499,8 @@ def test_concurrency_budget_must_be_positive():
 # --- Global vs per-call requirements ---
 
 
-async def test_global_requirements_override_per_call(mocked_context_backend):
-    """When `requirements` is set on the strategy, it supersedes the per-call list."""
+async def test_global_and_per_call_requirements_are_merged(mocked_context_backend):
+    """Strategy-level and per-call requirements are both evaluated."""
     global_req_calls = 0
     per_call_req_calls = 0
 
@@ -527,8 +527,31 @@ async def test_global_requirements_override_per_call(mocked_context_backend):
     )
 
     assert global_req_calls == 1, "global requirement should be evaluated"
-    assert per_call_req_calls == 0, (
-        "per-call requirement must be ignored when global is set"
+    assert per_call_req_calls == 1, "per-call requirement should be evaluated"
+
+
+async def test_merged_requirements_dedup_shared_instance(mocked_context_backend):
+    """A requirement set on both the strategy and the call is evaluated once."""
+    shared_req_calls = 0
+
+    def shared_validator(_ctx: Context) -> ValidationResult:
+        nonlocal shared_req_calls
+        shared_req_calls += 1
+        return ValidationResult(result=True)
+
+    shared_req = Requirement("shared", validation_fn=shared_validator)
+
+    strategy = RejectionSamplingStrategy(loop_budget=1, requirements=[shared_req])
+
+    await strategy.sample(
+        action=Instruction(description=""),
+        context=ChatContext(),
+        backend=mocked_context_backend,
+        requirements=[shared_req],
+    )
+
+    assert shared_req_calls == 1, (
+        "a requirement in both lists must be deduplicated and evaluated once"
     )
 
 
