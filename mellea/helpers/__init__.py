@@ -19,12 +19,12 @@ from .async_helpers import (
     send_to_queue,
     wait_for_all_mots,
 )
+from .chat_helpers import has_user_content
 from .event_loop_helper import _run_async_in_thread
 from .openai_compatible_helpers import (
     OPENAI_COMPATIBLE_WIRE_PROVIDERS,
     chat_completion_delta_merge,
     extract_model_tool_requests,
-    has_user_content,
     merge_provider_fields,
     message_to_openai_message,
     messages_to_docs,
@@ -47,6 +47,7 @@ __all__ = [
     "chat_completion_delta_merge",
     "extract_model_tool_requests",
     "get_current_event_loop",
+    "has_user_content",
     "is_vllm_server_with_structured_output",
     "merge_provider_fields",
     "message_to_openai_message",
