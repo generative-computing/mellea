@@ -1,8 +1,13 @@
 # pytest: unit
 """WindowCompactor — keep the last N body components.
 
-Demonstrates the default behaviour, the `window_size=` sugar on
-`ChatContext`, and how the auto-pinned system prefix is preserved.
+Demonstrates sliding window compaction using `WindowCompactor` and the `window_size=`
+sugar on `ChatContext`. Shows system-prefix pinning (`pin_system`), preserving initial
+user prompts (`pin_system_and_initial_user`), pure last-N (`pin_nothing`), and `size=0`
+to clear the conversation body while keeping pinned prefixes.
+
+Usage:
+    uv run python docs/examples/context/window_compactor.py
 """
 
 from mellea.stdlib.components.chat import Message
