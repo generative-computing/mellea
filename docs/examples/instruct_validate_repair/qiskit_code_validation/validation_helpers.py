@@ -3,16 +3,14 @@
 
 This module provides utilities for extracting code from markdown and validating
 Qiskit code against migration rules using the flake8-qiskit-migration plugin,
-against a benchmark problem's test suite, and against LintQ.
+and against a benchmark problem's own test suite.
 """
 
 import ast
 import builtins
 import ctypes
-import json
 import os
 import re
-import subprocess
 import tempfile
 import threading
 import traceback
@@ -236,47 +234,3 @@ def validate_correctness(problem: dict[str, Any], code: str) -> tuple[bool, str]
             else:
                 os.environ["MPLBACKEND"] = mpl_backend
 
-
-def validate_lintq(code: str) -> tuple[bool, str]:
-    """Run the LintQ CodeQL queries over `code`.
-
-    Requires the `codeql` CLI and `LINTQ_DIR` pointing at a LintQ checkout (see README.md).
-
-    Args:
-        code: Python source to analyse
-
-    Returns:
-        Tuple of (is_valid, error_message), one `[rule-id] message` line per finding
-    """
-    lintq = os.environ["LINTQ_DIR"]
-    with tempfile.TemporaryDirectory() as tmp:
-        os.makedirs(f"{tmp}/src")
-        with open(f"{tmp}/src/candidate.py", "w") as f:
-            f.write(code)
-        for cmd in (
-            [
-                "database",
-                "create",
-                f"{tmp}/db",
-                "--language=python",
-                f"--source-root={tmp}/src",
-            ],
-            [
-                "database",
-                "analyze",
-                f"{tmp}/db",
-                f"{lintq}/LintQ-all.qls",
-                "--format=sarifv2.1.0",
-                f"--output={tmp}/out.sarif",
-                f"--additional-packs={lintq}/qlint/codeql/src:{lintq}/qlint/codeql/lib",
-            ],
-        ):
-            subprocess.run(["codeql", *cmd], check=True, capture_output=True)
-        with open(f"{tmp}/out.sarif") as f:
-            results = [r for run in json.load(f)["runs"] for r in run["results"]]
-
-    if not results:
-        return True, ""
-    findings = "\n".join(f"[{r['ruleId']}] {r['message']['text']}" for r in results)
-    print(f"Validation failed: LintQ warnings:\n{findings}")
-    return False, f"LintQ warnings:\n{findings}"

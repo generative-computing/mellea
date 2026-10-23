@@ -1,15 +1,15 @@
 # Qiskit Code Validation with Instruct-Validate-Repair
 
-This example demonstrates using Mellea's Instruct-Validate-Repair (IVR) pattern to generate Qiskit quantum computing code that automatically passes `flake8-qiskit-migration` validation rules (QKT rules), and, optionally, the problem's own test suite and the [LintQ](https://github.com/sola-st/LintQ) static analyzer for quantum programs.
+This example demonstrates using Mellea's Instruct-Validate-Repair (IVR) pattern to generate Qiskit quantum computing code that automatically passes `flake8-qiskit-migration` validation rules (QKT rules), and, optionally, the problem's own test suite.
 
 ## What This Example Does
 
 Takes a prompt containing deprecated Qiskit code and:
 1. Generates corrected code using the LLM
-2. Validates the output against QKT rules, the test suite and LintQ
+2. Validates the output against QKT rules
 3. Automatically repairs the code if validation fails (up to 10 attempts)
 
-`validation_helpers.py` also provides test-suite and LintQ validators for benchmark problems (Qiskit HumanEval, QuantumKatas); see [Validating with Test Suites and LintQ](#validating-with-test-suites-and-lintq).
+`validation_helpers.py` also provides a test-suite validator for benchmark problems (Qiskit HumanEval, QuantumKatas); see [Validating with Test Suites](#validating-with-test-suites).
 
 ## Quick Start
 
@@ -76,13 +76,8 @@ qiskit_code_validation/
 - `validate_qiskit_migration()`: Validates against QKT rules
 - `validate_input_code()`: Pre-validates input prompts
 - `validate_correctness()`: Runs code against a benchmark problem's own test suite
-- `validate_lintq()`: Runs the LintQ CodeQL queries over the code
 
 All validators return `(is_valid, error_message)`, so the message is fed straight back to the model as the repair reason.
-
-### Adding LintQ to the Single-Prompt Example
-
-Set `use_lintq = True` in `test_qiskit_code_validation()` to also reject code flagged by LintQ. This needs the [LintQ setup](#lintq-setup) described below.
 
 ## Trying Different Prompts
 
@@ -209,44 +204,40 @@ qc.measure_all()
 
 **Note**: The exact output may vary depending on the model and its interpretation of the prompt.
 
-## Validating with Test Suites and LintQ
+## Validating with Test Suites
 
-Passing the QKT rules only shows that the code uses current Qiskit APIs, not that it solves the task or that it is free of quantum-specific bugs. For benchmark problems, `validate_correctness()` and `validate_lintq()` add two more checks:
+Passing the QKT rules only shows that the code uses current Qiskit APIs, not that it solves the task. For benchmark problems, `validate_correctness()` adds a second check:
 
 | Validator | What it checks | Repair reason fed back to the model |
 |-----------|----------------|-------------------------------------|
 | **QKT rules** | `flake8-qiskit-migration`, as in the single-prompt example | The QKT rule messages |
 | **Test suite** | Executes the code against the problem's own tests: `check(candidate)` for Qiskit HumanEval, `test_<entry_point>()` for QuantumKatas (best-effort 30s time limit, see below) | The assertion message or full traceback |
-| **LintQ** | Runs the [LintQ](https://github.com/sola-st/LintQ) CodeQL queries (double measurement, operations after measurement, unused qubits, ...) | `[rule-id] message` per finding |
 
-Both plug into the same `generate_validated_qiskit_code()` loop through its `extra_requirements` parameter. Running LintQ only once the tests pass avoids linting code that does not run, and saves time: each LintQ run builds a CodeQL database (around 20s).
+It plugs into the same `generate_validated_qiskit_code()` loop through its `extra_requirements` parameter.
 
 ```python
 from validation_helpers import (
     extract_code_from_markdown,
     validate_correctness,
-    validate_lintq,
 )
 
 from mellea.stdlib.requirements import req, simple_validate
 
 
-def tests_and_lintq(problem: dict):
-    """Pass the problem's tests, then LintQ."""
+def passes_tests(problem: dict):
+    """Pass the problem's own test suite."""
 
     def check(output: str) -> tuple[bool, str]:
-        code = extract_code_from_markdown(output)
-        passed, reason = validate_correctness(problem, code)
-        return validate_lintq(code) if passed else (passed, reason)
+        return validate_correctness(problem, extract_code_from_markdown(output))
 
     return req(
-        "The code must pass the problem's test suite and raise no LintQ warnings",
+        "The code must pass the problem's test suite",
         validation_fn=simple_validate(check),
     )
 
 
 code, success, attempts = generate_validated_qiskit_code(
-    m, problem["prompt"], strategy, extra_requirements=[tests_and_lintq(problem)]
+    m, problem["prompt"], strategy, extra_requirements=[passes_tests(problem)]
 )
 ```
 
@@ -256,7 +247,7 @@ code, success, attempts = generate_validated_qiskit_code(
 
 ### Setup
 
-The benchmark dependencies, the datasets and LintQ are **not** part of this repository. Install and download them anywhere you like; the paths below are only examples.
+The benchmark dependencies and the datasets are **not** part of this repository. Install and download them anywhere you like; the paths below are only examples.
 
 #### Python Dependencies
 
@@ -287,46 +278,6 @@ curl -L -o data/qiskit_quantumkatas.jsonl https://huggingface.co/datasets/Qiskit
 Check each dataset's license before redistributing it, or any results generated from it: results generated from QuantumKatas fall under CC BY-NC-SA 4.0.
 
 Some Qiskit HumanEval tasks call IBM Quantum services: they can only pass with a saved IBM Quantum account (`QiskitRuntimeService.save_account(...)`); without one, even their canonical solutions fail. The remaining canonical solutions, and all 350 QuantumKatas ones, pass the test-suite validator.
-
-#### LintQ Setup
-
-LintQ is a set of [CodeQL](https://codeql.github.com/) queries, so it needs the CodeQL CLI and a checkout of the LintQ repository:
-
-1. Install the CodeQL CLI and put `codeql` on your `PATH`, e.g. `brew install codeql` on macOS, or download the CodeQL bundle from the [codeql-action releases](https://github.com/github/codeql-action/releases). Check it with `codeql version`.
-2. Clone LintQ and install its query pack dependencies:
-
-   ```bash
-   git clone --depth 1 https://github.com/sola-st/LintQ.git
-   (cd LintQ/qlint/codeql/src && codeql pack install)
-   ```
-
-3. Point `LINTQ_DIR` at the checkout:
-
-   ```bash
-   export LINTQ_DIR="$(pwd)/LintQ"
-   ```
-
-
-### Benchmark Results
-
-All runs use `MultiTurnStrategy` with a loop budget of 3 (the first attempt plus up to 2 repairs).
-
-#### gpt-oss-120b (test suite + LintQ)
-
-These runs validated the test suite and LintQ.
-
-| Metric | QHE hard: first pass | QHE hard: post repair | QuantumKatas: first pass | QuantumKatas: post repair |
-|--------|------|------|------|------|
-| Tasks | 151 | 151 | 350 | 350 |
-| Passed both validators | 24/151 (16%) | **70/151 (46%)** | 25/350 (7%) | **163/350 (47%)** |
-| Failed | 127/151 (84%) | 81/151 (54%) | 325/350 (93%) | 187/350 (53%) |
-| Failed the test suite | 113 | 77 | 297 | 148 |
-| Flagged by LintQ | 14 | 4 | 28 | 39 |
-| LintQ warnings raised | 17 | 4 | 30 | 47 |
-| Fixed by the repair loop | — | 46 | — | 138 |
-
-The repair loop roughly triples the Qiskit HumanEval hard pass rate and multiplies the QuantumKatas one by more than six. On QuantumKatas, LintQ flags more tasks after repair than before: a task that fails its tests is never linted, and many programs only start running (and so get linted) after repair.
-
 
 ## Changing the Model
 
@@ -385,18 +336,6 @@ If using a general-purpose model, it may not have enough Qiskit knowledge to pas
 - Switching to the Qiskit-specialized model (`hf.co/Qiskit/mistral-small-3.2-24b-qiskit-GGUF:latest`)
 - Setting `system_prompt = QISKIT_SYSTEM_PROMPT` to guide the model toward modern Qiskit APIs
 - Using simpler prompts
-
-### LintQ Not Configured
-```
-KeyError: 'LINTQ_DIR'
-```
-**Solution**: Follow [LintQ Setup](#lintq-setup) and `export LINTQ_DIR=/path/to/LintQ`.
-
-### CodeQL Errors
-```
-subprocess.CalledProcessError: Command '['codeql', 'database', ...]' returned non-zero exit status
-```
-**Solution**: Check `codeql version` works, and that `codeql pack install` was run in `$LINTQ_DIR/qlint/codeql/src`.
 
 ### Import Error: flake8-qiskit-migration
 ```
