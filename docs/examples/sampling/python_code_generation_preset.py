@@ -1,16 +1,11 @@
 # pytest: e2e, qualitative, ollama
-"""Example demonstrating python_code_generation_sampling() preset.
+"""Python code generation sampling preset with automatic repair.
 
-Shows how the preset bundles requirements and feedback into a reusable
-configuration for Python code generation tasks, with automatic repair on failure.
+Demonstrates python_code_generation_sampling(), which bundles extraction, syntax,
+and execution requirements with repair feedback into a reusable configuration.
 
-The preset handles:
-1. Code extraction validation
-2. Syntax validation
-3. Execution validation with optional sandbox isolation
-4. Import restrictions (optional allowlist)
-5. Output size limits
-6. Model-friendly repair feedback for each failure type
+Usage:
+    uv run python docs/examples/sampling/python_code_generation_preset.py
 """
 
 import mellea

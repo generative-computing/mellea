@@ -1,6 +1,12 @@
 # pytest: ollama, e2e, qualitative, slow
+"""ReACT agent using Mellea's built-in react() framework.
 
-"""React examples using the Mellea library's framework."""
+Demonstrates the ReACT (Reasoning and Acting) loop with tool integration,
+using Mellea's stdlib react() function and LangChain tool interoperability.
+
+Usage:
+    uv run python docs/examples/agents/react/react_using_mellea.py
+"""
 
 import asyncio
 
