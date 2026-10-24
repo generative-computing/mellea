@@ -35,7 +35,7 @@ from mellea.backends.adapters.adapter import EmbeddedIntrinsicAdapter
 from mellea.backends.openai import OpenAIBackend
 from mellea.core import ModelOutputThunk, Requirement
 from mellea.stdlib import functional as mfuncs
-from mellea.stdlib.components import Intrinsic, Message
+from mellea.stdlib.components import Document, Intrinsic, Message
 from mellea.stdlib.context import ChatContext, SimpleContext
 from mellea.stdlib.requirements import ALoraRequirement
 
@@ -242,6 +242,11 @@ async def test_chat_template_kwargs_set():
 
     assert "chat_template_kwargs" in extra_body
     assert extra_body["chat_template_kwargs"]["adapter_name"] == "answerability"
+    # No documents in the context means no mirror: an empty documents list is
+    # falsy in the chat template too, so mirroring it would change nothing.
+    assert "documents" not in extra_body["chat_template_kwargs"]
+    # No io.yaml response_format means no schema to send.
+    assert "response_format" not in call_kwargs.kwargs
 
 
 async def test_composed_adapter_drives_generate_from_intrinsic():
@@ -694,6 +699,188 @@ async def test_user_extra_body_merges_into_intrinsic_extra_body():
     assert extra_body["chat_template_kwargs"]["enable_thinking"] is True
     assert extra_body["chat_template_kwargs"]["caller_key"] == "caller-value"
     assert call_kwargs["reasoning_effort"] == "medium"
+
+
+async def test_documents_mirrored_into_chat_template_kwargs():
+    """Documents ride in chat_template_kwargs as well as the top-level field.
+
+    vLLM reads the top-level `documents` field, but llama-server and other
+    OpenAI-compatible servers drop unknown top-level fields and only reach
+    chat-template variables through `chat_template_kwargs`. Without the
+    mirror, the Granite Switch template's `documents` variable never renders
+    there and every RAG adapter sees an empty document set (issue #1735).
+    """
+    backend = _make_backend_with_adapter(_SIMPLE_CONFIG)
+    ctx = ChatContext().add(
+        Message(
+            "user",
+            "What is the square root of 4?",
+            documents=[Document("The square root of 4 is 2.")],
+        )
+    )
+    mock_create = AsyncMock(return_value=_simple_chat_completion())
+
+    mock_client = MagicMock()
+    mock_client.chat.completions.create = mock_create
+
+    with patch.object(
+        OpenAIBackend,
+        "_async_client",
+        new_callable=PropertyMock,
+        return_value=mock_client,
+    ):
+        mot, _ = await mfuncs.aact(
+            Intrinsic("answerability"), ctx, backend, strategy=None
+        )
+        await mot.avalue()
+
+    extra_body = mock_create.call_args.kwargs["extra_body"]
+    assert extra_body["documents"]
+    assert extra_body["chat_template_kwargs"]["documents"] == extra_body["documents"]
+    assert extra_body["chat_template_kwargs"]["adapter_name"] == "answerability"
+
+
+async def test_user_chat_template_kwargs_documents_not_overwritten():
+    """A caller-supplied chat_template_kwargs.documents wins over the mirror."""
+    backend = _make_backend_with_adapter(_SIMPLE_CONFIG)
+    ctx = ChatContext().add(
+        Message(
+            "user",
+            "What is the square root of 4?",
+            documents=[Document("The square root of 4 is 2.")],
+        )
+    )
+    mock_create = AsyncMock(return_value=_simple_chat_completion())
+
+    mock_client = MagicMock()
+    mock_client.chat.completions.create = mock_create
+
+    caller_docs = [{"text": "caller document"}]
+    with patch.object(
+        OpenAIBackend,
+        "_async_client",
+        new_callable=PropertyMock,
+        return_value=mock_client,
+    ):
+        mot, _ = await mfuncs.aact(
+            Intrinsic("answerability"),
+            ctx,
+            backend,
+            strategy=None,
+            model_options={
+                "extra_body": {"chat_template_kwargs": {"documents": caller_docs}}
+            },
+        )
+        await mot.avalue()
+
+    extra_body = mock_create.call_args.kwargs["extra_body"]
+    assert extra_body["chat_template_kwargs"]["documents"] == caller_docs
+    # The top-level field still carries the documents derived from the
+    # context, not the caller's override.
+    assert extra_body["documents"] == [{"text": "The square root of 4 is 2."}]
+    assert extra_body["chat_template_kwargs"]["adapter_name"] == "answerability"
+
+
+_ANSWERABILITY_SCHEMA = {"type": "string", "enum": ["answerable", "unanswerable"]}
+
+
+async def test_response_format_sent_alongside_structured_outputs():
+    """The io.yaml schema rides in `response_format` as well as `structured_outputs`.
+
+    `structured_outputs` is vLLM's own field; llama-server ignores it and only
+    constrains decoding from the OpenAI-standard `response_format`, so without
+    this every adapter runs unconstrained there.
+    """
+    backend = _make_backend_with_adapter(
+        {**_SIMPLE_CONFIG, "response_format": _ANSWERABILITY_SCHEMA}
+    )
+    mock_create = AsyncMock(return_value=_simple_chat_completion('"answerable"'))
+
+    mock_client = MagicMock()
+    mock_client.chat.completions.create = mock_create
+
+    with patch.object(
+        OpenAIBackend,
+        "_async_client",
+        new_callable=PropertyMock,
+        return_value=mock_client,
+    ):
+        mot, _ = await mfuncs.aact(
+            Intrinsic("answerability"), _make_context(), backend, strategy=None
+        )
+        await mot.avalue()
+
+    call_kwargs = mock_create.call_args.kwargs
+    assert call_kwargs["response_format"] == {
+        "type": "json_schema",
+        "json_schema": {"name": "answerability", "schema": _ANSWERABILITY_SCHEMA},
+    }
+    # vLLM's own field is untouched.
+    assert call_kwargs["extra_body"]["structured_outputs"] == {
+        "json": _ANSWERABILITY_SCHEMA
+    }
+
+
+async def test_user_structured_outputs_drives_response_format():
+    """A caller's `extra_body.structured_outputs` override is the schema mirrored."""
+    backend = _make_backend_with_adapter(
+        {**_SIMPLE_CONFIG, "response_format": _ANSWERABILITY_SCHEMA}
+    )
+    mock_create = AsyncMock(return_value=_simple_chat_completion('"yes"'))
+
+    mock_client = MagicMock()
+    mock_client.chat.completions.create = mock_create
+
+    caller_schema = {"type": "string", "enum": ["yes", "no"]}
+    with patch.object(
+        OpenAIBackend,
+        "_async_client",
+        new_callable=PropertyMock,
+        return_value=mock_client,
+    ):
+        mot, _ = await mfuncs.aact(
+            Intrinsic("answerability"),
+            _make_context(),
+            backend,
+            strategy=None,
+            model_options={
+                "extra_body": {"structured_outputs": {"json": caller_schema}}
+            },
+        )
+        await mot.avalue()
+
+    call_kwargs = mock_create.call_args.kwargs
+    assert call_kwargs["extra_body"]["structured_outputs"] == {"json": caller_schema}
+    assert call_kwargs["response_format"]["json_schema"]["schema"] == caller_schema
+
+
+async def test_user_response_format_not_overwritten():
+    """A caller-supplied `response_format` wins over the io.yaml schema."""
+    backend = _make_backend_with_adapter(
+        {**_SIMPLE_CONFIG, "response_format": _ANSWERABILITY_SCHEMA}
+    )
+    mock_create = AsyncMock(return_value=_simple_chat_completion('"answerable"'))
+
+    mock_client = MagicMock()
+    mock_client.chat.completions.create = mock_create
+
+    caller_format = {"type": "json_object"}
+    with patch.object(
+        OpenAIBackend,
+        "_async_client",
+        new_callable=PropertyMock,
+        return_value=mock_client,
+    ):
+        mot, _ = await mfuncs.aact(
+            Intrinsic("answerability"),
+            _make_context(),
+            backend,
+            strategy=None,
+            model_options={"response_format": caller_format},
+        )
+        await mot.avalue()
+
+    assert mock_create.call_args.kwargs["response_format"] == caller_format
 
 
 async def test_user_extra_body_cannot_override_embedded_adapter():
