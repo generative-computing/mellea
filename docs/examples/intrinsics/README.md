@@ -157,9 +157,11 @@ Demonstrates checking compliance with policies.
 ```bash
 uv run intrinsics.py
 ```
+
 Full example showing multiple adapter functions working together in a RAG pipeline.
 
 ## Architecture
+
 ![Granite Libraries Software Stack Architecture in Mellea](../../docs/images/granite-libraries-mellea-architecture.png)
 
 ## Related Documentation
@@ -167,3 +169,11 @@ Full example showing multiple adapter functions working together in a RAG pipeli
 - See `mellea/stdlib/components/intrinsic/` for adapter function implementations
 - See `mellea/backends/adapters/` for adapter system
 - See `docs/docs/examples/granite-switch/README.md` for more about granite-switch
+
+## Decisions
+
+Typed one-token answers (probability, choice, score) from the decision
+adapter function on Granite Switch checkpoints:
+
+- [`decisions.py`](decisions.py) — vLLM serving
+- [`decisions_llamacpp.py`](decisions_llamacpp.py) — llama.cpp serving

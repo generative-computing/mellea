@@ -17,6 +17,7 @@ import openai
 from openai.types.chat import ChatCompletion
 from openai.types.chat.chat_completion_chunk import ChatCompletionChunk
 from openai.types.completion import Completion
+from packaging.version import Version
 
 from mellea.stdlib.requirements.requirement import ALoraRequirement
 
@@ -37,6 +38,7 @@ from ..core import (
 )
 from ..core.base import AbstractMelleaTool
 from ..formatters import ChatFormatter, TemplateFormatter, granite as granite_formatters
+from ..formatters.granite import intrinsics as intrinsics
 from ..helpers import (
     DEFAULT_CHUNK_TIMEOUT,
     ClientCache,
@@ -52,6 +54,8 @@ from ..helpers import (
     prefetch_audio_urls,
     send_to_queue,
     should_replay_reasoning,
+    vllm_server_version,
+    vllm_tokenize_single_tokens,
 )
 from ..stdlib.components import Intrinsic, Message
 from ..stdlib.requirements import LLMaJRequirement
@@ -84,6 +88,13 @@ openai_ollama_batching_error = "json: cannot unmarshal array into Go struct fiel
 format: None = None  # typing this variable in order to shadow the global format function and ensure mypy checks for errors
 
 
+_VLLM_MIN_LOGPROB_TOKEN_IDS_VERSION = Version("0.30.0")
+"""Oldest vLLM on which `logprob_token_ids` was verified on chat completions."""
+
+_VLLM_MAX_LOGPROB_TOKEN_IDS = 128
+"""vLLM rejects a `logprob_token_ids` list longer than this."""
+
+
 class OpenAIBackend(FormatterBackend, AdapterMixin):
     """A generic OpenAI compatible backend.
 
@@ -105,6 +116,12 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             repo ID from which to load embedded adapter configs. When `None`,
             falls back to *model_id*. Use this when the vLLM served model name
             differs from the adapter config location.
+        adapter_revision (str): Git revision for embedded-adapter discovery
+            from the Hugging Face Hub. Pin this to the same commit your
+            server loaded to avoid a mid-flight Hub update silently
+            changing the adapter configuration. Only used when
+            *adapter_source* (or *model_id*) is a Hub repo ID; local
+            directories are read as-is. Defaults to `"main"`.
         api_key (str | None): API key; falls back to `OPENAI_API_KEY` env var.
         default_extra_body (dict | None): Construction-time `extra_body` fields
             that are merged into every request this backend makes. Per-call
@@ -144,6 +161,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         default_to_constraint_checking_alora: bool = True,
         load_embedded_adapters: bool = False,
         adapter_source: str | None = None,
+        adapter_revision: str = "main",
         api_key: str | None = None,
         default_extra_body: dict | None = None,
         **kwargs,
@@ -252,6 +270,8 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         self._provider: str = "openai"
 
         self._adapter_source = adapter_source
+        self._adapter_revision = adapter_revision
+        self._label_token_id_cache: dict[tuple[str, ...], list[int] | None] = {}
 
         # Use provided parameters or fall back to environment variables
         self._api_key = api_key
@@ -328,7 +348,9 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         # OpenAI Backends only support embedded_adapters.
         self._uses_embedded_adapters = True
         if load_embedded_adapters:
-            self.register_embedded_adapter_model(self._adapter_source or self._model_id)
+            self.register_embedded_adapter_model(
+                self._adapter_source or self._model_id, revision=self._adapter_revision
+            )
 
     def __repr__(self) -> str:
         """Mask the API key to prevent accidental exposure in logs."""
@@ -565,12 +587,17 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         # discovery call) must not run under the lock `add_adapter()` briefly
         # takes around its dict writes.
         with self._adapter_resolve_lock():
-            discovered = _discover_embedded_adapters(
+            discovered, skip_reasons = _discover_embedded_adapters(
                 source,
                 revision=revision,
                 cache_dir=cache_dir,
                 intrinsic_name=intrinsic_name,
             )
+            if skip_reasons:
+                self._adapter_skip_reasons = {
+                    **self._adapter_skip_reasons,
+                    **skip_reasons,
+                }
             names = []
             for adapter, config in discovered:
                 key = _composed_adapter_key(adapter)
@@ -1002,6 +1029,51 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         return result
 
+    def _vllm_label_token_ids(self, labels: list[str]) -> list[int] | None:
+        """Token ids of one-token decision labels, when the server can score them exactly.
+
+        vLLM (0.30.0 and later, the version this was verified on) accepts
+        `logprob_token_ids` and then returns the logprob of exactly those
+        ids, so a label outside the top-K cannot be missed. The ids come
+        from the server's own `/tokenize`. Anything else (another server,
+        an older vLLM, a label that is not a single token, more labels than
+        the server's 128-id cap) returns None and the caller keeps the
+        top-K request. The result is cached per label set.
+
+        Args:
+            labels: The one-token label pool of the capability.
+
+        Returns:
+            The label token ids in label order, or None to use the top-K path.
+        """
+        key = (self._model_id if isinstance(self._model_id, str) else "", *labels)
+        if key in self._label_token_id_cache:
+            return self._label_token_id_cache[key]
+        ids: list[int] | None = None
+        base_url = str(self._client.base_url)
+        headers = {**self._client.auth_headers, **self._client._custom_headers}
+        version = vllm_server_version(base_url, headers)
+        if (
+            version is not None
+            and version >= _VLLM_MIN_LOGPROB_TOKEN_IDS_VERSION
+            and len(labels) <= _VLLM_MAX_LOGPROB_TOKEN_IDS
+        ):
+            try:
+                ids = vllm_tokenize_single_tokens(
+                    base_url,
+                    headers,
+                    self._model_id,
+                    labels,  # type: ignore[arg-type]
+                )
+            except ValueError as exc:
+                MelleaLogger.get_logger().info(
+                    "Not requesting exact label logprobs from the server (%s); "
+                    "using the top-K readout instead.",
+                    exc,
+                )
+        self._label_token_id_cache[key] = ids
+        return ids
+
     async def _generate_from_intrinsic(
         self,
         action: Intrinsic,
@@ -1137,6 +1209,11 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         }
 
         rewritten = rewriter.transform(request_json, **action.intrinsic_kwargs)
+        MelleaLogger.get_logger().debug(
+            "Intrinsic '%s' rendered messages: %s",
+            action.intrinsic_name,
+            [m.content for m in rewritten.messages],
+        )
 
         # --- prepare extra_body and api_params --------------------------------
         extra_body = {}
@@ -1186,6 +1263,20 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         api_params.update(self._map_thinking_option(thinking, extra_body))
 
         extra_body = self._merge_user_extra_body(extra_body, user_extra_body)
+
+        # One-token decisions: ask a vLLM server for the logprobs of exactly the
+        # label token ids instead of scanning its top-K, so a label outside the
+        # top-K cannot be missed. The server returns the requested ids as
+        # decoded strings, which the first_token rule matches exactly as before.
+        first_token_labels = intrinsics.input._first_token_labels(
+            intrinsic_config.get("transformations")
+        )
+        if first_token_labels is not None:
+            label_ids = await asyncio.to_thread(
+                self._vllm_label_token_ids, first_token_labels
+            )
+            if label_ids is not None:
+                extra_body["logprob_token_ids"] = label_ids
 
         # Embedded adapters activate via control tokens in the chat template;
         # the binding owns the final request edit so callers cannot override
