@@ -206,16 +206,13 @@ qc.measure_all()
 
 ## Validating with Test Suites
 
-Passing the QKT rules only shows that the code uses current Qiskit APIs, not that it solves the task. For benchmark problems, `validate_correctness()` adds a second check:
+Passing the QKT rules only shows that the code uses current Qiskit APIs, not that it solves the task. For benchmark problems, `validate_correctness()` runs the code against the problem's own tests (`check(candidate)` for Qiskit HumanEval, `test_<entry_point>()` for QuantumKatas, with a best-effort 30s time limit) and feeds the assertion message or traceback back to the model as the repair reason.
 
-| Validator | What it checks | Repair reason fed back to the model |
-|-----------|----------------|-------------------------------------|
-| **QKT rules** | `flake8-qiskit-migration`, as in the single-prompt example | The QKT rule messages |
-| **Test suite** | Executes the code against the problem's own tests: `check(candidate)` for Qiskit HumanEval, `test_<entry_point>()` for QuantumKatas (best-effort 30s time limit, see below) | The assertion message or full traceback |
-
-It plugs into the same `generate_validated_qiskit_code()` loop through its `extra_requirements` parameter.
+To try it, drop the snippet below into `qiskit_code_validation.py`: the imports and `passes_tests()` at the top, the last two statements in `test_qiskit_code_validation()` in place of the existing `generate_validated_qiskit_code()` call, so they reuse its `m` and `strategy`. It reads a dataset downloaded as in [Setup](#setup).
 
 ```python
+import json
+
 from validation_helpers import (
     extract_code_from_markdown,
     validate_correctness,
@@ -235,6 +232,9 @@ def passes_tests(problem: dict):
         validation_fn=simple_validate(check),
     )
 
+
+# One dataset row = one problem dict
+problem = json.loads(next(open("data/qiskit_humaneval_hard.jsonl")))
 
 code, success, attempts = generate_validated_qiskit_code(
     m, problem["prompt"], strategy, extra_requirements=[passes_tests(problem)]

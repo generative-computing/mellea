@@ -130,8 +130,9 @@ class _Timeout(BaseException):
     """
 
 
-# Builtins the executed code does not get: they could escape or stall the check
-# (defense in depth, not a sandbox).
+# Builtins the executed code does not get: they could escape or stall the check.
+# This is defense in depth, not a sandbox: `__import__` is kept for `import`
+# statements, so the executed code can still use any module.
 _SAFE_BUILTINS = {
     k: v
     for k, v in vars(builtins).items()
