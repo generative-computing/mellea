@@ -131,9 +131,7 @@ def python_code_generation_sampling(
         use_sandbox=use_sandbox,
     )
 
-    strategy = ModelFriendlyRepairStrategy(
-        loop_budget=loop_budget, requirements=requirements
-    )
+    strategy = ModelFriendlyRepairStrategy(loop_budget=loop_budget)
 
     return SamplingPreset(
         requirements=requirements,
@@ -235,9 +233,7 @@ def python_plotting_sampling(
 
     all_reqs = python_reqs + plotting_reqs
 
-    strategy = ModelFriendlyRepairStrategy(
-        loop_budget=loop_budget, requirements=all_reqs
-    )
+    strategy = ModelFriendlyRepairStrategy(loop_budget=loop_budget)
 
     return SamplingPreset(
         requirements=all_reqs,
