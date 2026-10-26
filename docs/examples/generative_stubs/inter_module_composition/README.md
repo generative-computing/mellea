@@ -2,7 +2,7 @@
 
 Composing modular generative functions across separate Python files to build multi-stage pipelines.
 
-## Files
+## Examples
 
 | File | Description |
 | :--- | :--- |
