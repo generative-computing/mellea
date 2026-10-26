@@ -2,8 +2,19 @@
 """Matplotlib plotting sampling preset with headless validation.
 
 Demonstrates python_plotting_sampling(), which bundles Python code generation
-requirements with headless matplotlib backend configuration, savefig() output
-validation, and execution sandboxing.
+requirements with headless matplotlib backend configuration and savefig() output
+validation.
+
+The plotting preset defaults to `use_sandbox=True`, but most examples in this
+file override that with `use_sandbox=False` so they run as static validation
+(parse and import-check only, no code execution). The exception is
+`example_without_output_path`, which uses the sandbox default and therefore
+requires Docker — see the function docstring for details.
+
+Prerequisites:
+    pip install matplotlib numpy
+    ollama pull granite4.2:3b
+    ollama serve
 
 Usage:
     uv run python docs/examples/sampling/python_plotting_preset.py
@@ -82,6 +93,14 @@ def example_without_output_path():
     Demonstrates using the preset when you don't care about a specific output path.
     The preset validates that matplotlib dependencies are available but doesn't
     enforce a specific savefig() call.
+
+    Note: this is the only function in this file that uses the plotting preset's
+    sandbox default (`use_sandbox=True`). It requires a running Docker daemon and
+    `mellea[sandbox]` installed (`uv sync --extra sandbox`). If Docker is
+    unavailable the sandbox requirement fails silently — the run reports
+    ``Valid: X/Y`` with the unmet requirement listed as "sandbox execution with
+    policy", and the script still prints "✓ completed" because it does not check
+    the sampling result.
     """
     session = mellea.start_session()
 

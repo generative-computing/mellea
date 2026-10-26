@@ -1,5 +1,8 @@
 # Requirements Examples
 
+For a higher-level interface that bundles these requirements into ready-to-use presets,
+see [`sampling/`](../sampling/README.md).
+
 This directory contains examples for using Mellea's requirement validation system,
 including specialized requirements for RAG (Retrieval-Augmented Generation) workflows
 and code generation tasks like plotting.

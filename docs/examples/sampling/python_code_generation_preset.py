@@ -1,8 +1,17 @@
 # pytest: e2e, qualitative, ollama
 """Python code generation sampling preset with automatic repair.
 
-Demonstrates python_code_generation_sampling(), which bundles extraction, syntax,
-and execution requirements with repair feedback into a reusable configuration.
+Demonstrates python_code_generation_sampling(), which bundles code extraction,
+syntax checking, and import validation into a reusable configuration with
+automatic repair feedback.
+
+By default (`use_sandbox=False`) generated code is validated statically — the
+preset parses and import-checks the code but does not execute it. Pass
+`use_sandbox=True` to run the code in a Docker sandbox instead.
+
+Prerequisites:
+    ollama pull granite4.2:3b
+    ollama serve
 
 Usage:
     uv run python docs/examples/sampling/python_code_generation_preset.py
