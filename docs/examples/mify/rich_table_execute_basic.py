@@ -1,6 +1,23 @@
 # pytest: ollama, qualitative, e2e
+"""Extracting and transforming tables from a PDF with RichDocument.
 
-# This is an example of using the RichDocument class.
+Demonstrates loading a remote PDF with `RichDocument`, extracting its first
+table as a mified `Table` object, and applying `m.transform()` to add a derived
+column — retrying with different seeds until the result is a valid `Table`.
+
+`RichDocument` and `Table` are internally mified wrappers around Docling
+documents. More about Docling: https://github.com/docling-project/docling
+
+Prerequisites:
+    uv sync --extra backends
+    pip install docling
+    ollama pull llama3.2:3b
+    ollama serve
+
+Usage:
+    uv run python docs/examples/mify/rich_table_execute_basic.py
+"""
+
 import os
 
 from mellea import start_session
@@ -9,12 +26,6 @@ from mellea.core import MelleaLogger
 from mellea.stdlib.components.docs.richdocument import RichDocument, Table
 
 MelleaLogger.get_logger().setLevel("ERROR")
-
-"""
-Here we demonstrate the use of the (internally m-ified) class
-RichDocument and Table that are wrappers around Docling documents.
-More about Docling here: https://github.com/docling-project/docling
-"""
 
 # Using a paper from arxive as source file
 source = "https://arxiv.org/pdf/1906.04043"

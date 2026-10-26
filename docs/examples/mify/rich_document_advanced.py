@@ -2,8 +2,21 @@
 # SKIP REASON: CXXABI_1.3.15 not found - conda environment issue on HPC systems with old glibc
 
 # ruff: noqa E402
-# Example: Rich Documents and Templating
-# Lets look at how to pass documents to a model using `Mellea`.
+"""Rich document processing and custom template formatting with docling.
+
+Walks through passing PDF documents to a Mellea model in progressively richer ways:
+raw markdown export via `m.chat()`, the built-in `RichDocument` wrapper, a custom
+subclass that overrides `format_for_llm()` to expose only section titles via an
+inline Jinja2 template, and finally using a custom-formatted document as
+`grounding_context` in `m.instruct()`.
+
+Prerequisites:
+    uv sync --extra backends
+    pip install docling docling-core
+
+Usage:
+    uv run python docs/examples/mify/rich_document_advanced.py
+"""
 
 # 1. We'll start by initializing our `Mellea` session.
 from docling_core.types.doc.document import DoclingDocument

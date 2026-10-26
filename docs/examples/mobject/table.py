@@ -1,4 +1,18 @@
 # pytest: ollama, e2e
+"""Querying and transforming a mified table object.
+
+Demonstrates using `@mify` with `fields_include` and a Jinja2 `template` to
+expose a markdown table to Mellea, then querying it with `m.query()` and
+updating it with `m.transform()`.
+
+Prerequisites:
+    pip install pandas
+    ollama pull granite4.2:3b
+    ollama serve
+
+Usage:
+    uv run python docs/examples/mobject/table.py
+"""
 
 from io import StringIO
 
