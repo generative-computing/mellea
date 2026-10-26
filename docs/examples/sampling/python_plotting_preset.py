@@ -98,7 +98,7 @@ def example_without_output_path():
     sandbox default (`use_sandbox=True`). It requires a running Docker daemon and
     `mellea[sandbox]` installed (`uv sync --extra sandbox`). If Docker is
     unavailable the sandbox requirement fails silently — the run reports
-    ``Valid: X/Y`` with the unmet requirement listed as "sandbox execution with
+    `Valid: X/Y` with the unmet requirement listed as "sandbox execution with
     policy", and the script still prints "✓ completed" because it does not check
     the sampling result.
     """
