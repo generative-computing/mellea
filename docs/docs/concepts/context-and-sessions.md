@@ -248,7 +248,7 @@ result, ctx = await react(
 )
 ```
 
-See the examples in [`docs/examples/context/`](../../examples/context/README.md) for
+See the examples in [`docs/examples/context/`](https://github.com/generative-computing/mellea/tree/main/docs/examples/context) for
 `WindowCompactor`, `ThresholdCompactor`, custom compactors, and ReACT integration.
 
 ## Why explicit context management matters
