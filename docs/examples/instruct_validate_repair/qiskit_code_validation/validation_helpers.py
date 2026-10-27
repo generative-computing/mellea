@@ -234,4 +234,3 @@ def validate_correctness(problem: dict[str, Any], code: str) -> tuple[bool, str]
                 os.environ.pop("MPLBACKEND", None)
             else:
                 os.environ["MPLBACKEND"] = mpl_backend
-
