@@ -1,13 +1,18 @@
 # pytest: ollama, e2e
-#
-# Standalone function hooks — the simplest way to extend Mellea.
-#
-# This example registers two function-based hooks:
-#   1. A generation_pre_call hook that logs and enforces a token budget
-#   2. A component_post_success hook that logs generation latency
-#
-# Run:
-#   uv run python docs/examples/plugins/standalone_hooks.py
+"""Standalone function hooks: the simplest way to extend Mellea.
+
+Registers two function-based hooks:
+1. A generation_pre_call hook that logs and enforces a token budget
+2. A component_post_success hook that logs generation latency
+
+Prerequisites:
+    uv sync --extra hooks
+    ollama pull granite4.2:3b
+    ollama serve
+
+Usage:
+    uv run python docs/examples/plugins/standalone_hooks.py
+"""
 
 import logging
 import sys

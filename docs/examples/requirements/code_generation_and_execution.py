@@ -1,54 +1,40 @@
 # pytest: e2e, ollama, qualitative, slow
-"""Example demonstrating code generation, data extraction, and graph file generation.
+"""Generating, executing and validating data-extraction and plotting code.
 
-This example shows how to use Mellea to:
-1. Accept user input specifying what data to extract AND how to visualize it
-2. Read a CSV file
-3. Generate Python code to extract and visualize data in one step
-4. Execute the code to generate and save the graph to a file using headless matplotlib
+Demonstrates an end-to-end pipeline that turns a natural-language request into a
+saved graph. The request names both the data to extract from a CSV file and how to
+visualize it. Mellea generates the Python code, `PythonExecutionReq` runs it during
+validation, and `MatplotlibHeadlessBackend` and `PlotFileSaved` check that the plot
+renders headlessly (Agg) to the expected file:
+1. User Input - Accept a request specifying data extraction AND visualization
+2. CSV Loading - Read and preview the CSV file (a 100-row sample is created by default)
+3. Code Generation - Generate code to extract data and plot it with headless matplotlib
+4. Code Execution - Execute the code as a side effect of validation, saving the PNG
 
-The pipeline implements a 4-step process:
-1. User Input - Accept natural language request specifying data extraction AND visualization
-2. CSV Loading - Read data from a CSV file
-3. Code Generation - Generate code to extract data and create visualization using
-   headless matplotlib
-4. Code Execution - Execute the code to generate and save graph to file (no display)
+Because execution happens during validation, the code has already run by the time
+`m.instruct()` returns; check that the output file exists instead of running the code
+again.
 
-## Execution Tier & Safety
+Command-line options: `--csv PATH` for your own CSV (the sample columns are `name`,
+`age`, `salary`, `department`, `years_experience`, `work_location`), `--interactive`
+to type requests instead of using the predefined ones, and `--output DIR` for the
+directory the graphs are saved to.
 
-This example uses execution_tier="local" for fast local execution. Execution tiers
-control where and how generated code runs:
+Safety: this example uses `execution_tier="local"`, which runs model-generated code
+as a subprocess with no container isolation. Use it only for trusted, development-time
+runs. For LLM-generated or untrusted code, switch to `execution_tier="docker"` (needs
+`mellea[sandbox]` and a running Docker daemon). The tiers, when to use each, and which
+`CapabilityPolicy` fields are enforced are covered in the "Execution tiers" section of
+docs/docs/how-to/tools-and-agents.md.
 
-**Available Tiers:**
-- "static" (default): Parse and import-check only, no execution
-- "local_unsafe": Direct subprocess execution, no isolation, no policy restrictions
-- "local": Subprocess execution with CapabilityPolicy (timeout, resource limits)
-- "docker_unsafe": Docker-isolated execution, no policy restrictions
-- "docker": Docker-isolated execution with CapabilityPolicy (RECOMMENDED for untrusted
-  inputs)
+Prerequisites:
+    pip install matplotlib numpy
+    ollama pull granite4.2:3b
+    ollama serve
 
-**When to use each tier:**
-- Use "local" ONLY when:
-  * Code source is trusted (internal development)
-  * Running in already-sandboxed environments (CI/CD, containers)
-  * Performance is critical and isolation overhead is unacceptable
-- Use "docker" when:
-  * Code is LLM-generated or from untrusted sources
-  * Running in shared environments or production
-  * Security is more important than speed
-
-**For production use with untrusted code, set execution_tier="docker":**
-```python
-PythonExecutionReq(
-    execution_tier="docker",  # Container-isolated execution (recommended for
-    # untrusted code)
-    policy=CapabilityPolicy(timeout=20),
-    max_output_chars=10_000,
-)
-```
-
-This example uses "local" for demonstration purposes. Change to "docker" for production.
-See docs/examples/requirements/README.md for more details.
+Usage:
+    uv run python docs/examples/requirements/code_generation_and_execution.py
+    uv run python docs/examples/requirements/code_generation_and_execution.py --interactive
 """
 
 import argparse

@@ -1,13 +1,18 @@
 # pytest: ollama, e2e
-#
-# Class-based plugin — group related hooks in a single Plugin subclass.
-#
-# This example creates a PII protection plugin that:
-#   1. Blocks input containing SSN patterns before component execution
-#   2. Scans LLM output for SSN patterns after generation (observe-only)
-#
-# Run:
-#   uv run python docs/examples/plugins/class_plugin.py
+"""Class-based plugin that groups related hooks in a Plugin subclass.
+
+Demonstrates a PII protection plugin that:
+1. Blocks input containing SSN patterns before component execution
+2. Scans LLM output for SSN patterns after generation (observe-only)
+
+Prerequisites:
+    uv sync --extra hooks
+    ollama pull granite4.2:3b
+    ollama serve
+
+Usage:
+    uv run python docs/examples/plugins/class_plugin.py
+"""
 
 import logging
 import re

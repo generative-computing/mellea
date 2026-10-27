@@ -1,5 +1,5 @@
 # pytest: ollama, e2e
-"""Full pipeline tracing example combining generation and sampling diagnostics.
+"""Full pipeline tracing with generation and sampling debug plugins.
 
 This example demonstrates both the generation and sampling debug plugins working
 together to provide end-to-end visibility into the entire sampling loop.
@@ -16,9 +16,6 @@ This combined view helps debug complex interactions between:
 - Validation logic (sampling diagnostics)
 - Repair strategies (how feedback improves results)
 
-Run:
-    uv run python docs/examples/plugins/builtin_full_pipeline_tracing.py
-
 Watch the complete flow:
     [📤 GEN-PRE-CALL] → [📥 GEN-POST-CALL] (model called)
     [❌ SAMPLING-ITER] → [🔧 REPAIR-TRIGGERED] (validation failed)
@@ -26,6 +23,14 @@ Watch the complete flow:
     [❌ SAMPLING-ITER] → [🔧 REPAIR-TRIGGERED] (still failing)
     ...
     [💥 SAMPLING-END] (final result)
+
+Prerequisites:
+    uv sync --extra hooks
+    ollama pull granite4.2:3b
+    ollama serve
+
+Usage:
+    uv run python docs/examples/plugins/builtin_full_pipeline_tracing.py
 """
 
 import logging

@@ -1,17 +1,23 @@
 # pytest: skip_always
-"""Example: summarise recent GitHub activity using the GitHub MCP server.
+"""Summarizing recent GitHub activity with tools from the GitHub MCP server.
 
-Demonstrates the mellea MCP workflow:
-  1. Discover all tools on the server with discover_mcp_tools()
-  2. Pick only the ones needed by name
-  3. Drive multi-turn tool use with mellea's react() loop
+Demonstrates consuming MCP tools from Mellea against the hosted GitHub MCP server:
+1. Discover all tools on the server with `discover_mcp_tools()`
+2. Pick only the ones needed by name (`get_me`, `search_pull_requests`) and wrap
+   them as `MelleaTool` with `as_mellea_tool()`
+3. Drive multi-turn tool use with Mellea's `react()` loop, which asks the model to
+   summarize your pull-request activity over the last `--days` days (default 14)
+
+For the API overview, see docs/docs/how-to/tools-and-agents.md.
 
 Prerequisites:
-    pip install 'mellea[tools]'
+    uv sync --extra tools
     export GITHUB_TOKEN=<token with repo + read:user scopes>
+    ollama pull granite4.1:8b
+    ollama serve
 
 Usage:
-    uv run python docs/examples/mcp/github_activity_summary.py
+    uv run python docs/examples/mcp/github_activity_summary.py --days 14
 """
 
 import argparse

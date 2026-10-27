@@ -1,17 +1,22 @@
 # pytest: ollama, e2e
-"""Validation tracing example showing real failures.
+"""Validation tracing with real failures.
 
 This example uses instruct with immediate validation (no repair strategy),
 so we'll see real validation failures in the logs.
-
-Run:
-    uv run python docs/examples/plugins/builtin_validation_failures.py
 
 Watch the logs to see:
     [🔍 VALIDATION-PRE-CHECK] requirements setup
     [❌ VALIDATION-POST-CHECK] with MIXED RESULTS showing:
     ✓ Passed requirements (debug level)
     ❌ Failed requirements (info level) with reasons
+
+Prerequisites:
+    uv sync --extra hooks
+    ollama pull granite4.2:3b
+    ollama serve
+
+Usage:
+    uv run python docs/examples/plugins/builtin_validation_failures.py
 """
 
 import logging

@@ -1,5 +1,5 @@
 # pytest: ollama, e2e
-"""Complete diagnostics example with all debug plugins.
+"""Complete diagnostics with all built-in debug plugins.
 
 This example combines generation, sampling, AND validation tracing for maximum
 visibility into the entire sampling + validation pipeline.
@@ -18,10 +18,13 @@ This provides complete end-to-end traceability for:
 - Repair strategy (how feedback improves results)
 - Overall sampling loop (iterations and budget)
 
-Run:
-    uv run python docs/examples/plugins/builtin_complete_diagnostics.py
+Prerequisites:
+    uv sync --extra hooks
+    ollama pull granite4.2:3b
+    ollama serve
 
-Watch the complete flow with all lifecycle events visible.
+Usage:
+    uv run python docs/examples/plugins/builtin_complete_diagnostics.py
 """
 
 import logging

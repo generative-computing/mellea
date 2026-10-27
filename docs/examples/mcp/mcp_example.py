@@ -1,11 +1,27 @@
 # pytest: skip_always
-"""Example of an MCP server.
+"""Exposing a Mellea instruct-validate-repair loop as an MCP server.
 
-You need to install the mcp package:
-uv pip install "mcp[cli]"
+Demonstrates a FastMCP server whose `write_a_poem` tool runs `m.instruct()` with a
+word-limit `Requirement` and `RejectionSamplingStrategy`, so the tool validates and
+repairs its own output before returning. The same pattern makes any Mellea program
+callable from Claude Desktop, Langflow, Cursor, or any other MCP client. The file
+also registers a `greeting://{name}` resource.
 
-and run the example in MCP debug UI:
-uv run mcp dev docs/examples/mcp/mcp_example.py
+To use it from Langflow, follow https://docs.langflow.org/mcp-client#mcp-stdio-mode
+and register the server with the config in `mcp_server.json` in this directory,
+replacing `<ABSOLUTE PATH>` with the absolute path to your Mellea checkout. The
+config launches `uv --directory <path>/docs/examples/mcp run mcp run mcp_example.py`
+over stdio.
+
+For a walkthrough of building servers, see docs/docs/integrations/mcp.md.
+
+Prerequisites:
+    uv pip install "mcp[cli]"
+    ollama pull smollm2:1.7b
+    ollama serve
+
+Usage:
+    uv run mcp dev docs/examples/mcp/mcp_example.py
 """
 
 import io
@@ -19,11 +35,6 @@ from mellea.backends.ollama import OllamaModelBackend
 from mellea.core import MelleaLogger, ModelOutputThunk, Requirement
 from mellea.stdlib.requirements import simple_validate
 from mellea.stdlib.sampling import RejectionSamplingStrategy
-
-# #################
-# run MCP debug UI with: uv run mcp dev docs/examples/tutorial/mcp_example.py
-# ##################
-
 
 # Create an MCP server
 mcp = FastMCP("Demo")

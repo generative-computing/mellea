@@ -1,5 +1,5 @@
 # pytest: ollama, e2e
-"""Built-in sampling diagnostics plugin example.
+"""Built-in sampling diagnostics plugin.
 
 This example demonstrates the sampling hooks from mellea.plugins.builtin_debug,
 which trace the sampling strategy pipeline with iteration tracking, validation
@@ -12,15 +12,20 @@ The plugin logs:
 - Repair events when triggered
 - Final sampling result with success/failure reason
 
-Run:
-    uv run python docs/examples/plugins/builtin_sampling_diagnostics.py
-
 Watch the logs to see:
     [🎯 SAMPLING-START] strategy=... | loop_budget=... | requirements=...
     [✅ SAMPLING-ITER 1] SUCCESS: ... validations passed
     [❌ SAMPLING-ITER 2] FAILED: ... validations passed
     [🔧 REPAIR-TRIGGERED] at iteration ...
     [🎉 SAMPLING-END] SUCCESS in ... iterations
+
+Prerequisites:
+    uv sync --extra hooks
+    ollama pull granite4.2:3b
+    ollama serve
+
+Usage:
+    uv run python docs/examples/plugins/builtin_sampling_diagnostics.py
 """
 
 import logging

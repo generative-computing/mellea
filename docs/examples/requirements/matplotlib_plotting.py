@@ -1,8 +1,26 @@
 # pytest: unit
-"""Examples for matplotlib-specific requirements validation.
+"""Validating matplotlib plotting code with the plotting requirements.
 
-This example demonstrates how to use MatplotlibHeadlessBackend, PlotFileSaved,
-and PlotDependenciesAvailable requirements to validate code that generates plots.
+Demonstrates `MatplotlibHeadlessBackend`, `PlotFileSaved` and
+`PlotDependenciesAvailable`, calling each requirement's `validation_fn` directly on
+a `ChatContext` that holds the code, with no model involved. Eight examples cover:
+headless backend validation (valid `Agg`, and a failing interactive `TkAgg`), plot
+file saved (valid, and failing when `savefig` is missing), a dependencies-available
+check, multiple `savefig` calls, the `fig.savefig()` pattern, and keyword arguments
+in `savefig`.
+
+`MatplotlibHeadlessBackend` accepts `Agg`, `Cairo`, `pdf`, `svg`, `pgf` and
+`module://gr.matplotlib.backend_gr`. `PlotFileSaved(output_path=...)` accepts
+`plt.savefig(...)` and `fig.savefig(...)`, with positional or keyword arguments.
+`PlotDependenciesAvailable` checks that matplotlib and numpy are importable. These
+checks suit server and CI code that must run headless; for interactive plotting or
+notebook display they are the wrong tool.
+
+Prerequisites:
+    pip install matplotlib numpy
+
+Usage:
+    uv run python docs/examples/requirements/matplotlib_plotting.py
 """
 
 from mellea.core import ModelOutputThunk

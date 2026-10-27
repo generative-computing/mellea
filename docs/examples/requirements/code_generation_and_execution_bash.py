@@ -1,16 +1,13 @@
 # pytest: e2e, ollama, qualitative, slow
-"""Example demonstrating Python code generation for CLI data processing tasks.
+"""Generating Python code that orchestrates bash_executor for CLI data processing.
 
-This example shows how to use Mellea to:
-1. Accept user input specifying file/directory management and CLI tasks
-2. Generate Python code with bash_executor() calls for data processing workflows
-3. Execute the generated Python code to orchestrate multiple bash_executor calls
-
-The pipeline implements a 4-step process:
-1. User Input - Accept natural language request for file/CLI operations
-2. Context Loading - Load file listings and sample data
+Demonstrates turning a natural-language file or CLI request into Python code that
+makes sequential `bash_executor()` calls, validating it with `PythonSyntaxValid`
+under a `ModelFriendlyRepairStrategy`, and running it with `python_tool`:
+1. User Input - Accept a natural language request for file/CLI operations
+2. Context Loading - Load the listing of a sample workspace (logs, data, config)
 3. Code Generation - Generate Python code with sequential bash_executor calls
-4. Code Execution - Execute the generated Python code to process data
+4. Code Execution - Execute the generated code and display the command output
 
 Example tasks:
 - Find and process files matching patterns
@@ -19,7 +16,30 @@ Example tasks:
 - Generate reports from log files or data files
 - Search and filter data across multiple files
 
-This approach avoids shell operators (pipes, redirects) by generating Python control flow instead.
+This approach avoids shell operators (pipes, redirects, semicolons) by generating
+Python control flow instead: loops, conditionals and variables process each command's
+output via the `ExecutionResult` API (`result.success`, `result.stdout`,
+`result.skip_message`). Generated code looks like:
+
+    result = bash_executor("find logs -name '*.log'", working_dir=workspace_dir)
+    if result.success:
+        for file in result.stdout.strip().split("\\n"):
+            result = bash_executor(f"grep -c ERROR {file}", working_dir=workspace_dir)
+
+The runner uses `python_tool(tier="local_unsafe", allowed_imports=["mellea"])`, which
+executes model-generated code as an unrestricted subprocess. That is acceptable for a
+trusted, development-time demo; the tier trade-offs are covered in the "Execution
+tiers" section of docs/docs/how-to/tools-and-agents.md. Pass `--workspace PATH` to use
+your own directory and `--interactive` to type requests instead of using the
+predefined ones.
+
+Prerequisites:
+    ollama pull granite4.2:3b
+    ollama serve
+
+Usage:
+    uv run python docs/examples/requirements/code_generation_and_execution_bash.py
+    uv run python docs/examples/requirements/code_generation_and_execution_bash.py --interactive
 """
 
 import argparse

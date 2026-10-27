@@ -1,5 +1,5 @@
 # pytest: ollama, e2e
-"""Built-in generation tracing plugin example.
+"""Built-in generation tracing plugin.
 
 This example demonstrates the GenerationTracingPlugin from mellea.plugins.builtin_debug,
 which traces all LLM backend calls with request/response inspection.
@@ -12,12 +12,17 @@ The plugin logs:
 - Latency in milliseconds
 - Token usage (prompt + completion = total)
 
-Run:
-    uv run python docs/examples/plugins/builtin_generation_tracing.py
-
 Watch the logs to see tracing in action:
     [📤 GEN-PRE-CALL gen_id=...] model=... | prompt=...
     [📥 GEN-POST-CALL gen_id=...] model=... | latency=...ms | tokens=(...) | response=...
+
+Prerequisites:
+    uv sync --extra hooks
+    ollama pull granite4.2:3b
+    ollama serve
+
+Usage:
+    uv run python docs/examples/plugins/builtin_generation_tracing.py
 """
 
 import logging

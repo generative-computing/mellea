@@ -1,5 +1,5 @@
 # pytest: e2e, ollama, qualitative
-"""Example usage patterns for bash_executor tool.
+"""Running shell commands with the bash_executor tool.
 
 Demonstrates multiple ways to use Mellea's bash execution capabilities:
 1. Direct execution for local commands
@@ -20,6 +20,16 @@ provide isolation at the application layer (containers, VMs).
 
 Note: Commands must use argv-friendly syntax (no pipes, redirects, or shell builtins).
 Use individual commands and compose them in Python instead.
+
+Examples 1, 2 and 4-6 run without an LLM. Example 3 needs a model; if no backend is
+reachable it is skipped with a message and the rest still run.
+
+Prerequisites:
+    ollama pull granite4.2:3b
+    ollama serve
+
+Usage:
+    uv run python docs/examples/tools/shell_example.py
 """
 
 from mellea import MelleaSession, start_session

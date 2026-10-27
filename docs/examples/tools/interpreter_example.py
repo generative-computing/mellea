@@ -1,4 +1,27 @@
 # pytest: ollama, e2e
+"""Code interpreter tool with forced tool use and argument validation.
+
+Walks through `python_tool()` in four steps: running code directly with no LLM,
+offering the tool to the model, forcing the call with `uses_tool()`, and constraining
+the generated code with `tool_arg_validator()` so the plot is written to a file
+instead of shown. The tool call is returned but not executed by `m.instruct()`;
+the example runs it explicitly with `call_func()`.
+
+Only `example_4` runs when the script is executed; call the others from the bottom
+of the file to try them. `example_1` uses `tier="docker_unsafe"` and needs Docker;
+the LLM-driven examples use `tier="local_unsafe"`, which runs model-generated code
+as an unrestricted subprocess with no isolation. Use it only for trusted,
+development-time runs. The tier trade-offs are covered in the "Execution tiers"
+section of docs/docs/how-to/tools-and-agents.md.
+
+Prerequisites:
+    pip install matplotlib
+    ollama pull granite4.2:3b
+    ollama serve
+
+Usage:
+    uv run python docs/examples/tools/interpreter_example.py
+"""
 
 from mellea import MelleaSession, start_session
 from mellea.backends import ModelOption

@@ -1,5 +1,5 @@
 # pytest: ollama, e2e
-"""Validation tracing plugin example.
+"""Built-in validation tracing plugin.
 
 This example demonstrates the validation debug plugins from mellea.plugins.builtin_debug,
 which trace requirement validation with pre-check setup and detailed per-requirement
@@ -10,15 +10,20 @@ The plugin logs:
 - Per-requirement: pass/fail status with reasons for failures
 - Post-check: aggregate pass/fail counts and summary
 
-Run:
-    uv run python docs/examples/plugins/builtin_validation_tracing.py
-
 Watch the logs to see:
     [🔍 VALIDATION-PRE-CHECK] requirements=... | target=...
     [❌ VALIDATION-POST-CHECK] MIXED RESULTS: ... passed, ... failed
     ✓ Passed requirement
     ❌ Failed requirement
        └─ reason why it failed
+
+Prerequisites:
+    uv sync --extra hooks
+    ollama pull granite4.2:3b
+    ollama serve
+
+Usage:
+    uv run python docs/examples/plugins/builtin_validation_tracing.py
 """
 
 import logging

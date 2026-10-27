@@ -1,14 +1,24 @@
 # pytest: ollama, e2e
-"""Example showing how to use pre-built Hugging Face smolagents tools with Mellea.
+"""Using pre-built Hugging Face smolagents tools with Mellea.
 
-This demonstrates loading existing tools from the smolagents ecosystem,
-similar to how you can use langchain tools with MelleaTool.from_langchain().
+Demonstrates loading an existing tool from the smolagents ecosystem and converting
+it with `MelleaTool.from_smolagents()`, similar to how LangChain tools are wrapped
+with `MelleaTool.from_langchain()`. Here `PythonInterpreterTool` is offered to the
+model, and any tool call it makes is executed with `call_func()`.
 
 The smolagents library provides various pre-built tools like:
 - PythonInterpreterTool for code execution
 - DuckDuckGoSearchTool for web search (requires ddgs package)
 - WikipediaSearchTool for Wikipedia queries
 - And many others from the Hugging Face ecosystem
+
+Prerequisites:
+    uv sync --extra tools
+    ollama pull granite4.2:3b
+    ollama serve
+
+Usage:
+    uv run python docs/examples/tools/smolagents_example.py
 """
 
 from mellea import start_session
@@ -47,5 +57,5 @@ try:
             print(f"\nTool execution failed: {e}")
 
 except ImportError as e:
-    print("Please install smolagents: uv pip install 'mellea[smolagents]'")
+    print("Please install smolagents: uv pip install 'mellea[tools]'")
     print(f"Error: {e}")
