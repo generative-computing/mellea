@@ -1,6 +1,6 @@
 # Qiskit Code Validation with Instruct-Validate-Repair
 
-This example demonstrates using Mellea's Instruct-Validate-Repair (IVR) pattern to generate Qiskit quantum computing code that automatically passes `flake8-qiskit-migration` validation rules (QKT rules).
+This example demonstrates using Mellea's Instruct-Validate-Repair (IVR) pattern to generate Qiskit quantum computing code that automatically passes `flake8-qiskit-migration` validation rules (QKT rules), and, optionally, the problem's own test suite.
 
 ## What This Example Does
 
@@ -8,6 +8,8 @@ Takes a prompt containing deprecated Qiskit code and:
 1. Generates corrected code using the LLM
 2. Validates the output against QKT rules
 3. Automatically repairs the code if validation fails (up to 10 attempts)
+
+`validation_helpers.py` also provides a test-suite validator for benchmark problems (Qiskit HumanEval, QuantumKatas); see [Validating with Test Suites](#validating-with-test-suites).
 
 ## Quick Start
 
@@ -64,7 +66,7 @@ Benchmarks on `mistral-small-3.2-24b-qiskit` model:
 
 ```
 qiskit_code_validation/
-├── qiskit_code_validation.py   # Main example
+├── qiskit_code_validation.py   # Main example (single prompt)
 ├── validation_helpers.py       # Validation utilities
 └── README.md                   # This file
 ```
@@ -73,6 +75,9 @@ qiskit_code_validation/
 - `extract_code_from_markdown()`: Extracts code from markdown blocks
 - `validate_qiskit_migration()`: Validates against QKT rules
 - `validate_input_code()`: Pre-validates input prompts
+- `validate_correctness()`: Runs code against a benchmark problem's own test suite
+
+All validators return `(is_valid, error_message)`, so the message is fed straight back to the model as the repair reason.
 
 ## Trying Different Prompts
 
@@ -198,6 +203,81 @@ qc.measure_all()
 ````
 
 **Note**: The exact output may vary depending on the model and its interpretation of the prompt.
+
+## Validating with Test Suites
+
+Passing the QKT rules only shows that the code uses current Qiskit APIs, not that it solves the task. For benchmark problems, `validate_correctness()` runs the code against the problem's own tests (`check(candidate)` for Qiskit HumanEval, `test_<entry_point>()` for QuantumKatas, with a best-effort 30s time limit) and feeds the assertion message or traceback back to the model as the repair reason.
+
+To try it, drop the snippet below into `qiskit_code_validation.py`: the imports and `passes_tests()` at the top, the last two statements in `test_qiskit_code_validation()` in place of the existing `generate_validated_qiskit_code()` call, so they reuse its `m` and `strategy`. It reads a dataset downloaded as in [Setup](#setup).
+
+```python
+import json
+
+from validation_helpers import (
+    extract_code_from_markdown,
+    validate_correctness,
+)
+
+from mellea.stdlib.requirements import req, simple_validate
+
+
+def passes_tests(problem: dict):
+    """Pass the problem's own test suite."""
+
+    def check(output: str) -> tuple[bool, str]:
+        return validate_correctness(problem, extract_code_from_markdown(output))
+
+    return req(
+        "The code must pass the problem's test suite",
+        validation_fn=simple_validate(check),
+    )
+
+
+# One dataset row = one problem dict
+problem = json.loads(next(open("data/qiskit_humaneval_hard.jsonl")))
+
+code, success, attempts = generate_validated_qiskit_code(
+    m, problem["prompt"], strategy, extra_requirements=[passes_tests(problem)]
+)
+```
+
+> ⚠️ **Security**: the test-suite validator runs `exec()` on model-generated code and on the dataset's test code, in the current process and **not** in a sandbox. Run it only on datasets you trust, on a machine where running arbitrary Python is acceptable.
+>
+> The 30s time limit is best effort: it is only checked between Python bytecodes, so code blocked inside a C call (a simulator run, `time.sleep`) is stopped only once that call returns, and a bare `except:` in the generated code can swallow it.
+
+### Setup
+
+The benchmark dependencies and the datasets are **not** part of this repository. Install and download them anywhere you like; the paths below are only examples.
+
+#### Python Dependencies
+
+The benchmark tests import Qiskit and a few plotting and graph libraries. Install them in the project environment:
+
+```bash
+uv pip install flake8-qiskit-migration "qiskit>=2.1.0,<2.5.0" qiskit-aer qiskit-ibm-runtime qiskit-ibm-transpiler matplotlib networkx pylatexenc seaborn
+```
+
+#### Datasets
+
+The benchmarks are published by Qiskit on Hugging Face, with the same fields (`task_id`, `prompt`, `canonical_solution`, `test`, `entry_point`); each row is one `problem` for `validate_correctness()`.
+
+| Benchmark | Tasks | Prompt style | License |
+|-----------|-------|--------------|---------|
+| [Qiskit HumanEval hard](https://huggingface.co/datasets/Qiskit/qiskit_humaneval_hard) | 151 | Natural-language instruction: the model writes the whole function | Apache-2.0 |
+| [Qiskit HumanEval](https://huggingface.co/datasets/Qiskit/qiskit_humaneval) | 151 | Code stub with a docstring | Apache-2.0 |
+| [Qiskit QuantumKatas](https://huggingface.co/datasets/Qiskit/Qiskit-QuantumKatas) | 350 | Task description plus a function stub | **CC BY-NC-SA 4.0 (non-commercial)** |
+
+```bash
+mkdir -p data
+# Qiskit HumanEval hard (and, the same way, Qiskit/qiskit_humaneval)
+uv run --with datasets python -c "from datasets import load_dataset; load_dataset('Qiskit/qiskit_humaneval_hard', split='test').to_json('data/qiskit_humaneval_hard.jsonl', force_ascii=False)"
+# Qiskit QuantumKatas
+curl -L -o data/qiskit_quantumkatas.jsonl https://huggingface.co/datasets/Qiskit/Qiskit-QuantumKatas/resolve/main/qiskit_quantumkatas.jsonl
+```
+
+Check each dataset's license before redistributing it, or any results generated from it: results generated from QuantumKatas fall under CC BY-NC-SA 4.0.
+
+Some Qiskit HumanEval tasks call IBM Quantum services: they can only pass with a saved IBM Quantum account (`QiskitRuntimeService.save_account(...)`); without one, even their canonical solutions fail. The remaining canonical solutions, and all 350 QuantumKatas ones, pass the test-suite validator.
 
 ## Changing the Model
 
