@@ -1,14 +1,22 @@
 # pytest: huggingface, e2e
+"""Estimating model certainty about its own answer with the uncertainty adapter.
 
-"""Example usage of the uncertainty/certainty intrinsic.
+Demonstrates `core.check_certainty()`, which evaluates how certain the model is
+about its response to a user question. The context must contain a user question
+followed by an assistant answer; the script generates one with `mfuncs.chat()`
+and then scores it.
 
-Evaluates how certain the model is about its response to a user question.
-The context should contain a user question followed by an assistant answer.
+The script uses `LocalHFBackend`. The same adapter function also runs on
+`OpenAIBackend` with a Granite Switch model; see `docs/examples/granite-switch/`.
+For Ollama, see `uncertainty_ollama.py`.
+Runs the model locally, so it needs a GPU or Apple Silicon Mac; the model and
+adapter are downloaded from Hugging Face on first run.
 
-To run this script from the root of the Mellea source tree, use the command:
-```
-uv run python docs/examples/intrinsics/uncertainty.py
-```
+Prerequisites:
+    uv sync --extra hf
+
+Usage:
+    uv run python docs/examples/intrinsics/uncertainty.py
 """
 
 from mellea import model_ids, start_backend

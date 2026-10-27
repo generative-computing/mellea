@@ -1,13 +1,20 @@
 # pytest: huggingface, e2e
+"""Validating a response against a requirement with the requirement-check adapter.
 
-"""Example usage of the requirement check intrinsic.
+Demonstrates `core.requirement_check()`, which scores (0.0 to 1.0) whether an
+assistant response satisfies a natural-language requirement. This is the same
+adapter function that `ALoraRequirement` uses internally.
 
-Intrinsic function that determines if the text satisfies the given requirements.
+The script uses `LocalHFBackend`. The same adapter function also runs on
+`OpenAIBackend` with a Granite Switch model; see `docs/examples/granite-switch/`.
+Runs the model locally, so it needs a GPU or Apple Silicon Mac; the model and
+adapter are downloaded from Hugging Face on first run.
 
-To run this script from the root of the Mellea source tree, use the command:
-```
-uv run python docs/examples/intrinsics/requirement_check.py
-```
+Prerequisites:
+    uv sync --extra hf
+
+Usage:
+    uv run python docs/examples/intrinsics/requirement_check.py
 """
 
 from mellea import model_ids, start_backend

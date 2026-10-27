@@ -1,11 +1,20 @@
 # pytest: huggingface, e2e
+"""Extracting supporting citations for an assistant response with the citations adapter.
 
-"""Example usage of the citations intrinsic for RAG applications.
+Demonstrates `rag.find_citations()`, which identifies the document sentences that
+support each sentence of an assistant response. One of the two documents is
+deliberately unrelated, so the output shows that only relevant sentences are cited.
 
-To run this script from the root of the Mellea source tree, use the command:
-```
-uv run python docs/examples/intrinsics/citations.py
-```
+The script uses `LocalHFBackend`. The same adapter function also runs on
+`OpenAIBackend` with a Granite Switch model; see `docs/examples/granite-switch/`.
+Runs the model locally, so it needs a GPU or Apple Silicon Mac; the model and
+adapter are downloaded from Hugging Face on first run.
+
+Prerequisites:
+    uv sync --extra hf
+
+Usage:
+    uv run python docs/examples/intrinsics/citations.py
 """
 
 import json

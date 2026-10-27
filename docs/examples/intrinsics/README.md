@@ -1,169 +1,29 @@
-# Adapter Functions Examples
+# Adapter Function Examples
 
-This directory contains examples for using Mellea's adapter functions - specialized model capabilities accessed through adapters.
+Examples demonstrating Mellea's adapter functions: specialized LoRA/aLoRA-backed
+capabilities (RAG quality checks, safety checks, requirement validation) accessed
+through `LocalHFBackend`, `OpenAIBackend` with Granite Switch, or Ollama. For
+setup, backend support, and a conceptual overview, see
+[Adapter functions](../../docs/advanced/intrinsics.md) and
+[Safety guardrails](../../docs/how-to/safety-guardrails.md). To run the same
+adapter functions on a Granite Switch model, see [`granite-switch/`](../granite-switch/README.md).
+To train your own, see [`aLora/`](../aLora/README.md).
 
-## Concepts Demonstrated
+## Examples
 
-- **Adapter Functions**: Specialized model capabilities beyond text generation
-- **Adapter System**: Using LoRA/aLoRA adapters for specific tasks
-- **RAG Evaluation**: Assessing retrieval-augmented generation quality
-- **Quality Metrics**: Measuring relevance, groundedness, and accuracy
-- **Backend Integration**: Running adapter functions through LocalHFBackend
-  (runtime adapters or local Granite Switch checkpoints) and OpenAIBackend
-  (Granite Switch deployments)
-
-## Basic Usage
-
-```python
-from mellea import model_ids, start_backend
-from mellea.stdlib import functional as mfuncs
-from mellea.stdlib.components.intrinsic import core
-
-ctx, backend = start_backend(
-    "hf", model_id=model_ids.IBM_GRANITE_4_1_3B, context_type="chat"
-)
-
-response, ctx = mfuncs.chat("What is 2 + 2?", ctx, backend)
-print(f"Response: {response.content}")
-
-# NOTE: There are additional functions for other adapter functions as well.
-result = core.check_certainty(ctx, backend)
-print(f"Certainty score: {result}")
-```
-
-Granite Switch models can run locally with `LocalHFBackend`:
-
-```python
-from mellea.backends.huggingface import LocalHFBackend
-from mellea.backends.model_ids import IBM_GRANITE_SWITCH_4_1_3B_PREVIEW
-
-backend = LocalHFBackend(
-    model_id=IBM_GRANITE_SWITCH_4_1_3B_PREVIEW,
-    load_embedded_adapters=True,
-)
-```
-
-Install this path with `uv sync --extra hf`.
-
-The underlying adapter functions can also be utilized directly when generating:
-
-```python
-from mellea.stdlib.components import Intrinsic
-import mellea.stdlib.functional as mfuncs
-
-...
-
-out, new_ctx = mfuncs.act(
-    Intrinsic(
-        "requirement-check",
-        intrinsic_kwargs={"requirement": "The assistant is helpful."}),
-    ctx,
-    backend
-)
-```
-
-For complete runnable Granite Switch examples, see
-[`../granite-switch/`](../granite-switch/).
-
-> **Note:** Not all adapter functions are embedded in every Granite Switch model. You should check
-> the model's `adapter_index.json` file for a definitive list. For granite switch models
-> pre-built by IBM, we include a list of models in the Mellea `model_id`.
-
-## Available Adapter Functions
-
-- **answerability**: Determine if question is answerable
-- **citations**: Extract and validate citations
-- **context-attribution**: Identify context sentences that most influenced response
-- **factuality_correction**: Correct factually incorrect responses
-- **factuality_detection**: Detect factually incorrect responses
-- **guardian-core**: Safety risk detection (harm, bias, groundedness, custom criteria)
-- **hallucination_detection**: Detect hallucinated content
-- **policy_guardrails**: Determine if scenario complies with policy
-- **query_clarification**: Generate a clarification request if needed, otherwise "CLEAR".
-- **query_rewrite**: Improve query formulation
-- **requirement_check**: Validate requirements (used by ALoraRequirement)
-- **uncertainty**: Estimate certainty about answering a question
-
-## Example Files
-
-### RAG Adapter Functions
-
-```bash
-uv run answerability.py
-```
-Demonstrates checking if documents can answer a question.
-
-```bash
-uv run citations.py
-```
-Demonstrates extracting and validating citations from responses.
-
-```bash
-uv run context_attribution.py
-```
-Demonstrates identifying which context sentences influenced the response.
-
-```bash
-uv run hallucination_detection.py
-```
-Demonstrates detecting potentially hallucinated content.
-
-```bash
-uv run query_clarification.py
-```
-Demonstrates generating clarification requests when needed.
-
-```bash
-uv run query_rewrite.py
-```
-Demonstrates rewriting queries for better retrieval.
-
-### Core Adapter Functions
-
-```bash
-uv run requirement_check.py
-```
-Demonstrates validating requirements against model outputs.
-
-```bash
-uv run uncertainty.py
-```
-Demonstrates assessing model certainty about its response.
-
-### Guardian Adapter Functions
-
-```bash
-uv run factuality_detection.py
-```
-Demonstrates detecting factually incorrect statements.
-
-```bash
-uv run factuality_correction.py
-```
-Demonstrates automatically correcting factual errors.
-
-```bash
-uv run guardian_core.py
-```
-Demonstrates comprehensive safety checks (harm, bias, groundedness).
-
-```bash
-uv run policy_guardrails.py
-```
-Demonstrates checking compliance with policies.
-
-### Comprehensive Example
-
-```bash
-uv run intrinsics.py
-```
-Full example showing multiple adapter functions working together in a RAG pipeline.
-
-## Architecture
-![Granite Libraries Software Stack Architecture in Mellea](../../docs/images/granite-libraries-mellea-architecture.png)
-
-## Related Documentation
-
-- See `mellea/stdlib/components/intrinsic/` for adapter function implementations
-- See `mellea/backends/adapters/` for adapter system
-- See `docs/docs/examples/granite-switch/README.md` for more about granite-switch
+| File | Description |
+| :--- | :--- |
+| [`answerability.py`](./answerability.py) | `rag.check_answerability()`: whether retrieved documents can answer a question. |
+| [`citations.py`](./citations.py) | `rag.find_citations()`: document sentences that support each sentence of a response. |
+| [`context_attribution.py`](./context_attribution.py) | `core.find_context_attributions()`: context sentences that most influenced each response sentence. |
+| [`hallucination_detection.py`](./hallucination_detection.py) | `rag.flag_hallucinated_content()`: response sentences not supported by the documents. |
+| [`query_clarification.py`](./query_clarification.py) | `rag.clarify_query()`: a clarification request for an ambiguous query, or "CLEAR". |
+| [`query_rewrite.py`](./query_rewrite.py) | `rag.rewrite_question()`: rewriting a follow-up question into a standalone retrieval query. |
+| [`requirement_check.py`](./requirement_check.py) | `core.requirement_check()`: scoring whether a response satisfies a requirement (the check behind `ALoraRequirement`). |
+| [`uncertainty.py`](./uncertainty.py) | `core.check_certainty()`: model certainty about its own answer, on `LocalHFBackend`. |
+| [`uncertainty_ollama.py`](./uncertainty_ollama.py) | `core.check_certainty()` on `OllamaModelBackend` using an Ollama model that bundles the uncertainty aLoRA. |
+| [`factuality_detection.py`](./factuality_detection.py) | `guardian.factuality_detection()`: "yes" if a response is factually incorrect given a document, "no" otherwise. |
+| [`factuality_correction.py`](./factuality_correction.py) | `guardian.factuality_correction()`: rewriting a response so it agrees with a document. |
+| [`guardian_core.py`](./guardian_core.py) | `guardian.guardian_check()`: harm, social bias, groundedness, custom criteria, function-call hallucination, and answer relevance. |
+| [`policy_guardrails.py`](./policy_guardrails.py) | `guardian.policy_guardrails()`: whether a scenario complies with a policy text. |
+| [`intrinsics.py`](./intrinsics.py) | Direct use of an adapter function via a composed `Adapter`, `Intrinsic`, and `mfuncs.act()`, underneath the helper functions above. |

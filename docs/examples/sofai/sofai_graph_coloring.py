@@ -1,21 +1,32 @@
 # pytest: ollama, qualitative, e2e
+"""Two-tier SOFAI sampling on a graph coloring problem.
 
-"""SOFAI Sampling Strategy Example: Graph Coloring Problem.
+Demonstrates `SOFAISamplingStrategy` (Slow and Fast AI): a fast S1 model iterates
+with validation feedback up to `loop_budget` times, and the problem escalates to a
+slower S2 model only if S1 fails. The task is to 3-color an odd 5-cycle, which small
+models often get wrong on the first attempt, exercising the feedback loop.
+`s2_solver_mode` ("fresh_start", "continue_chat", "best_attempt") controls how S2
+starts when it is called. SOFAI requires a `ChatContext`.
 
-This example demonstrates the SOFAI (Slow and Fast AI)
-sampling strategy using a graph coloring constraint satisfaction problem.
-
-In this example, we use the SOFAI sampling strategy. Because we wrote this
-example to run on consumer grade hardware, each model is still relatively small:
+Because this example is written to run on consumer grade hardware, each model is
+still relatively small:
 1. S1 Solver (granite4.1:3b) - Fast model with iterative feedback loop
 2. S2 Solver (granite4:latest) - Slow model, called once on escalation
 3. Custom validator - Provides detailed feedback for constraint violations
 
-Note: This example uses a custom validator (check_graph_coloring). To use the
-optional judge_backend feature for LLM-as-Judge validation, you can:
+The example uses a custom validator (`check_graph_coloring`). To use the optional
+`judge_backend` for LLM-as-Judge validation instead:
 - Remove the validation_fn parameter from req()
 - Add judge_backend and feedback_strategy parameters to SOFAISamplingStrategy
 - feedback_strategy options: "simple", "first_error", "all_errors"
+
+Prerequisites:
+    ollama pull granite4.1:3b
+    ollama pull granite4:latest
+    ollama serve
+
+Usage:
+    uv run python docs/examples/sofai/sofai_graph_coloring.py
 """
 
 import json

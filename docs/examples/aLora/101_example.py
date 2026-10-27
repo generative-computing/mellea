@@ -1,10 +1,11 @@
 # pytest: huggingface, e2e, slow
-"""How `ALoraRequirement` routes validation through a fast adapter.
+"""Comparing aLoRA-backed requirement validation against LLM-as-a-judge.
 
-Uses the catalog-native `requirement-check` adapter, registered here as a
-composed `Adapter` (Identity + IOContract + LocalFileBinding), to compare
-aLoRA-backed validation against full LLM-as-judge generation for the same
-requirement. `LLMaJRequirement` is used for the comparison because
+Demonstrates how `ALoraRequirement` routes validation through a fast adapter. Uses
+the catalog-native `requirement-check` adapter, registered here as a composed
+`Adapter` (Identity + IOContract + LocalFileBinding), to compare aLoRA-backed
+validation against full LLM-as-judge generation for the same requirement, timing
+both paths. `LLMaJRequirement` is used for the comparison because
 `ALoraRequirement` always routes through the registered adapter regardless of
 `backend.default_to_constraint_checking_alora`.
 
@@ -13,6 +14,15 @@ For loading a fully custom, non-catalog adapter with your own output schema
 `stembolts_intrinsic.py` in this directory — it has no standalone entry point of
 its own; `102_example.py` drives it interactively (reads from stdin, so it isn't
 runnable as an automated example).
+
+Runs the model locally, so it needs a GPU or Apple Silicon Mac; the model and
+adapter are downloaded from Hugging Face on first run.
+
+Prerequisites:
+    uv sync --extra hf
+
+Usage:
+    uv run python docs/examples/aLora/101_example.py
 """
 
 import time

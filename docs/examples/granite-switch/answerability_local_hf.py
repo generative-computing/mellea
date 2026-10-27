@@ -1,13 +1,17 @@
 # pytest: e2e, huggingface, skip
+"""Running the answerability adapter function on a local Granite Switch checkpoint.
 
-"""Run the answerability adapter function through a local Granite Switch checkpoint.
+Demonstrates `rag.check_answerability()` against a Granite Switch checkpoint loaded
+with `LocalHFBackend(load_embedded_adapters=True)`. The adapters are already baked
+into the checkpoint, so no separate adapter weights are downloaded.
 
-Requires a GPU or Apple Silicon Mac and:
+Runs the model locally, so it needs a GPU or Apple Silicon Mac; the checkpoint is
+downloaded from Hugging Face on first run.
 
+Prerequisites:
     uv sync --extra hf
 
-To run from the Mellea source tree:
-
+Usage:
     uv run python docs/examples/granite-switch/answerability_local_hf.py
 """
 

@@ -1,11 +1,19 @@
 # pytest: huggingface, e2e
+"""Flagging hallucinated content with the hallucination-detection adapter.
 
-"""Example usage of the hallucination detection intrinsic for RAG applications.
+Demonstrates `rag.flag_hallucinated_content()`, which flags the sentences of an
+assistant response that are not supported by the retrieved documents.
 
-To run this script from the root of the Mellea source tree, use the command:
-```
-uv run python docs/examples/intrinsics/hallucination_detection.py
-```
+The script uses `LocalHFBackend`. The same adapter function also runs on
+`OpenAIBackend` with a Granite Switch model; see `docs/examples/granite-switch/`.
+Runs the model locally, so it needs a GPU or Apple Silicon Mac; the model and
+adapter are downloaded from Hugging Face on first run.
+
+Prerequisites:
+    uv sync --extra hf
+
+Usage:
+    uv run python docs/examples/intrinsics/hallucination_detection.py
 """
 
 import json

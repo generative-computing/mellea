@@ -1,15 +1,18 @@
 # pytest: e2e, vllm, skip
+"""Running hallucination detection on a Granite Switch model served by vLLM.
 
-"""Example: running hallucination detection via OpenAI backend with Granite Switch.
+Demonstrates `rag.flag_hallucinated_content()` through `OpenAIBackend` with
+`load_embedded_adapters=True`. The script exits with status 1 and a "Skipped"
+message if the vLLM server is not reachable (set `VLLM_SWITCH_TEST_BASE_URL` to
+override the default `http://localhost:8000`).
 
-Requires a vLLM server hosting a Granite Switch model.
-
-To start the server:
+Prerequisites:
+    uv sync --extra switch   # downloads the embedded adapter metadata
     python -m vllm.entrypoints.openai.api_server \
         --model <granite-switch-model-id> \
         --dtype bfloat16 --enable-prefix-caching
 
-To run this script from the root of the Mellea source tree:
+Usage:
     uv run python docs/examples/granite-switch/hallucination_detection_openai.py
 """
 
