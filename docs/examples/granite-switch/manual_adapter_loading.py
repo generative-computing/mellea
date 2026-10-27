@@ -1,5 +1,5 @@
 # pytest: e2e, vllm, skip
-"""Manually registering embedded adapters on the OpenAI backend.
+"""Example: manually loading embedded adapters for the OpenAI backend.
 
 Instead of using `load_embedded_adapters=True` (which loads all adapters from
 the model repo at init), this example shows how to create an OpenAIBackend with

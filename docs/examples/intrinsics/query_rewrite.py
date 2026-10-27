@@ -5,8 +5,6 @@ Demonstrates `rag.rewrite_question()`, which uses the conversation history to
 rewrite an under-specified last user question (here, "is he more likely to get
 fleas?") into a self-contained query suitable for retrieval.
 
-The script uses `LocalHFBackend`. The same adapter function also runs on
-`OpenAIBackend` with a Granite Switch model; see `docs/examples/granite-switch/`.
 Runs the model locally, so it needs a GPU or Apple Silicon Mac; the model and
 adapter are downloaded from Hugging Face on first run.
 

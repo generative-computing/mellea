@@ -8,9 +8,6 @@ stembolt response schema, and writes rows of the form
 `{"item": ..., "label": "<json string>"}` — the format `m alora train` expects (see
 `stembolt_failure_dataset.jsonl`). Output goes to stdout unless `-o` is given.
 
-Prerequisites:
-    pip install jsonschema
-
 Usage:
     uv run python docs/examples/aLora/make_training_data.py \
         docs/examples/aLora/stembolt_customer_data.jsonl -o training_data.jsonl

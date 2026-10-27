@@ -10,7 +10,8 @@ and writes a model README (description, data examples, integration code) to
 
 Prerequisites:
     uv sync --extra cli
-    ollama serve   # the default session backend
+    ollama serve
+    ollama pull granite4.2:3b
 
 Usage:
     cd docs/examples/aLora && uv run python example_readme_generator.py

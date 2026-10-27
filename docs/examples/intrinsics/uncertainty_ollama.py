@@ -1,9 +1,8 @@
 # pytest: e2e, ollama
-"""Estimating model certainty with an Ollama model that bundles the uncertainty adapter.
+"""Example usage of the uncertainty/certainty intrinsic with Ollama.
 
-Demonstrates `core.check_certainty()` on `OllamaModelBackend`, which evaluates how
-certain the model is about its response to a user question. The context must
-contain a user question followed by an assistant answer.
+Evaluates how certain the model is about its response to a user question.
+The context should contain a user question followed by an assistant answer.
 
 Ollama bundles one adapter per model. For this single-adapter example, the
 uncertainty aLoRA tag is used for normal chat and the certainty helper, so

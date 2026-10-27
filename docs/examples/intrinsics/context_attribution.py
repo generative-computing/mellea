@@ -1,12 +1,10 @@
 # pytest: huggingface, e2e
-"""Attributing a response to the context that influenced it with the context-attribution adapter.
+"""Example usage of the context attribution intrinsic.
 
-Demonstrates `core.find_context_attributions()`, which finds the sentences in prior
-conversation messages and RAG documents that were most important to the model in
-generating each sentence of the assistant response.
+Intrinsic function that finds sentences in prior conversation messages and RAG
+documents that were most important to the LLM in generating each sentence in
+the assistant response.
 
-The script uses `LocalHFBackend`. The same adapter function also runs on
-`OpenAIBackend` with a Granite Switch model; see `docs/examples/granite-switch/`.
 Runs the model locally, so it needs a GPU or Apple Silicon Mac; the model and
 adapter are downloaded from Hugging Face on first run.
 

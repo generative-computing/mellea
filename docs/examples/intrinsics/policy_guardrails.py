@@ -1,12 +1,9 @@
 # pytest: huggingface, e2e
-"""Checking scenario compliance with a written policy using the policy-guardrails adapter.
+"""Example usage of the policy_guardrails intrinsic.
 
-Demonstrates `guardian.policy_guardrails()`, which uses the Granite Guardian 4.0
-Micro LoRA adapter (policy_guardrails) through Mellea's intrinsic pipeline to
-label whether a scenario complies with a policy text.
+Demonstrates how to use the Granite Guardian 4.0 Micro LoRA adapter
+(policy_guardrails) through Mellea's intrinsic pipeline for scenario-policy compliance checking.
 
-The script uses `LocalHFBackend`. The same adapter function also runs on
-`OpenAIBackend` with a Granite Switch model; see `docs/examples/granite-switch/`.
 Runs the model locally, so it needs a GPU or Apple Silicon Mac; the model and
 adapter are downloaded from Hugging Face on first run.
 

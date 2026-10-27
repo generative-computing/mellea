@@ -1,5 +1,5 @@
 # pytest: e2e, huggingface, skip
-"""Running the answerability adapter function on a local Granite Switch checkpoint.
+"""Run the answerability adapter function through a local Granite Switch checkpoint.
 
 Demonstrates `rag.check_answerability()` against a Granite Switch checkpoint loaded
 with `LocalHFBackend(load_embedded_adapters=True)`. The adapters are already baked

@@ -1,14 +1,11 @@
 # pytest: huggingface, e2e
-"""Estimating model certainty about its own answer with the uncertainty adapter.
+"""Example usage of the uncertainty/certainty intrinsic.
 
-Demonstrates `core.check_certainty()`, which evaluates how certain the model is
-about its response to a user question. The context must contain a user question
-followed by an assistant answer; the script generates one with `mfuncs.chat()`
-and then scores it.
+Evaluates how certain the model is about its response to a user question.
+The context should contain a user question followed by an assistant answer.
 
-The script uses `LocalHFBackend`. The same adapter function also runs on
-`OpenAIBackend` with a Granite Switch model; see `docs/examples/granite-switch/`.
 For Ollama, see `uncertainty_ollama.py`.
+
 Runs the model locally, so it needs a GPU or Apple Silicon Mac; the model and
 adapter are downloaded from Hugging Face on first run.
 

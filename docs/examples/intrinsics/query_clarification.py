@@ -1,12 +1,10 @@
 # pytest: huggingface, e2e
-"""Generating clarification requests for ambiguous queries with the query-clarification adapter.
+"""Example usage of the query clarification intrinsic for RAG applications.
 
 Demonstrates `rag.clarify_query()`, which returns a clarification request when a
 query is ambiguous given the retrieved documents, or "CLEAR" when it is not. The
 script runs one ambiguous query and one clear query.
 
-The script uses `LocalHFBackend`. The same adapter function also runs on
-`OpenAIBackend` with a Granite Switch model; see `docs/examples/granite-switch/`.
 Runs the model locally, so it needs a GPU or Apple Silicon Mac; the model and
 adapter are downloaded from Hugging Face on first run.
 

@@ -1,13 +1,11 @@
 # pytest: huggingface, e2e
-"""Checking whether documents can answer a question with the answerability adapter.
+"""Example usage of the answerability intrinsic for RAG applications.
 
 Demonstrates `rag.check_answerability()`, which scores whether a set of retrieved
 documents contains enough information to answer a question. The script runs the
 check twice: once with a document that contains the answer and once with a
 document that does not.
 
-The script uses `LocalHFBackend`. The same adapter function also runs on
-`OpenAIBackend` with a Granite Switch model; see `docs/examples/granite-switch/`.
 Runs the model locally, so it needs a GPU or Apple Silicon Mac; the model and
 adapter are downloaded from Hugging Face on first run.
 

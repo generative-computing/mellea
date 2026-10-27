@@ -1,5 +1,5 @@
 # type: ignore
-"""Helper module for loading and calling a fully custom, non-catalog adapter.
+"""Helper functions for loading and calling a fully custom, non-catalog adapter.
 
 `stembolts` (Hugging Face: `nfulton/stembolts`) is a custom aLoRA adapter trained
 against several base models (`base_model_name` is a constructor argument here,

@@ -1,11 +1,10 @@
 # pytest: huggingface, e2e, slow
-"""Comparing aLoRA-backed requirement validation against LLM-as-a-judge.
+"""How `ALoraRequirement` routes validation through a fast adapter.
 
-Demonstrates how `ALoraRequirement` routes validation through a fast adapter. Uses
-the catalog-native `requirement-check` adapter, registered here as a composed
-`Adapter` (Identity + IOContract + LocalFileBinding), to compare aLoRA-backed
-validation against full LLM-as-judge generation for the same requirement, timing
-both paths. `LLMaJRequirement` is used for the comparison because
+Uses the catalog-native `requirement-check` adapter, registered here as a
+composed `Adapter` (Identity + IOContract + LocalFileBinding), to compare
+aLoRA-backed validation against full LLM-as-judge generation for the same
+requirement. `LLMaJRequirement` is used for the comparison because
 `ALoraRequirement` always routes through the registered adapter regardless of
 `backend.default_to_constraint_checking_alora`.
 

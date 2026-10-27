@@ -1,5 +1,5 @@
 # pytest: e2e, vllm, skip
-"""Running hallucination detection on a Granite Switch model served by vLLM.
+"""Example: running hallucination detection via OpenAI backend with Granite Switch.
 
 Demonstrates `rag.flag_hallucinated_content()` through `OpenAIBackend` with
 `load_embedded_adapters=True`. The script exits with status 1 and a "Skipped"

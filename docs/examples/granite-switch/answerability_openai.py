@@ -1,5 +1,5 @@
 # pytest: e2e, vllm, skip
-"""Running the answerability adapter function on a Granite Switch model served by vLLM.
+"""Example: running the answerability adapter function via OpenAI backend with Granite Switch.
 
 Demonstrates `rag.check_answerability()` through `OpenAIBackend` with
 `load_embedded_adapters=True` — the simplest way to use adapter functions with

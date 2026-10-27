@@ -1,13 +1,11 @@
 # pytest: huggingface, e2e
-"""Detecting a factually incorrect response with the factuality-detection adapter.
+"""Example usage of the factuality detection intrinsic.
 
 Demonstrates `guardian.factuality_detection()`, which returns "yes" if an assistant
 response is factually incorrect given the supporting document attached to the
 context, and "no" otherwise. The document can be attached to the context or passed
 explicitly with `documents=`.
 
-The script uses `LocalHFBackend`. The same adapter function also runs on
-`OpenAIBackend` with a Granite Switch model; see `docs/examples/granite-switch/`.
 Runs the model locally, so it needs a GPU or Apple Silicon Mac; the model and
 adapter are downloaded from Hugging Face on first run.
 
