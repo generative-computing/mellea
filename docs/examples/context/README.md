@@ -1,6 +1,6 @@
 # Context Examples
 
-Examples demonstrating context tree inspection with sampling strategies and context shrinking using the `Compactor` protocol.
+Examples demonstrating context tree inspection with sampling strategies and context shrinking using the `Compactor` protocol. For a conceptual overview of compaction, see [Context and Sessions](../../docs/concepts/context-and-sessions.md#compaction).
 
 ## Examples
 
