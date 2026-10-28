@@ -1,16 +1,7 @@
 # pytest: ollama, e2e, qualitative
-"""Continuing a LangChain conversation in a Mellea session.
+"""Example showing how to convert LangChain messages to Mellea format and use them in a session.
 
-Demonstrates converting messages from another library into a Mellea `ChatContext`:
-LangChain messages are converted to OpenAI format with `convert_to_openai_messages`,
-each one is added to a `ChatContext` as a Mellea `Message`, and the context seeds
-`start_session(ctx=...)` so the model can answer a question about the earlier turns.
-
-The pattern works with any library that can export OpenAI-format messages (for
-example LlamaIndex, Haystack or Semantic Kernel), and the same conversion can be
-reversed to send Mellea messages back out. If your messages carry images or
-documents, extract those fields explicitly; the loop below copies only `role` and
-`content`. For more on LangChain interop, see docs/docs/integrations/langchain.md.
+For more on LangChain interop, see docs/docs/integrations/langchain.md.
 
 Prerequisites:
     uv sync --extra tools
@@ -21,6 +12,8 @@ Usage:
     uv run python docs/examples/library_interop/langchain_messages.py
 """
 
+# Installing langchain is necessary for this example, but it works for any library
+# you may want to use Mellea with.
 from typing import Any
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
