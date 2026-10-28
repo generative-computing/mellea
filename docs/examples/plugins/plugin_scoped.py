@@ -1,12 +1,13 @@
 # pytest: ollama, e2e
-"""Scoped plugins that are active only for a specific block of code.
+"""Scoped plugins — activate plugins for a specific block of code.
 
 Three forms of scoped activation are shown:
-1. plugin_scope(*items)  — the universal scope; accepts standalone hooks,
-   Plugin instances, PluginSets, or any mix
-2. with <Plugin instance>  — Plugin subclass used directly as a context manager
-   (includes a blocked-topic scenario)
-3. with <PluginSet>        — a named group used directly as a context manager
+
+  1. plugin_scope(*items)  — the universal scope; accepts standalone hooks,
+                             Plugin instances, PluginSets, or any mix
+  2. with <Plugin instance>  — Plugin subclass used directly as a context
+                               manager (includes a blocked-topic scenario)
+  3. with <PluginSet>        — a named group used directly as a context manager
 
 All three guarantee that the plugins are registered on __enter__ and
 deregistered on __exit__, even if the block raises an exception.

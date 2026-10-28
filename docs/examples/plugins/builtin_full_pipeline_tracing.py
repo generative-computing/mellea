@@ -1,5 +1,5 @@
 # pytest: ollama, e2e
-"""Full pipeline tracing with generation and sampling debug plugins.
+"""Full pipeline tracing example combining generation and sampling diagnostics.
 
 This example demonstrates both the generation and sampling debug plugins working
 together to provide end-to-end visibility into the entire sampling loop.

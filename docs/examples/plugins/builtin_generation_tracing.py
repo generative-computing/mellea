@@ -1,5 +1,5 @@
 # pytest: ollama, e2e
-"""Built-in generation tracing plugin.
+"""Built-in generation tracing plugin example.
 
 This example demonstrates the GenerationTracingPlugin from mellea.plugins.builtin_debug,
 which traces all LLM backend calls with request/response inspection.

@@ -1,11 +1,10 @@
 # pytest: ollama, e2e
-"""Session-scoped plugins that fire only within a specific session.
+"""Session-scoped plugins — plugins that fire only within a specific session.
 
-Demonstrates:
-1. A global observability hook that fires for ALL sessions
-2. A session-scoped content policy, passed via `start_session(plugins=...)`, that
-   only fires for one session
-3. A second session without the content policy to show the difference
+This example demonstrates:
+  1. A global observability hook that fires for ALL sessions
+  2. A session-scoped content policy that only fires for one session
+  3. A second session without the content policy to show the difference
 
 Prerequisites:
     uv sync --extra hooks

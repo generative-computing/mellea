@@ -1,16 +1,17 @@
 # pytest: ollama, e2e
-"""Tool hook plugins: safety and security policies for tool invocation.
+"""Tool hook plugins — safety and security policies for tool invocation.
 
-Demonstrates four enforcement / repair patterns using TOOL_PRE_INVOKE and
-TOOL_POST_INVOKE hooks, built on top of the @tool decorator examples (see
-`docs/examples/tools/tool_decorator_example.py`):
-1. Tool allow list     — blocks any tool not on an explicit approved list
-2. Argument validator  — inspects args before invocation (e.g., blocks disallowed
-   patterns in calculator expressions)
-3. Tool audit logger   — fire-and-forget logging of every tool call
-4. Arg sanitizer       — auto-fixes tool args before invocation instead of
-   blocking (e.g., strips unsafe chars from calculator expressions and
-   normalises location strings)
+This example demonstrates four enforcement / repair patterns using
+TOOL_PRE_INVOKE and TOOL_POST_INVOKE hooks, built on top of the @tool
+decorator examples:
+
+  1. Tool allow list     — blocks any tool not on an explicit approved list
+  2. Argument validator  — inspects args before invocation (e.g., blocks
+                           disallowed patterns in calculator expressions)
+  3. Tool audit logger   — fire-and-forget logging of every tool call
+  4. Arg sanitizer       — auto-fixes tool args before invocation instead of
+                           blocking (e.g., strips unsafe chars from calculator
+                           expressions and normalises location strings)
 
 Prerequisites:
     uv sync --extra hooks

@@ -1,5 +1,5 @@
 # pytest: ollama, e2e
-"""Built-in validation tracing plugin.
+"""Validation tracing plugin example.
 
 This example demonstrates the validation debug plugins from mellea.plugins.builtin_debug,
 which trace requirement validation with pre-check setup and detailed per-requirement

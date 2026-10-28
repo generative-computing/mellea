@@ -1,8 +1,8 @@
 # pytest: ollama, e2e
-"""Quick start: your first Mellea plugin in under 30 lines.
+"""Quick Start — your first Mellea plugin in under 30 lines.
 
-Registers a single function hook on `HookType.GENERATION_PRE_CALL` that logs every
-generation call, then runs a normal `instruct()` to show it in action.
+This example registers a single function hook that logs every generation
+call, then runs a normal instruct() to show it in action.
 
 Prerequisites:
     uv sync --extra hooks

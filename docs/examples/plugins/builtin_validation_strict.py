@@ -1,5 +1,5 @@
 # pytest: ollama, e2e
-"""Strict validation tracing with intentional failures.
+"""Strict validation tracing example with intentional failures.
 
 This example demonstrates validation tracing with STRICT requirements designed
 to trigger failures so you can see the full validation output including:

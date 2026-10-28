@@ -1,5 +1,5 @@
 # pytest: ollama, e2e
-"""Built-in sampling diagnostics plugin.
+"""Built-in sampling diagnostics plugin example.
 
 This example demonstrates the sampling hooks from mellea.plugins.builtin_debug,
 which trace the sampling strategy pipeline with iteration tracking, validation

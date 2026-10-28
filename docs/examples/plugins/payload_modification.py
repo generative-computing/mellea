@@ -1,10 +1,10 @@
 # pytest: ollama, e2e
-"""Modifying payloads from inside hooks.
+"""Payload modification — how to modify payloads in hooks.
 
-Demonstrates:
-1. Using modify() to change writable payload fields
-2. Using model_copy(update={...}) directly for fine-grained control
-3. What happens when you try to modify a non-writable field (silently discarded)
+This example demonstrates:
+  1. Using modify() to change writable payload fields
+  2. Using model_copy(update={...}) directly for fine-grained control
+  3. What happens when you try to modify a non-writable field (silently discarded)
 
 Prerequisites:
     uv sync --extra hooks

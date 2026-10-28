@@ -1,5 +1,5 @@
 # pytest: ollama, e2e
-"""Validation tracing with real failures.
+"""Validation tracing example showing real failures.
 
 This example uses instruct with immediate validation (no repair strategy),
 so we'll see real validation failures in the logs.

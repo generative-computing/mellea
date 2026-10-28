@@ -1,12 +1,10 @@
 # pytest: unit
-"""Unit-testing hook functions without a live session.
+"""Testing plugins — how to unit-test hook functions without a live session.
 
-Demonstrates how to:
-1. Construct a payload manually
-2. Call a hook function directly (`await my_hook(payload, ctx)`)
-3. Assert the return value for both pass-through and blocking cases
-
-No model backend is needed.
+This example shows how to:
+  1. Construct a payload manually
+  2. Call a hook function directly (await my_hook(payload, ctx))
+  3. Assert the return value for both pass-through and blocking cases
 
 Prerequisites:
     uv sync --extra hooks

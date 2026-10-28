@@ -1,9 +1,9 @@
 # pytest: ollama, e2e
-"""Class-based plugin that groups related hooks in a Plugin subclass.
+"""Class-based plugin — group related hooks in a single Plugin subclass.
 
-Demonstrates a PII protection plugin that:
-1. Blocks input containing SSN patterns before component execution
-2. Scans LLM output for SSN patterns after generation (observe-only)
+This example creates a PII protection plugin that:
+  1. Blocks input containing SSN patterns before component execution
+  2. Scans LLM output for SSN patterns after generation (observe-only)
 
 Prerequisites:
     uv sync --extra hooks

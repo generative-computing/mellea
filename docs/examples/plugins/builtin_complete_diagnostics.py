@@ -1,5 +1,5 @@
 # pytest: ollama, e2e
-"""Complete diagnostics with all built-in debug plugins.
+"""Complete diagnostics example with all debug plugins.
 
 This example combines generation, sampling, AND validation tracing for maximum
 visibility into the entire sampling + validation pipeline.
@@ -17,6 +17,8 @@ This provides complete end-to-end traceability for:
 - Validation logic (what passes/fails and why)
 - Repair strategy (how feedback improves results)
 - Overall sampling loop (iterations and budget)
+
+Watch the complete flow with all lifecycle events visible.
 
 Prerequisites:
     uv sync --extra hooks
