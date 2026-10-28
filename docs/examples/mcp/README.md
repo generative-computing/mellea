@@ -13,4 +13,4 @@ Tools and Agents how-to.
 | :--- | :--- |
 | [`mcp_example.py`](./mcp_example.py) | **Expose Mellea as an MCP server.** Makes a Mellea instruct-validate-repair loop callable as an MCP tool from Claude Desktop, Langflow, or any MCP client. |
 | [`github_activity_summary.py`](./github_activity_summary.py) | **Consume MCP server tools from Mellea.** Discovers tools on a remote MCP server and drops them into a Mellea `react()` loop. Needs `GITHUB_TOKEN`. |
-| [`mcp_server.json`](./mcp_server.json) | MCP client config that launches `mcp_example.py` over stdio. Replace `<ABSOLUTE PATH>` so that `--directory` points at this directory. |
+| [`mcp_server.json`](./mcp_server.json) | MCP client config that launches `mcp_example.py` over stdio. See [Connecting a client](../../docs/integrations/mcp.md#connecting-a-client). |

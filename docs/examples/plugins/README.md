@@ -3,7 +3,7 @@
 Examples demonstrating how to extend Mellea with hooks and plugins for observability,
 modification, and control over the generation pipeline. Plugins need the `hooks`
 extra (`uv sync --extra hooks`), and all but `testing_plugins.py` run against a local
-Ollama model. 
+Ollama model.
 
 For the concepts, the full hook reference, and execution-mode semantics,
 see [Plugins & Hooks](https://docs.mellea.ai/concepts/plugins). For the built-in debug

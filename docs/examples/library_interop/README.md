@@ -22,6 +22,7 @@ wrapping, see
 ## Supported Libraries
 
 This pattern works with any library that can export to OpenAI-compatible format:
+
 - LangChain
 - LlamaIndex
 - Haystack
@@ -31,4 +32,4 @@ This pattern works with any library that can export to OpenAI-compatible format:
 ## Related Documentation
 
 - See `mellea/stdlib/components/chat.py` for Message API
-- See `mellea/stdlib/context.py` for context management
+- See `mellea/stdlib/context/` for context management
