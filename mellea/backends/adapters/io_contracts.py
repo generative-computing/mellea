@@ -186,6 +186,169 @@ class _RequirementCheckContract(IOContract):
         return data
 
 
+_HALLUCINATION_REQUIRED_KEYS: frozenset[str] = frozenset(
+    {"response_begin", "response_end", "response_text", "faithfulness", "explanation"}
+)
+_HALLUCINATION_FAITHFULNESS_LABELS: tuple[str, ...] = (
+    "faithful",
+    "partial",
+    "unfaithful",
+    "NA",
+)
+
+
+class _HallucinationDetectionContract(IOContract):
+    """Validate and deduplicate `hallucination_detection` adapter output.
+
+    Unlike other contracts in this module (which return parsed data unchanged),
+    `parse()` drops duplicate records that share `(response_begin, response_end)`
+    and agree on `faithfulness` (keeping the first record). Duplicate spans that
+    disagree on `faithfulness`, or distinct spans whose half-open intervals
+    `[response_begin, response_end)` overlap, raise `AdapterSchemaMismatchError`.
+
+    The `faithfulness` value set (`"faithful"`, `"partial"`, `"unfaithful"`,
+    `"NA"`) is closed on purpose (fail-closed): on Granite Switch, `io.yaml`
+    comes from the served model's `io_configs/` while this contract comes from
+    Mellea's registry, so a Switch release adding a new label raises
+    `AdapterSchemaMismatchError` until Mellea is upgraded.
+    """
+
+    def build_prompt(self, **_kwargs: object) -> Component:
+        raise NotImplementedError(_BUILD_PROMPT_NOT_IMPLEMENTED)
+
+    def parse(self, raw: str) -> dict[str, object]:
+        """Parse, validate, and deduplicate `hallucination_detection` output.
+
+        Args:
+            raw (str): Raw JSON string from the model.
+
+        Returns:
+            dict[str, object]: `{"items": <list of validated, deduplicated dicts>}`.
+
+        Raises:
+            ValueError: When `raw` is not valid JSON, is not a JSON array, or
+                contains a non-object element.
+            AdapterSchemaMismatchError: When any record is missing a required key,
+                has an invalid `faithfulness` value, has non-`int` (or `bool`) or
+                inverted span offsets (`response_begin > response_end`), has a
+                non-`str` `explanation`, conflicts on `faithfulness` for a repeated
+                `(response_begin, response_end)` span, or overlaps another span's
+                half-open interval `[response_begin, response_end)`.
+        """
+        data = json.loads(raw)
+        if not isinstance(data, list):
+            raise ValueError(
+                f"Adapter 'hallucination_detection' output must be a JSON array, "
+                f"got {type(data).__name__}."
+            )
+
+        seen_spans: dict[tuple[int, int], str] = {}
+        accepted_spans: list[tuple[int, int, frozenset[str]]] = []
+        deduplicated: list[dict[str, object]] = []
+
+        for item in data:
+            if not isinstance(item, dict):
+                raise ValueError(
+                    f"Adapter 'hallucination_detection' output array must contain "
+                    f"only JSON objects, got a {type(item).__name__} element."
+                )
+            observed = frozenset(item.keys())
+            missing = _HALLUCINATION_REQUIRED_KEYS - observed
+            if missing:
+                raise AdapterSchemaMismatchError(
+                    "hallucination_detection", observed, _HALLUCINATION_REQUIRED_KEYS
+                )
+
+            faithfulness = item["faithfulness"]
+            if not isinstance(faithfulness, str):
+                valid_labels = ", ".join(
+                    repr(lbl) for lbl in _HALLUCINATION_FAITHFULNESS_LABELS
+                )
+                raise AdapterSchemaMismatchError(
+                    "hallucination_detection",
+                    observed,
+                    _HALLUCINATION_REQUIRED_KEYS,
+                    f"`faithfulness` must be a `str` (one of {valid_labels}), "
+                    f"got {type(faithfulness).__name__}",
+                )
+            if faithfulness not in _HALLUCINATION_FAITHFULNESS_LABELS:
+                valid_labels = ", ".join(
+                    repr(lbl) for lbl in _HALLUCINATION_FAITHFULNESS_LABELS
+                )
+                raise AdapterSchemaMismatchError(
+                    "hallucination_detection",
+                    observed,
+                    _HALLUCINATION_REQUIRED_KEYS,
+                    f"invalid `faithfulness` value {faithfulness!r}; expected one of "
+                    f"{valid_labels} (upgrade `mellea` if the upstream adapter added "
+                    f"a new label)",
+                )
+
+            begin = item["response_begin"]
+            if isinstance(begin, bool) or not isinstance(begin, int):
+                raise AdapterSchemaMismatchError(
+                    "hallucination_detection",
+                    observed,
+                    _HALLUCINATION_REQUIRED_KEYS,
+                    f"`response_begin` must be `int` (not `bool`), "
+                    f"got {type(begin).__name__}",
+                )
+            end = item["response_end"]
+            if isinstance(end, bool) or not isinstance(end, int):
+                raise AdapterSchemaMismatchError(
+                    "hallucination_detection",
+                    observed,
+                    _HALLUCINATION_REQUIRED_KEYS,
+                    f"`response_end` must be `int` (not `bool`), "
+                    f"got {type(end).__name__}",
+                )
+            if begin > end:
+                raise AdapterSchemaMismatchError(
+                    "hallucination_detection",
+                    observed,
+                    _HALLUCINATION_REQUIRED_KEYS,
+                    f"`response_begin` ({begin}) must be <= `response_end` ({end})",
+                )
+
+            explanation = item["explanation"]
+            if not isinstance(explanation, str):
+                raise AdapterSchemaMismatchError(
+                    "hallucination_detection",
+                    observed,
+                    _HALLUCINATION_REQUIRED_KEYS,
+                    f"`explanation` must be a `str`, got {type(explanation).__name__}",
+                )
+
+            span = (begin, end)
+            if span in seen_spans:
+                if seen_spans[span] != faithfulness:
+                    raise AdapterSchemaMismatchError(
+                        "hallucination_detection",
+                        observed,
+                        _HALLUCINATION_REQUIRED_KEYS,
+                        f"conflicting `faithfulness` values ({seen_spans[span]!r} vs "
+                        f"{faithfulness!r}) for duplicate span {span}",
+                    )
+                continue
+
+            seen_spans[span] = faithfulness
+            accepted_spans.append((begin, end, observed))
+            deduplicated.append(item)
+
+        for i, (a_begin, a_end, _) in enumerate(accepted_spans):
+            for b_begin, b_end, b_observed in accepted_spans[i + 1 :]:
+                if max(a_begin, b_begin) < min(a_end, b_end):
+                    raise AdapterSchemaMismatchError(
+                        "hallucination_detection",
+                        b_observed,
+                        _HALLUCINATION_REQUIRED_KEYS,
+                        f"overlapping response spans [{a_begin}, {a_end}) and "
+                        f"[{b_begin}, {b_end})",
+                    )
+
+        return {"items": deduplicated}
+
+
 _INTRINSIC_IO_CONTRACTS: dict[str, IOContract] = {
     "answerability": _DictContract("answerability", frozenset({"answerability"})),
     "query_rewrite": _DictContract("query_rewrite", frozenset({"rewritten_question"})),
@@ -206,18 +369,7 @@ _INTRINSIC_IO_CONTRACTS: dict[str, IOContract] = {
             }
         ),
     ),
-    "hallucination_detection": _ListContract(
-        "hallucination_detection",
-        frozenset(
-            {
-                "response_begin",
-                "response_end",
-                "response_text",
-                "faithfulness",
-                "explanation",
-            }
-        ),
-    ),
+    "hallucination_detection": _HallucinationDetectionContract(),
     "policy-guardrails": _PolicyGuardrailsContract(),
     "guardian-core": _GuardianCheckContract(),
     "factuality-detection": _DictContract("factuality-detection", frozenset({"score"})),
