@@ -650,11 +650,12 @@ weights binding into a single, inspectable object. Both `LocalHFBackend` and
 `OpenAIBackend` accept a composed `Adapter` directly via `add_adapter` —
 dispatching on the weights binding's reality (`LocalFileBinding` for
 LocalFile/PEFT, `EmbeddedBinding` for Embedded/Granite Switch, `PromptBinding`
-for a weightless prompt fallback) — alongside the deprecated shim classes,
-which remain functional for now (Epic #929, issue #1144). An `EmbeddedBinding`
-adapter additionally requires `add_adapter`'s `config=` argument (the raw
-io.yaml mapping) — `add_adapter` raises `ValueError` without it, since that
-reality's config cannot be cheaply re-derived later; see below.
+for a weightless prompt fallback). The composed `Adapter` is now the only
+registration path — the earlier shim classes have been removed (Epic #929,
+issue #1144). An `EmbeddedBinding` adapter additionally requires
+`add_adapter`'s `config=` argument (the raw io.yaml mapping) — `add_adapter`
+raises `ValueError` without it, since that reality's config cannot be cheaply
+re-derived later; see below.
 
 Each weights binding models how its deployment turns an adapter on.
 `LocalFileBinding` downloads and loads LoRA/aLoRA weights, so it exposes a
