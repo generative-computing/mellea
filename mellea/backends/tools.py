@@ -97,13 +97,16 @@ class MelleaTool(AbstractMelleaTool[P, R]):
             R: The return value of the underlying callable.
         """
         if self._positional_only and not args:
-            # Pop positional-only params out of kwargs in signature order and pass
-            # them positionally. Only move those actually supplied, so omitted
-            # parameters still fall back to the callable's defaults. Guarded on
-            # `not args` so an explicit positional call (e.g. run(1, 2)) is untouched.
-            positional = [
-                kwargs.pop(name) for name in self._positional_only if name in kwargs
-            ]
+            # Pass positional-only params positionally, stopping at the first
+            # one the call didn't supply: names after a gap stay in kwargs, so
+            # the callable raises its own clear TypeError instead of binding
+            # them to earlier slots. Guarded on `not args` so an explicit
+            # positional call (e.g. run(1, 2)) is untouched.
+            positional = []
+            for name in self._positional_only:
+                if name not in kwargs:
+                    break
+                positional.append(kwargs.pop(name))
             return self._call_tool(*positional, **kwargs)  # type: ignore[arg-type]
         return self._call_tool(*args, **kwargs)
 

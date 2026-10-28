@@ -359,6 +359,39 @@ def test_call_func_positional_only():
     assert call.call_func() == 3
 
 
+def _add_two_positional_only(a: int = 1, b: int = 2, /) -> int:
+    """Add two numbers, both positional-only, both defaulted.
+
+    Args:
+        a: first
+        b: second
+    """
+    return a + b
+
+
+def test_run_two_positional_only_gap_raises():
+    """Omitting an earlier positional-only param must not misbind a later one.
+
+    With two positional-only params, supplying only `b` cannot be packed from
+    slot 0 — doing so would bind `b`'s value to `a`. Stopping at the first gap
+    leaves `b` in kwargs, so the callable raises its own clear TypeError rather
+    than silently returning the wrong result.
+    """
+    t = MelleaTool.from_callable(_add_two_positional_only)
+
+    # Supplying both, or a contiguous prefix, still works.
+    assert t.run(a=10, b=5) == 15
+    assert t.run(a=10) == 12
+    assert t.run() == 3
+    # Explicit positional forms are untouched.
+    assert t.run(10, 5) == 15
+
+    # A gap (only the later param supplied by keyword) raises instead of
+    # misbinding b's value to a.
+    with pytest.raises(TypeError):
+        t.run(b=5)
+
+
 def test_from_callable_async_positional_only():
     """Positional-only reordering also works for async callables."""
 
