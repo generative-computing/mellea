@@ -5,11 +5,13 @@ import mellea
 # INFO: this line will download IBM's Granite 4 Micro 3B model.
 m = mellea.start_session()
 
-print("Basic email:")
+label = "Basic email:"
+print(f"\n{label}\n{'-' * len(label)}")
 email = m.instruct("Write an email inviting interns to an office party at 3:30pm.")
 print(str(email))
 
-print("Function with user variables:")
+label = "Function with user variables:"
+print(f"\n{label}\n{'-' * len(label)}")
 
 
 def write_email(m: mellea.MelleaSession, name: str, notes: str) -> str:
@@ -28,7 +30,8 @@ print(
     )
 )
 
-print("Email with requirements:")
+label = "Email with requirements:"
+print(f"\n{label}\n{'-' * len(label)}")
 
 
 def write_email_with_requirements(
@@ -53,7 +56,8 @@ print(
     )
 )
 
-print("Email with rejection sampling:")
+label = "Email with rejection sampling:"
+print(f"\n{label}\n{'-' * len(label)}")
 from mellea.stdlib.sampling import RejectionSamplingStrategy
 
 
