@@ -1,40 +1,54 @@
 # pytest: e2e, ollama, qualitative, slow
-"""Generating, executing and validating data-extraction and plotting code.
+r"""Example demonstrating code generation, data extraction, and graph file generation.
 
-Demonstrates an end-to-end pipeline that turns a natural-language request into a
-saved graph. The request names both the data to extract from a CSV file and how to
-visualize it. Mellea generates the Python code, `PythonExecutionReq` runs it during
-validation, and `MatplotlibHeadlessBackend` and `PlotFileSaved` check that the plot
-renders headlessly (Agg) to the expected file:
-1. User Input - Accept a request specifying data extraction AND visualization
-2. CSV Loading - Read and preview the CSV file (a 100-row sample is created by default)
-3. Code Generation - Generate code to extract data and plot it with headless matplotlib
-4. Code Execution - Execute the code as a side effect of validation, saving the PNG
+This example shows how to use Mellea to:
+1. Accept user input specifying what data to extract AND how to visualize it
+2. Read a CSV file
+3. Generate Python code to extract and visualize data in one step
+4. Execute the code to generate and save the graph to a file using headless matplotlib
 
-Because execution happens during validation, the code has already run by the time
-`m.instruct()` returns; check that the output file exists instead of running the code
-again.
+The pipeline implements a 4-step process:
+1. User Input - Accept natural language request specifying data extraction AND visualization
+2. CSV Loading - Read data from a CSV file
+3. Code Generation - Generate code to extract data and create visualization using
+   headless matplotlib
+4. Code Execution - Execute the code to generate and save graph to file (no display)
 
-Command-line options: `--csv PATH` for your own CSV (the sample columns are `name`,
-`age`, `salary`, `department`, `years_experience`, `work_location`), `--interactive`
-to type requests instead of using the predefined ones, and `--output DIR` for the
-directory the graphs are saved to.
+This example uses execution_tier="local" for fast local execution, for
+demonstration purposes. See the "Execution tiers" section of
+https://docs.mellea.ai/how-to/tools-and-agents#execution-tiers for the available
+tiers and when to use each.
 
-Safety: this example uses `execution_tier="local"`, which runs model-generated code
-as a subprocess with no container isolation. Use it only for trusted, development-time
-runs. For LLM-generated or untrusted code, switch to `execution_tier="docker"` (needs
-`mellea[sandbox]` and a running Docker daemon). The tiers, when to use each, and which
-`CapabilityPolicy` fields are enforced are covered in the "Execution tiers" section of
-docs/docs/how-to/tools-and-agents.md.
+For production use with untrusted code, set execution_tier="docker":
+```python
+PythonExecutionReq(
+    execution_tier="docker",  # Container-isolated execution (recommended for
+    # untrusted code)
+    policy=CapabilityPolicy(timeout=20),
+    max_output_chars=10_000,
+)
+```
 
 Prerequisites:
-    pip install matplotlib numpy
+    uv pip install matplotlib numpy
     ollama pull granite4.2:3b
     ollama serve
 
 Usage:
+    # Default sample data with predefined requests
     uv run python docs/examples/requirements/code_generation_and_execution.py
-    uv run python docs/examples/requirements/code_generation_and_execution.py --interactive
+
+    # Custom CSV file
+    uv run python docs/examples/requirements/code_generation_and_execution.py \
+      --csv /path/to/data.csv
+
+    # Interactive mode
+    uv run python docs/examples/requirements/code_generation_and_execution.py \
+      --interactive
+
+    # Combined options
+    uv run python docs/examples/requirements/code_generation_and_execution.py \
+      --csv /path/to/data.csv --interactive --output /tmp
 """
 
 import argparse

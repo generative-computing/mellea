@@ -13,6 +13,6 @@ bundles of these requirements, see [`sampling/`](../sampling/).
 
 | File | Description |
 | :--- | :--- |
-| [`matplotlib_plotting.py`](./matplotlib_plotting.py) | Calling `MatplotlibHeadlessBackend`, `PlotFileSaved` and `PlotDependenciesAvailable` directly on sample code, with passing and failing cases. No model needed. |
-| [`code_generation_and_execution.py`](./code_generation_and_execution.py) | Natural-language request to saved graph: CSV loading, code generation, execution via `PythonExecutionReq(execution_tier="local")`, and plot validation. Takes `--csv`, `--interactive` and `--output`. |
-| [`code_generation_and_execution_bash.py`](./code_generation_and_execution_bash.py) | Generating Python that orchestrates `bash_executor()` calls for CLI data processing, validated with `PythonSyntaxValid` and run with `python_tool`. Takes `--workspace` and `--interactive`. |
+| [`matplotlib_plotting.py`](./matplotlib_plotting.py) | Demonstrates how to use matplotlib-specific requirements to validate code that generates plots. No model needed. |
+| [`code_generation_and_execution.py`](./code_generation_and_execution.py) | Demonstrates the complete pipeline of code generation, data extraction, and graph visualization. |
+| [`code_generation_and_execution_bash.py`](./code_generation_and_execution_bash.py) | Demonstrates Python code generation with `bash_executor` for CLI data processing tasks. |
