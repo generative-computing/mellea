@@ -1,4 +1,9 @@
 # pytest: ollama, e2e
+"""Modular text summarization generative stubs.
+
+Defines reusable `@generative` stubs for meeting transcripts, legal contracts,
+and literary short stories.
+"""
 
 from mellea import generative
 

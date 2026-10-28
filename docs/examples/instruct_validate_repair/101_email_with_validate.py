@@ -1,12 +1,19 @@
 # pytest: ollama, e2e
+"""Explicit validation and sampling inspection.
+
+Demonstrates using `RejectionSamplingStrategy` with `return_sampling_results=True`
+to inspect generation attempts, validation outcomes, and requirement satisfaction
+reports across sampling loops.
+
+Usage:
+    uv run python docs/examples/instruct_validate_repair/101_email_with_validate.py
+"""
 
 from docs.examples.helper import req_print, w
 from mellea import start_session
 from mellea.backends import ModelOption
-from mellea.backends.model_ids import IBM_GRANITE_4_HYBRID_MICRO
 from mellea.stdlib.sampling import RejectionSamplingStrategy
 
-# create a session using Granite 4 Micro (3B) on Ollama and a simple context [see below]
 m = start_session(model_options={ModelOption.MAX_NEW_TOKENS: 200})
 
 email_v2_samples = m.instruct(
@@ -27,10 +34,3 @@ else:
     print(
         f"===> Requirement for this sample: \n{req_print(email_v2_samples.sample_validations[selected_index])}"
     )
-
-# # [optional] get logs for all loops:
-# from mellea.stdlib.base import GenerateLog
-# _,logs = m.ctx.last_output_and_logs(all_intermediate_results=True)
-# assert isinstance(logs, list) and isinstance(logs[0], GenerateLog)
-# for i, log in enumerate(logs):
-#     print(f"*** Prompt {i} ****\n{w(log.prompt)}\n\n-- RES--- \n{w(log.result)}")

@@ -7,8 +7,9 @@ This module implements a two-solver sampling strategy that uses:
 1. S1 Solver (fast model) - Iterative solving with feedback-based repair
 2. S2 Solver (slow model) - Single attempt escalation when S1 fails or shows no improvement
 
-The strategy leverages ValidationResult.reason fields to provide targeted
-feedback for repair, enabling more effective iterative improvement.
+The strategy feeds each failed requirement's description back to the solver as
+targeted feedback for repair, appending ValidationResult.reason as extra detail
+when it adds signal.
 """
 
 import re
@@ -41,6 +42,19 @@ from ...stdlib import functional as mfuncs
 from ..components import Message
 from ..context import ChatContext
 
+# Generic reasons the "simple" judge feedback strategy emits (single source
+# of truth for both the generator in _validate_with_judge_backend and this
+# filter). They carry no signal beyond the pass/fail verdict, so when a failed
+# validation carries one, the repair feedback must still include the requirement
+# description, or the retry turn has no constraint context (#1497).
+# "Requirement satisfied." is unreachable on the failed-only feedback paths but
+# is kept so the filter matches every generic literal the judge emits.
+_REQUIREMENT_NOT_SATISFIED = "Requirement not satisfied."
+_REQUIREMENT_SATISFIED = "Requirement satisfied."
+_GENERIC_VALIDATION_REASONS = frozenset(
+    {_REQUIREMENT_NOT_SATISFIED, _REQUIREMENT_SATISFIED}
+)
+
 
 class SOFAISamplingStrategy(SamplingStrategy):
     """SOFAI (Slow and Fast AI) two-solver sampling strategy.
@@ -49,8 +63,9 @@ class SOFAISamplingStrategy(SamplingStrategy):
     results. If S1 Solver fails after exhausting the budget or shows no
     improvement, escalates to a single attempt with S2 Solver (slow model).
 
-    The strategy leverages `ValidationResult.reason` fields to provide targeted
-    feedback for repair, enabling more effective iterative improvement.
+    The strategy feeds each failed requirement's description back to the solver
+    as targeted feedback for repair, appending `ValidationResult.reason` as extra
+    detail when it adds signal.
 
     Args:
         s1_solver_backend (Backend): Backend for the fast S1 solver used in the
@@ -119,13 +134,13 @@ class SOFAISamplingStrategy(SamplingStrategy):
         old_ctx: Context,
         new_ctx: Context,
         past_actions: Sequence[SampleActionType],
-        past_results: list[ComputedModelOutputThunk],
+        past_results: Sequence[ComputedModelOutputThunk | None],
         past_val: list[list[tuple[Requirement, ValidationResult]]],
     ) -> tuple[SampleActionType, Context]:
         """Create targeted feedback message from validation results.
 
-        Extracts failed requirements and uses their ValidationResult.reason fields
-        to provide specific, actionable feedback for the next attempt.
+        Extracts failed requirements and reports each description, with the
+        ValidationResult.reason appended as detail when it adds signal.
 
         Args:
             old_ctx: The context WITHOUT the last action + output.
@@ -144,15 +159,20 @@ class SOFAISamplingStrategy(SamplingStrategy):
         # Extract failed requirements with their validation reasons
         failed_items = [(req, val) for req, val in past_val[-1] if not val.as_bool()]
 
-        # Build targeted feedback from validation reasons
+        # Build targeted feedback from validation results
         feedback_lines = []
         for req, val_result in failed_items:
-            if val_result.reason:
-                # Use detailed feedback from validator
-                feedback_lines.append(f"* {val_result.reason}")
-            else:
-                # Fallback to requirement description
-                feedback_lines.append(f"* {req.description}")
+            # The requirement description always reaches the model; a generic
+            # validator reason carries no signal and must not suppress it (#1497).
+            # A bare yes/no judge sets reason to the description itself
+            # (Requirement.validate), so the detail would only duplicate it.
+            feedback_lines.append(f"* {req.description or '[no description]'}")
+            if (
+                val_result.reason
+                and val_result.reason not in _GENERIC_VALIDATION_REASONS
+                and val_result.reason != req.description
+            ):
+                feedback_lines.append(f"  (detail: {val_result.reason})")
 
         repair_message = (
             "The previous attempt failed. Please fix the following issues:\n"
@@ -360,9 +380,7 @@ class SOFAISamplingStrategy(SamplingStrategy):
             feedback = self._extract_feedback(judgment_text)
         else:  # "simple" or fallback
             feedback = (
-                "Requirement not satisfied."
-                if not is_valid
-                else "Requirement satisfied."
+                _REQUIREMENT_NOT_SATISFIED if not is_valid else _REQUIREMENT_SATISFIED
             )
 
         return ValidationResult(result=is_valid, reason=feedback)
@@ -488,8 +506,18 @@ class SOFAISamplingStrategy(SamplingStrategy):
             ]
             feedback_lines = []
             for req, val in failed_reqs:
+                # Same rules as repair(): the description is never suppressed by
+                # a generic reason (#1497), and a bare yes/no judge reason equals
+                # the description, so the detail would only duplicate it.
+                detail = (
+                    f" (detail: {val.reason})"
+                    if val.reason
+                    and val.reason not in _GENERIC_VALIDATION_REASONS
+                    and val.reason != req.description
+                    else ""
+                )
                 feedback_lines.append(
-                    f"  - {val.reason if val.reason else req.description}"
+                    f"  - {req.description or '[no description]'}{detail}"
                 )
 
             # Extract original problem statement from original_action

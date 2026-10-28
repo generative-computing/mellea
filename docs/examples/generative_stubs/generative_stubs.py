@@ -1,4 +1,12 @@
 # pytest: ollama, e2e
+"""Generative stubs for sentiment classification and summarization.
+
+Demonstrates using the `@generative` decorator to create typed, callable LLM
+functions with `Literal` output types and docstrings as natural language prompts.
+
+Usage:
+    uv run python docs/examples/generative_stubs/generative_stubs.py
+"""
 
 from typing import Literal
 

@@ -1,22 +1,19 @@
 # pytest: unit
-"""Compose the ReACT loop with a sync `Compactor`.
+"""Compose the ReACT agent loop with context compaction.
 
-Two integration points are available, and they're complementary:
+Demonstrates integrating sync `Compactor` strategies with the ReACT agent loop across
+two complementary integration points:
 
-1. **Per-add** — the `ChatContext`'s own compactor runs every time the
-   ReACT loop appends a Message, ToolMessage, or thunk. This is fine
-   for cheap strategies like `WindowCompactor`.
-2. **Per-turn** — pass `compactor=` to `react(...)` to invoke a
-   compactor once per ReACT iteration after the tool observation. Use
-   it for heavier strategies that should fire at turn boundaries
-   instead of on every component append.
+1. **Per-add** — the `ChatContext`'s own compactor runs every time the ReACT loop
+   appends a Message, ToolMessage, or thunk (suitable for lightweight compactors like `WindowCompactor`).
+2. **Per-turn** — pass `compactor=` to `react(...)` to invoke a compactor once per
+   ReACT iteration after the tool observation (suitable for turn-boundary compaction).
 
-In both cases use `pin_react_initiator` (from
-`mellea.stdlib.components.react`) so the goal and tool registration
-survive compaction.
+In both cases, use `pin_react_initiator` (from `mellea.stdlib.components.react`)
+so the goal and tool registrations survive compaction.
 
-This example exercises the wiring end-to-end against a fake backend so
-no LLM is required.
+Usage:
+    uv run python docs/examples/context/react_compaction.py
 """
 
 from __future__ import annotations

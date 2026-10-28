@@ -33,7 +33,8 @@ directly.
 ## Step 1: Write your prompt to a file
 
 Create a plain-text file that describes the full task. Include all constraints
-and requirements as part of the description — `m decompose` extracts them:
+and requirements as part of the description — `m decompose` extracts them.
+This is the birthday-party task, with its paragraph breaks and bullets:
 
 ```text
 Plan a birthday party for a 10-year-old.
@@ -48,7 +49,17 @@ All content must be age-appropriate. The invitation must not exceed 30 words.
 The activity list must be ordered from most energetic to least energetic.
 ```
 
-Save this as `party_plan.txt`.
+`m decompose run` treats each non-empty physical line of `--input-file` as one
+task job and expands a literal `\n` to a newline inside that job. Save the
+complete task as this single physical line in `party_plan.txt`, with `\n\n`
+between paragraphs:
+
+> **Warning:** Editor soft wrapping is fine, but a physical line break creates
+> an additional job.
+
+```text
+Plan a birthday party for a 10-year-old.\n\nThe plan must include:\n- A theme suggestion with a short explanation\n- A list of at least 5 activities suitable for children aged 8-12\n- A catering menu with a main dish, two sides, and a birthday cake option\n- A 30-word invitation message addressed to the child's classmates\n\nAll content must be age-appropriate. The invitation must not exceed 30 words.\nThe activity list must be ordered from most energetic to least energetic.
+```
 
 > **Tip:** The more explicit your constraints in the prompt file, the more
 > accurately `m decompose` assigns them to individual subtasks. Phrases like
@@ -60,14 +71,15 @@ Save this as `party_plan.txt`.
 ## Step 2: Run the decompose command
 
 ```bash
-m decompose run --prompt-file party_plan.txt --out-dir ./output/
+mkdir -p ./output
+m decompose run --input-file party_plan.txt --out-dir ./output/
 ```
 
-This produces two files in `./output/`:
+One task job writes these files:
 
-- `m_decomp_result.py` — a runnable Python script with one `m.instruct()` call
+- `output/m_decomp_result/m_decomp_result.py` — a runnable Python script with one `m.instruct()` call
   per subtask, in dependency order
-- `m_decomp_result.json` — the full decomposition: subtask list, extracted
+- `output/m_decomp_result/m_decomp_result.json` — the full decomposition: subtask list, extracted
   constraints, dependency graph, and Jinja2 prompt templates
 
 > **Note:** The `--out-dir` directory must already exist. `m decompose` does not
@@ -90,9 +102,9 @@ This produces two files in `./output/`:
 
 | Flag | Default | Description |
 | --- | --- | --- |
-| `--prompt-file` | (interactive) | Path to a text file containing the task prompt. Omit to enter the prompt interactively. |
+| `--input-file` | (interactive) | Path to a text file of task prompts. Each non-empty physical line is one job; a literal `\n` expands to a newline inside that job. Omit to enter one prompt interactively. |
 | `--out-dir` | (required) | Path to the directory for output files. Must exist. |
-| `--out-name` | `m_decomp_result` | Base name for the output `.py` and `.json` files. |
+| `--out-name` | `m_decomp_result` | Base name for the per-job output directory and the `.py` and `.json` files inside it. |
 | `--model-id` | `mistral-small3.2:latest` | Model to use for the decomposition. |
 | `--backend` | `ollama` | Inference backend: `ollama` or `openai`. |
 | `--backend-endpoint` | — | URL endpoint. Required when `--backend openai`. |
@@ -104,7 +116,7 @@ This produces two files in `./output/`:
 
 ## Step 3: Review the generated Python file
 
-Open `output/m_decomp_result.py`. For the birthday party prompt above, the
+Open `output/m_decomp_result/m_decomp_result.py`. For the birthday party prompt above, the
 generated script looks roughly like this:
 
 ```python
@@ -161,7 +173,7 @@ Each subtask is a separate `m.instruct()` call. Subtasks that depend on earlier
 outputs receive them through `user_variables`. The file runs as-is:
 
 ```bash
-python output/m_decomp_result.py
+python output/m_decomp_result/m_decomp_result.py
 ```
 
 > **Note:** Generated output varies — LLM responses depend on model and
@@ -249,8 +261,9 @@ valid Python identifiers, uppercase, and contain only alphanumeric characters
 and underscores:
 
 ```bash
+mkdir -p ./output
 m decompose run \
-  --prompt-file party_plan.txt \
+  --input-file party_plan.txt \
   --out-dir ./output/ \
   --input-var CHILD_NAME \
   --input-var PARTY_DATE
@@ -273,8 +286,9 @@ with many interdependent constraints, a larger model produces clearer subtask
 boundaries:
 
 ```bash
+mkdir -p ./output
 m decompose run \
-  --prompt-file party_plan.txt \
+  --input-file party_plan.txt \
   --out-dir ./output/ \
   --model-id mistral-large:latest
 ```
@@ -282,8 +296,9 @@ m decompose run \
 To use an OpenAI-compatible endpoint:
 
 ```bash
+mkdir -p ./output
 m decompose run \
-  --prompt-file party_plan.txt \
+  --input-file party_plan.txt \
   --out-dir ./output/ \
   --backend openai \
   --model-id gpt-4o-mini \

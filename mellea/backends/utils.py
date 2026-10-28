@@ -20,7 +20,7 @@ from typing import Any
 from ..core import Context, MelleaLogger, ModelToolCall, Span
 from ..core.base import AbstractMelleaTool, ModelOutputThunk
 from ..formatters import ChatFormatter
-from ..helpers import merge_provider_fields
+from ..helpers import has_user_content, merge_provider_fields
 from ..stdlib.components import Message
 from .tools import _parse_tool_calls, validate_tool_arguments
 
@@ -87,6 +87,10 @@ def to_chat(
 
     Returns:
         List of role/content dicts suitable for `apply_chat_template`.
+
+    Raises:
+        ValueError: If the assembled conversation carries no user-role
+            content, which would send the model a blank prompt.
     """
     assert ctx.is_chat_context
 
@@ -97,6 +101,17 @@ def to_chat(
     ctx_as_message_list: list[Message] = formatter.to_chat_messages(linearized_ctx)
     # add action
     ctx_as_message_list.extend(formatter.to_chat_messages([action]))
+
+    # Refuse to send an empty user prompt, matching the guard the other chat
+    # backends enforce. See `has_user_content` for why whitespace-only text
+    # still counts as empty.
+    if not has_user_content(ctx_as_message_list):
+        raise ValueError(
+            "Refusing to call the model: no user-role content in the assembled "
+            "conversation. This usually means a stateless context (e.g. "
+            "SimpleContext) was combined with an empty or whitespace-only "
+            "action; recorded turns are not forwarded to the model."
+        )
 
     # NOTE: `self.formatter.to_chat_messages` explicitly skips `Message` objects. However, we need
     # to print `Message`s to correctly serialize any documents with the message. Do the printing here.
