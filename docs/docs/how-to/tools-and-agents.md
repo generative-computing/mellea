@@ -279,8 +279,7 @@ above).
 
 The `tier` argument chooses where and how code runs. Pass it explicitly: omitting it
 resolves to `"local_unsafe"` and emits a `UserWarning` so the trust decision is not
-implicit. The same five tiers are available to the
-[`PythonExecutionReq`](../api/mellea/stdlib/requirements/python_reqs.mdx) requirement,
+implicit. The same five tiers are available to the `PythonExecutionReq` requirement,
 which calls the parameter `execution_tier` and defaults it to `"static"`.
 
 | Tier | Isolation | Speed | Use case |
@@ -340,7 +339,6 @@ from mellea.stdlib.tools.execution_policy import CapabilityPolicy
 
 # Safe: container isolation + timeout control
 # Note: most policy fields are declared only (not enforced at runtime).
-# The docker tier enforces: timeout, resource limits, and artifact export paths.
 req = PythonExecutionReq(
     execution_tier="docker",  # Container-isolated execution
     policy=CapabilityPolicy(
