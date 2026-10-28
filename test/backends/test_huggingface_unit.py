@@ -285,7 +285,31 @@ def _register_adapter_stub(backend, adapter: _AdapterCore) -> str:
     backend._added_adapters = {key: adapter}
     backend._composed_adapters[key] = adapter
     backend._composed_adapter_configs[key] = _EMBEDDED_STUB_CONFIG
+    # A registered-and-prepared adapter has its weights loaded, so record it in
+    # `_loaded_adapters` too — this is what keeps the LocalFile/PEFT branch's
+    # pre-guard reload (huggingface.py) from firing for an already-loaded aLoRA
+    # whose composed key equals its PEFT qualified_name.
+    backend._loaded_adapters[key] = adapter
     return key
+
+
+# Both intrinsic-dispatch branches must be pinned: `_make_embedded_adapter_stub`
+# routes through `_generate_embedded_with_generation_lock` (the embedded
+# reality), `_make_intrinsic_adapter_stub` through
+# `_generate_composed_local_file_with_adapter_scope` (the `else:` LocalFile/PEFT
+# branch). Tests that moved to the embedded stub-only left the local-file branch
+# without logits/closure-release coverage (PR #1700); parametrizing over both
+# restores it. Both stub dispatch methods are pass-throughs in
+# `_make_intrinsic_backend_stub`, so the only extra setup the local-file branch
+# needs is an empty `peft_config` so the aLoRA activation guard cleanly no-ops
+# (the stub model is a bare MagicMock otherwise).
+_INTRINSIC_STUB_FACTORIES = pytest.mark.parametrize(
+    "make_adapter_stub",
+    [
+        pytest.param(_make_embedded_adapter_stub, id="embedded"),
+        pytest.param(_make_intrinsic_adapter_stub, id="local_file"),
+    ],
+)
 
 
 def _make_intrinsic_backend_stub(stub_backend):
@@ -295,6 +319,7 @@ def _make_intrinsic_backend_stub(stub_backend):
     stub_backend._added_adapters = {}
     stub_backend._composed_adapters = {}
     stub_backend._composed_adapter_configs = {}
+    stub_backend._loaded_adapters = {}
     stub_backend._tokenizer = object()
     stub_backend._model = object()
     stub_backend._llguidance_tokenizer = object()
@@ -2862,12 +2887,18 @@ async def test_kv_cache_stream_timeout_signals_generation_thread():
 
 
 @pytest.mark.asyncio
-async def test_intrinsic_logits_populated_when_option_set(stub_backend):
+@_INTRINSIC_STUB_FACTORIES
+async def test_intrinsic_logits_populated_when_option_set(
+    stub_backend, make_adapter_stub
+):
     """_generate_from_intrinsic populates generation.logits when ModelOption.LOGITS=True.
 
     generate_with_transformers wraps the raw GenerateDecoderOnlyOutput into a
     ChatCompletionResponse and discards it.  The backend proxies self._model so the
     raw output is intercepted and stashed for post_processing/_surface_logits.
+
+    Parametrized over both the embedded and composed LocalFile/PEFT adapter
+    stubs so both dispatch branches populate logits (PR #1700).
     """
     vocab_size = 32000
     fake_scores = (torch.zeros(1, vocab_size), torch.zeros(1, vocab_size))
@@ -2896,7 +2927,7 @@ async def test_intrinsic_logits_populated_when_option_set(stub_backend):
     backend._tokenizer = MagicMock(eos_token_id=0)
     backend.model_id = "stub-model"
 
-    adapter = _make_embedded_adapter_stub()
+    adapter = make_adapter_stub()
     _register_adapter_stub(backend, adapter)
 
     class _FakeChatCompletionResponse:
@@ -2944,6 +2975,10 @@ async def test_intrinsic_logits_populated_when_option_set(stub_backend):
     ):
         mock_model = MagicMock()
         mock_model.generate = MagicMock(return_value=fake_hf_output)
+        # Empty peft_config so the LocalFile/PEFT branch's aLoRA activation
+        # guard cleanly no-ops (no cfg loaded for this stub); the embedded
+        # branch skips the guard entirely.
+        mock_model.peft_config = {}
         backend._model = mock_model
 
         output = await LocalHFBackend._generate_from_intrinsic(
@@ -2981,8 +3016,9 @@ async def test_intrinsic_logits_populated_when_option_set(stub_backend):
 
 
 @pytest.mark.asyncio
+@_INTRINSIC_STUB_FACTORIES
 async def test_intrinsic_closure_cell_and_kv_cache_released_after_post_processing(
-    stub_backend,
+    stub_backend, make_adapter_stub
 ):
     """Holding only the MOT after post_processing must not pin intrinsic HF output.
 
@@ -2999,6 +3035,10 @@ async def test_intrinsic_closure_cell_and_kv_cache_released_after_post_processin
 
     The test deliberately retains the MOT while dropping all independent test
     references to the HF output, DynamicCache, and KV tensors.
+
+    Parametrized over both the embedded and composed LocalFile/PEFT adapter
+    stubs so both dispatch branches release the closure cell and KV cache
+    (PR #1700).
     """
     backend = _make_intrinsic_backend_stub(stub_backend)
     backend.processing = lambda *args, **kwargs: LocalHFBackend.processing(
@@ -3045,7 +3085,7 @@ async def test_intrinsic_closure_cell_and_kv_cache_released_after_post_processin
         if t is not None
     ]
 
-    adapter = _make_embedded_adapter_stub()
+    adapter = make_adapter_stub()
     _register_adapter_stub(backend, adapter)
 
     class _FakeChatCompletionResponse:
@@ -3077,6 +3117,9 @@ async def test_intrinsic_closure_cell_and_kv_cache_released_after_post_processin
 
     mock_model = MagicMock()
     mock_model.generate = MagicMock(return_value=fake_hf_output)
+    # Empty peft_config so the LocalFile/PEFT branch's aLoRA activation guard
+    # cleanly no-ops; the embedded branch skips the guard entirely.
+    mock_model.peft_config = {}
     backend._model = mock_model
 
     with (

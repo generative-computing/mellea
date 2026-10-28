@@ -317,3 +317,39 @@ async def test_reassigned_weights_fail_loudly():
 
     # The registered adapter still activates correctly — nothing was mutated.
     assert isinstance(adapter.weights, EmbeddedBinding)
+
+
+async def test_mismatched_weights_fail_loudly_at_activation():
+    """A non-`EmbeddedBinding` `.weights` must raise `TypeError` at activation.
+
+    The frozen `Adapter` plus `add_adapter`'s own `EmbeddedBinding` check make
+    this hard to reach in normal use, but the generation-path guard
+    (`openai.py`) is defense-in-depth for a wrongly-constructed adapter whose
+    `.weights` is some other binding: it must raise loudly rather than silently
+    send an unactivated request. Regression guard: the rewrite left only the
+    frozen-dataclass `FrozenInstanceError` test, dropping coverage of this
+    guard (PR #1700). `object.__setattr__` forces the mismatch past the frozen
+    dataclass to stand in for that wrongly-constructed adapter.
+    """
+    backend = _backend_with_adapter("alora")
+    adapter = backend._added_adapters["answerability_alora"]
+    object.__setattr__(adapter, "weights", ServerMediatedBinding())
+
+    mock_create = AsyncMock(return_value=_chat_completion())
+    mock_client = MagicMock()
+    mock_client.chat.completions.create = mock_create
+
+    with patch.object(
+        OpenAIBackend,
+        "_async_client",
+        new_callable=PropertyMock,
+        return_value=mock_client,
+    ):
+        ctx = ChatContext().add(Message("user", "What is the square root of 4?"))
+        # The guard runs while `_generate_from_intrinsic` builds the request,
+        # so it raises during `aact` itself — before any request is dispatched.
+        with pytest.raises(TypeError, match="must be an EmbeddedBinding"):
+            await mfuncs.aact(Intrinsic("answerability"), ctx, backend, strategy=None)
+
+    # The guard fires before any request is sent.
+    mock_create.assert_not_called()

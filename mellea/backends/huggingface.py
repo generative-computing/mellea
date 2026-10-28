@@ -453,10 +453,13 @@ def _alora_qualified_name_for_activation_check(adapter: _AdapterCore) -> str | N
 
     Returning a qualified name here is necessary but not sufficient for the
     guard to actually see the adapter: the caller (`_generate_from_intrinsic`)
-    checks `peft_config` for it immediately, before the weights are
-    necessarily loaded. That is fine for the composed-`Adapter` path
-    (`resolve_adapter()` calls `binding.prepare()`, and therefore
-    `load_peft_adapter`, at registration time, well before generation).
+    checks `peft_config` for it, which only holds the weights once they have
+    been loaded. `resolve_adapter()` calls `binding.prepare()` (and therefore
+    `load_peft_adapter`) at registration time, but an intervening
+    `unload_peft_adapter()` can drop the weights again while the registration
+    survives — so the caller reloads the name (when it is registered in
+    `_added_adapters` but absent from `_loaded_adapters`) immediately before
+    the guard runs, rather than relying on registration-time `prepare()` alone.
 
     Args:
         adapter: The resolved composed `Adapter` about to generate.
@@ -1320,6 +1323,26 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         if not adapter_is_embedded:
             alora_qualified_name = _alora_qualified_name_for_activation_check(adapter)
             if alora_qualified_name is not None:
+                # Reload the aLoRA's weights *before* the guard runs, not inside
+                # `adapter_scope` below. `_check_alora_activation` looks the name
+                # up in `model.peft_config` and bails silently when it is absent
+                # (`_core.py` `_check_alora_activation`). An intervening
+                # `unload_peft_adapter()` (GPU-memory reclaim, test teardown)
+                # drops the weights from `peft_config` while leaving the
+                # registration in `_added_adapters`, so without this reload the
+                # guard sees nothing to check, returns, and generation proceeds
+                # on base-model weights — a silently wrong score for the exact
+                # mismatch the guard exists to catch (PR #1700). Reloading here,
+                # under the same `_adapter_activation_lock()` `activate()` uses,
+                # puts the weights back in `peft_config` first; `activate()`'s
+                # own `except ValueError` reload then only covers a genuine race.
+                if (
+                    alora_qualified_name in self._added_adapters
+                    and alora_qualified_name not in self._loaded_adapters
+                ):
+                    with self._adapter_activation_lock():
+                        if alora_qualified_name not in self._loaded_adapters:
+                            self.load_peft_adapter(alora_qualified_name)
                 # getattr, not direct attribute access, for both `base_model_name`
                 # and `_warned_about`: every real backend sets both
                 # (`base_model_name` is an abstract property every concrete

@@ -705,6 +705,11 @@ class LocalFileBinding(WeightsBinding):
             RuntimeError: `prepare()` was not called first, or called but did
                 not complete (registered with the backend but the weights
                 load itself failed or hasn't been retried yet).
+            Exception: Whatever `load_peft_adapter()` raises when the reload
+                after an intervening unload fails (e.g. the checkpoint was
+                evicted). The half-injected PEFT state is cleaned up before
+                the exception propagates, so the next `activate()` retries the
+                load cleanly rather than silently serving zero-effect weights.
         """
         backend = self.backend
         if backend is None or not self._loaded:
@@ -727,7 +732,21 @@ class LocalFileBinding(WeightsBinding):
                 # held here guards, so no new lock is taken — re-loading under
                 # `_lifecycle_lock` (as prepare() does) would invert the adapter
                 # lock order against a concurrent release().
-                backend.load_peft_adapter(self.qualified_name)
+                try:
+                    backend.load_peft_adapter(self.qualified_name)
+                except BaseException:
+                    # PEFT injects the adapter's modules and registers the name
+                    # in `peft_config` *before* it reads the checkpoint, so a
+                    # failed reload (e.g. an evicted cache dir) leaves the name
+                    # half-registered: the next `set_adapter` would succeed on
+                    # zero-effect modules and serve base-model output under the
+                    # adapter's name with no error. unload_peft_adapter()'s
+                    # best-effort cleanup reverses that injected-but-unloaded
+                    # state, so the next activate() hits ValueError again and
+                    # retries the load cleanly. `_loaded` is deliberately left
+                    # True — the registration itself is intact (PR #1700).
+                    backend.unload_peft_adapter(self.qualified_name)
+                    raise
                 backend.activate_peft_adapter(self.qualified_name)
             self._active = True
 
