@@ -1,4 +1,13 @@
 # pytest: ollama, e2e
+"""Multi-stage financial advice generation with semantic validation.
+
+Demonstrates orchestrating multiple `@generative` stubs for client profile
+analysis, recommendation generation, and compliance checks with semantic
+preconditions and postconditions.
+
+Usage:
+    uv run python docs/examples/generative_stubs/investment_advice.py
+"""
 
 from typing import Literal
 

@@ -29,8 +29,8 @@ to run.
 | -------- | ------------- |
 | `instruct_validate_repair/` | The IVR loop end-to-end: basic generation, adding requirements, automatic repair on failure, custom validators |
 | `generative_stubs/` | `@generative` functions with typed returns, pipeline composition, `ChatContext` persona injection, pre/postcondition checks |
-| `context/` | Context inspection, sampling with context trees, parallel context branches |
-| `sessions/` | Custom session types and backend selection |
+| `context/` | Context inspection, sampling with context trees, sliding window and threshold compaction |
+| `sessions/` | Custom session types, safety filtering, and backend selection |
 | `async/` | How to utilize basic async capabilities |
 | `streaming/` | `stream()` with per-chunk validation, typed event vocabulary, early-exit on fail, retry/repair via a sampling strategy |
 
@@ -62,6 +62,7 @@ to run.
 
 | Category | What it shows |
 | -------- | ------------- |
+| `requirements/` | String and functional validation requirements, custom predicate functions, and validation repair |
 | `intrinsics/` | [Guardian adapter functions](../how-to/safety-guardrails.md): `guardian_check()` for harm, jailbreak, social bias, groundedness; `policy_guardrails()`; `factuality_detection()` / `factuality_correction()` |
 | `safety/` | *(Examples removed — see [Guardian how-to guide](../how-to/safety-guardrails.md) for the current API. The `RepairTemplateStrategy` gap is tracked in [#1071](https://github.com/generative-computing/mellea/issues/1071).)* |
 
@@ -79,6 +80,7 @@ to run.
 
 | Category | What it shows |
 | -------- | ------------- |
+| `sampling/` | Pre-packaged sampling presets and custom rejection sampling configurations |
 | `aLora/` | Training aLoRA adapters for fast constraint checking; performance optimisation |
 | `intrinsics/` | *(Non-Guardian)* Answer relevance, hallucination detection, citation validation — specialised adapter-backed checks. For Guardian safety functions see [Safety and validation](#safety-and-validation) above |
 | `granite-switch/` | Running adapter functions via OpenAI backend with Granite Switch embedded adapters |
@@ -88,6 +90,7 @@ to run.
 
 | Category | What it shows |
 | -------- | ------------- |
+| `audio_text_models/` | Audio-language models, `AudioBlock`, speech prompting, backend support matrix |
 | `image_text_models/` | Vision-language models, `ImageBlock`, multimodal prompting, backend support matrix |
 
 ### Observability

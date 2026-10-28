@@ -1,13 +1,12 @@
 # pytest: ollama, e2e, qualitative
+"""Conversational repair with MultiTurnStrategy.
 
-"""MultiTurnStrategy Example with Validation Functions
+Demonstrates using `MultiTurnStrategy` with `ChatContext` to iteratively improve
+outputs through conversational dialogue, providing structured validation failure
+reasons back to the model as user turns.
 
-Demonstrates how MultiTurnStrategy uses conversational repair with detailed
-validation feedback to iteratively improve outputs.
-
-This example shows the key difference between MultiTurnStrategy and other strategies:
-it builds a conversation history where validation failures are communicated as user
-messages, allowing the model to iteratively improve its response through dialogue.
+Usage:
+    uv run python docs/examples/instruct_validate_repair/multiturn_strategy_example.py
 """
 
 from mellea import start_session
