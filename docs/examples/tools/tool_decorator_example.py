@@ -1,11 +1,5 @@
 # pytest: ollama, e2e
-"""Defining tools with the @tool decorator.
-
-Demonstrates the `@tool` decorator as a cleaner alternative to
-`MelleaTool.from_callable()`: arguments and the JSON schema are derived from type
-hints and the docstring, decorated functions are passed straight to
-`ModelOption.TOOLS`, they are invoked with `.run()`, and `@tool(name=...)` overrides
-the tool name.
+"""Example demonstrating the @tool decorator for cleaner tool definitions.
 
 The default run uses mock tools and needs no model. `example_with_llm()` passes the
 tools to a model; it is commented out at the bottom of the file, so uncomment it

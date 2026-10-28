@@ -1,5 +1,5 @@
 # pytest: e2e, ollama, qualitative
-"""Running shell commands with the bash_executor tool.
+"""Example usage patterns for bash_executor tool.
 
 Demonstrates multiple ways to use Mellea's bash execution capabilities:
 1. Direct execution for local commands

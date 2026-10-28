@@ -1,21 +1,20 @@
 # pytest: ollama, e2e
-"""Code interpreter tool with forced tool use and argument validation.
+"""Comprehensive examples of using the code interpreter tool with LLMs.
 
-Walks through `python_tool()` in four steps: running code directly with no LLM,
-offering the tool to the model, forcing the call with `uses_tool()`, and constraining
-the generated code with `tool_arg_validator()` so the plot is written to a file
-instead of shown. The tool call is returned but not executed by `m.instruct()`;
-the example runs it explicitly with `call_func()`.
+Covers direct code execution with `python_tool().run()`, tool integration with
+`m.instruct()`, forcing tool use with `uses_tool()`, validating tool arguments
+with `tool_arg_validator()`, and explicit tier selection for local execution.
+
+The LLM-driven examples use `tier="local_unsafe"`, which executes model-generated code as an
+unrestricted subprocess with no container isolation. See the "Execution tiers" section of
+https://docs.mellea.ai/how-to/tools-and-agents#execution-tiers for the available
+tiers.
 
 Only `example_4` runs when the script is executed; call the others from the bottom
-of the file to try them. `example_1` uses `tier="docker_unsafe"` and needs Docker;
-the LLM-driven examples use `tier="local_unsafe"`, which runs model-generated code
-as an unrestricted subprocess with no isolation. Use it only for trusted,
-development-time runs. The tier trade-offs are covered in the "Execution tiers"
-section of docs/docs/how-to/tools-and-agents.md.
+of the file to try them.
 
 Prerequisites:
-    pip install matplotlib
+    uv pip install matplotlib
     ollama pull granite4.2:3b
     ollama serve
 

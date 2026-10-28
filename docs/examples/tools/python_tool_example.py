@@ -1,27 +1,28 @@
 # pytest: e2e, slow
-"""Running code with python_tool(): arithmetic, CSV summary, and matplotlib plot.
-
-Demonstrates `python_tool().run()` without an LLM in the loop, including on-demand
-package installs and collecting generated files as artifacts.
+"""Examples for python_tool() — arithmetic, CSV summary, and matplotlib plot.
 
 Each example uses `tier="local_unsafe"` — an explicit trust decision meaning
-the code will run as a direct subprocess with no container isolation, no
-filesystem or network restrictions, and no memory/CPU limits. Use it only for
-trusted, development-time runs; use `tier="docker"` for LLM-generated or untrusted
-code (needs `mellea[sandbox]` and a running Docker daemon). The five tiers and when
-to use each are covered in the "Execution tiers" section of
-docs/docs/how-to/tools-and-agents.md.
+the model-generated code will run as a direct subprocess with no container
+isolation, no filesystem or network restrictions, and no memory/CPU limits.
+This tier is appropriate for trusted, development-time use.  For production or
+untrusted code, use `tier="docker"` or `tier="docker_unsafe"`. See the "Execution
+tiers" section of https://docs.mellea.ai/how-to/tools-and-agents#execution-tiers
+for the available tiers and when to use each.
 
-Package-install story: pass `packages=["pkg1", "pkg2"]` to `python_tool()` for
-on-demand installs. The tool runs `uv pip install` when uv is on PATH (the default
-in uv-managed projects), falling back to `python -m pip` otherwise. Installs happen
-once per tool lifetime (the shared install cache is keyed to the `python_tool`
+Package-install story
+---------------------
+Pass `packages=["pkg1", "pkg2"]` to `python_tool()` for on-demand installs.
+The tool runs `uv pip install` when uv is on PATH (the default in uv-managed
+projects), falling back to `python -m pip` otherwise.  Installs happen once
+per tool lifetime (the shared install cache is keyed to the `python_tool`
 instance), so repeated `tool.run()` calls only pay the pip cost once.
 
-Artifact directory: pass `artifact_dir=<Path>` to collect files the code writes.
-Only files produced by a **successful** execution are surfaced. When `artifact_dir`
-is omitted, a per-call tempdir is created; it is kept alive as long as the returned
-`ExecutionResult` holds artifacts, and cleaned up otherwise.
+Artifact directory
+------------------
+Pass `artifact_dir=<Path>` to collect files the code writes.  Only files
+produced by a **successful** execution are surfaced.  When `artifact_dir` is
+omitted, a per-call tempdir is created; it is kept alive as long as the
+returned `ExecutionResult` holds artifacts, and cleaned up otherwise.
 
 Usage:
     uv run python docs/examples/tools/python_tool_example.py

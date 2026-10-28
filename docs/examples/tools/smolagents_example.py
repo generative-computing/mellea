@@ -1,10 +1,8 @@
 # pytest: ollama, e2e
-"""Using pre-built Hugging Face smolagents tools with Mellea.
+"""Example showing how to use pre-built Hugging Face smolagents tools with Mellea.
 
-Demonstrates loading an existing tool from the smolagents ecosystem and converting
-it with `MelleaTool.from_smolagents()`, similar to how LangChain tools are wrapped
-with `MelleaTool.from_langchain()`. Here `PythonInterpreterTool` is offered to the
-model, and any tool call it makes is executed with `call_func()`.
+This demonstrates loading existing tools from the smolagents ecosystem,
+similar to how you can use langchain tools with MelleaTool.from_langchain().
 
 The smolagents library provides various pre-built tools like:
 - PythonInterpreterTool for code execution
