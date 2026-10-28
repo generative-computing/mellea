@@ -1,19 +1,9 @@
 # pytest: skip_always
-"""Exposing a Mellea instruct-validate-repair loop as an MCP server.
+"""Example of an MCP server.
 
-Demonstrates a FastMCP server whose `write_a_poem` tool runs `m.instruct()` with a
-word-limit `Requirement` and `RejectionSamplingStrategy`, so the tool validates and
-repairs its own output before returning. The same pattern makes any Mellea program
-callable from Claude Desktop, Langflow, Cursor, or any other MCP client. The file
-also registers a `greeting://{name}` resource.
-
-To use it from Langflow, follow https://docs.langflow.org/mcp-client#mcp-stdio-mode
-and register the server with the config in `mcp_server.json` in this directory,
-replacing `<ABSOLUTE PATH>` with the absolute path to your Mellea checkout. The
-config launches `uv --directory <path>/docs/examples/mcp run mcp run mcp_example.py`
-over stdio.
-
-For a walkthrough of building servers, see docs/docs/integrations/mcp.md.
+A simple example to show how to write a MCP tool with Mellea and
+instruct-validate-repair. Being able to speak the tool language lets you integrate
+with Claude Desktop, Langflow, and other MCP clients.
 
 Prerequisites:
     uv pip install "mcp[cli]"
