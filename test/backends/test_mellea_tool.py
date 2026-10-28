@@ -8,6 +8,7 @@ from pydantic_core import ValidationError
 import mellea
 from mellea.backends.model_options import ModelOption
 from mellea.backends.tools import MelleaTool
+from mellea.core.base import ModelToolCall
 from mellea.stdlib.session import MelleaSession
 
 
@@ -315,6 +316,64 @@ def test_from_callable_async_propagates_exceptions():
     t = MelleaTool.from_callable(raiser)
     with pytest.raises(RuntimeError, match="boom"):
         t.run()
+
+
+def _add_positional_only(a: int, /, b: int = 1) -> int:
+    """Add two numbers where the first is positional-only.
+
+    Args:
+        a: first
+        b: second
+    """
+    return a + b
+
+
+def test_from_callable_positional_only():
+    """A positional-only parameter is callable by keyword (as the model supplies it).
+
+    Tool calls always arrive as keyword arguments (`func.run(**args)`), so a
+    positional-only parameter must be reordered into a positional slot before the
+    underlying callable is invoked. The emitted schema is unchanged.
+    """
+    t = MelleaTool.from_callable(_add_positional_only)
+
+    # Schema side is unaffected: the positional-only param is a normal property.
+    params = t.as_json_tool["function"]["parameters"]
+    assert params["required"] == ["a"]
+    assert "a" in params["properties"]
+    assert "b" in params["properties"]
+
+    # All-keyword is the path ModelToolCall.call_func uses.
+    assert t.run(a=1, b=2) == 3
+    # The default for the positional-only param's companion still applies.
+    assert t.run(a=5) == 6
+    # Mixed and all-positional forms keep working.
+    assert t.run(1, b=2) == 3
+    assert t.run(1, 2) == 3
+
+
+def test_call_func_positional_only():
+    """End-to-end: a model's tool call dispatches through ModelToolCall.call_func."""
+    t = MelleaTool.from_callable(_add_positional_only)
+    call = ModelToolCall(name=t.name, func=t, args={"a": 1, "b": 2})
+    assert call.call_func() == 3
+
+
+def test_from_callable_async_positional_only():
+    """Positional-only reordering also works for async callables."""
+
+    async def async_add(a: int, /, b: int = 1) -> int:
+        """Add two numbers where the first is positional-only.
+
+        Args:
+            a: first
+            b: second
+        """
+        return a + b
+
+    t = MelleaTool.from_callable(async_add)
+    assert t.run(a=1, b=2) == 3
+    assert t.run(1, 2) == 3
 
 
 if __name__ == "__main__":
