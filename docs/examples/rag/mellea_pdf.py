@@ -5,10 +5,9 @@ Demonstrates loading a remote PDF into a `RichDocument` component and using it
 as `grounding_context` in `m.instruct()` for document-grounded question answering.
 
 Prerequisites:
-    uv sync --extra backends
-    pip install docling
-    ollama pull granite4.2:3b
+    uv sync --extra docling
     ollama serve
+    ollama pull granite4.2:3b
 
 Usage:
     uv run python docs/examples/rag/mellea_pdf.py

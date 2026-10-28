@@ -1,12 +1,12 @@
 # pytest: ollama, e2e
-"""Named entity extraction with generative stubs.
+"""Simple Example of information extraction with Mellea using generative stubs.
 
 Demonstrates using a `@generative` function with a `list[str]` return type to
 extract all person names from a text passage declaratively.
 
 Prerequisites:
-    ollama pull granite4.2:3b
     ollama serve
+    ollama pull granite4.2:3b
 
 Usage:
     uv run python docs/examples/information_extraction/101_with_gen_stubs.py

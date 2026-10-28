@@ -7,15 +7,20 @@
 #     "mellea"
 # ]
 # ///
-"""RAG pipeline with semantic retrieval and LLM-based relevance filtering.
+"""Simple RAG (Retrieval-Augmented Generation) example with relevance filtering.
 
-Demonstrates a two-stage retrieval pipeline: embedding a document corpus into a
-FAISS index for semantic search, then using a `@generative` relevance filter to
-discard off-topic results before grounded answer generation.
+This script demonstrates how to:
+1. Create a FAISS vector index from documents
+2. Retrieve relevant documents using semantic search
+3. Filter retrieved documents for relevance using Mellea
+4. Generate a final answer based on the filtered documents
 
 Prerequisites:
-    ollama pull mistral:7b
     ollama serve
+    ollama pull mistral:7b
+
+    faiss-cpu and sentence-transformers come from the PEP 723 header, so
+    `uv run` (without `python`) installs them automatically.
 
 Usage:
     uv run docs/examples/rag/simple_rag_with_filter.py

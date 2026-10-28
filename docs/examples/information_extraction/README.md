@@ -1,6 +1,7 @@
 # Information Extraction Examples
 
 Examples demonstrating structured information extraction from text using Mellea.
+For a walkthrough, see [Data Extraction Pipeline](../../docs/examples/data-extraction-pipeline.md).
 
 ## Examples
 

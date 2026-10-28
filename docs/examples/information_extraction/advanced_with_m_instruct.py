@@ -1,13 +1,13 @@
 # pytest: ollama, e2e
-"""Structured information extraction with Pydantic formatting and sampling requirements.
+"""Advanced Example of information extraction with Mellea using m.instruct() and constraints.
 
 Demonstrates constrained extraction using `m.instruct()` with a Pydantic `format`
 model, a custom `at_least_n` predicate requirement, and `RejectionSamplingStrategy`
 to retry until the output contains enough extracted entities.
 
 Prerequisites:
-    ollama pull granite4.2:3b
     ollama serve
+    ollama pull granite4.2:3b
 
 Usage:
     uv run python docs/examples/information_extraction/advanced_with_m_instruct.py

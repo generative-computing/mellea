@@ -6,9 +6,9 @@ expose a markdown table to Mellea, then querying it with `m.query()` and
 updating it with `m.transform()`.
 
 Prerequisites:
-    pip install pandas
-    ollama pull granite4.2:3b
+    uv pip install pandas
     ollama serve
+    ollama pull granite4.2:3b
 
 Usage:
     uv run python docs/examples/mobject/table.py

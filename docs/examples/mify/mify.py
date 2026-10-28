@@ -8,8 +8,9 @@ objects with Mellea, including class-level decoration, ad-hoc mification,
 templates, and `funcs_include` for exposing class methods as tools.
 
 Prerequisites:
-    ollama pull granite4.2:3b
+    uv sync --extra docling
     ollama serve
+    ollama pull granite4.2:3b
 
 Usage:
     uv run python docs/examples/mify/mify.py
