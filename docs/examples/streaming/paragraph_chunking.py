@@ -17,6 +17,13 @@ emitting anything — so if the model writes everything as one long paragraph
 the stream completes before any chunk is emitted.  Use ParagraphChunking when
 the validation logic requires full paragraph context: topic coherence,
 heading structure, citation presence, or overall paragraph quality.
+
+Prerequisites:
+    ollama serve
+    ollama pull granite4.2:3b
+
+Usage:
+    uv run python docs/examples/streaming/paragraph_chunking.py
 """
 
 import asyncio

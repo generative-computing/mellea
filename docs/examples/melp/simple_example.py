@@ -1,4 +1,13 @@
 # pytest: ollama, e2e
+"""Basic introduction to MELP's lazy evaluation concepts.
+
+Prerequisites:
+    ollama serve
+    ollama pull granite4:latest
+
+Usage:
+    uv run python docs/examples/melp/simple_example.py
+"""
 
 import asyncio
 

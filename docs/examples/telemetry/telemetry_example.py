@@ -8,22 +8,28 @@ When tracing is enabled, two scopes are populated:
 1. Application trace (`mellea.application`) - user-facing operations
 2. Backend trace (`mellea.backend`) - LLM backend interactions
 
-Run with different configurations:
+Prerequisites:
+    uv sync --extra telemetry
+    ollama serve
+    ollama pull granite4.2:3b
 
-# Enable tracing
-export MELLEA_TRACES_ENABLED=true
-python telemetry_example.py
+Usage:
+    Run with different configurations:
 
-# Export to OTLP endpoint (e.g., Jaeger)
-export MELLEA_TRACES_ENABLED=true
-export MELLEA_TRACES_OTLP=true
-export OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://localhost:4317
-python telemetry_example.py
+    # Enable tracing
+    export MELLEA_TRACES_ENABLED=true
+    uv run python docs/examples/telemetry/telemetry_example.py
 
-# Enable console output for debugging
-export MELLEA_TRACES_ENABLED=true
-export MELLEA_TRACES_CONSOLE=true
-python telemetry_example.py
+    # Export to OTLP endpoint (e.g., Jaeger)
+    export MELLEA_TRACES_ENABLED=true
+    export MELLEA_TRACES_OTLP=true
+    export OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://localhost:4317
+    uv run python docs/examples/telemetry/telemetry_example.py
+
+    # Enable console output for debugging
+    export MELLEA_TRACES_ENABLED=true
+    export MELLEA_TRACES_CONSOLE=true
+    uv run python docs/examples/telemetry/telemetry_example.py
 """
 
 from mellea import generative, start_session

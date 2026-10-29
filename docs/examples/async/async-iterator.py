@@ -1,6 +1,18 @@
 # pytest: ollama, e2e
 
-"""Example of streaming a response with the `async for` iterator."""
+"""Example of streaming a response with the `async for` iterator.
+
+Demonstrates:
+- Consuming a streamed response with `async for delta in response`
+- Using `async with` so an early exit cancels the in-flight generation
+
+Prerequisites:
+    ollama serve
+    ollama pull granite4.2:3b
+
+Usage:
+    uv run python docs/examples/async/async-iterator.py
+"""
 
 import asyncio
 

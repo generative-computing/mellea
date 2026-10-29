@@ -8,6 +8,13 @@ Demonstrates:
 - Iterating the typed StreamEvents from an EventStreamer (stream(as_events=True))
 - Driving the stream with `async with` + `async for` for safe cleanup
 - Reading terminal state (failed_early, full_text, final_validations) after the loop
+
+Prerequisites:
+    ollama serve
+    ollama pull granite4.2:3b
+
+Usage:
+    uv run python docs/examples/streaming/validated_streaming.py
 """
 
 import asyncio

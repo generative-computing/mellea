@@ -22,6 +22,13 @@ Extension pattern:
      when the stream ends naturally.  The default base implementation returns `[]`
      (fragment discarded); override it when the trailing fragment is semantically
      significant.
+
+Prerequisites:
+    ollama serve
+    ollama pull granite4.2:3b
+
+Usage:
+    uv run python docs/examples/streaming/custom_chunking.py
 """
 
 import asyncio

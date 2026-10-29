@@ -11,30 +11,36 @@ drawn from the OTel GenAI semconv (https://opentelemetry.io/docs/specs/semconv/g
   gen_ai.conversation.id — correlated to the active session via `with_context`
   error.type             — set on the error path alongside ERROR span status
 
-Run against otelite for human verification:
-
-  # Terminal 1 — start otelite (OTLP gRPC :4317, UI :8080)
-  docker run --rm -p 4317:4317 -p 8080:8080 ghcr.io/planetf1/otelite:latest
-
-  # Terminal 2
-  export MELLEA_TRACES_ENABLED=true
-  export MELLEA_TRACES_OTLP=true
-  export OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://localhost:4317
-  export OTEL_SERVICE_NAME=mellea-semconv-demo
-  python otel_genai_semconv_example.py
-
-  Then open http://localhost:8080 and select the mellea-semconv-demo service.
-
 Expected span attributes
 ------------------------
   Span "chat" (normal path)
     gen_ai.provider.name       = "ollama"
-    gen_ai.request.model       = "granite4.1:3b"
+    gen_ai.request.model       = "granite4.2:3b"
     gen_ai.conversation.id     = "demo-session-1"
 
   Span "chat" (error path)
     error.type  = <exception class name>
     status      = ERROR
+
+Prerequisites:
+    uv sync --extra telemetry
+    ollama serve
+    ollama pull granite4.2:3b
+
+Usage:
+    Run against otelite for human verification:
+
+      # Terminal 1 — start otelite (OTLP gRPC :4317, UI :8080)
+      docker run --rm -p 4317:4317 -p 8080:8080 ghcr.io/planetf1/otelite:latest
+
+      # Terminal 2
+      export MELLEA_TRACES_ENABLED=true
+      export MELLEA_TRACES_OTLP=true
+      export OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://localhost:4317
+      export OTEL_SERVICE_NAME=mellea-semconv-demo
+      uv run python docs/examples/telemetry/otel_genai_semconv_example.py
+
+      Then open http://localhost:8080 and select the mellea-semconv-demo service.
 """
 
 from mellea import start_session

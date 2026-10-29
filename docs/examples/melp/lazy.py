@@ -1,4 +1,13 @@
 # pytest: ollama, qualitative, e2e
+"""Core lazy evaluation patterns and primitives.
+
+Prerequisites:
+    ollama serve
+    ollama pull granite4:latest
+
+Usage:
+    uv run python docs/examples/melp/lazy.py
+"""
 
 import asyncio
 

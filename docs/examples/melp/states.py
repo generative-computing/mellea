@@ -1,4 +1,13 @@
 # pytest: ollama, e2e
+"""State management in lazy evaluation contexts.
+
+Prerequisites:
+    ollama serve
+    ollama pull granite4:latest
+
+Usage:
+    uv run python docs/examples/melp/states.py
+"""
 
 import asyncio
 
