@@ -62,9 +62,8 @@ to run.
 
 | Category | What it shows |
 | -------- | ------------- |
-| `requirements/` | String and functional validation requirements, custom predicate functions, and validation repair |
+| `requirements/` | String and functional validation requirements, custom predicate functions, and validation repair; validating code generation and plotting with execution tiers and security policies |
 | `intrinsics/` | [Guardian adapter functions](../how-to/safety-guardrails.md): `guardian_check()` for harm, jailbreak, social bias, groundedness; `policy_guardrails()`; `factuality_detection()` / `factuality_correction()` |
-| `requirements/` | Validating code generation and plotting with execution tiers and security policies |
 | `safety/` | *(Examples removed — see [Guardian how-to guide](../how-to/safety-guardrails.md) for the current API. The `RepairTemplateStrategy` gap is tracked in [#1071](https://github.com/generative-computing/mellea/issues/1071).)* |
 
 ### Integration and deployment
