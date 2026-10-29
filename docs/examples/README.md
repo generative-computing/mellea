@@ -5,7 +5,7 @@ This directory contains comprehensive examples demonstrating Mellea's features a
 ## 🚀 Getting Started
 
 **New to Mellea?** Start here:
-1. [tutorial/simple_email.py](tutorial/) - Your first Mellea program
+1. [tutorial/simple_email.py](tutorial/simple_email.py) - Your first Mellea program
 2. [instruct_validate_repair/](instruct_validate_repair/) - Core paradigm
 3. [generative_stubs/](generative_stubs/) - Type-safe LLM functions
 4. [notebooks/](notebooks/) - Interactive tutorials
@@ -61,6 +61,12 @@ Two-tier sampling with fast and slow models.
 - Escalation to slow models
 - Constraint satisfaction problems
 
+**[sampling/](sampling/)**
+Pre-packaged sampling presets for constrained generation tasks.
+- Python code generation preset
+- Matplotlib plotting preset
+- Automated repair with feedback loops
+
 ### Data & Documents
 
 **[information_extraction/](information_extraction/)**
@@ -96,6 +102,12 @@ Implementing agent patterns (ReACT).
 - Reasoning and acting loops
 - Tool selection and execution
 - Multi-turn agent workflows
+
+**[primitives/](primitives/)**
+Low-level functional primitives for manual tool execution and execution hooks.
+- Tool invocation without an agent loop
+- Tool call execution hooks
+- Raw tool response handling
 
 **[tools/](tools/)**
 Tool calling and code execution.
@@ -243,6 +255,7 @@ Utility functions used across examples.
 
 ### Agent Systems
 - [agents/](agents/) - ReACT agents
+- [primitives/](primitives/) - Low-level tool primitives
 - [tools/](tools/) - Tool-using agents
 - [mini_researcher/](mini_researcher/) - Research assistant
 
@@ -253,6 +266,7 @@ Utility functions used across examples.
 
 ### Performance Optimization
 - [aLora/](aLora/) - Fast validation
+- [sampling/](sampling/) - Sampling presets
 - [sofai/](sofai/) - Cost optimization
 - [intrinsics/](intrinsics/) - Specialized tasks
 

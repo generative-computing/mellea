@@ -1,9 +1,12 @@
 # pytest: ollama, e2e
-
 """Demonstrates ModelOption.THINKING against a local Ollama Granite model.
 
-Requires `ollama serve` running with `granite4.2:3b` pulled
-(`ollama pull granite4.2:3b`).
+Prerequisites:
+    ollama serve
+    ollama pull granite4.2:3b
+
+Usage:
+    uv run python docs/examples/thinking_mode.py
 """
 
 import mellea
