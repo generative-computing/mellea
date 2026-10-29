@@ -1,6 +1,18 @@
 # pytest: ollama, e2e
 
-"""Example of using Ollama with vision models with linear context."""
+"""Example of using Ollama with vision models with linear context.
+
+Demonstrates passing a PIL image to `session.instruct()` with a
+`granite-vision` model via Ollama and `ChatContext` to preserve image context
+across follow-up instructions.
+
+Prerequisites:
+    ollama serve
+    ollama pull hf.co/ibm-granite/granite-vision-4.1-4b-GGUF:Q4_K_M
+
+Usage:
+    uv run python docs/examples/image_text_models/vision_ollama_chat.py
+"""
 
 import pathlib
 

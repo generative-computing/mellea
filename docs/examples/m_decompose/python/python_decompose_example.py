@@ -1,10 +1,15 @@
 # pytest: ollama, e2e, slow, qualitative
-#!/usr/bin/env python3
-"""
-Example: Using Mellea's decompose functionality programmatically
+"""Example: Using Mellea's decompose functionality programmatically.
 
 This script demonstrates how to use the decompose pipeline from Python code
 to break down a complex task into subtasks with generated prompts.
+
+Prerequisites:
+    ollama serve
+    ollama pull granite4:small-h
+
+Usage:
+    uv run python docs/examples/m_decompose/python/python_decompose_example.py
 """
 
 import json
