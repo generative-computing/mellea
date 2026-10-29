@@ -10,7 +10,7 @@ and a multi-turn `m.chat()` — while OpenTelemetry instrumentation records each
 step. Two trace scopes are populated: the application trace covers Mellea-level
 operations, and the backend trace covers raw LLM calls.
 
-**Source file:** `docs/examples/telemetry/telemetry_example.py`
+**Source file:** [`docs/examples/telemetry/telemetry_example.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/telemetry/telemetry_example.py)
 
 ## Concepts covered
 

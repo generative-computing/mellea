@@ -9,7 +9,7 @@ document corpus, retrieve candidates by semantic similarity, then use a
 [`@generative`](../reference/glossary.md#generative) boolean function to discard irrelevant candidates before passing
 the survivors to a grounded `m.instruct()` call.
 
-**Source file:** `docs/examples/rag/simple_rag_with_filter.py`
+**Source file:** [`docs/examples/rag/simple_rag_with_filter.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/rag/simple_rag_with_filter.py)
 
 ## Concepts covered
 
