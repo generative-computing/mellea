@@ -31,6 +31,31 @@ uv sync --extra hf
 uv sync --extra switch
 ```
 
+### llama.cpp inference
+
+Run adapter functions against a local [llama.cpp](https://github.com/ggml-org/llama.cpp)
+server (v0.1.0 or newer, which carries the granite-switch architecture; tested
+on v0.6.0):
+
+```bash
+./scripts/start_llamacpp_switch.sh
+```
+
+The first run downloads the checkpoint from the Hugging Face Hub (~7 GB for the
+3b) and converts it to GGUF (~9 GB more; both cached under
+`~/.cache/mellea/llamacpp-switch-build`). Later runs reuse the cache and start
+in seconds. The server listens on `http://127.0.0.1:8081`, deliberately not the
+base-Granite server's 8080
+([`scripts/start_llamacpp.sh`](../../../scripts/start_llamacpp.sh)), so both can
+run side by side; `LLAMACPP_SWITCH_PORT` changes it.
+
+`answerability_llamacpp.py` runs against that server whenever it is reachable
+(`LLAMACPP_SWITCH_BASE_URL`, default `http://127.0.0.1:8081/v1`) and serves the
+Switch model, and skips with an actionable reason otherwise. The example never
+downloads model weights; its first run does fetch the small adapter
+configuration files (`adapter_index.json` and the `io_configs/`) from the Hub,
+which are cached. The conversion cost is paid only by running the script.
+
 ## Available adapters
 
 Not all adapter functions are embedded in every Granite Switch model. Check the
@@ -49,6 +74,14 @@ checkpoint using `LocalHFBackend(load_embedded_adapters=True)`.
 Demonstrates `rag.check_answerability()` using `OpenAIBackend` with
 `load_embedded_adapters=True` — the simplest way to use adapter functions with Granite
 Switch.
+
+### [answerability_llamacpp.py](./answerability_llamacpp.py)
+
+Demonstrates `rag.check_answerability()` against a local llama-server started by
+[`scripts/start_llamacpp_switch.sh`](../../../scripts/start_llamacpp_switch.sh).
+Runs when that server is reachable (`LLAMACPP_SWITCH_BASE_URL`, default port 8081)
+and serves the Switch model; skips with an actionable reason otherwise. See the
+llama.cpp prerequisites above for what the script does on its first run.
 
 ### [hallucination_detection_openai.py](./hallucination_detection_openai.py)
 
