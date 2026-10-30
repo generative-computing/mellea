@@ -242,7 +242,7 @@ Utility functions used across examples.
 ### Text Generation
 - [instruct_validate_repair/](instruct_validate_repair/) - Email generation
 - [generative_stubs/](generative_stubs/) - Summarization
-- [tutorial/sentiment_classifier.py](tutorial/) - Classification
+- [tutorial/sentiment_classifier.py](tutorial/sentiment_classifier.py) - Classification
 
 ### Audio & Multimodal
 - [audio_text_models/](audio_text_models/) - Audio understanding with `AudioBlock`

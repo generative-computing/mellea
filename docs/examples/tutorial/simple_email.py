@@ -11,7 +11,6 @@ Usage:
 
 import mellea
 
-# INFO: this line will download IBM's Granite 4 Micro 3B model.
 m = mellea.start_session()
 
 print("Basic email:")
