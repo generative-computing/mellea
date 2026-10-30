@@ -723,7 +723,7 @@ def test_run_transformers(yaml_json_combo_with_model, gh_run):
             cfg.base_model_id,
             cfg.repo_id,
             revision=cfg.revision,
-            alora=cfg.is_alora,
+            adapter_type="alora" if cfg.is_alora else "lora",
         )
     except requests.exceptions.HTTPError:
         pytest.xfail("Downloads fail on CI server because repo is private")
@@ -889,7 +889,7 @@ def test_run_ollama(yaml_json_combo_for_ollama):
             cfg.base_model_id,
             cfg.repo_id,
             revision=cfg.revision,
-            alora=cfg.is_alora,
+            adapter_type="alora" if cfg.is_alora else "lora",
         )
     except requests.exceptions.HTTPError:
         pytest.xfail("Downloads fail on CI server because repo is private")

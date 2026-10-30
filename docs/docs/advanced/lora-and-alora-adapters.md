@@ -182,9 +182,18 @@ response schema; label-only adapter output is not compatible with
 
 ## How automatic routing works
 
-When an adapter is loaded via `backend.add_adapter()`, Mellea automatically routes
-`req()` validation calls through it rather than falling back to LLM-as-a-judge. The
-rule is: use the most specific available method. In practice this means the aLoRA
+Any adapter-function call (`core.requirement_check`, `rag.*`, an `Intrinsic`, …)
+resolves and registers an adapter for its capability implicitly; you do not have to
+call `backend.add_adapter()` yourself. Once a `requirement-check` adapter is registered,
+whether explicitly or by an earlier adapter-function call, Mellea automatically routes
+`req()` validation calls through it rather than falling back to LLM-as-a-judge.
+
+On a Granite 4.1 model that adapter can be an aLoRA. Which path a `validate()` call takes
+therefore depends on the model, and on whether an adapter-function call registered one
+earlier in the session. To keep LLM-as-a-judge regardless, set
+`backend.default_to_constraint_checking_alora = False` (exception 1 below).
+
+The rule is: use the most specific available method. In practice this means the aLoRA
 adapter is preferred whenever one is loaded, with three exceptions:
 
 1. `backend.default_to_constraint_checking_alora` is set to `False` — the adapter
@@ -201,6 +210,12 @@ If the adapter runs but its output fails schema validation, `validate()` does no
 fall back. Instead it surfaces the schema error on `ValidationResult.error` and
 fails the check closed (`bool(result)` is `False`), so callers can tell an
 unparsable adapter response apart from an ordinary "requirement not met".
+
+The automatic routing matches only an aLoRA. A [prompt fallback](intrinsics.md#prompt-fallback)
+registers a `"prompt"` binding, which the routing skips: intrinsic helpers run the prompt,
+and `Requirement.validate()` falls back to LLM-as-a-judge. To route validation through
+the prompt, request it explicitly with
+`ALoraRequirement("…", adapter_types=(AdapterType.PROMPT,))`.
 
 If you want to force the adapter path even when using `generate_from_context`
 directly (bypassing the normal `validate()` call), use `ALoraRequirement` from
