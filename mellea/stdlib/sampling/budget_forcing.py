@@ -55,7 +55,8 @@ class BudgetForcingSamplingStrategy(RejectionSamplingStrategy):
             Empty string disables forcing.
         answer_suffix (str | None): Suffix to elicit a final answer.
         loop_budget (int): Rejection-sampling loop count. Must be > 0.
-        requirements (list[Requirement] | None): Requirements to validate against.
+        requirements (list[Requirement] | None): Requirements to validate
+            against, merged with any per-call requirements.
 
     """
 
