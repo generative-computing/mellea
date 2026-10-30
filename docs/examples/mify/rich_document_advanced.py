@@ -2,8 +2,20 @@
 # SKIP REASON: CXXABI_1.3.15 not found - conda environment issue on HPC systems with old glibc
 
 # ruff: noqa E402
-# Example: Rich Documents and Templating
-# Lets look at how to pass documents to a model using `Mellea`.
+"""Rich document processing and custom template formatting with docling.
+
+Walks through passing PDF documents to a Mellea model in progressively richer ways:
+raw markdown export via `m.chat()`, the built-in `RichDocument` wrapper, a custom
+subclass that overrides `format_for_llm()` to expose only section titles via an
+inline Jinja2 template, and finally using a custom-formatted document as
+`grounding_context` in `m.instruct()`.
+
+Prerequisites:
+    uv sync --extra backends --extra docling
+
+Usage:
+    uv run python docs/examples/mify/rich_document_advanced.py
+"""
 
 # 1. We'll start by initializing our `Mellea` session.
 from docling_core.types.doc.document import DoclingDocument
@@ -16,12 +28,24 @@ m = mellea.start_session(backend_name="hf")
 
 # 2. Let's import docling so that we can process pdf documents.
 
+import torch
 from docling.datamodel.base_models import InputFormat
-from docling.datamodel.pipeline_options import PdfPipelineOptions
+from docling.datamodel.pipeline_options import (
+    AcceleratorDevice,
+    AcceleratorOptions,
+    PdfPipelineOptions,
+)
 from docling.document_converter import DocumentConverter, PdfFormatOption
 
 source = "https://arxiv.org/pdf/1906.04043"
 pipeline_options = PdfPipelineOptions(images_scale=2.0, generate_picture_images=True)
+
+# Docling's layout model runs in float64, which Apple Silicon's MPS backend does not
+# support, so fall back to CPU there. `RichDocument` applies the same guard internally.
+if torch.backends.mps.is_available():
+    pipeline_options.accelerator_options = AcceleratorOptions(
+        device=AcceleratorDevice.CPU
+    )
 
 converter = DocumentConverter(
     format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)}
