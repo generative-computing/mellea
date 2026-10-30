@@ -1,11 +1,19 @@
 # pytest: huggingface, e2e
-
 """Example usage of the factuality correction intrinsic.
 
-To run this script from the root of the Mellea source tree, use the command:
-```
-uv run python docs/examples/intrinsics/factuality_correction.py
-```
+Demonstrates `guardian.factuality_correction()`, which rewrites an assistant
+response so that it agrees with the supporting document attached to the context.
+The document can be attached to the context or passed explicitly with
+`documents=`.
+
+Runs the model locally, so it needs a GPU or Apple Silicon Mac; the model and
+adapter are downloaded from Hugging Face on first run.
+
+Prerequisites:
+    uv sync --extra hf
+
+Usage:
+    uv run python docs/examples/intrinsics/factuality_correction.py
 """
 
 from mellea import model_ids, start_backend

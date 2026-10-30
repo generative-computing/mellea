@@ -1,5 +1,4 @@
 # pytest: e2e, ollama
-
 """Example usage of the uncertainty/certainty intrinsic with Ollama.
 
 Evaluates how certain the model is about its response to a user question.
@@ -7,14 +6,18 @@ The context should contain a user question followed by an assistant answer.
 
 Ollama bundles one adapter per model. For this single-adapter example, the
 uncertainty aLoRA tag is used for normal chat and the certainty helper, so
-Ollama can retain one model identity.
+Ollama can retain one model identity (mapped through `adapter_models`). Unless
+`MELLEA_OLLAMA_UNCERTAINTY_MODEL` names an existing tag, the script builds one by
+running `test/scripts/build_ollama_uncertainty_adapter.sh` (needs `git`, `uv`, and
+network access to download the base model and adapter). If the build fails, the
+script prints "SKIPPED" and exits with status 0.
 
-Requires `mellea[switch]` to download the adapter's `io.yaml`.
+Prerequisites:
+    uv sync --extra switch   # downloads the adapter's io.yaml
+    ollama serve
 
-To run this script from the root of the Mellea source tree, use the command:
-```
-uv run python docs/examples/intrinsics/uncertainty_ollama.py
-```
+Usage:
+    uv run python docs/examples/intrinsics/uncertainty_ollama.py
 """
 
 import os

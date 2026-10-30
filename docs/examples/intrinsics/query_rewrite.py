@@ -1,3 +1,20 @@
+# pytest: huggingface, e2e
+"""Rewriting a follow-up question into a standalone retrieval query with the query-rewrite adapter.
+
+Demonstrates `rag.rewrite_question()`, which uses the conversation history to
+rewrite an under-specified last user question (here, "is he more likely to get
+fleas?") into a self-contained query suitable for retrieval.
+
+Runs the model locally, so it needs a GPU or Apple Silicon Mac; the model and
+adapter are downloaded from Hugging Face on first run.
+
+Prerequisites:
+    uv sync --extra hf
+
+Usage:
+    uv run python docs/examples/intrinsics/query_rewrite.py
+"""
+
 from mellea import model_ids, start_backend
 from mellea.stdlib.components import Message
 from mellea.stdlib.components.intrinsic import rag

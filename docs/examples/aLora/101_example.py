@@ -13,6 +13,15 @@ For loading a fully custom, non-catalog adapter with your own output schema
 `stembolts_intrinsic.py` in this directory — it has no standalone entry point of
 its own; `102_example.py` drives it interactively (reads from stdin, so it isn't
 runnable as an automated example).
+
+Runs the model locally, so it needs a GPU or Apple Silicon Mac; the model and
+adapter are downloaded from Hugging Face on first run.
+
+Prerequisites:
+    uv sync --extra hf
+
+Usage:
+    uv run python docs/examples/aLora/101_example.py
 """
 
 import time

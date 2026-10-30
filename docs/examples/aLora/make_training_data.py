@@ -1,5 +1,18 @@
 # pytest: skip, huggingface, e2e
 # SKIP REASON: documentation only.
+"""Converting raw JSONL into the `{item, label}` training format for aLoRA training.
+
+Reads a JSONL file whose rows carry `item`, `defective_part`, and `diag_likelihood`
+(such as `stembolt_customer_data.jsonl`), validates each label against the
+stembolt response schema, and writes rows of the form
+`{"item": ..., "label": "<json string>"}` — the format `m alora train` expects (see
+`stembolt_failure_dataset.jsonl`). Output goes to stdout unless `-o` is given.
+
+Usage:
+    uv run python docs/examples/aLora/make_training_data.py \
+        docs/examples/aLora/stembolt_customer_data.jsonl -o training_data.jsonl
+"""
+
 import argparse
 import json
 import sys

@@ -8,6 +8,15 @@ float}`) rather than the generic `{"requirement_check": {"score": ...}}` shape
 most catalog adapters use. It is invoked directly via `Intrinsic`/`mfuncs.act()`
 and the raw JSON is returned to the caller — it is not a pass/fail
 `ALoraRequirement` validator. Consumed by `102_example.py` in this directory.
+
+This module has no standalone entry point and is not run directly.
+
+Prerequisites:
+    uv sync --extra hf
+
+Usage:
+    See `102_example.py`, which imports `stembolt_failure_analysis()` and
+    `async_stembolt_failure_analysis()` from this module.
 """
 
 import mellea.stdlib.functional as mfuncs

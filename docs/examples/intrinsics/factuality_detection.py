@@ -1,11 +1,19 @@
 # pytest: huggingface, e2e
-
 """Example usage of the factuality detection intrinsic.
 
-To run this script from the root of the Mellea source tree, use the command:
-```
-uv run python docs/examples/intrinsics/factuality_detection.py
-```
+Demonstrates `guardian.factuality_detection()`, which returns "yes" if an assistant
+response is factually incorrect given the supporting document attached to the
+context, and "no" otherwise. The document can be attached to the context or passed
+explicitly with `documents=`.
+
+Runs the model locally, so it needs a GPU or Apple Silicon Mac; the model and
+adapter are downloaded from Hugging Face on first run.
+
+Prerequisites:
+    uv sync --extra hf
+
+Usage:
+    uv run python docs/examples/intrinsics/factuality_detection.py
 """
 
 from mellea import model_ids, start_backend
