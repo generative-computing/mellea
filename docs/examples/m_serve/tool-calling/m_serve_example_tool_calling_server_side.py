@@ -17,6 +17,10 @@ entirely on the server:
 The client therefore never sees intermediate `function_call` items — it
 only receives the final answer.
 
+Prerequisites:
+    ollama serve
+    ollama pull granite4:micro-h
+
 Usage:
     1. Start the server:
        uv run m serve docs/examples/m_serve/tool-calling/m_serve_example_tool_calling_server_side.py

@@ -4,6 +4,17 @@
 
 The decomposition pipeline extracts constraints, generates prompt templates for each subtask, and writes runnable outputs so you can inspect and execute the workflow.
 
+For a full guide, see [m decompose](../../docs/how-to/m-decompose.md); for every
+option, see the [CLI reference](../../docs/reference/cli.md).
+
+## Examples
+
+| File | Description |
+| :--- | :--- |
+| [`python/python_decompose_example.py`](./python/python_decompose_example.py) | Calls the `decompose` pipeline directly from Python: breaks down a blog-post task, saves the results as JSON, renders an executable Python script from the decomposition template, and optionally runs it. |
+| [`decompose_using_cli.sh`](./decompose_using_cli.sh) | Minimal `m decompose run` invocation: writes a task to a file, creates the output directory, and runs the CLI. |
+| [`decompose_intermediary_python_command.sh`](./decompose_intermediary_python_command.sh) | Runs `m decompose run` and then executes the generated Python script to produce the final output. |
+
 ## How users run it (current behavior)
 
 ### CLI mode (recommended)
@@ -64,64 +75,3 @@ For multiple queries:
 - `*.json`: full decomposition result (`subtask_list`, `identified_constraints`, `subtasks`, ...)
 - `*.py`: rendered runnable program from the selected template version (`latest` currently resolves to `v2`)
 - `validations/`: generated validation helper functions for constraints using `code` strategy
-
-
-
-## Key CLI options
-
-- `--backend`: `ollama` | `openai`
-- `--model-id`: inference model id/name
-- `--backend-endpoint`: required for `openai`
-- `--backend-api-key`: required for `openai`
-- `--backend-req-timeout`: request timeout (seconds), default `300`
-- `--input-var`: optional input variable names (repeatable, must be valid Python identifiers)
-- `--version`: template version (`latest`, `v1`, `v2`)
-- `--log-mode`: `demo` | `debug`
-
-## Python API (pipeline interface)
-
-You can call the decomposition pipeline directly:
-
-```python
-import json
-
-from cli.decompose.pipeline import DecompBackend, decompose
-
-result = decompose(
-    task_prompt="Write a short blog post about morning exercise.",
-    user_input_variable=["USER_CONTEXT"],
-    model_id="mistral-small3.2:latest",
-    backend=DecompBackend.ollama,
-)
-
-print(json.dumps(result, indent=2, ensure_ascii=False))
-```
-
-`result["subtasks"]` items include:
-
-- `subtask`
-- `tag`
-- `prompt_template`
-- `general_instructions`
-- `input_vars_required`
-- `depends_on`
-- `constraints` (with `val_strategy`, `val_fn_name`, `val_fn`)
-
-## Example: OpenAI-compatible endpoint
-
-```bash
-m decompose run \
-  --input-file task.txt \
-  --out-dir ./output \
-  --backend openai \
-  --model-id gpt-4o-mini \
-  --backend-endpoint http://localhost:8000/v1 \
-  --backend-api-key EMPTY
-```
-
-## What this example demonstrates
-
-- Decomposing one large task into manageable subtasks
-- Preserving explicit constraints across subtasks
-- Producing inspectable intermediate artifacts for debugging and editing
-- Generating a runnable decomposition program instead of a single opaque prompt call

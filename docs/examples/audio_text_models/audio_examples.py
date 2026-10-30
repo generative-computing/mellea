@@ -1,8 +1,23 @@
 # pytest: openai, e2e, qualitative
 """Audio-text-to-text examples using session.instruct() and session.chat().
 
+Downloads sample audio from the OpenAI CDN and demonstrates both
+`session.instruct()` (task-style prompt) and `session.chat()` (conversational)
+against a llama-server audio-capable endpoint.
+
 Prerequisites:
-    - llama-server running with gemma-4-12b-it-Q8_0.gguf on port 8088
+    llama-server \\
+      --model gemma-4-12b-it-Q8_0.gguf \\
+      --mmproj mmproj-F16.gguf \\
+      --n-gpu-layers 99 \\
+      --ctx-size 32768 \\
+      --flash-attn on \\
+      --parallel 1 \\
+      --cache-type-k q8_0 \\
+      --cache-type-v q8_0 \\
+      --temp 0.1 --top-k 1 \\
+      --jinja \\
+      --host 0.0.0.0 --port 8088
 
 Usage:
     uv run python docs/examples/audio_text_models/audio_examples.py
