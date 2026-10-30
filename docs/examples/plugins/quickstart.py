@@ -1,12 +1,17 @@
 # pytest: ollama, e2e
-#
-# Quick Start — your first Mellea plugin in under 30 lines.
-#
-# This example registers a single function hook that logs every generation
-# call, then runs a normal instruct() to show it in action.
-#
-# Run:
-#   uv run python docs/examples/plugins/quickstart.py
+"""Quick Start — your first Mellea plugin in under 30 lines.
+
+This example registers a single function hook that logs every generation
+call, then runs a normal instruct() to show it in action.
+
+Prerequisites:
+    uv sync --extra hooks
+    ollama pull granite4.2:3b
+    ollama serve
+
+Usage:
+    uv run python docs/examples/plugins/quickstart.py
+"""
 
 import logging
 

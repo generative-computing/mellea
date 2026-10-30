@@ -9,6 +9,14 @@ The smolagents library provides various pre-built tools like:
 - DuckDuckGoSearchTool for web search (requires ddgs package)
 - WikipediaSearchTool for Wikipedia queries
 - And many others from the Hugging Face ecosystem
+
+Prerequisites:
+    uv sync --extra tools
+    ollama pull granite4.2:3b
+    ollama serve
+
+Usage:
+    uv run python docs/examples/tools/smolagents_example.py
 """
 
 from mellea import start_session
@@ -47,5 +55,5 @@ try:
             print(f"\nTool execution failed: {e}")
 
 except ImportError as e:
-    print("Please install smolagents: uv pip install 'mellea[smolagents]'")
+    print("Please install smolagents: uv pip install 'mellea[tools]'")
     print(f"Error: {e}")

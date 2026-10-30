@@ -1,21 +1,26 @@
 # pytest: ollama, e2e
-#
-# Execution modes — all five PluginMode values side by side.
-#
-# This example registers five hooks on the same hook type
-# (COMPONENT_PRE_EXECUTE), each using a different execution mode.
-# It demonstrates:
-#
-#   1. SEQUENTIAL      — serial, can block + modify
-#   2. TRANSFORM       — serial, can modify only (blocks suppressed)
-#   3. AUDIT           — serial, observe-only (modifications discarded, blocks logged)
-#   4. CONCURRENT      — parallel, can block only (modifications discarded)
-#   5. FIRE_AND_FORGET — background, observe-only (result ignored)
-#
-# Execution order: SEQUENTIAL → TRANSFORM → AUDIT → CONCURRENT → FIRE_AND_FORGET
-#
-# Run:
-#   uv run python docs/examples/plugins/execution_modes.py
+"""Execution modes — all five PluginMode values side by side.
+
+This example registers five hooks on the same hook type
+(COMPONENT_PRE_EXECUTE), each using a different execution mode.
+It demonstrates:
+
+  1. SEQUENTIAL      — serial, can block + modify
+  2. TRANSFORM       — serial, can modify only (blocks suppressed)
+  3. AUDIT           — serial, observe-only (modifications discarded, blocks logged)
+  4. CONCURRENT      — parallel, can block only (modifications discarded)
+  5. FIRE_AND_FORGET — background, observe-only (result ignored)
+
+Execution order: SEQUENTIAL → TRANSFORM → AUDIT → CONCURRENT → FIRE_AND_FORGET
+
+Prerequisites:
+    uv sync --extra hooks
+    ollama pull granite4.2:3b
+    ollama serve
+
+Usage:
+    uv run python docs/examples/plugins/execution_modes.py
+"""
 
 import logging
 

@@ -1,158 +1,32 @@
-# Mellea Plugins
+# Plugin Examples
 
-This directory contains examples of extending Mellea with custom plugins—hooks for observability, modification, and control over the generation pipeline.
+Examples demonstrating how to extend Mellea with hooks and plugins for observability,
+modification, and control over the generation pipeline. Plugins need the `hooks`
+extra (`uv sync --extra hooks`), and all but `testing_plugins.py` run against a local
+Ollama model.
 
-## Prerequisites
-
-These examples require a running Ollama instance:
-
-```bash
-ollama serve
-```
+For the concepts, the full hook reference, and execution-mode semantics,
+see [Plugins & Hooks](https://docs.mellea.ai/concepts/plugins). For the built-in debug
+plugins, see [Debug with Plugins](../../docs/how-to/debug-with-plugins.md).
 
 ## Examples
 
-### Quick Start
-
-```bash
-uv run quickstart.py
-```
-
-Demonstrates:
-- Registering a single hook function
-- Using `HookType.GENERATION_PRE_CALL` to log before LLM calls
-- Minimal plugin setup (30 lines)
-
-### Standalone Hooks
-
-```bash
-uv run standalone_hooks.py
-```
-
-Demonstrates:
-- Function-based hooks without a class
-- Token budget enforcement
-- Generation latency monitoring
-- Multiple hook types in one program
-
-### Class-Based Plugins
-
-```bash
-uv run class_plugin.py
-```
-
-Demonstrates:
-- Organizing hooks in a Plugin subclass
-- PII protection patterns
-- Input blocking before execution
-- Output scanning (observe-only)
-
-### Execution Modes
-
-```bash
-uv run execution_modes.py
-```
-
-Demonstrates:
-- All five PluginMode execution strategies:
-  - `SEQUENTIAL` — serial, can block and modify
-  - `TRANSFORM` — serial, modify-only
-  - `AUDIT` — serial, observe-only
-  - `CONCURRENT` — parallel, can block
-  - `FIRE_AND_FORGET` — background, observe-only
-
-### Plugin Set Composition
-
-```bash
-uv run plugin_set_composition.py
-```
-
-Demonstrates:
-- Grouping related hooks into PluginSets
-- Global vs. per-session registration
-- Organizing by concern (security, observability)
-
-### Session-Scoped Plugins
-
-```bash
-uv run session_scoped.py
-```
-
-Demonstrates:
-- Global hooks (fire for all sessions)
-- Per-session plugins (fire only in specific session)
-- Content policy enforcement by session
-
-### Scoped Plugins
-
-```bash
-uv run plugin_scoped.py
-```
-
-Demonstrates:
-- Plugin activation for specific code blocks
-- `plugin_scope()` context manager for multiple plugins
-- Plugin subclasses as context managers
-- PluginSet as a context manager
-- Automatic deregistration on block exit
-
-### Payload Modification
-
-```bash
-uv run payload_modification.py
-```
-
-Demonstrates:
-- Using `modify()` to change payload fields
-- Model copying with `model_copy(update={...})`
-- Handling read-only vs. writable fields
-
-### Tool Hooks
-
-```bash
-uv run tool_hooks.py
-```
-
-Demonstrates:
-- `TOOL_PRE_INVOKE` and `TOOL_POST_INVOKE` hooks
-- Tool allow-listing
-- Argument validation and sanitization
-- Tool call auditing
-
-### Testing Plugins
-
-```bash
-uv run testing_plugins.py
-```
-
-Demonstrates:
-- Unit-testing hooks without a live session
-- Constructing payloads manually
-- Direct hook invocation with `await`
-- Testing blocking and pass-through behavior
-
-## Hook Types
-
-Mellea supports hooks at various stages of the generation pipeline:
-
-- `GENERATION_PRE_CALL` — Before LLM call
-- `GENERATION_POST_CALL` — After LLM call
-- `SESSION_CREATE` — On session creation
-- `SESSION_DESTROY` — On session cleanup
-- (See `mellea.plugins.HookType` for complete list)
-
-## Key Concepts
-
-**Hooks**: Functions that execute at specific pipeline stages, allowing observation and modification of Mellea's behavior.
-
-**Payload Modification**: Hooks can transform request/response payloads before/after LLM calls.
-
-**Session Scope**: Plugins can be registered globally or per-session.
-
-**Async Support**: Hooks can be synchronous or asynchronous.
-
-## See Also
-
-- [../telemetry/](../telemetry/) — Monitoring and metrics collection
-- [../requirements/](../requirements/) — Custom validation logic
-- Documentation: `mellea.plugins` module
+| File | Description |
+| :--- | :--- |
+| [`quickstart.py`](./quickstart.py) | Registering one function hook on `GENERATION_PRE_CALL` to log every generation call. |
+| [`standalone_hooks.py`](./standalone_hooks.py) | Function-based hooks that enforce a token budget and log generation latency. |
+| [`class_plugin.py`](./class_plugin.py) | Grouping hooks in a `Plugin` subclass for PII protection: block SSNs on input, scan output. |
+| [`execution_modes.py`](./execution_modes.py) | All five `PluginMode` values (`SEQUENTIAL`, `TRANSFORM`, `AUDIT`, `CONCURRENT`, `FIRE_AND_FORGET`) on one hook type. |
+| [`payload_modification.py`](./payload_modification.py) | Changing payloads with `modify()` and `model_copy(update=...)`, and what happens to non-writable fields. |
+| [`plugin_set_composition.py`](./plugin_set_composition.py) | Grouping hooks into `PluginSet`s by concern, registered globally or per session. |
+| [`session_scoped.py`](./session_scoped.py) | Global hooks versus plugins passed via `start_session(plugins=...)` that fire for one session only. |
+| [`plugin_scoped.py`](./plugin_scoped.py) | Block-scoped activation with `plugin_scope()`, `Plugin` and `PluginSet` as context managers. |
+| [`tool_hooks.py`](./tool_hooks.py) | `TOOL_PRE_INVOKE` / `TOOL_POST_INVOKE` hooks for tool allow-listing, argument validation, audit logging, and argument sanitizing. |
+| [`testing_plugins.py`](./testing_plugins.py) | Unit-testing hook functions with hand-built payloads and no live session. |
+| [`builtin_generation_tracing.py`](./builtin_generation_tracing.py) | Built-in generation tracing: model, prompt and response previews, latency, and token usage. |
+| [`builtin_validation_tracing.py`](./builtin_validation_tracing.py) | Built-in validation tracing: per-requirement pass/fail with reasons. |
+| [`builtin_validation_failures.py`](./builtin_validation_failures.py) | Validation tracing with immediate validation and no repair, so real failures are logged. |
+| [`builtin_validation_strict.py`](./builtin_validation_strict.py) | Validation tracing with strict requirements designed to fail. |
+| [`builtin_sampling_diagnostics.py`](./builtin_sampling_diagnostics.py) | Built-in sampling tracing: loop budget, per-iteration results, repair events, and final outcome. |
+| [`builtin_full_pipeline_tracing.py`](./builtin_full_pipeline_tracing.py) | Generation and sampling tracing together across the whole sampling loop. |
+| [`builtin_complete_diagnostics.py`](./builtin_complete_diagnostics.py) | Generation, sampling, and validation tracing combined for end-to-end visibility. |

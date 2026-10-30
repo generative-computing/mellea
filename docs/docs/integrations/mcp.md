@@ -117,6 +117,37 @@ To run the server directly:
 uv run your_server.py
 ```
 
+## Connecting a client
+
+MCP clients such as Claude Desktop, Cursor, and Langflow launch a local server over
+stdio from an `mcpServers` entry in their config. Point `--directory` at the folder
+that contains your server file:
+
+```json
+{
+  "mcpServers": {
+    "mellea_mcp_server": {
+      "command": "uv",
+      "args": [
+        "--directory",
+        "<ABSOLUTE PATH>/mellea/docs/examples/mcp",
+        "run",
+        "mcp",
+        "run",
+        "your_server.py"
+      ]
+    }
+  }
+}
+```
+
+Where the entry goes depends on the client. For Langflow, follow
+[Langflow's MCP stdio guide](https://docs.langflow.org/mcp-client#mcp-stdio-mode).
+
+A ready-made config for the poem server example is in
+[`docs/examples/mcp/mcp_server.json`](https://github.com/generative-computing/mellea/blob/main/docs/examples/mcp/mcp_server.json).
+Replace `<ABSOLUTE PATH>` with the folder that contains your `mellea` checkout.
+
 **Full example:** [`docs/examples/notebooks/mcp_example.ipynb`](https://github.com/generative-computing/mellea/blob/main/docs/examples/notebooks/mcp_example.ipynb)
 
 ---

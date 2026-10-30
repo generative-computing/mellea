@@ -20,6 +20,26 @@ Example tasks:
 - Search and filter data across multiple files
 
 This approach avoids shell operators (pipes, redirects) by generating Python control flow instead.
+
+The generated code runs through python_tool with tier="local_unsafe", an unrestricted
+subprocess suitable only for trusted, development-time use. See
+https://docs.mellea.ai/how-to/tools-and-agents#execution-tiers for the available tiers.
+
+Prerequisites:
+    ollama pull granite4.2:3b
+    ollama serve
+
+Usage:
+    # Run with default sample workspace and predefined requests
+    uv run python docs/examples/requirements/code_generation_and_execution_bash.py
+
+    # Use a custom workspace directory
+    uv run python docs/examples/requirements/code_generation_and_execution_bash.py \
+      --workspace /path/to/workspace
+
+    # Accept user input interactively
+    uv run python docs/examples/requirements/code_generation_and_execution_bash.py \
+      --interactive
 """
 
 import argparse

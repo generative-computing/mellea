@@ -1,14 +1,19 @@
 # pytest: ollama, e2e
-#
-# PluginSet composition — group hooks by concern and register them together.
-#
-# This example shows how to:
-#   1. Define hooks across different concerns (security, observability)
-#   2. Group them into PluginSets
-#   3. Register observability globally and security per-session
-#
-# Run:
-#   uv run python docs/examples/plugins/plugin_set_composition.py
+"""PluginSet composition — group hooks by concern and register them together.
+
+This example shows how to:
+  1. Define hooks across different concerns (security, observability)
+  2. Group them into PluginSets
+  3. Register observability globally and security per-session
+
+Prerequisites:
+    uv sync --extra hooks
+    ollama pull granite4.2:3b
+    ollama serve
+
+Usage:
+    uv run python docs/examples/plugins/plugin_set_composition.py
+"""
 
 import logging
 import sys

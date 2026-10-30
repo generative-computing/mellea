@@ -275,6 +275,106 @@ above).
 > Do not use it in production contexts without sandboxing. Use
 > `tier="docker"` or `tier="docker_unsafe"` for real process isolation.
 
+### Execution tiers
+
+The `tier` argument chooses where and how code runs. Pass it explicitly: omitting it
+resolves to `"local_unsafe"` and emits a `UserWarning` so the trust decision is not
+implicit. The same five tiers are available to the `PythonExecutionReq` requirement,
+which calls the parameter `execution_tier` and defaults it to `"static"`.
+
+| Tier | Isolation | Speed | Use case |
+| ---- | --------- | ----- | -------- |
+| `"static"` | Analysis only (no execution) | Fastest | Fast validation before execution; the `PythonExecutionReq` default |
+| `"local_unsafe"` | None (direct subprocess) | Fast | Trusted code only, max performance |
+| `"local"` | None (policy control only) | Fast | Trusted code with resource limits (timeout, stdout/stderr limits) |
+| `"docker_unsafe"` | Container isolation | Slower | Untrusted code, no policy restrictions |
+| `"docker"` | Container isolation + policy | Slower | **Recommended:** untrusted or LLM-generated code with resource limits |
+
+All executing tiers enforce the timeout and the `allowed_imports` allowlist, and they
+can install `packages=` before the first run. Only the Docker tiers can copy files in
+and out of the environment, and they need a running Docker daemon plus the `sandbox`
+extra (`pip install 'mellea[sandbox]'`).
+
+#### When to use each tier
+
+**Use `"local"` or `"local_unsafe"`:**
+
+- Code source is trusted (internal development)
+- Running in an already-sandboxed environment (CI/CD, Docker container)
+- Performance is critical and isolation overhead is unacceptable
+- Development or demonstration purposes
+
+**Use `"docker"` (recommended for production):**
+
+- Code is LLM-generated or from untrusted sources
+- Running in shared environments or production
+- Security is more important than speed
+- You need container-level process isolation and resource limits
+
+### Capability policies
+
+A `CapabilityPolicy` declares what an execution environment may do. Only some of its
+fields are enforced at runtime; the rest are declarations that do not block anything.
+Each field has a matching `ENFORCED_*` class attribute on `CapabilityPolicy` that
+reports its status.
+
+| Field | Enforced |
+| ----- | -------- |
+| `timeout`, `stdout_max_bytes`, `stderr_max_bytes` | Yes |
+| `artifact_export_paths`, `packages` | Yes |
+| `network_access`, `package_installation`, `subprocess_execution`, `env_var_access` | No |
+| `filesystem_read_roots`, `filesystem_write_roots` | No (a `UserWarning` is emitted when set) |
+
+The boolean restrictions are declarative on the local tiers regardless of the policy
+you pass, including the default policy that `tier="local"` uses. Treat `"local"` as
+resource limits, not isolation.
+
+For production with LLM-generated code:
+
+```python
+# Requires: mellea[sandbox]
+# Returns: Requirement
+from mellea.stdlib.requirements.python_reqs import PythonExecutionReq
+from mellea.stdlib.tools.execution_policy import CapabilityPolicy
+
+# Safe: container isolation + timeout control
+# Note: most policy fields are declared only (not enforced at runtime).
+req = PythonExecutionReq(
+    execution_tier="docker",  # Container-isolated execution
+    policy=CapabilityPolicy(
+        timeout=30,  # Kill after 30 seconds (enforced)
+    ),
+    max_output_chars=10_000,  # Limit output size (enforced)
+)
+```
+
+#### How code execution works
+
+When `m.instruct()` runs with a `PythonExecutionReq`, the requirement validation
+executes the generated code during validation. This happens as a **side effect** of
+validation, before the result is returned to the caller. The requirement runs the code
+in an execution environment built from the `execution_tier` and `CapabilityPolicy` you
+pass, and that environment enforces the timeout and tier behavior.
+
+**Key point:** after `m.instruct()` returns, the code has _already been executed_. To
+verify success, check the outcome (for example, that an output file exists). There is
+no need for a separate execution step.
+
+### Collecting files
+
+Pass `artifact_dir=<Path>` to `python_tool()` to collect files the code writes:
+
+- **Local tiers:** only files from a successful run (exit code 0) are returned, as
+  `Artifact` objects on `result.artifacts`.
+- **Docker tiers:** there is no host-shared directory to scan, so artifacts are
+  returned only when the policy lists the container paths in `artifact_export_paths`.
+  `artifact_dir` then becomes the host destination.
+- **No `artifact_dir`:** a per-call temporary directory is used. It is kept alive while
+  the returned `ExecutionResult` holds artifacts and cleaned up otherwise.
+
+If the executed code imports `matplotlib`, `matplotlib.use('Agg')` is injected
+automatically so plots are written to files. Pass `suppress_agg=True` to disable this.
+
 ## MCP tools
 
 Mellea can consume tools from any [MCP](https://modelcontextprotocol.io/) server

@@ -1,4 +1,26 @@
 # pytest: ollama, e2e
+"""Comprehensive examples of using the code interpreter tool with LLMs.
+
+Covers direct code execution with `python_tool().run()`, tool integration with
+`m.instruct()`, forcing tool use with `uses_tool()`, validating tool arguments
+with `tool_arg_validator()`, and explicit tier selection for local execution.
+
+The LLM-driven examples use `tier="local_unsafe"`, which executes model-generated code as an
+unrestricted subprocess with no container isolation. See the "Execution tiers" section of
+https://docs.mellea.ai/how-to/tools-and-agents#execution-tiers for the available
+tiers.
+
+Only `example_4` runs when the script is executed; call the others from the bottom
+of the file to try them.
+
+Prerequisites:
+    uv pip install matplotlib
+    ollama pull granite4.2:3b
+    ollama serve
+
+Usage:
+    uv run python docs/examples/tools/interpreter_example.py
+"""
 
 from mellea import MelleaSession, start_session
 from mellea.backends import ModelOption

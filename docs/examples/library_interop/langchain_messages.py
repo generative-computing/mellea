@@ -1,4 +1,16 @@
 # pytest: ollama, e2e, qualitative
+"""Example showing how to convert LangChain messages to Mellea format and use them in a session.
+
+For more on LangChain interop, see docs/docs/integrations/langchain.md.
+
+Prerequisites:
+    uv sync --extra tools
+    ollama pull granite4.2:3b
+    ollama serve
+
+Usage:
+    uv run python docs/examples/library_interop/langchain_messages.py
+"""
 
 # Installing langchain is necessary for this example, but it works for any library
 # you may want to use Mellea with.

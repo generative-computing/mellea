@@ -7,15 +7,20 @@ to trigger failures so you can see the full validation output including:
 - Failure reasons
 - Pass/fail counts
 
-Run:
-    uv run python docs/examples/plugins/builtin_validation_strict.py
-
 Watch the logs to see validation failures:
     [🔍 VALIDATION-PRE-CHECK] requirements=... | target=...
     [❌ VALIDATION-POST-CHECK] MIXED RESULTS: ... passed, ... failed
     ✓ Passed requirement
     ❌ Failed requirement
        └─ reason why it failed
+
+Prerequisites:
+    uv sync --extra hooks
+    ollama pull granite4.2:3b
+    ollama serve
+
+Usage:
+    uv run python docs/examples/plugins/builtin_validation_strict.py
 """
 
 import logging

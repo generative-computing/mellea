@@ -18,10 +18,15 @@ This provides complete end-to-end traceability for:
 - Repair strategy (how feedback improves results)
 - Overall sampling loop (iterations and budget)
 
-Run:
-    uv run python docs/examples/plugins/builtin_complete_diagnostics.py
-
 Watch the complete flow with all lifecycle events visible.
+
+Prerequisites:
+    uv sync --extra hooks
+    ollama pull granite4.2:3b
+    ollama serve
+
+Usage:
+    uv run python docs/examples/plugins/builtin_complete_diagnostics.py
 """
 
 import logging
