@@ -1,0 +1,33 @@
+name: Feature request
+description: New feature request in Mellea
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to fill out this feature request!
+
+  - type: textarea
+    id: feature
+    attributes:
+      label: What feature would you like to be added?
+    validations:
+      required: true
+
+  - type: textarea
+    id: rationale
+    attributes:
+      label: Why is this feature needed?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternative
+    attributes:
+      label: Any alternative solution that you may want to share?
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Anything else we need to know?
