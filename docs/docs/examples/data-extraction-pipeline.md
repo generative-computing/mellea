@@ -8,7 +8,7 @@ This example shows the most direct path from raw text to typed, structured
 output in Mellea: a `@generative` function whose return annotation tells the
 runtime exactly what shape the result must have.
 
-**Source file:** `docs/examples/information_extraction/101_with_gen_stubs.py`
+**Source file:** [`docs/examples/information_extraction/101_with_gen_stubs.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/information_extraction/101_with_gen_stubs.py)
 
 ## Concepts covered
 
