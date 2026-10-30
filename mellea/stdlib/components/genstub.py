@@ -6,11 +6,29 @@
 import abc
 import functools
 import inspect
+import json
+import types
 from collections.abc import Awaitable, Callable, Coroutine
 from copy import deepcopy
 from dataclasses import dataclass, fields
-from typing import Any, Generic, ParamSpec, TypedDict, TypeVar, get_type_hints, overload
+from typing import (
+    Annotated,
+    Any,
+    ForwardRef,
+    Generic,
+    Literal,
+    ParamSpec,
+    TypedDict,
+    TypeVar,
+    Union,
+    cast,
+    get_args,
+    get_origin,
+    get_type_hints,
+    overload,
+)
 
+import pydantic_core
 from pydantic import BaseModel, Field, create_model
 
 import mellea.stdlib.functional as mfuncs
@@ -92,11 +110,14 @@ class FunctionDict(TypedDict):
         name (str): The function's `__name__`.
         signature (str): The function's parameter signature as a string.
         docstring (str | None): The function's docstring, or `None` if absent.
+        return_type (str): The function's return annotation as a string, or
+            `Any` if it has none.
     """
 
     name: str
     signature: str
     docstring: str | None
+    return_type: str
 
 
 class ArgumentDict(TypedDict):
@@ -222,6 +243,132 @@ class Function(Generic[P, R]):
         self._function_dict: FunctionDict = describe_function(func)
 
 
+def _format_type(annotation: Any) -> str:
+    """Render a type annotation for a prompt, without module paths.
+
+    `inspect.formatannotation` drops the `builtins.` prefix but keeps every other
+    module path (`tasks.Person`, `__main__.Person`), and `str(type)` renders a class
+    as `<class 'str'>`. Neither path carries meaning for the model, so this
+    renders every type by its qualified name. A postponed annotation that could
+    not be resolved is a string, and renders bare (`Decimal`, not `'Decimal'`) so
+    it is not mistaken for a string-typed value.
+    """
+    if annotation is inspect.Parameter.empty or annotation is Any:
+        return "Any"
+    if annotation is None or annotation is type(None):
+        return "None"
+    if annotation is Ellipsis:  # The `...` in `tuple[int, ...]`.
+        return "..."
+    if isinstance(annotation, str):
+        return annotation
+    if isinstance(annotation, ForwardRef):
+        return annotation.__forward_arg__
+    if isinstance(annotation, TypeVar):
+        return annotation.__name__
+    if isinstance(annotation, list):  # The parameter list of a `Callable[[...], R]`.
+        return "[" + ", ".join(_format_type(a) for a in annotation) + "]"
+
+    origin, args = get_origin(annotation), get_args(annotation)
+    if origin is Literal:
+        return f"Literal[{', '.join(repr(a) for a in args)}]"
+    if origin is Annotated:
+        return _format_type(args[0])
+    if origin is Union or origin is types.UnionType:
+        return " | ".join(_format_type(a) for a in args)
+    if origin is not None and args:
+        name = getattr(origin, "__qualname__", None) or _format_type(origin)
+        return f"{name}[{', '.join(_format_type(a) for a in args)}]"
+    if isinstance(annotation, type):
+        return annotation.__qualname__
+    return inspect.formatannotation(annotation)
+
+
+def _format_signature(func: Callable) -> str:
+    """Render `func`'s signature for a prompt, with every annotation via `_format_type`."""
+    sig = resolve_signature_annotations(func)
+    params = []
+    for p in sig.parameters.values():
+        text = p.name
+        if p.annotation is not inspect.Parameter.empty:
+            text += f": {_format_type(p.annotation)}"
+        if p.default is not inspect.Parameter.empty:
+            text += f" = {p.default!r}"
+        params.append(text)
+    signature = f"({', '.join(params)})"
+    if sig.return_annotation is not inspect.Signature.empty:
+        signature += f" -> {_format_type(sig.return_annotation)}"
+    return signature
+
+
+def _format_value(val: Any) -> str:
+    """Render an argument value for a prompt: strings quoted, structured values as JSON.
+
+    Pydantic models, dataclasses, dicts and lists render as JSON, which is what the
+    model also emits for structured output; `str()` would show a Pydantic model as
+    `field='value' other=[Thought(...)]`.
+    """
+    if isinstance(val, str):
+        return f'"{val}"'
+    try:
+        return json.dumps(pydantic_core.to_jsonable_python(val), ensure_ascii=False)
+    except Exception:
+        return str(val)
+
+
+def _json_shape(schema: dict[str, Any], defs: dict[str, Any]) -> str:
+    """Render a JSON schema as a compact, readable shape for a prompt.
+
+    For example `{"owner": string, "task": string}` rather than the raw schema.
+    The raw schema's `$defs` / `$ref` indirection measurably confuses some models
+    (one answered `[]` for nearly every `list[Model]` return), and structured
+    output already enforces the exact schema, so the prompt only needs the shape.
+    A model referenced from inside itself renders by name to stop the recursion.
+    """
+    return _json_shape_inner(schema, defs, frozenset())
+
+
+def _json_shape_inner(
+    schema: dict[str, Any], defs: dict[str, Any], seen: frozenset[str]
+) -> str:
+    if "$ref" in schema:
+        name = schema["$ref"].rsplit("/", 1)[-1]
+        if name in seen or name not in defs:
+            return name
+        return _json_shape_inner(defs[name], defs, seen | {name})
+    if "enum" in schema:
+        return " | ".join(json.dumps(v) for v in schema["enum"])
+    if "const" in schema:
+        return json.dumps(schema["const"])
+    for key in ("anyOf", "oneOf", "allOf"):
+        if key in schema:
+            return " | ".join(_json_shape_inner(s, defs, seen) for s in schema[key])
+    kind = schema.get("type")
+    if isinstance(kind, list):
+        return " | ".join(
+            _json_shape_inner({**schema, "type": k}, defs, seen) for k in kind
+        )
+    if kind == "object":
+        props = schema.get("properties")
+        if props:
+            fields_ = ", ".join(
+                f"{json.dumps(k)}: {_json_shape_inner(v, defs, seen)}"
+                for k, v in props.items()
+            )
+            return "{" + fields_ + "}"
+        extra = schema.get("additionalProperties")
+        if isinstance(extra, dict) and extra:
+            return "{string: " + _json_shape_inner(extra, defs, seen) + ", ...}"
+        return "object"
+    if kind == "array":
+        items = schema.get("items")
+        if isinstance(items, dict) and items:
+            return "[" + _json_shape_inner(items, defs, seen) + ", ...]"
+        return "[...]"
+    if kind in ("string", "integer", "number", "boolean", "null"):
+        return kind
+    return "any"
+
+
 def describe_function(func: Callable) -> FunctionDict:
     """Generates a FunctionDict given a function.
 
@@ -234,20 +381,25 @@ def describe_function(func: Callable) -> FunctionDict:
     # This signature is rendered directly into the prompt by
     # `GenerativeStub.jinja2`, so unlike the other call sites the return
     # annotation *is* consumed by the model. An unresolvable one (a
-    # `TYPE_CHECKING`-only import, or a forward reference) is therefore left as
-    # its postponed string and renders quoted — `-> 'Decimal'` — which still
-    # conveys the type name, rather than being dropped from the prompt entirely.
+    # `TYPE_CHECKING`-only import, or a forward reference) is left as its
+    # postponed string, and `_format_signature` renders it bare — `-> Decimal` —
+    # because `str(inspect.Signature)` would quote it as `-> 'Decimal'`, which a
+    # small model can read as "returns a string".
     return {
         "name": func.__name__,
-        "signature": str(resolve_signature_annotations(func)),
+        "signature": _format_signature(func),
         "docstring": inspect.getdoc(func),
+        "return_type": _format_type(
+            resolve_signature_annotations(func).return_annotation
+        ),
     }
 
 
 def get_argument(func: Callable, key: str, val: Any) -> Argument:
     """Returns an argument given a parameter.
 
-    Note: Performs additional formatting for string objects, putting them in quotes.
+    Note: Formats the value for the prompt: strings are quoted, and structured
+    values (Pydantic models, dataclasses, dicts, lists) are rendered as JSON.
 
     Args:
         func : Callable Function
@@ -268,9 +420,9 @@ def get_argument(func: Callable, key: str, val: Any) -> Argument:
         param_type = type(val)
 
     if param_type is str:
-        val = f'"{val!s}"'
+        val = str(val)
 
-    return Argument(str(param_type), key, val)
+    return Argument(_format_type(param_type), key, _format_value(val))
 
 
 def bind_function_arguments(
@@ -353,11 +505,12 @@ class GenerativeStub(Component[R], Generic[P, R]):
     A `GenerativeStub` wraps a callable and uses an LLM to generate its output.
     Subclasses (`SyncGenerativeStub`, `AsyncGenerativeStub`) implement
     `__call__` for synchronous and asynchronous invocation respectively.
-    The function's signature, docstring, and type hints are rendered into a prompt
-    so the LLM can imitate the function's intended behaviour.
+    The function's name, docstring, bound arguments, and return type are rendered
+    into a prompt that asks the LLM to perform the task and reply with JSON of the
+    return type's shape.
 
     Args:
-        func (Callable): The function whose behaviour the LLM should imitate.
+        func (Callable): The function whose behaviour the LLM should perform.
 
     Attributes:
         precondition_requirements (list[Requirement]): Requirements validated
@@ -388,6 +541,10 @@ class GenerativeStub(Component[R], Generic[P, R]):
         functools.update_wrapper(self, func)
 
         self._response_model = create_response_format(self._function._func)
+        response_schema = self._response_model.model_json_schema()
+        self._result_shape: str = _json_shape(
+            response_schema["properties"]["result"], response_schema.get("$defs", {})
+        )
 
         # Set when calling the decorated func.
         self.precondition_requirements: list[Requirement] = []
@@ -516,8 +673,8 @@ class GenerativeStub(Component[R], Generic[P, R]):
         """Format this generative stub for the language model.
 
         Builds a `TemplateRepresentation` containing the function metadata
-        (name, signature, docstring), the bound arguments, and any requirement
-        descriptions.
+        (name, signature, docstring, return type), the bound arguments, any
+        requirement descriptions, and the JSON shape the result must take.
 
         Returns:
             TemplateRepresentation: The formatted representation ready for the
@@ -535,6 +692,7 @@ class GenerativeStub(Component[R], Generic[P, R]):
                     and r.description != ""
                     and not r.check_only
                 ],  # Same conditions on requirements as in instruction.
+                "result_shape": self._result_shape,
             },
             tools=None,
             template_order=["*", "GenerativeStub"],
@@ -690,11 +848,13 @@ class SyncGenerativeStub(GenerativeStub, Generic[P, R]):
                 model_options=extracted.model_options,
             )
 
-        assert response.parsed_repr is not None
+        # `parsed_repr` is the decorated function's return value, which may be `None`
+        # when the return type admits it (e.g. `-> str | None`).
+        result = cast(R, response.parsed_repr)
         if context is None:
-            return response.parsed_repr
+            return result
         else:
-            return response.parsed_repr, context
+            return result, context
 
 
 class AsyncGenerativeStub(GenerativeStub, Generic[P, R]):
@@ -843,11 +1003,12 @@ class AsyncGenerativeStub(GenerativeStub, Generic[P, R]):
             assert response.is_computed(), (
                 "unexpectedly received uncomputed model output thunk in async generative stub"
             )
-            assert response.parsed_repr is not None
+            # May be `None` when the return type admits it; see the sync path.
+            result = cast(R, response.parsed_repr)
             if context is None:
-                return response.parsed_repr
+                return result
             else:
-                return response.parsed_repr, context
+                return result, context
 
         return __async_call__()
 
@@ -864,10 +1025,10 @@ def generative(func: Callable[P, R]) -> GenerativeStub[P, R]:
     """Convert a function into an AI-powered function.
 
     This decorator transforms a regular Python function into one that uses an LLM
-    to generate outputs. The function's entire signature - including its name,
-    parameters, docstring, and type hints - is used to instruct the LLM to imitate
-    that function's behavior. The output is guaranteed to match the return type
-    annotation using structured outputs and automatic validation.
+    to generate outputs. The function's name, docstring, arguments, and return type
+    are used to instruct the LLM to perform the task the function describes. The
+    output is guaranteed to match the return type annotation using structured
+    outputs and automatic validation.
 
     Notes:
     - Works with async functions as well.
@@ -878,7 +1039,7 @@ def generative(func: Callable[P, R]) -> GenerativeStub[P, R]:
     Tip: Write the function and docstring in the most Pythonic way possible, not
     like a prompt. This ensures the function is well-documented, easily understood,
     and familiar to any Python developer. The more natural and conventional your
-    function definition, the better the AI will understand and imitate it.
+    function definition, the better the AI will understand and perform it.
 
     The new function has the following additional args:
         *m*: MelleaSession: A mellea session (optional: must set context and backend if None)
