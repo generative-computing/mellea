@@ -1,4 +1,13 @@
 # pytest: ollama, e2e
+"""Demonstrates lazy evaluation with Fibonacci sequence generation.
+
+Prerequisites:
+    ollama serve
+    ollama pull granite4:latest
+
+Usage:
+    uv run python docs/examples/melp/lazy_fib.py
+"""
 
 import asyncio
 

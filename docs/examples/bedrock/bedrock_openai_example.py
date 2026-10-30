@@ -7,6 +7,18 @@
 #   "mellea[openai]"
 # ]
 # ///
+"""Example of using Bedrock models through the mantle OpenAI backend.
+
+Stand-alone email using the mantle OpenAI backends: creates a Bedrock-backed
+`OpenAIBackend` for `gpt-oss-120b` and asks it which model it is.
+
+Prerequisites:
+    export AWS_BEARER_TOKEN_BEDROCK=<your API key goes here>
+
+Usage:
+    uv run docs/examples/bedrock/bedrock_openai_example.py
+"""
+
 import os
 
 from mellea import MelleaSession

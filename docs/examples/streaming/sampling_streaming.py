@@ -6,6 +6,13 @@ Demonstrates:
 - Passing `strategy=` to `stream()` so an attempt that fails mid-stream is aborted and repaired
 - Observing `RetryEvent` and per-attempt `ChunkEvent`s via `stream(as_events=True)`
 - Reading the per-attempt history from `streamer.attempts` after the run
+
+Prerequisites:
+    ollama serve
+    ollama pull granite4.2:3b
+
+Usage:
+    uv run python docs/examples/streaming/sampling_streaming.py
 """
 
 import asyncio

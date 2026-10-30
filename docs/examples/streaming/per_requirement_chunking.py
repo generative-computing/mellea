@@ -10,6 +10,13 @@ Demonstrates:
 The stream uses its default chunking=None, so each `ChunkEvent.text` is a raw model delta.
 Each requirement re-chunks those deltas with its own chunker, so its `_stream_validate`
 receives one complete sentence or word at a time, not the raw deltas.
+
+Prerequisites:
+    ollama serve
+    ollama pull granite4.2:3b
+
+Usage:
+    uv run python docs/examples/streaming/per_requirement_chunking.py
 """
 
 import asyncio
