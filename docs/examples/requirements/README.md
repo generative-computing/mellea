@@ -1,5 +1,8 @@
 # Requirements Examples
 
+For a higher-level interface that bundles these requirements into ready-to-use presets,
+see [`sampling/`](../sampling/README.md).
+
 This directory contains examples for using Mellea's requirement validation system,
 including specialized requirements for RAG (Retrieval-Augmented Generation) workflows
 and code generation tasks like plotting.
@@ -25,10 +28,10 @@ commands via Python control flow.
 
 Before running this example, ensure you have:
 
-1. Ollama running with the granite4.1:3b model:
+1. Ollama running with the granite4.2:3b model:
    ```bash
    ollama serve  # in one terminal
-   ollama pull granite4.1:3b  # in another terminal (if not already downloaded)
+   ollama pull granite4.2:3b  # in another terminal (if not already downloaded)
    ```
 
 2. Required dependencies installed:
@@ -138,10 +141,10 @@ For production with untrusted code, use `execution_tier="docker"`. See file docs
 
 Before running this example, ensure you have:
 
-1. Ollama running with the granite4.1:3b model:
+1. Ollama running with the granite4.2:3b model:
    ```bash
    ollama serve  # in one terminal
-   ollama pull granite4.1:3b  # in another terminal (if not already downloaded)
+   ollama pull granite4.2:3b  # in another terminal (if not already downloaded)
    ```
 
 2. Required dependencies installed:
@@ -411,6 +414,6 @@ Extract employee distribution across work locations and create a pie chart
 
 ### code_generation_and_execution.py
 
-- Ollama backend with granite4.1:3b model running (`ollama serve`)
+- Ollama backend with granite4.2:3b model running (`ollama serve`)
 - matplotlib and numpy installed (required for executing generated code)
 - Python subprocess execution support (provided by `PythonExecutionReq`)
