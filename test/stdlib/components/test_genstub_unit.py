@@ -8,13 +8,22 @@ create_response_format, GenerativeStub.format_for_llm, and @generative routing.
 """
 
 import inspect
+import json
 from typing import Any, Literal, get_type_hints
 from unittest.mock import MagicMock
 
 import pytest
+from pydantic import BaseModel
 
 from mellea import generative
-from mellea.core import Requirement, TemplateRepresentation, ValidationResult
+from mellea.core import (
+    Backend,
+    ModelOutputThunk,
+    Requirement,
+    TemplateRepresentation,
+    ValidationResult,
+)
+from mellea.core.base import GenerateLog, GenerateType
 from mellea.stdlib.components.genstub import (
     ArgPreconditionRequirement,
     Arguments,
@@ -22,6 +31,7 @@ from mellea.stdlib.components.genstub import (
     Function,
     PreconditionException,
     SyncGenerativeStub,
+    _format_type,
     bind_function_arguments,
     create_response_format,
     describe_function,
@@ -86,10 +96,9 @@ def test_describe_function_resolves_postponed_annotations():
     assert "'str'" not in result["signature"]
     assert "'list[Requirement]'" not in result["signature"]
     assert "product_description: str" in result["signature"]
-    assert (
-        "list[test.stdlib.components._postponed_annotation_samples.Requirement]"
-        in result["signature"]
-    )
+    # Types render by name, without the module path (which is noise to the model).
+    assert result["signature"].endswith("-> list[Requirement]")
+    assert "_postponed_annotation_samples" not in result["signature"]
 
 
 def test_describe_function_type_checking_only_return_annotation():
@@ -97,7 +106,7 @@ def test_describe_function_type_checking_only_return_annotation():
     # evaluates the return annotation, so a return type imported only under
     # `if TYPE_CHECKING:` raised NameError and no prompt could be built at all.
     # Parameters must still resolve; the unresolvable return stays a postponed
-    # string and renders quoted, which still names the type for the model.
+    # string and renders bare, which still names the type for the model.
     # Guard the preconditions: the annotation must still be postponed, and the
     # whole-signature path must still fail, or this stops testing the fallback.
     assert price_item.__annotations__["return"] == "Decimal"
@@ -109,12 +118,10 @@ def test_describe_function_type_checking_only_return_annotation():
     # Parameters resolved: no quoted parameter annotations.
     assert "quantity: int" in signature
     assert "'int'" not in signature
-    assert (
-        "item: test.stdlib.components._postponed_annotation_samples.Requirement"
-        in signature
-    )
-    # Return left postponed, so the model still sees the type name.
-    assert signature.endswith("-> 'Decimal'")
+    assert "item: Requirement" in signature
+    # Return left postponed, so the model still sees the type name. It renders
+    # bare: a quoted `-> 'Decimal'` reads to a small model as "returns a string".
+    assert signature.endswith("-> Decimal")
 
 
 # --- get_argument ---
@@ -129,7 +136,7 @@ def test_get_argument_type_checking_only_return_annotation():
         inspect.signature(price_item, eval_str=True)
 
     arg = get_argument(price_item, "quantity", 3)
-    assert arg._argument_dict["value"] == 3
+    assert arg._argument_dict["value"] == "3"
     assert "int" in str(arg._argument_dict["annotation"])
 
 
@@ -147,8 +154,8 @@ def test_get_argument_int_value_not_quoted():
         pass
 
     arg = get_argument(fn, "count", 42)
-    assert arg._argument_dict["value"] == 42
-    assert "int" in str(arg._argument_dict["annotation"])
+    assert arg._argument_dict["value"] == "42"
+    assert arg._argument_dict["annotation"] == "int"
 
 
 def test_get_argument_string_value_quoted_under_postponed_annotations():
@@ -261,7 +268,7 @@ def test_generative_decoration_survives_type_checking_only_return():
     # Parameters still resolve for the prompt; only the return stays postponed.
     signature = stub._function._function_dict["signature"]
     assert "quantity: int" in signature
-    assert signature.endswith("-> 'Decimal'")
+    assert signature.endswith("-> Decimal")
 
 
 # --- GenerativeStub.format_for_llm ---
@@ -472,6 +479,248 @@ def test_genstub_parse_int_result():
     mot = ModelOutputThunk(value=json.dumps({"result": 42}))
     parsed = compute._parse(mot)
     assert parsed == 42
+
+
+# --- prompt rendering (issue #1476) ---
+
+
+class _Person(BaseModel):
+    name: str
+    age: int
+
+
+class _Team(BaseModel):
+    lead: _Person
+    members: list[_Person]
+
+
+@pytest.mark.parametrize(
+    "annotation, expected",
+    [
+        (str, "str"),
+        (list[int], "list[int]"),
+        (dict[str, list[_Person]], "dict[str, list[_Person]]"),
+        (_Person | None, "_Person | None"),
+        (Literal["a.b", "c"], "Literal['a.b', 'c']"),
+        (tuple[int, ...], "tuple[int, ...]"),
+        ("Decimal", "Decimal"),
+    ],
+)
+def test_format_type_renders_bare_names(annotation, expected):
+    # `str(type)` renders `<class 'str'>` and `inspect.formatannotation` keeps module
+    # paths (`test.stdlib...._Person`); both are noise to the model. A `Literal`'s
+    # values must survive untouched even when they contain dots.
+    assert _format_type(annotation) == expected
+
+
+def test_get_argument_annotation_is_bare_type_name():
+    def fn(name: str, people: list[_Person]) -> None:
+        pass
+
+    assert get_argument(fn, "name", "x")._argument_dict["annotation"] == "str"
+    assert (
+        get_argument(fn, "people", [])._argument_dict["annotation"] == "list[_Person]"
+    )
+
+
+def test_get_argument_renders_structured_values_as_json():
+    # `str()` shows a Pydantic model as `name='Ada' age=36`; JSON matches what the
+    # model emits for structured output.
+    def fn(team: _Team, scores: dict[str, int]) -> None:
+        pass
+
+    team = _Team(lead=_Person(name="Ada", age=36), members=[])
+    arg = get_argument(fn, "team", team)
+    assert json.loads(arg._argument_dict["value"]) == team.model_dump()
+    arg = get_argument(fn, "scores", {"a": 1})
+    assert arg._argument_dict["value"] == '{"a": 1}'
+
+
+def test_describe_function_return_type():
+    def fn(x: int) -> list[_Person]: ...
+
+    def bare(x: int): ...
+
+    assert describe_function(fn)["return_type"] == "list[_Person]"
+    assert describe_function(bare)["return_type"] == "Any"
+
+
+@pytest.mark.parametrize(
+    "return_type, expected",
+    [
+        (str, "string"),
+        (bool, "boolean"),
+        (Literal["yes", "no"], '"yes" | "no"'),
+        (str | None, "string | null"),
+        (list[str], "[string, ...]"),
+        (dict, "object"),
+        (
+            _Team,
+            '{"lead": {"name": string, "age": integer},'
+            ' "members": [{"name": string, "age": integer}, ...]}',
+        ),
+    ],
+)
+def test_result_shape(return_type, expected):
+    def fn() -> None: ...
+
+    fn.__annotations__["return"] = return_type
+    assert generative(fn).format_for_llm().args["result_shape"] == expected
+
+
+def test_result_shape_recursive_model_terminates():
+    class Node(BaseModel):
+        value: int
+        children: list["Node"] = []
+
+    @generative
+    def tree() -> Node: ...
+
+    assert tree.format_for_llm().args["result_shape"] == (
+        '{"value": integer, "children": [Node, ...]}'
+    )
+
+
+def _render(stub, **kwargs) -> str:
+    from copy import deepcopy
+
+    from mellea.formatters import TemplateFormatter
+
+    stub = deepcopy(stub)
+    stub._arguments = Arguments(
+        [get_argument(stub._function._func, k, v) for k, v in kwargs.items()]
+    )
+    return TemplateFormatter(model_id="default").print(stub)
+
+
+def test_generative_stub_prompt_states_task_inputs_and_json_shape():
+    @generative
+    def extract_people(text: str) -> list[_Person]:
+        """Extract every person mentioned in the text."""
+
+    prompt = _render(extract_people, text="Ada, 36, met Alan.")
+    assert prompt.startswith("Task: extract_people\n\nExtract every person")
+    assert '- text: "Ada, 36, met Alan."  (type: str)' in prompt
+    assert '{"result": <value of type list[_Person]>}' in prompt
+    assert '{"result": [{"name": string, "age": integer}, ...]}' in prompt
+    # The old "imitate the output of the following function" framing is gone.
+    assert "imitate" not in prompt and "def extract_people" not in prompt
+
+
+def test_generative_stub_prompt_without_docstring_has_no_placeholder():
+    # The old template's `default("No documentation provided.")` never fired for a
+    # `None` docstring and rendered an empty `""""""` block instead.
+    @generative
+    def is_question(sentence: str) -> bool: ...
+
+    prompt = _render(is_question, sentence="Why?")
+    assert prompt.startswith("Task: is_question\n\nInputs:")
+    assert '""' not in prompt
+
+
+def test_generative_stub_prompt_keeps_multiline_docstring_intact():
+    @generative
+    def identify_fruit(text: str) -> str | None:
+        """
+        Extract fruit from text, or None if none mentioned.
+        Ex: "I ate an apple" -> "apple"
+        """
+
+    prompt = _render(identify_fruit, text="x")
+    assert (
+        'Extract fruit from text, or None if none mentioned.\nEx: "I ate an apple"'
+        in prompt
+    )
+
+
+def test_generative_stub_prompt_lists_requirements():
+    @generative
+    def write_headline(article: str) -> str:
+        """Write a headline for the article."""
+
+    stub = write_headline
+    from copy import deepcopy
+
+    stub = deepcopy(stub)
+    stub.requirements = [reqify("At most 10 words.")]
+    stub._arguments = Arguments([get_argument(stub._function._func, "article", "a")])
+    from mellea.formatters import TemplateFormatter
+
+    prompt = TemplateFormatter(model_id="default").print(stub)
+    assert "Requirements:\n- At most 10 words." in prompt
+
+
+# --- `None` results (issue #1476) ---
+
+
+class _FixedJSONBackend(Backend):
+    """Test double that answers every generation with a fixed JSON body."""
+
+    _model_id = "test-model"
+    _provider = "test"
+
+    def __init__(self, body: str):
+        self._body = body
+
+    async def _generate_from_context(
+        self, action, ctx, *, format=None, model_options=None, tool_calls=False
+    ):
+        mot = ModelOutputThunk(value=None)
+        mot._call.action = action
+        mot._gen.generate_type = GenerateType.ASYNC
+
+        async def _process(m: ModelOutputThunk, chunk) -> None:
+            if chunk is not None:
+                m._underlying_value = (m._underlying_value or "") + chunk
+
+        async def _post_process(m: ModelOutputThunk) -> None:
+            m._generate_log = GenerateLog()
+
+        mot._gen.process = _process
+        mot._gen.post_process = _post_process
+        mot._gen.chunk_size = 0
+        mot._gen.queue.put_nowait(self._body)
+        mot._gen.queue.put_nowait(None)
+        return mot, ctx.add(action).add(mot)
+
+    async def _generate_from_raw(self, *args, **kwargs):
+        raise NotImplementedError
+
+
+def test_sync_stub_returns_none_result():
+    """A stub whose return type admits `None` returns `None` instead of crashing.
+
+    Regression test: `{"result": null}` parsed to `None`, which tripped the
+    "non-`None` parsed_repr" invariant in `ModelOutputThunk` (and the stub's own
+    assert), so the documented `-> str | None` pattern crashed exactly when the
+    correct answer was `None`.
+    """
+
+    @generative
+    def identify_fruit(text: str) -> str | None:
+        """Extract the fruit mentioned in the text, or None if none is mentioned."""
+
+    backend = _FixedJSONBackend('{"result": null}')
+    result, _ = identify_fruit(
+        context=SimpleContext(), backend=backend, text="The car is parked outside."
+    )
+    assert result is None
+
+    backend = _FixedJSONBackend('{"result": "banana"}')
+    result, _ = identify_fruit(context=SimpleContext(), backend=backend, text="x")
+    assert result == "banana"
+
+
+async def test_async_stub_returns_none_result():
+    @generative
+    async def identify_fruit(text: str) -> str | None:
+        """Extract the fruit mentioned in the text, or None if none is mentioned."""
+
+    backend = _FixedJSONBackend('{"result": null}')
+    result, _ = await identify_fruit(
+        context=SimpleContext(), backend=backend, text="The car is parked outside."
+    )
+    assert result is None
 
 
 if __name__ == "__main__":

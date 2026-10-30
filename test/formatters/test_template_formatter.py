@@ -330,6 +330,37 @@ def test_user_path(instr: Instruction):
         assert "user provided granite33 template." in ud_tmpl
 
 
+@pytest.mark.parametrize(
+    "model_id, expected",
+    [
+        ("granite4.1:3b", "granite"),
+        ("llama3.2:1b", "llama"),
+        ("mistral:7b", "mistral"),
+        ("qwen2.5:7b", "default"),
+    ],
+)
+def test_sibling_family_dirs_select_matching_family(model_id: str, expected: str):
+    """Each model resolves to its own family directory, or `default` when none match.
+
+    Regression test: pruning `os.walk`'s `dirs` with `remove` while iterating it
+    skipped the entry after each removal, so a non-matching sibling family directory
+    survived and its template overwrote the right one (`granite4.1:3b` and
+    `qwen2.5:7b` both resolved to `llama/`).
+    """
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as td:
+        # Create the families in an order that has non-matching siblings adjacent.
+        for family in ["default", "granite", "mistral", "llama"]:
+            family_dir = os.path.join(td, "prompts", family)
+            os.makedirs(family_dir)
+            with open(os.path.join(family_dir, "Instruction.jinja2"), "w") as f:
+                f.write(family)
+
+        tf = TemplateFormatter(model_id, template_path=td, use_template_cache=False)
+        assert tf._get_template(td, "Instruction.jinja2") == (
+            f"prompts/{expected}/Instruction.jinja2"
+        )
+
+
 def test_no_module(tf: TemplateFormatter):
     c = Instruction("description")
     c.__module__ = "fake-module"

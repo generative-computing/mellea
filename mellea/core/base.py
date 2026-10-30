@@ -1567,7 +1567,13 @@ class ModelOutputThunk(Generic[S]):
             await self._gen.post_process(self)
 
             self._set_parsed_repr()
-            assert self.parsed_repr is not None, (
+            # A `Component` whose type parameter admits `None` (e.g. a `@generative`
+            # stub returning `str | None`) can legitimately parse to `None`, so only
+            # non-`Component` actions — whose parsed repr is the computed string — are
+            # held to a non-`None` parsed repr.
+            assert self.parsed_repr is not None or isinstance(
+                self._call.action, Component
+            ), (
                 "enforce constraint that a computed ModelOutputThunk has a non-None parsed_repr"
             )
 

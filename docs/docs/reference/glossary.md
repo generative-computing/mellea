@@ -73,7 +73,7 @@ A decorator that converts a typed Python function into an AI-powered function.
 `@generative` uses the function's name, docstring, parameters, and return type
 annotation to instruct the LLM. The output is constrained to match the return type.
 Write the function in idiomatic Python — the more natural the signature and
-docstring, the better the model understands and imitates it.
+docstring, the better the model understands and performs it.
 
 ```python
 from mellea import generative, start_session
