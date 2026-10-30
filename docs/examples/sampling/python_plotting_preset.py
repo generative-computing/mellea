@@ -109,10 +109,13 @@ def example_without_output_path():
 
     Note: this is the only function in this file that uses the plotting preset's
     sandbox default (`use_sandbox=True`). It requires a running Docker daemon and
-    `mellea[sandbox]` installed (`uv sync --extra sandbox`). If Docker is
-    unavailable, the run reports `Valid: X/Y` with the unmet requirement listed as
-    "sandbox execution with policy", and the script still prints "✓ completed"
-    because it does not check the sampling result.
+    `mellea[sandbox]` installed (`uv sync --extra sandbox`). The default sandbox
+    image (`ghcr.io/vndee/sandbox-python-311-bullseye`) ships matplotlib, so the
+    example can pass as shipped — provided Docker is available and the image runs
+    on your architecture (the image is amd64-only). If Docker is unavailable, the
+    run reports `Valid: X/Y` with the unmet requirement listed as "sandbox
+    execution with policy", and the script still prints "✓ completed" because it
+    does not check the sampling result.
     """
     session = mellea.start_session()
 
