@@ -49,7 +49,7 @@ IMPORTS: dict[str, list[str]] = {
         "from mellea.backends import Backend, ModelIdentifier, ModelOption",
         "from mellea.backends.ollama import OllamaModelBackend",
         "from mellea.backends.openai import OpenAIBackend",
-        "from mellea.backends.adapters.adapter import EmbeddedIntrinsicAdapter",
+        "from mellea.backends.adapters.adapter import AdapterMixin",
         "from mellea.core import Backend",
     ],
     "hf": ["from mellea.backends.huggingface import LocalHFBackend"],

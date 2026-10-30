@@ -361,8 +361,7 @@ backend = OpenAIBackend(
 )
 
 # Discover and register a single adapter from the model's Hugging Face repo —
-# this composes an Adapter (Identity + IOContract + EmbeddedBinding) rather
-# than returning the deprecated EmbeddedIntrinsicAdapter shim.
+# this composes an Adapter (Identity + IOContract + EmbeddedBinding).
 backend.register_embedded_adapter_model(
     IBM_GRANITE_SWITCH_4_1_3B_PREVIEW.hf_model_name,
     intrinsic_name="answerability",

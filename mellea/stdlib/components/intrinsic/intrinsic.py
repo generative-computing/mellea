@@ -27,8 +27,8 @@ class Intrinsic(Component[str]):
             name outside Mellea's intrinsics catalog (a custom, non-catalog
             adapter function), `adapter_types` must be provided explicitly —
             this is what lets a custom `Intrinsic` construct without a
-            catalog entry, replacing the deprecated `CustomIntrinsicAdapter`
-            shim's catalog monkey-patch (Epic #929, issue #1144).
+            catalog entry, rather than through a catalog monkey-patch
+            (Epic #929, issue #1144).
         intrinsic_kwargs (dict | None): Optional keyword arguments required by
             the intrinsic at invocation time.
         adapter_types (tuple[AdapterType, ...] | None): Adapter types this

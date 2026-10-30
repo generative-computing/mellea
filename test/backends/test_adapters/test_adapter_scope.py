@@ -17,6 +17,7 @@ import pytest
 from mellea.backends.adapters._core import (
     Adapter,
     AdapterSchemaMismatchError,
+    EmbeddedBinding,
     Identity,
     IOContract,
     LocalFileBinding,
@@ -366,6 +367,28 @@ def test_adapter_scope_is_not_atomic_across_concurrent_calls():
     # It isn't: thread2's full cycle ran to completion (and deactivated)
     # while thread1's body was still executing.
     assert observed_inside_a1_body == [None]
+
+
+def test_adapter_scope_rejects_binding_with_no_lifecycle():
+    """A non-`WeightsBinding` binding (e.g. `EmbeddedBinding`) must raise `TypeError`.
+
+    `adapter_scope` drives the `activate()`/`deactivate()` lifecycle, which an
+    `EmbeddedBinding` does not have — it activates through `apply_activation()`
+    in the chat template instead (issue #1142). The guard at `adapter.py`
+    rejects it loudly rather than entering a scope it cannot run. Regression
+    guard: this was the only test of that guard and moved here when
+    `test_shims.py` was removed (PR #1700).
+    """
+    mock_backend = MagicMock(spec=AdapterMixin)
+    embedded_adapter = Adapter(
+        identity=Identity(name="answerability", adapter_type="lora"),
+        io_contract=_Contract(),
+        weights=EmbeddedBinding(source="granite-4.1-3b"),
+    )
+
+    with pytest.raises(TypeError, match=r"have no activate\(\)/deactivate\(\)"):
+        with AdapterMixin.adapter_scope(mock_backend, embedded_adapter):
+            pytest.fail("body must not run for a binding with no lifecycle")
 
 
 def test_adapter_scope_noop_when_adapter_is_none():
