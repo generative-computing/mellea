@@ -191,7 +191,7 @@ def step_write_full_report(
         description="Context:\n{{context}}\nSummarize the relevant information available into a detailed report on how {{current_subtopic}} impacts {{main_topic}}.\n\nFollow this outline:\n{{outline}}",
         requirements=[req_focus, req_length, req_language, req_tone],
         user_variables=user_args,
-        strategy=RejectionSamplingStrategy(loop_budget=2, requirements=[req_length]),
+        strategy=RejectionSamplingStrategy(loop_budget=2),
         return_sampling_results=True,
     )
 
