@@ -13,6 +13,12 @@ The validator implements a sophisticated 4-step pipeline:
 
 Note: This example requires Hugging Face backend with GPU (8GB+ VRAM recommended)
 and access to the ibm-granite/granite-4.0-micro model.
+
+Prerequisites:
+    uv sync --extra hf
+
+Usage:
+    uv run python docs/examples/groundedness_requirement_example.py
 """
 
 import asyncio

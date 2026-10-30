@@ -1,6 +1,13 @@
 # pytest: ollama, e2e
+"""Minimal example: structured output via act(format=) with a Pydantic model.
 
-"""Minimal example: structured output via act(format=) with a Pydantic model."""
+Prerequisites:
+    ollama serve
+    ollama pull granite4.2:3b
+
+Usage:
+    uv run python docs/examples/structured_output_minimal.py
+"""
 
 from pydantic import BaseModel
 

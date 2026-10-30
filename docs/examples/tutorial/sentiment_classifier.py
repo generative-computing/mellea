@@ -1,4 +1,13 @@
 # pytest: ollama, e2e
+"""Building a sentiment classification system.
+
+Prerequisites:
+    ollama serve
+    ollama pull granite4.2:3b
+
+Usage:
+    uv run python docs/examples/tutorial/sentiment_classifier.py
+"""
 
 from typing import Literal
 

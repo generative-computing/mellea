@@ -1,7 +1,16 @@
 # pytest: ollama, qualitative, e2e
+"""Using document MObjects for text processing.
+
+Prerequisites:
+    uv sync --extra docling
+    ollama serve
+    ollama pull llama3.2:3b
+
+Usage:
+    uv run python docs/examples/tutorial/document_mobject.py
+"""
 
 from mellea.backends import model_ids
-from mellea.backends.model_ids import IBM_GRANITE_4_HYBRID_MICRO
 from mellea.stdlib.components.docs.richdocument import RichDocument
 
 rd = RichDocument.from_document_file("https://arxiv.org/pdf/1906.04043")

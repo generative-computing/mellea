@@ -8,6 +8,9 @@ win on a collision, and a declaration that names a provider the request never
 reaches raises a `ValueError` (add `"*"` to opt out of that check).
 
 See issue #1565 for the design.
+
+Usage:
+    uv run python docs/examples/provider_fields.py
 """
 
 import pytest

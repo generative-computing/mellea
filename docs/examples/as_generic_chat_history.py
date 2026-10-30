@@ -5,6 +5,9 @@ The as_generic_chat_history() function converts any Context into a list of
 Messages, gracefully handling unknown component types by converting them to
 strings. This is useful for working with mixed-type contexts or when you need
 a more flexible interface than as_chat_history().
+
+Usage:
+    uv run python docs/examples/as_generic_chat_history.py
 """
 
 from mellea.core import CBlock, ModelOutputThunk

@@ -1,8 +1,16 @@
 # pytest: ollama, e2e
+"""Email generation example - the classic "Hello World" of Mellea.
+
+Prerequisites:
+    ollama serve
+    ollama pull granite4.2:3b
+
+Usage:
+    uv run python docs/examples/tutorial/simple_email.py
+"""
 
 import mellea
 
-# INFO: this line will download IBM's Granite 4 Micro 3B model.
 m = mellea.start_session()
 
 label = "Basic email:"
