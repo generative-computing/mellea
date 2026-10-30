@@ -2210,7 +2210,7 @@ def test_register_embedded_adapter_model_refused_duplicate_does_not_clobber_cach
     first_config = {"version": "first"}
     with patch(
         "mellea.backends.huggingface._discover_embedded_adapters",
-        return_value=[(_make_composed(), first_config)],
+        return_value=([(_make_composed(), first_config)], {}),
     ):
         names = backend.register_embedded_adapter_model(
             "some/repo", intrinsic_name="answerability"
@@ -2221,7 +2221,7 @@ def test_register_embedded_adapter_model_refused_duplicate_does_not_clobber_cach
     second_config = {"version": "second"}
     with patch(
         "mellea.backends.huggingface._discover_embedded_adapters",
-        return_value=[(_make_composed(), second_config)],
+        return_value=([(_make_composed(), second_config)], {}),
     ):
         names = backend.register_embedded_adapter_model(
             "some/other-repo", intrinsic_name="answerability"
@@ -2596,6 +2596,121 @@ async def test_intrinsic_seed_with_zero_temperature_keeps_greedy(stub_backend):
 
     assert captured["generate_input"]["do_sample"] is False
     assert "temperature" not in captured["generate_input"]
+
+
+class _SingleTokenTokenizer:
+    """Maps each decision label to one token id; multi-character labels to two."""
+
+    def __call__(self, text, add_special_tokens=False):
+        ids = {"A": [32], "B": [33], "AB": [32, 33]}[text]
+        return {"input_ids": ids}
+
+
+async def _drive_first_token_intrinsic(stub_backend, labels, model_options):
+    """Run `_generate_from_intrinsic` for a config with a `first_token` rule.
+
+    Returns the `(generate_input, other_input)` that reached
+    `generate_with_transformers`.
+    """
+    backend = _make_intrinsic_backend_stub(stub_backend)
+    backend._tokenizer = _SingleTokenTokenizer()
+    adapter = _make_intrinsic_adapter_stub()
+    backend._added_adapters = {adapter.qualified_name: adapter}
+    backend._intrinsic_adapter_name_and_config = lambda _adapter: (
+        "decision",
+        {"transformations": [{"type": "first_token", "labels": labels}]}
+        if labels is not None
+        else {"transformations": None},
+    )
+    captured: dict[str, Any] = {}
+
+    def fake_transformers_inputs(rewritten, tokenizer, model, ll_tokenizer=None):
+        return {"input_tokens": object(), "do_sample": False}, {"top_logprobs": 20}
+
+    def fake_generate_with_transformers(tokenizer, model, generate_input, other_input):
+        captured["generate_input"] = generate_input
+        captured["other_input"] = other_input
+        return object()
+
+    with (
+        patch(
+            "mellea.backends.huggingface.granite_formatters.IntrinsicsRewriter",
+            _FakeRewriter,
+        ),
+        patch(
+            "mellea.backends.huggingface.granite_formatters.IntrinsicsResultProcessor",
+            _FakeResultProcessor,
+        ),
+        patch(
+            "mellea.formatters.granite.base.util.chat_completion_request_to_transformers_inputs",
+            side_effect=fake_transformers_inputs,
+        ),
+        patch(
+            "mellea.formatters.granite.base.util.generate_with_transformers",
+            side_effect=fake_generate_with_transformers,
+        ),
+    ):
+        output = await LocalHFBackend._generate_from_intrinsic(
+            backend,
+            Intrinsic("answerability"),
+            ChatContext().add(Message("user", "Is the sky blue?")),
+            model_options=model_options,
+        )
+        assert output._gen.generate is not None
+        await output._gen.generate
+    return captured["generate_input"], captured["other_input"]
+
+
+async def test_first_token_intrinsic_requests_raw_logits_and_label_ids(stub_backend):
+    """A one-token readout asks for raw logits and the exact label token ids."""
+    generate_input, other_input = await _drive_first_token_intrinsic(
+        stub_backend, ["A", "B"], {ModelOption.TEMPERATURE: 0.0}
+    )
+    assert generate_input["output_logits"] is True
+    assert other_input["raw_logprobs"] is True
+    assert other_input["logprob_token_ids"] == [32, 33]
+
+
+async def test_first_token_intrinsic_resists_caller_sampling_options(stub_backend):
+    """Options that reach `generate()` cannot change what the readout reads."""
+    generate_input, other_input = await _drive_first_token_intrinsic(
+        stub_backend,
+        ["A", "B"],
+        {ModelOption.TEMPERATURE: 0.0, "repetition_penalty": 1.5, "do_sample": True},
+    )
+    # The options still reach generate(), but the readout is taken from raw
+    # logits, which they do not alter.
+    assert generate_input["repetition_penalty"] == 1.5
+    assert generate_input["output_logits"] is True
+    assert other_input["raw_logprobs"] is True
+
+
+async def test_first_token_intrinsic_rejects_custom_logits_processor(stub_backend):
+    """generate() records raw logits after processors run, so an in-place
+    custom processor would leak into the readout; refuse it."""
+    with pytest.raises(ValueError, match="logits_processor"):
+        await _drive_first_token_intrinsic(
+            stub_backend,
+            ["A", "B"],
+            {ModelOption.TEMPERATURE: 0.0, "logits_processor": [object()]},
+        )
+
+
+async def test_first_token_intrinsic_rejects_multi_token_label(stub_backend):
+    with pytest.raises(ValueError, match="single-token labels"):
+        await _drive_first_token_intrinsic(
+            stub_backend, ["AB"], {ModelOption.TEMPERATURE: 0.0}
+        )
+
+
+async def test_non_first_token_intrinsic_keeps_processed_scores(stub_backend):
+    """Other intrinsics are untouched by the raw-logit readout."""
+    generate_input, other_input = await _drive_first_token_intrinsic(
+        stub_backend, None, {ModelOption.TEMPERATURE: 0.0}
+    )
+    assert "output_logits" not in generate_input
+    assert "raw_logprobs" not in other_input
+    assert "logprob_token_ids" not in other_input
 
 
 @pytest.mark.asyncio

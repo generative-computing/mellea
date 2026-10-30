@@ -374,6 +374,29 @@ def _compute_generate_kwargs_allowlist() -> frozenset[str]:
 
 
 _GENERATE_KWARGS_ALLOWLIST: frozenset[str] = _compute_generate_kwargs_allowlist()
+
+
+def _single_token_label_ids(
+    tokenizer: PreTrainedTokenizerBase, labels: list[str]
+) -> list[int]:
+    """Token ids of one-token decision labels.
+
+    Raises:
+        ValueError: A label does not encode to exactly one token, so a
+            one-token readout cannot represent it.
+    """
+    ids = []
+    for label in labels:
+        encoded = tokenizer(label, add_special_tokens=False)["input_ids"]
+        if len(encoded) != 1:
+            raise ValueError(
+                f"Decision label {label!r} encodes to {len(encoded)} tokens "
+                f"({encoded}); a one-token readout needs single-token labels."
+            )
+        ids.append(encoded[0])
+    return ids
+
+
 _SWITCH_TRANSFORMERS_WARNING_EMITTED = False
 
 
@@ -621,6 +644,15 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             `hf` extra.
         adapter_source (str | None): Local checkpoint directory or Hugging Face
             Hub repository used to discover embedded adapter functions.
+        adapter_revision (str): Git revision for embedded-adapter discovery
+            from the Hugging Face Hub; pin it to the commit whose weights you
+            are serving. Note: model weights themselves are always loaded
+            from the Hub's default revision (`from_pretrained` takes no
+            revision here), so a pinned adapter revision that differs from
+            the weights' current `main` would produce a weights/config
+            mismatch. Only used when *adapter_source* (or *model_id*) is a
+            Hub repo ID; local directories are read as-is. Defaults to
+            `"main"`.
         model_options (dict | None): Default model options for generation requests.
 
     Attributes:
@@ -650,6 +682,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         default_to_constraint_checking_alora: bool = True,
         load_embedded_adapters: bool = False,
         adapter_source: str | None = None,
+        adapter_revision: str = "main",
         model_options: dict | None = None,
     ):
         """Load model weights from the given model ID, or from a custom config if provided."""
@@ -772,6 +805,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         # time, unlike the LocalFile case (see _intrinsic_adapter_name_and_config).
         self._composed_adapter_configs: dict[str, dict] = {}
         self._adapter_source = adapter_source
+        self._adapter_revision = adapter_revision
         self._uses_embedded_adapters = load_embedded_adapters
 
         self._generation_lock = threading.RLock()
@@ -794,7 +828,9 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         """
 
         if load_embedded_adapters:
-            self.register_embedded_adapter_model(self._adapter_source or self._model_id)
+            self.register_embedded_adapter_model(
+                self._adapter_source or self._model_id, revision=self._adapter_revision
+            )
 
     def _make_dc_cache(self, toks, **model_options):
         dc = DynamicCache()
@@ -1516,6 +1552,29 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         if "stop_strings" in user_params and "tokenizer" not in user_params:
             user_params["tokenizer"] = self._tokenizer
         generate_input.update(user_params)
+
+        first_token_labels = intrinsics.input._first_token_labels(
+            intrinsic_config.get("transformations")
+        )
+        if first_token_labels is not None:
+            # One-token readouts must see the model's own next-token
+            # distribution: raw LM-head logits, not processor-adjusted scores,
+            # so no generate() option (penalties, bad words, sampling warpers)
+            # can move the label probabilities. Every label is read exactly,
+            # so the top-K cut cannot hide one.
+            if "logits_processor" in generate_input:
+                # generate() records the raw logits after the processors run,
+                # so a processor that edits its input in place would still
+                # reach the readout.
+                raise ValueError(
+                    "A one-token decision readout cannot take a custom "
+                    "logits_processor: it would alter the label probabilities."
+                )
+            generate_input["output_logits"] = True
+            other_input["raw_logprobs"] = True
+            other_input["logprob_token_ids"] = _single_token_label_ids(
+                self._tokenizer, first_token_labels
+            )
 
         want_scores = bool(
             model_options.get(ModelOption.LOGITS)
@@ -3301,12 +3360,17 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         # under the lock `add_adapter()`'s composed-LocalFileBinding branch
         # briefly takes around its dict writes.
         with self._adapter_resolve_lock():
-            discovered = _discover_embedded_adapters(
+            discovered, skip_reasons = _discover_embedded_adapters(
                 source,
                 revision=revision,
                 cache_dir=cache_dir,
                 intrinsic_name=intrinsic_name,
             )
+            if skip_reasons:
+                self._adapter_skip_reasons = {
+                    **self._adapter_skip_reasons,
+                    **skip_reasons,
+                }
             names = []
             for adapter, config in discovered:
                 key = _composed_adapter_key(adapter)

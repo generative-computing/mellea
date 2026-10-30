@@ -170,6 +170,173 @@ backend = OpenAIBackend(
 )
 ```
 
+## Decisions: typed one-token answers
+
+Some Granite Switch checkpoints embed a **decision** adapter function (named
+`decision`). It answers a fixed-answer question about some state
+with a probability, a choice, or a score — read from the model's first
+generated token, so a decision costs one forward pass and is fast enough for
+control flow: `if` on a probability, route on a choice, threshold a score.
+
+### Serving
+
+Serve a checkpoint such as `ibm-granite/granite-switch-4.1-8b` via vLLM
+with `--max-logprobs 20` (the readout requests up to 20), installing the
+[granite-switch](https://pypi.org/project/granite-switch/) package alongside
+vLLM (the `GraniteSwitchForCausalLM` architecture is plugin-registered, not
+in upstream vLLM). On vLLM 0.30.0 and later the backend also asks the server
+for the logprobs of the exact label token ids (`logprob_token_ids`, ids taken
+from the server's `/tokenize`), so a label outside the top 20 cannot be
+missed. Other servers, and older vLLM, keep the top-20 request. Set up the
+backend as in
+[Use a local Granite Switch checkpoint](#use-a-local-granite-switch-checkpoint).
+
+Decisions also work against [llama.cpp](https://github.com/ggml-org/llama.cpp)'s
+`llama-server` and the HuggingFace backend (`LocalHFBackend` with
+`granite-switch[hf]>=0.1.1`). Runnable examples:
+[`decisions.py`](../../examples/intrinsics/decisions.py) (vLLM) and
+[`decisions_llamacpp.py`](../../examples/intrinsics/decisions_llamacpp.py).
+
+Both serving backends accept `adapter_revision` to pin the Hub revision
+used for embedded-adapter discovery. Pin it to the same commit your
+server loaded, so a mid-flight Hub update cannot silently change the
+adapter configuration your client reads:
+
+```python
+backend = OpenAIBackend(
+    model_id="ibm-granite/granite-switch-4.1-8b",
+    base_url="http://localhost:8000/v1",
+    load_embedded_adapters=True,
+    adapter_revision="<commit-sha>",
+)
+```
+
+For a step-by-step tutorial covering a realistic triage workflow,
+custom true/false descriptions, conversational state, and error
+handling, see [Tutorial: One-Token
+Decisions](../tutorials/09-one-token-decisions.md).
+
+### The API
+
+```python
+from mellea.stdlib.components.intrinsic import decisions
+
+# Predicate: a probability you threshold. Ordering operators delegate to
+# .probability, so this reads naturally:
+if decisions.decide(ticket, backend, "Does this require urgent attention?") >= 0.7:
+    escalate(ticket)
+
+# Choice: the best option key plus the distribution.
+route = decisions.choose(
+    ticket,
+    backend,
+    "Which team handles this?",
+    {"payments": "Payout failures and refunds", "account": "Login and account access"},
+)
+route.choice        # "payments"
+route.probabilities # {"payments": 0.91, "account": 0.09}
+
+# Score: expected level (may land between levels) plus per-level probabilities.
+sev = decisions.score(ticket, backend, "How urgent is this?",
+                      ["can wait a week", "this week", "today"])
+sev.score           # 1.7
+sev.probabilities   # {"0": 0.05, "1": 0.20, "2": 0.75}
+```
+
+`state` (the first argument) is the thing being judged: a string, a dict or
+list (rendered as JSON), or a `ChatContext` for conversational state. A
+`ChatContext` forwards its own messages as the state (no separate state turn
+is rendered for it); any other `Context` type raises a `TypeError`. A
+conversational state sends the conversation's turns as they are, without the
+`State:` header that plain data gets. The adapter was trained on a single
+block of state, so check long or multi-turn conversations on your own
+examples. A Pydantic model or dataclass is rendered as the JSON of its
+fields.
+All three helpers take `model_options`, but every decision-critical
+setting (`max_completion_tokens=1`, greedy `temperature=0.0`, `top_p` and
+`top_k`, logprobs, the sized `top_logprobs`, no streaming) is pinned by
+the capability contract. Logit-shaping options (`logit_bias`, the
+frequency, presence and repetition penalties, a custom `logits_processor`)
+are rejected too. A conflicting option raises rather than silently
+breaking the readout, whether it is passed per call or set on the backend.
+`enable_thinking` is the exception: the decision template has no thinking
+branch, so any value you set is dropped and the call proceeds.
+Special-token strings in your text are split with an invisible word
+joiner, so state, question and option text cannot forge a turn or switch
+the adapter. That covers the `<|name|>` family (role markers, end of text,
+adapter control tokens) and the tag tokens of the Switch checkpoints
+(`<tool_call>`, `<think>`, `<schema>` and the like), so tool and reasoning
+markup in a state is read as plain text. Ordinary text is unchanged.
+On `LocalHFBackend` the label probabilities are read from the raw
+logits at the label token ids, so no generation option can move them. The
+probabilities are the model's own and are not calibrated against ground
+truth; fit a calibration on labelled data before acting on a threshold.
+`choose` takes 2-10 options and `score` 2-10
+levels. When serving with vLLM, do not enable
+`--logprobs-mode processed_logprobs`; the decision readout expects
+raw logprobs, and applying temperature before returning them would
+distort the probabilities.
+
+### How it works
+
+The adapter is trained on a specific prompt layout: a fixed system prompt
+("You are a decision engine…"), a state turn (`State:\n<your state>`), and
+a decision turn (`### DECISION\nQuestion:\n…\nOptions:\nA: …\nB: …\n…`).
+Mellea assembles this layout from the capability's configuration and sends
+it to the model, which generates exactly one token — the answer label
+(`A`, `B`, `C`, …).
+
+The answer is decoded from that token's logprob distribution: the top-20
+logprobs are read from the response, the option labels are matched by exact
+token identity, and a restricted softmax over the used labels produces the
+probability distribution. For `decide`, the labels map to
+`[false, true]` (so `.probability` is P(true)); for `choose`, the
+argmax label maps back to the option key; for `score`, the expected level
+is computed from the per-level probabilities.
+
+The capability's prompt layout is carried by Mellea as an interim
+configuration, merged field by field into the checkpoint's published
+`io.yaml` at adapter discovery: a field the published file omits gets the
+carried value, and a field it publishes wins over the carried one (with a
+warning naming both). The merged configuration is validated at discovery;
+if it is invalid (for example, a published field breaks a placeholder the
+rewriter depends on), the decision capability is not registered and the
+error from `decide`/`choose`/`score` says why.
+
+### Answer semantics
+
+A bare `if answer:` is always `True` — test `answer.probability`, compare
+`answer.choice == "..."`, or compare a `PredicateAnswer`/`ScoreAnswer`
+directly against a number (ordering operators delegate to the primary
+field). `confidence` on choice and score answers is an uncalibrated
+distribution-shape statistic, not a probability of correctness. For a
+choice it is the top probability rescaled so a uniform distribution reads 0
+and certainty reads 1, `(max(p) − 1/K) / (1 − 1/K)`. For a score it is 1
+minus the expected distance from the most likely level, divided by the mean
+distance every level has from the scale midpoint. Both follow the OpenAI
+decisions specification's formulas, and both reproduce its worked examples.
+
+### Failure modes
+
+Failure is loud, never silent:
+
+- **Label-mass floor**: if the answer distribution does not concentrate on
+  the declared options (mass < 0.5), the call raises. This usually indicates a serving or template problem.
+- **Missing labels**: if the server cannot return enough logprobs to see
+  all option labels, the call raises with a server-configuration hint
+  (vLLM: check `--max-logprobs`).
+- **Marker contamination**: if the invocation marker (`### DECISION`)
+appears in the state, question, or options text (not just the decision
+turn), the call raises `AloraActivationError` — the adapter would activate
+  at the wrong position.
+- **Parameter conflicts**: a caller `model_options` key that conflicts
+  with a pinned decision-critical setting (e.g. `MAX_NEW_TOKENS: 64`)
+  raises rather than silently breaking the readout.
+
+Every decision is logged with its question, answer distribution, label
+mass, and latency; set `MELLEA_LOGS_LEVEL=DEBUG` to also log option
+descriptions and the full state.
+
 ## Answerability
 
 Check whether a set of retrieved documents can answer a given question:
