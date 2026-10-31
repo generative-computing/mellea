@@ -1,20 +1,19 @@
 # pytest: unit
-"""Implementing the Compactor protocol — structural and marker typing.
+"""Implementing custom compactors with structural and marker typing.
 
-The Compactor Protocol is structurally typed: any class with a
+The `Compactor` protocol is structurally typed: any class with a
 `compact(ctx, *, backend=None) -> ChatContext` method satisfies it.
 
-Two ways to use a custom compactor with a `ChatContext`:
+Two patterns for using custom compactors with `ChatContext`:
 
-- **Pattern 1 (wired into `ChatContext.add`)**: inherit from
-  `InlineCompactor` for simple compactors that don't make backend
-  calls. Backend-calling compactors should instead be wrapped in
-  `ThresholdCompactor` (which gates them by token count) before being
-  attached to a `ChatContext`.
-- **Pattern 2 (manual call)**: invoke `compact()` directly between
-  turns. Any object satisfying the structural `Compactor` protocol
-  works — no inheritance needed. Works for backend-calling compactors
-  or any other custom compactor.
+- **Pattern 1 (wired into `ChatContext.add`)**: Inherit from `InlineCompactor`
+  for lightweight compactors that don't make backend calls. Backend-calling
+  compactors should instead be wrapped in `ThresholdCompactor` before being attached.
+- **Pattern 2 (manual call)**: Invoke `compact()` directly between turns. Any
+  object satisfying the structural `Compactor` protocol works without inheritance.
+
+Usage:
+    uv run python docs/examples/context/custom_compactor.py
 """
 
 from mellea.stdlib.components.chat import Message

@@ -1,6 +1,17 @@
 # pytest: e2e, ollama, slow
+"""RAG over a PDF document using RichDocument and grounding context.
 
-"""Answer a question grounded in W3C's historical WCAG 1.0 checklist."""
+Demonstrates loading a remote PDF into a `RichDocument` component and using it
+as `grounding_context` in `m.instruct()` for document-grounded question answering.
+
+Prerequisites:
+    uv sync --extra docling
+    ollama serve
+    ollama pull granite4.2:3b
+
+Usage:
+    uv run python docs/examples/rag/mellea_pdf.py
+"""
 
 import mellea
 from mellea.stdlib.components.docs.richdocument import RichDocument

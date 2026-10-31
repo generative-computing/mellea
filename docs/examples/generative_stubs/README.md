@@ -1,60 +1,14 @@
 # Generative Stubs Examples
 
-This directory contains examples demonstrating the `@generative` decorator for creating type-safe, composable LLM functions.
+Examples demonstrating the `@generative` decorator for creating type-safe, composable LLM functions.
 
-## Files
+## Examples
 
-### [generative_stubs.py](./generative_stubs.py)
-Basic introduction to generative stubs with sentiment classification and text summarization.
-
-**Key Features:**
-- Using `@generative` decorator for type-safe LLM functions
-- Literal types for constrained outputs
-- Docstrings as prompts for the LLM
-- Simple function composition
-
-### [generate_with_context.py](./generate_with_context.py)
-Shows how to use generative stubs with custom context and grounding information.
-
-### [generative_gsm8k.py](./generative_gsm8k.py)
-Demonstrates using generative stubs for mathematical reasoning tasks (GSM8K dataset).
-
-### [generative_stubs_with_requirements.py](./generative_stubs_with_requirements.py)
-Combines generative stubs with requirements for validated outputs.
-
-### [investment_advice.py](./investment_advice.py)
-A more complex example using generative stubs for financial analysis.
-
-### [inter_module_composition/](inter_module_composition/)
-Subdirectory with examples of composing multiple generative functions together.
-
-## Concepts Demonstrated
-
-- **Type Safety**: Using Python type hints for structured outputs
-- **Docstring Prompts**: Leveraging docstrings as instructions to the LLM
-- **Composition**: Building complex workflows from simple generative functions
-- **Requirements**: Adding validation to generative functions
-- **Context Management**: Using grounding context with generative stubs
-
-## Basic Usage
-
-```python
-from mellea import generative, start_session
-from typing import Literal
-
-@generative
-def classify_sentiment(text: str) -> Literal["positive", "negative"]:
-    """Classify the sentiment of the given text."""
-
-@generative
-def generate_summary(text: str) -> str:
-    """Generate a concise summary under 20 words."""
-
-with start_session() as m:
-    sentiment = classify_sentiment(m, text="I love this!")
-    summary = generate_summary(m, text="Long document...")
-```
-
-## Related Documentation
-
-- See `mellea/stdlib/components/genstub.py` for implementation
+| File | Description |
+| :--- | :--- |
+| [`generative_stubs.py`](./generative_stubs.py) | Basic sentiment classification and text summarization with `@generative` functions and `Literal` return types. |
+| [`generate_with_context.py`](./generate_with_context.py) | Generative stubs with dynamic context and role modification. |
+| [`generative_gsm8k.py`](./generative_gsm8k.py) | Stepwise chain-of-thought mathematical reasoning on GSM8K problems using structured Pydantic models. |
+| [`generative_stubs_with_requirements.py`](./generative_stubs_with_requirements.py) | Enforcing preconditions and postcondition requirements on generative stub executions. |
+| [`investment_advice.py`](./investment_advice.py) | Multi-step financial advice workflow with semantic preconditions and compliance checks. |
+| [`inter_module_composition/`](./inter_module_composition/) | Modular generative pipeline composing summarization and decision-making modules. |

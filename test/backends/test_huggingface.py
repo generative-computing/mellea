@@ -3,6 +3,7 @@
 
 import asyncio
 import faulthandler
+import json
 import os
 import random
 import sys
@@ -129,6 +130,9 @@ def test_constraint_lora_with_requirement(session, backend) -> None:
     val_result = validation_outputs[0]
     assert isinstance(val_result, ValidationResult)
     assert "requirement_check" in str(val_result.reason)
+    assert isinstance(val_result.context.previous_node.node_data, ALoraRequirement)  # type: ignore
+    score = json.loads(str(val_result.reason))["requirement_check"]["score"]
+    assert bool(val_result) is (score > 0.5)
 
 
 @pytest.mark.qualitative
@@ -474,7 +478,10 @@ async def test_generate_with_lock_does_not_block_when_awaiting_value(backend) ->
     """
     # Params to modify depending on speed.
     token_generation_length = 100
-    timeout_in_seconds = 30
+    # Generous on purpose: the nightly GPU verification runs on shared nodes where a
+    # heavy co-tenant can slow generation well past 30s without anything being wrong
+    # (#1602). A genuine deadlock still fails here; it just takes longer to surface.
+    timeout_in_seconds = 120
 
     # Set up the inputs.
     ctx = ChatContext().add(Message("user", "hello"))

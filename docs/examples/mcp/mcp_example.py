@@ -1,11 +1,17 @@
 # pytest: skip_always
 """Example of an MCP server.
 
-You need to install the mcp package:
-uv pip install "mcp[cli]"
+A simple example to show how to write a MCP tool with Mellea and
+instruct-validate-repair. Being able to speak the tool language lets you integrate
+with Claude Desktop, Langflow, and other MCP clients.
 
-and run the example in MCP debug UI:
-uv run mcp dev docs/examples/mcp/mcp_example.py
+Prerequisites:
+    uv pip install "mcp[cli]"
+    ollama pull smollm2:1.7b
+    ollama serve
+
+Usage:
+    uv run mcp dev docs/examples/mcp/mcp_example.py
 """
 
 import io
@@ -19,11 +25,6 @@ from mellea.backends.ollama import OllamaModelBackend
 from mellea.core import MelleaLogger, ModelOutputThunk, Requirement
 from mellea.stdlib.requirements import simple_validate
 from mellea.stdlib.sampling import RejectionSamplingStrategy
-
-# #################
-# run MCP debug UI with: uv run mcp dev docs/examples/tutorial/mcp_example.py
-# ##################
-
 
 # Create an MCP server
 mcp = FastMCP("Demo")

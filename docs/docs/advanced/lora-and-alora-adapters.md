@@ -191,23 +191,23 @@ adapter is preferred whenever one is loaded, with three exceptions:
    is loaded but routing is suppressed for the entire backend instance.
 2. The requirement uses the `LLMaJRequirement` subtype explicitly — the caller is
    asking for LLM-as-a-judge regardless of what adapters are loaded.
-3. The adapter is unavailable — Mellea falls back to LLM-as-a-judge
-   automatically. This covers the adapter not being registered at all, and
+3. The adapter is unavailable (a plain `Requirement` only) — Mellea falls back
+   to LLM-as-a-judge automatically. This covers the adapter not being registered
+   at all, and an aLoRA that is registered but proven unable to activate for this prompt
    (see [aLoRA activation is not guaranteed by
-   loading](#alora-activation-is-not-guaranteed-by-loading)) an aLoRA that is
-   registered but proven unable to activate for this prompt: generation for
-   it is skipped entirely, so it never reaches the case below. This is the
-   *only* fallback case: if the adapter genuinely runs and its output fails
-   schema validation, `validate()` does not fall back. Instead it surfaces
-   the schema error on `ValidationResult.error` and fails the check closed
-   (`bool(result)` is `False`), so callers can tell an unparsable adapter
-   response apart from an ordinary "requirement not met".
+   loading](#alora-activation-is-not-guaranteed-by-loading)).
+
+If the adapter runs but its output fails schema validation, `validate()` does not
+fall back. Instead it surfaces the schema error on `ValidationResult.error` and
+fails the check closed (`bool(result)` is `False`), so callers can tell an
+unparsable adapter response apart from an ordinary "requirement not met".
 
 If you want to force the adapter path even when using `generate_from_context`
 directly (bypassing the normal `validate()` call), use `ALoraRequirement` from
 `mellea.stdlib.requirements` — this bypasses `default_to_constraint_checking_alora`,
-but still requires a matching adapter to actually be registered. If none is found,
-Mellea logs a warning and falls back to regular generation rather than erroring.
+but requires a matching adapter to be registered and usable. If the adapter is not
+found or cannot activate, Mellea raises `ValueError` rather than falling back. Use a
+plain `Requirement` if you want the automatic LLMaJ fallback.
 
 ### What the adapter sees
 
@@ -254,12 +254,13 @@ all. The check activates only where an aLoRA is actually the adapter in play tod
 
 - **A composed `Adapter` you registered yourself** with an aLoRA `LocalFileBinding`
   (`add_adapter()` directly, bypassing `resolve_adapter()`'s default).
-- **Automatic `Requirement` routing** (a plain `Requirement`, or an explicit
-  `ALoraRequirement`) *once* such an aLoRA is registered under the matching name --
-  routing itself does not register one. When the check fires here, it's caught and
-  falls back to LLM-as-a-judge, logging a warning -- exactly the same treatment as
-  "adapter not registered" already gets. Only an `ALoraRequirement` over a context
-  with nothing to judge still raises outright; that's a different, pre-existing case.
+- **Automatic `Requirement` routing** once such an aLoRA is registered under the
+  matching name -- routing itself does not register one. For a plain `Requirement`
+  (auto-rerouted as an optimisation), the check being caught falls back to
+  LLM-as-a-judge, logging a warning. For an explicit `ALoraRequirement`, it raises
+  `ValueError` (chained from the `AloraActivationError`) instead -- consistent with
+  how a missing adapter is handled, and for the same reason: a yes/no LLMaJ answer
+  cannot be parsed by the adapter's JSON `output_to_bool`.
 - **The deprecated `IntrinsicAdapter` shim**, but not on its first call: the shim's
   PEFT weights load lazily inside generation, so the check has nothing to compare
   against yet the first time. From the second call onward the weights are already

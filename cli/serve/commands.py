@@ -18,12 +18,33 @@ def serve(
     ),
     host: str = typer.Option("0.0.0.0", help="Host to bind to"),
     port: int = typer.Option(8080, help="Port to bind to"),
+    response_ttl: int = typer.Option(
+        1800,
+        min=1,
+        help="Seconds before stored responses expire (default: 1800 = 30 minutes). "
+        "Must be at least 1. Stored responses enable multi-turn sessions "
+        "via previous_response_id.",
+    ),
+    max_stored_responses: int = typer.Option(
+        1000,
+        min=1,
+        help="Maximum number of stored responses kept in memory (default: 1000). "
+        "Must be at least 1. When the cap is reached, the oldest stored "
+        "responses are dropped first.",
+    ),
 ):
     """Serve a Mellea program as an OpenAI-compatible HTTP endpoint.
 
     Loads a Python file containing a `serve` function and exposes it
     via a FastAPI server implementing the OpenAI chat completions API. The server
-    accepts `POST /v1/chat/completions` requests.
+    accepts `POST /v1/chat/completions` and `POST /v1/responses` requests.
+
+    Multi-turn sessions are supported on the Responses API: each completed
+    response is stored in memory and returned in its `id` field.  Pass that
+    `id` as `previous_response_id` in the next request to continue the
+    conversation without resending history.  Responses expire after
+    `--response-ttl` seconds, and at most `--max-stored-responses` entries
+    are kept (oldest dropped first).
 
     Prerequisites:
         Mellea installed with server dependency group (`uv add 'mellea[server]'`).
@@ -33,14 +54,23 @@ def serve(
         Starts a long-running HTTP server on the specified host and port.
         The `/v1/chat/completions` endpoint accepts OpenAI-format chat
         completion requests and returns `ChatCompletion` JSON responses.
+        The `/v1/responses` endpoint accepts Responses API requests and
+        supports multi-turn sessions via `previous_response_id`.
 
     Examples:
         m serve my_app.py --port 9000
+        m serve my_app.py --response-ttl 3600
+        m serve my_app.py --max-stored-responses 5000
 
     See Also:
         guide: integrations/m-serve
     """
-
     from cli.serve.app import run_server
 
-    run_server(script_path=script_path, host=host, port=port)
+    run_server(
+        script_path=script_path,
+        host=host,
+        port=port,
+        response_ttl=response_ttl,
+        max_stored_responses=max_stored_responses,
+    )

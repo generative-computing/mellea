@@ -129,8 +129,8 @@ class SamplingStrategy(abc.ABC):
 
     Attributes:
         loop_budget: Maximum number of generate/validate cycles. Defaults to `1`.
-        requirements: Global requirements evaluated on every sample. When set,
-            overrides per-call requirements. Defaults to `None`.
+        requirements: Global requirements evaluated on every sample, merged with
+            any per-call requirements. Defaults to `None`.
     """
 
     loop_budget: int = 1
@@ -387,8 +387,6 @@ class SamplingStrategy(abc.ABC):
     ) -> list[Requirement]:
         """Merge global strategy requirements with per-call requirements.
 
-        Global requirements (set on the strategy) supersede per-call requirements.
-
         Args:
             call_requirements: Requirements provided at the call site.
 
@@ -396,8 +394,8 @@ class SamplingStrategy(abc.ABC):
             Deduplicated list of requirements to use for this sampling call.
         """
         reqs: list[Requirement] = []
+        if call_requirements is not None:
+            reqs += call_requirements
         if self.requirements is not None:
             reqs += self.requirements
-        elif call_requirements is not None:
-            reqs += call_requirements
         return list(dict.fromkeys(reqs))

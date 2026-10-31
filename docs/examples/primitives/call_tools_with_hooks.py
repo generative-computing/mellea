@@ -1,12 +1,13 @@
 # pytest: ollama, e2e
-"""Advanced: Using call_tools() with tool execution hooks.
+"""Using call_tools() with plugin execution hooks.
 
-This example demonstrates using TOOL_PRE_INVOKE and TOOL_POST_INVOKE hooks
-with call_tools() to observe and control tool execution. Hooks fire even
-when using the low-level call_tools() primitive, providing full plugin support.
+Demonstrates using TOOL_PRE_INVOKE and TOOL_POST_INVOKE hooks with call_tools()
+to observe and control tool execution. Hooks fire even when using low-level
+functional primitives, providing full plugin support (allowlisting, auditing,
+and argument modification).
 
-Run:
-  uv run python docs/examples/primitives/call_tools_with_hooks.py
+Usage:
+    uv run python docs/examples/primitives/call_tools_with_hooks.py
 """
 
 import logging

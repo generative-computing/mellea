@@ -13,8 +13,9 @@ Helper factories such as `default_output_to_bool` make it easy to build requirem
 without boilerplate.
 """
 
+import inspect
 import re
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from copy import copy
 from dataclasses import dataclass
 from typing import Literal, final
@@ -290,8 +291,9 @@ class Requirement(Component[str]):
     Args:
         description (str | None): A natural-language description of the requirement. Sometimes included in
             `Instruction` prompts; use `check_only=True` to suppress this.
-        validation_fn (Callable[[Context], ValidationResult] | None): If provided, this function is executed
-            instead of LLM-as-a-Judge. The `bool()` of its return value defines pass/fail.
+        validation_fn (Callable[[Context], ValidationResult | Awaitable[ValidationResult]] | None): If provided, this function is executed
+            instead of LLM-as-a-Judge. May be sync or async (an awaitable result is awaited by
+            `validate`). The `bool()` of its return value defines pass/fail.
         output_to_bool (Callable[[CBlock | ModelOutputThunk | str], bool] | None): Translates LLM-as-a-Judge output to a boolean.
             Defaults to a "yes"-detection heuristic. May raise if the output does not match
             the expected format — see `validate` for details.
@@ -305,7 +307,7 @@ class Requirement(Component[str]):
         description (str | None): A natural-language description of the requirement.
         output_to_bool (Callable[[CBlock | ModelOutputThunk | str], bool] | None): Function used to convert LLM-as-a-Judge
             output into a boolean pass/fail result.
-        validation_fn (Callable[[Context], ValidationResult] | None): Optional custom validation
+        validation_fn (Callable[[Context], ValidationResult | Awaitable[ValidationResult]] | None): Optional custom validation
             function that bypasses the LLM-as-a-Judge strategy entirely.
         check_only (bool): When `True`, the requirement description is excluded from `Instruction`
             prompts to avoid influencing model output.
@@ -315,7 +317,10 @@ class Requirement(Component[str]):
     def __init__(
         self,
         description: str | None = None,
-        validation_fn: Callable[[Context], ValidationResult] | None = None,
+        validation_fn: Callable[
+            [Context], ValidationResult | Awaitable[ValidationResult]
+        ]
+        | None = None,
         *,
         output_to_bool: Callable[[CBlock | ModelOutputThunk | str], bool]
         | None = default_output_to_bool,
@@ -376,8 +381,9 @@ class Requirement(Component[str]):
     ) -> ValidationResult:
         """Chooses the appropriate validation strategy and applies it to the given context.
 
-        Uses `validation_fn` if one was provided, otherwise falls back to LLM-as-a-Judge
-        by generating a judgement response with the backend.
+        Uses `validation_fn` if one was provided (awaiting it first when it is async),
+        otherwise falls back to LLM-as-a-Judge by generating a judgement response with
+        the backend.
 
         Args:
             backend (Backend): The inference backend used when the LLM-as-a-Judge strategy is selected.
@@ -396,10 +402,19 @@ class Requirement(Component[str]):
         Raises:
             AssertionError: If the LLM-as-a-Judge strategy is selected but `output_to_bool`
                 is `None`, or if the context has no `ModelOutputThunk` as its last output.
+            ValueError: If `self` is an `ALoraRequirement` and the backend cannot use its
+                adapter (not registered, cannot activate, or context renders no conversation).
+                Raised by the backend during the `generate_from_context` call.
         """
         if self.validation_fn is not None:
-            # Python validation strategy
-            return self.validation_fn(ctx)
+            # Python validation strategy. Async validators (e.g. SOFAI's judge
+            # wrapping) hand back a coroutine; awaiting it here is what turns it
+            # into a ValidationResult instead of a truthy coroutine that fails
+            # every downstream check open (#1728).
+            raw = self.validation_fn(ctx)
+            if inspect.isawaitable(raw):
+                raw = await raw
+            return raw
         else:
             # LLMaJ validation strategy. This includes aLoRA because the backend generate call will appropriately dispatch.
             assert self.output_to_bool is not None
@@ -417,6 +432,17 @@ class Requirement(Component[str]):
             )
             await llm_as_a_judge_result.avalue()
 
+            # A backend may reroute a plain Requirement to an ALoraRequirement; parse
+            # with the output_to_bool of the requirement that ran (recorded in val_ctx).
+            output_to_bool = self.output_to_bool
+            executed = val_ctx.previous_node
+            executed_action = executed.node_data if executed is not None else None
+            if (
+                isinstance(executed_action, Requirement)
+                and executed_action.output_to_bool is not None
+            ):
+                output_to_bool = executed_action.output_to_bool
+
             # LLM-as-a-Judge validation often returns only "yes"/"no" because the
             # prompt asks for binary classification. However, repair strategies
             # display the reason to guide the model during repair iterations.
@@ -430,7 +456,7 @@ class Requirement(Component[str]):
                     reason = self.description
 
             try:
-                result = self.output_to_bool(llm_as_a_judge_result)
+                result = output_to_bool(llm_as_a_judge_result)
             except Exception as exc:
                 # A custom output_to_bool (e.g. the adapter-backed
                 # requirement_check_to_bool) can raise on unparsable output.

@@ -43,6 +43,34 @@ from mellea.backends.huggingface import LocalHFBackend
 backend = LocalHFBackend(model_id="ibm-granite/granite-4.1-3b")
 ```
 
+## How temperature affects scores
+
+Some adapter functions, such as `core.requirement_check()` and
+`core.check_certainty()`, return a likelihood-based score. The score is
+calculated from the model's token probabilities at the answer token, not from
+the label the model samples.
+
+On `LocalHFBackend`, this has three consequences when you pass `model_options`:
+
+- **Temperature rescales the score.** A `ModelOption.TEMPERATURE` other than
+  `0.0` (greedy) or `1.0` (no scaling) rescales the probability distribution
+  the score is read from, so the same input can produce a different score at
+  a different temperature. Compare scores only when they were produced with
+  the same settings.
+- **Temperature adds no randomness.** Repeated calls with the same input and
+  settings return the same score, even when sampling is enabled. The score does
+  not capture how often sampling would produce each label, and the sampled
+  label is not returned. If you need to measure variation across sampled
+  outputs, the score alone is not sufficient.
+- **`do_sample` does not add randomness either.** Setting `do_sample=True`
+  does not make the score vary between calls. Setting `do_sample=False` along
+  with a temperature makes Transformers ignore the temperature, so the score
+  matches the one you get with no temperature set. Mellea enables
+  `do_sample` for you when you pass a non-zero temperature.
+
+This describes `LocalHFBackend`; do not assume other backends compute scores
+the same way, and not every adapter function returns a likelihood score.
+
 ## Use an adapter bundled in an Ollama model
 
 Ollama serves adapter weights as part of a model tag; Mellea does not load the

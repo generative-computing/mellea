@@ -2964,7 +2964,7 @@ class TestStreamingHookCallSites:
     """STREAMING_START/EVENT/END fire across a stream() run consumed with async for."""
 
     async def test_start_and_end_fire_once_across_a_drained_stream(self) -> None:
-        """Draining a stream fires STREAMING_START and STREAMING_END once each, with payloads."""
+        """Draining a strategy-driven stream fires STREAMING_START/END once each, with payloads."""
         from mellea.stdlib.streaming import stream
 
         starts: list[Any] = []
@@ -2983,7 +2983,11 @@ class TestStreamingHookCallSites:
         register(on_start)
         register(on_end)
         async with await stream(
-            CBlock("prompt"), _StreamingBackend(), SimpleContext(), chunking="sentence"
+            CBlock("prompt"),
+            _StreamingBackend(),
+            SimpleContext(),
+            chunking="sentence",
+            strategy=RejectionSamplingStrategy(loop_budget=2),
         ) as s:
             async for _chunk in s:
                 pass
@@ -2992,11 +2996,15 @@ class TestStreamingHookCallSites:
         assert starts[0].has_requirements is False
         assert starts[0].requirement_count == 0
         assert starts[0].chunking_strategy == "SentenceChunking"
+        assert starts[0].strategy_name == "RejectionSamplingStrategy"
+        assert starts[0].loop_budget == 2
 
         assert len(ends) == 1
         assert ends[0].success is True
         assert ends[0].model == "stream-mock-model"
         assert ends[0].provider == "stream-mock-provider"
+        assert ends[0].attempts_used == 1
+        assert ends[0].strategy_name == "RejectionSamplingStrategy"
 
     async def test_streaming_end_fires_once_across_repeat_aclose(self) -> None:
         """aclose() fires STREAMING_END once; a repeat aclose() does not re-fire it."""

@@ -6,10 +6,13 @@
 Covers _extract_action_prompt, _parse_judgment, _extract_feedback, _select_best_attempt.
 """
 
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 
-from mellea.core import Requirement, TemplateRepresentation, ValidationResult
+from mellea.core import Backend, Requirement, ValidationResult
 from mellea.stdlib.components import Instruction, Message
+from mellea.stdlib.context import ChatContext
 from mellea.stdlib.sampling.sofai import SOFAISamplingStrategy
 
 # --- _parse_judgment ---
@@ -17,6 +20,37 @@ from mellea.stdlib.sampling.sofai import SOFAISamplingStrategy
 
 def test_parse_judgment_yes():
     assert SOFAISamplingStrategy._parse_judgment("Yes") is True
+
+
+async def test_judge_wrapped_requirement_returns_real_validation_result():
+    """The judge wrapping survives Requirement.validate instead of leaking a coroutine.
+
+    _create_judge_validate_function produces an async validation_fn; before the
+    fix, Requirement.validate returned its coroutine un-awaited, so the S1/S2
+    success checks read bool(coroutine) == True and every judge-backed run
+    passed vacuously (#1728).
+    """
+    judge_verdict = ValidationResult(False, reason="Requirement not satisfied.")
+    strategy = SOFAISamplingStrategy(
+        MagicMock(spec=Backend),
+        MagicMock(spec=Backend),
+        judge_backend=MagicMock(spec=Backend),
+    )
+    original = Requirement(description="must contain xylophone")
+
+    with patch.object(
+        SOFAISamplingStrategy,
+        "_validate_with_judge_backend",
+        new=AsyncMock(return_value=judge_verdict),
+    ):
+        wrapped = strategy._prepare_requirements_for_validation([original])[0]
+        result = await wrapped.validate(None, ChatContext())
+
+    assert isinstance(result, ValidationResult), (
+        f"expected a ValidationResult, got {type(result)}"
+    )
+    assert not result.as_bool()
+    assert result.reason == "Requirement not satisfied."
 
 
 def test_parse_judgment_yes_with_explanation():
@@ -167,6 +201,164 @@ def test_select_best_attempt_single():
     r = Requirement(description="r")
     val = [[(r, _vr(False))]]
     assert SOFAISamplingStrategy._select_best_attempt(val) == 0
+
+
+# --- repair() / S2 feedback (issue #1497) ---
+
+
+def test_repair_includes_description_when_reason_is_generic():
+    """A generic validator reason must not suppress the requirement description."""
+    from mellea.stdlib.context import ChatContext
+
+    req = Requirement(description="Response must be fewer than 100 words")
+    past_val = [
+        [(req, ValidationResult(result=False, reason="Requirement not satisfied."))]
+    ]
+    action, _ = SOFAISamplingStrategy.repair(
+        ChatContext(), ChatContext(), [], [], past_val
+    )
+    assert isinstance(action, Message)
+    assert "Response must be fewer than 100 words" in action.content
+    assert "Requirement not satisfied." not in action.content
+
+
+def test_repair_appends_meaningful_reason_as_detail():
+    """A meaningful validator reason is appended alongside the description."""
+    from mellea.stdlib.context import ChatContext
+
+    req = Requirement(description="Response must be fewer than 100 words")
+    past_val = [
+        [(req, ValidationResult(result=False, reason="The response was 150 words."))]
+    ]
+    action, _ = SOFAISamplingStrategy.repair(
+        ChatContext(), ChatContext(), [], [], past_val
+    )
+    assert isinstance(action, Message)
+    assert "Response must be fewer than 100 words" in action.content
+    assert "(detail: The response was 150 words.)" in action.content
+
+
+def test_repair_renders_placeholder_for_missing_description():
+    """A None description renders as [no description], not the literal None."""
+    from mellea.stdlib.context import ChatContext
+
+    req = Requirement(description=None)
+    past_val = [
+        [(req, ValidationResult(result=False, reason="Requirement not satisfied."))]
+    ]
+    action, _ = SOFAISamplingStrategy.repair(
+        ChatContext(), ChatContext(), [], [], past_val
+    )
+    assert isinstance(action, Message)
+    assert "* [no description]" in action.content
+
+
+def test_repair_skips_detail_when_reason_equals_description():
+    """A bare yes/no judge sets reason to the description; it must not repeat."""
+    from mellea.stdlib.context import ChatContext
+
+    req = Requirement(description="Response must be fewer than 100 words")
+    past_val = [
+        [
+            (
+                req,
+                ValidationResult(
+                    result=False, reason="Response must be fewer than 100 words"
+                ),
+            )
+        ]
+    ]
+    action, _ = SOFAISamplingStrategy.repair(
+        ChatContext(), ChatContext(), [], [], past_val
+    )
+    assert isinstance(action, Message)
+    assert action.content.count("Response must be fewer than 100 words") == 1
+
+
+def test_s2_best_attempt_feedback_includes_description_when_reason_is_generic():
+    """The S2 best-attempt prompt keeps the description under a generic reason."""
+    from unittest.mock import MagicMock
+
+    from mellea.core import Backend, ComputedModelOutputThunk, ModelOutputThunk
+    from mellea.stdlib.context import ChatContext
+
+    strategy = SOFAISamplingStrategy(MagicMock(spec=Backend), MagicMock(spec=Backend))
+    req = Requirement(description="State the opening time.")
+    scores = [
+        [(req, ValidationResult(result=False, reason="Requirement not satisfied."))]
+    ]
+    results = [
+        ComputedModelOutputThunk(ModelOutputThunk(value="The museum opens at 9am."))
+    ]
+    action, _ = strategy._prepare_s2_context(
+        "best_attempt",
+        Message("user", "State the museum's opening time."),
+        ChatContext(),
+        ChatContext(),
+        Message("user", "prior"),
+        results,
+        scores,
+        1,
+    )
+    assert isinstance(action, Message)
+    assert "State the opening time." in action.content
+    assert "Requirement not satisfied." not in action.content
+
+
+def test_s2_best_attempt_renders_placeholder_for_missing_description():
+    """The S2 best-attempt prompt renders [no description] for a None description."""
+    from unittest.mock import MagicMock
+
+    from mellea.core import Backend, ComputedModelOutputThunk, ModelOutputThunk
+    from mellea.stdlib.context import ChatContext
+
+    strategy = SOFAISamplingStrategy(MagicMock(spec=Backend), MagicMock(spec=Backend))
+    req = Requirement(description=None)
+    scores = [
+        [(req, ValidationResult(result=False, reason="Requirement not satisfied."))]
+    ]
+    results = [
+        ComputedModelOutputThunk(ModelOutputThunk(value="The museum opens at 9am."))
+    ]
+    action, _ = strategy._prepare_s2_context(
+        "best_attempt",
+        Message("user", "State the museum's opening time."),
+        ChatContext(),
+        ChatContext(),
+        Message("user", "prior"),
+        results,
+        scores,
+        1,
+    )
+    assert isinstance(action, Message)
+    assert "- [no description]" in action.content
+
+
+def test_s2_best_attempt_skips_detail_when_reason_equals_description():
+    """The S2 best-attempt prompt does not duplicate a description-valued reason."""
+    from unittest.mock import MagicMock
+
+    from mellea.core import Backend, ComputedModelOutputThunk, ModelOutputThunk
+    from mellea.stdlib.context import ChatContext
+
+    strategy = SOFAISamplingStrategy(MagicMock(spec=Backend), MagicMock(spec=Backend))
+    req = Requirement(description="State the opening time.")
+    scores = [[(req, ValidationResult(result=False, reason="State the opening time."))]]
+    results = [
+        ComputedModelOutputThunk(ModelOutputThunk(value="The museum opens at 9am."))
+    ]
+    action, _ = strategy._prepare_s2_context(
+        "best_attempt",
+        Message("user", "State the museum's opening time."),
+        ChatContext(),
+        ChatContext(),
+        Message("user", "prior"),
+        results,
+        scores,
+        1,
+    )
+    assert isinstance(action, Message)
+    assert action.content.count("State the opening time.") == 1
 
 
 if __name__ == "__main__":

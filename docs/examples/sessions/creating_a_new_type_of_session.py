@@ -1,4 +1,13 @@
 # pytest: huggingface, qualitative, e2e, slow
+"""Custom session subclass with Guardian safety filtering.
+
+Demonstrates creating a custom session type by subclassing `MelleaSession` to
+intercept and filter incoming chat messages against safety criteria using
+Granite Guardian adapter models.
+
+Usage:
+    uv run python docs/examples/sessions/creating_a_new_type_of_session.py
+"""
 
 from collections.abc import Iterable
 from typing import Literal
@@ -20,9 +29,6 @@ from mellea.core import (
 from mellea.stdlib.components import Document, Message
 from mellea.stdlib.components.intrinsic import guardian
 from mellea.stdlib.context import ChatContext
-
-# This example shows how you might go about creating a new type of session.
-# Here, we want to filter out potentially harmful chat messages from the user.
 
 
 class ChatCheckingSession(MelleaSession):

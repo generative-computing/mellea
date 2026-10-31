@@ -183,7 +183,14 @@ def run(
         typer.Option(help='Name for the output files. Defaults to "m_decomp_result".'),
     ] = "m_decomp_result",
     input_file: Annotated[
-        str | None, typer.Option(help="Path to a text file containing user queries.")
+        str | None,
+        typer.Option(
+            help=(
+                "Path to a text file of task prompts. "
+                "Each non-empty physical line is one task job. "
+                'Literal "\\n" sequences expand to newlines within that job.'
+            )
+        ),
     ] = None,
     model_id: Annotated[
         str,
@@ -277,8 +284,10 @@ def run(
         out_name: Base name used for the per-job output directory and generated
             files.
         input_file: Optional path to a text file containing one or more task
-            prompts. Each non-empty line is processed as a separate task job.
-            When omitted, the command prompts interactively for one task.
+            prompts. Each non-empty physical line is one task job. Literal
+            backslash-n sequences in a line expand to newlines within that
+            job and do not create additional jobs. When omitted, the command
+            prompts interactively for one task.
         model_id: Model identifier used for all decomposition pipeline stages.
         backend: Inference backend used to execute model calls.
         backend_req_timeout: Request timeout in seconds for backend inference calls.
@@ -363,7 +372,9 @@ def run(
             )
 
             raw_lines = input_path.read_text(encoding="utf-8").splitlines()
-            task_jobs = [line.strip() for line in raw_lines if line.strip()]
+            task_jobs = [
+                line.strip().replace("\\n", "\n") for line in raw_lines if line.strip()
+            ]
             user_input_variable = input_var
 
             logger.info("prompt source  : file")

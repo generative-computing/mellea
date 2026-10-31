@@ -36,6 +36,7 @@ class TestPythonCodeGenerationSampling:
         assert preset.requirements is not None
         assert isinstance(preset.requirements, list)
         assert preset.strategy is not None
+        assert preset.strategy.requirements is None
         assert preset.feedback_strategy_name == "python_code_repair"
         assert preset.description is not None
         assert preset.example_usage is not None
@@ -111,6 +112,7 @@ class TestPythonPlottingSampling:
         assert preset.requirements is not None
         assert isinstance(preset.requirements, list)
         assert preset.strategy is not None
+        assert preset.strategy.requirements is None
         assert preset.feedback_strategy_name == "matplotlib_plotting_repair"
         assert preset.description is not None
 
