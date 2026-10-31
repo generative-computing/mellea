@@ -15,14 +15,16 @@ When an event fires during Mellea's execution (e.g., "about to call the LLM" or 
 2. **Runs plugins in priority order**, grouped by execution mode
 3. **Returns a result** — continue unchanged, continue with a modified payload, or block execution entirely
 
-Plugins are organized into six hook categories:
+Plugins are organized into eight hook categories:
 
 - **Session Lifecycle** — session init, reset, and cleanup (`session_pre_init`, `session_post_init`, `session_reset`, `session_cleanup`)
 - **[Component](../reference/glossary.md#component) Lifecycle** — before and after component execution (`component_pre_execute`, `component_post_success`, `component_post_error`)
-- **Generation Pipeline** — before and after LLM calls (`generation_pre_call`, `generation_post_call`, `generation_error`)
+- **Generation Pipeline** — before and after LLM calls, including batch calls and mid-generation events (`generation_pre_call`, `generation_post_call`, `generation_error`, `generation_batch_pre_call`, `generation_batch_post_call`, `generation_batch_error`, `generation_event`)
 - **Validation** — before and after [requirement](../reference/glossary.md#requirement) checks (`validation_pre_check`, `validation_post_check`)
 - **Sampling Pipeline** — sampling loop events (`sampling_loop_start`, `sampling_iteration`, `sampling_repair`, `sampling_loop_end`)
 - **Tool Execution** — before and after tool invocations (`tool_pre_invoke`, `tool_post_invoke`)
+- **Adapter Function Lifecycle** — adapter function invocations and their phases (`adapter_function_invocation_complete`, `adapter_function_phase_complete`)
+- **Streaming Pipeline** — `stream` runs (`streaming_start`, `streaming_event`, `streaming_end`)
 
 :::note
 Plugins require the hooks extra: `pip install 'mellea[hooks]'`
@@ -563,6 +565,57 @@ async def cap_tokens(payload, ctx):
 - Error telemetry and alerting on backend failures
 - Logging structured error information for debugging
 
+#### `generation_batch_pre_call`
+
+**Fires:** Once, just before a batch generation request is sent to the backend.
+
+**Payload fields:** `actions`, `generation_id`, `model_options`, `format`, `tool_calls`, `num_actions`, `model`, `provider`
+
+**Writable fields:** `model_options`, `format`, `tool_calls`
+
+**Use cases:**
+
+- Enforcing limits on batch size or model options
+- Correlating a batch with its result through `generation_id`
+
+#### `generation_batch_post_call`
+
+**Fires:** Once, after a batch generation succeeds.
+
+**Payload fields:** `generation_id`, `model_outputs`, `usage`, `model`, `provider`, `latency_ms`
+
+**Writable fields:** *(observe-only)*
+
+**Use cases:**
+
+- Token usage accounting for the whole batch
+- Latency metrics per batch call
+
+#### `generation_batch_error`
+
+**Fires:** Once, when a batch generation request fails.
+
+**Payload fields:** `generation_id`, `exception`, `model`, `provider`, `latency_ms`
+
+**Writable fields:** *(observe-only)*
+
+**Use cases:**
+
+- Error telemetry for batch calls
+
+#### `generation_event`
+
+**Fires:** When a milestone happens during a single generation. Subscribers branch on `event_name` and read the keys of `data` for that event. The known event is `chunk_processed`, emitted once per streamed chunk during `astream()` when `MELLEA_GENERATION_CHUNK_EVENTS` is set.
+
+**Payload fields:** `generation_id`, `event_name`, `model`, `provider`, `data`
+
+**Writable fields:** *(observe-only)*
+
+**Use cases:**
+
+- Measuring time between streamed chunks
+- Progress reporting during long generations
+
 ---
 
 ### Validation
@@ -694,6 +747,86 @@ The payload includes an `is_control_flow` field that is `True` for framework con
 
 ---
 
+### Adapter function lifecycle
+
+#### `adapter_function_invocation_complete`
+
+**Fires:** After an adapter function invocation finishes, whether it succeeded or not.
+
+**Payload fields:** `name`, `revision`, `binding_type`, `adapter_type`, `outcome` (`"success"`, `"schema_error"` or `"error"`), `error`
+
+**Writable fields:** *(observe-only)*
+
+**Use cases:**
+
+- Counting adapter invocations by outcome
+- Logging adapter failures
+
+:::note
+The span of work `outcome` covers depends on `binding_type`, so avoid aggregating across bindings without separating them.
+:::
+
+#### `adapter_function_phase_complete`
+
+**Fires:** After one phase of an adapter function invocation finishes.
+
+**Payload fields:** `name`, `phase` (`"prepare"`, `"activate"`, `"generate"`, `"parse"` or `"deactivate"`), `duration_ms`
+
+**Writable fields:** *(observe-only)*
+
+**Use cases:**
+
+- Timing each phase of an adapter invocation
+
+:::warning
+Do not synchronously call `resolve_adapter()`, `register_embedded_adapter_model()` or `add_adapter()` with a composed `Adapter` on the same backend from a handler for this hook. They hold a backend-level lock that the hook's caller is still waiting on, which deadlocks.
+:::
+
+---
+
+### Streaming pipeline
+
+#### `streaming_start`
+
+**Fires:** Before a `stream` run starts.
+
+**Payload fields:** `streaming_id`, `has_requirements`, `requirement_count`, `chunking_strategy`, `strategy_name`, `loop_budget`
+
+**Writable fields:** *(observe-only)*
+
+**Use cases:**
+
+- Starting a trace span for the run
+- Recording which requirements and strategy drive the run
+
+#### `streaming_event`
+
+**Fires:** Once per `StreamEvent` produced during a `stream` run.
+
+**Payload fields:** `streaming_id`, `event`, `requirements`, `strategy_name`
+
+**Writable fields:** *(observe-only)*
+
+**Use cases:**
+
+- Forwarding stream events to a monitoring system
+- Counting retries and quick-check results
+
+#### `streaming_end`
+
+**Fires:** When a `stream` run finishes: on natural completion, on an early exit after a validation failure, and on an unhandled exception. Use `success` and `exception` to tell them apart.
+
+**Payload fields:** `streaming_id`, `success`, `failure_reason`, `exception`, `model`, `provider`, `full_text_length`, `attempts_used`, `strategy_name`, `sampling_success`
+
+**Writable fields:** *(observe-only)*
+
+**Use cases:**
+
+- Closing the trace span opened in `streaming_start`
+- Reporting attempts used and final outcome
+
+---
+
 ### Hook payload policy table
 
 This table summarizes which fields are writable for each hook type. Changes to non-writable fields are silently discarded.
@@ -710,6 +843,10 @@ This table summarizes which fields are writable for each hook type. Changes to n
 | `generation_pre_call` | `model_options`, `format`, `tool_calls` |
 | `generation_post_call` | *(observe-only)* |
 | `generation_error` | *(observe-only)* |
+| `generation_batch_pre_call` | `model_options`, `format`, `tool_calls` |
+| `generation_batch_post_call` | *(observe-only)* |
+| `generation_batch_error` | *(observe-only)* |
+| `generation_event` | *(observe-only)* |
 | `validation_pre_check` | `requirements`, `model_options` |
 | `validation_post_check` | `results`, `all_validations_passed` |
 | `sampling_loop_start` | `loop_budget` |
@@ -718,6 +855,11 @@ This table summarizes which fields are writable for each hook type. Changes to n
 | `sampling_loop_end` | *(observe-only)* |
 | `tool_pre_invoke` | `model_tool_call` |
 | `tool_post_invoke` | `tool_output` |
+| `adapter_function_invocation_complete` | *(observe-only)* |
+| `adapter_function_phase_complete` | *(observe-only)* |
+| `streaming_start` | *(observe-only)* |
+| `streaming_event` | *(observe-only)* |
+| `streaming_end` | *(observe-only)* |
 
 :::warning
 Only `SEQUENTIAL` and `TRANSFORM` modes can modify payloads. `AUDIT`, `CONCURRENT`, and `FIRE_AND_FORGET` modes have their modifications silently discarded regardless of the policy table.
@@ -1041,7 +1183,7 @@ from mellea.plugins import (
 | `block(reason, *, code, details)` | Create a blocking `PluginResult` |
 | `modify(payload, **field_updates)` | Create a modifying `PluginResult` via `model_copy` |
 | `is_internal_tool(tool_name)` | Returns `True` if the tool is a framework control-flow tool (e.g. `final_answer`) |
-| `HookType` | Enum with all 18 hook types |
+| `HookType` | Enum with all 27 hook types |
 | `PluginMode` | Enum: `SEQUENTIAL`, `TRANSFORM`, `AUDIT`, `CONCURRENT`, `FIRE_AND_FORGET` |
 | `PluginResult` | Typed result with `continue_processing`, `modified_payload`, and `violation` |
 | `PluginViolationError` | Exception with `.reason`, `.code`, `.hook_type`, `.plugin_name` |
