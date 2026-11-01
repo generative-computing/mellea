@@ -211,6 +211,24 @@ class Message(Component["Message"]):
 
     def _parse(self, computed: ModelOutputThunk) -> "Message":
         """Parse the model output into a Message."""
+        return Message._parse_output(computed)
+
+    @staticmethod
+    def _parse_output(computed: ModelOutputThunk) -> "Message":
+        """Parse a computed output into a `Message`, preserving tool calls.
+
+        Provider-aware and instance-independent so replay paths outside a
+        `Message` component (for example `ChatFormatter.to_chat_messages`
+        rebuilding a turn parsed by a text-only component such as
+        `Instruction`) can reuse the same parsing.
+
+        Args:
+            computed (ModelOutputThunk): The computed output to parse.
+
+        Returns:
+            Message: The parsed assistant message; carries `tool_calls` and
+                captured reasoning when the provider response provides them.
+        """
         # TODO: There's some specific logic for tool calls. Storing that here for now.
         # We may eventually need some generic parsing logic that gets run for all Component types...
         provider = computed.raw.provider
