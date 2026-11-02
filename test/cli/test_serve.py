@@ -334,6 +334,51 @@ class TestChatEndpoint:
         assert errors[0]["type"] == "greater_than_equal"
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize("content", [None, []])
+    async def test_empty_content_rejected(self, mock_module, content):
+        """A user message with null or empty-list content returns 400."""
+        request = ChatCompletionRequest(
+            model="test-model", messages=[ChatMessage(role="user", content=content)]
+        )
+
+        endpoint = make_chat_endpoint(mock_module)
+        response = await endpoint(request)
+
+        assert isinstance(response, JSONResponse)
+        assert response.status_code == 400
+        # serve() was never called with a None user turn
+        mock_module.serve.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_null_content_allowed_for_assistant_tool_calls(self, mock_module):
+        """An assistant turn with tool calls may omit content (OpenAI spec)."""
+        request = ChatCompletionRequest(
+            model="test-model",
+            messages=[
+                ChatMessage(role="user", content="What's the weather?"),
+                ChatMessage(
+                    role="assistant",
+                    content=None,
+                    tool_calls=[
+                        {
+                            "id": "call_1",
+                            "type": "function",
+                            "function": {"name": "get_weather", "arguments": "{}"},
+                        }
+                    ],
+                ),
+                ChatMessage(role="tool", content="Sunny, 25C", tool_call_id="call_1"),
+            ],
+        )
+
+        mock_module.serve.return_value = ModelOutputThunk("Test response")
+        endpoint = make_chat_endpoint(mock_module)
+        response = await endpoint(request)
+
+        assert isinstance(response, ChatCompletion)
+        mock_module.serve.assert_called_once()
+
+    @pytest.mark.asyncio
     async def test_client_options_not_passed_when_not_declared(
         self, mock_module, sample_request
     ):

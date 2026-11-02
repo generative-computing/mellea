@@ -358,6 +358,36 @@ def _build_model_options_from_response_request(request: ResponseRequest) -> dict
     return result
 
 
+def _validate_message_content(messages: list) -> None:
+    """Reject messages whose content is null or an empty list.
+
+    Both endpoints accept `ChatMessage` requests whose `content` may be
+    `None` or `[]` at pydantic-parse time, so a user turn without content
+    would otherwise reach `serve()` as a `None` turn and return 200. The one
+    legitimate empty case is an assistant turn carrying tool calls — the
+    OpenAI APIs allow `content: null` there — so those are exempt.
+
+    Args:
+        messages: The message list about to be passed to `serve()`.
+
+    Raises:
+        ValueError: If a message has null or empty content without tool
+            calls (the endpoints convert this to a 400, matching how
+            `input_file` content is handled).
+    """
+    for index, message in enumerate(messages):
+        if message.content is None or message.content == []:
+            if message.role == "assistant" and (
+                message.tool_calls or message.function_call
+            ):
+                continue
+            raise ValueError(
+                f"Message at index {index} (role={message.role!r}) has null "
+                "or empty content. Only assistant messages with tool calls "
+                "may omit content."
+            )
+
+
 def _convert_input_content_to_message_content(
     content: str | list[InputContent] | None,
 ) -> str | list | None:
@@ -631,6 +661,8 @@ def make_responses_endpoint(module):
             # previous_response_id this reduces to instructions + input.
             messages = instruction_messages + prior_messages + input_messages
 
+            _validate_message_content(messages)
+
             # The conversation to persist: prior turns + this request's new
             # input. Instructions are excluded on purpose (see note above) so
             # they are not re-applied on the next turn.
@@ -818,6 +850,10 @@ def make_chat_endpoint(module):
                     error_type="invalid_request_error",
                     param="n",
                 )
+
+            # Reject null/empty message content before it reaches serve()
+            # as a None turn (400, matching the responses endpoint).
+            _validate_message_content(request.messages)
 
             completion_id = "chatcmpl-" + "".join(
                 secrets.choice(_BASE62) for _ in range(29)
