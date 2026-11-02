@@ -1,57 +1,16 @@
 # Asynchronous Mellea Workflows
 
 This directory contains examples of using Mellea with asynchronous Python patterns, including streaming responses and concurrent operations.
-
-## Prerequisites
-
-These examples use async/await and require Python 3.11+. Most examples also need a running Ollama instance:
-
-```bash
-ollama serve
-```
+For the concepts, see [Use Async and Streaming](../../docs/how-to/use-async-and-streaming.md)
+and [Tutorial 02: Streaming and Async](../../docs/tutorials/02-streaming-and-async.md).
 
 ## Examples
 
-### Basic Async Usage
-
-```bash
-uv run async-simple.py
-```
-
-Demonstrates:
-- Async session initialization
-- Using `ainstruct()` for asynchronous instruction execution
-- Streaming responses with `ModelOption.STREAM`
-- Lazy compute evaluation
-
-### Async with Lazy Compute
-
-```bash
-uv run async-with-lazy-compute.py
-```
-
-Demonstrates:
-- Combining async operations with lazy evaluation
-- Creating ModelOutputThunk objects
-- Deferred computation patterns
-
-### Streaming with the Async Iterator
-
-```bash
-uv run async-iterator.py
-```
-
-Demonstrates:
-- Consuming a streamed response with `async for delta in response`
-- Using `async with` so an early exit cancels the in-flight generation
-
-## Key Concepts
-
-**Async Backend Operations**: Mellea backends support async methods (`ainstruct`, `aact`, `achat`) that allow concurrent execution without blocking.
-
-**Streaming**: Set `ModelOption.STREAM: True` in model options to receive responses as they're generated, useful for real-time feedback or long-running operations.
-
-**Lazy Compute**: Defer execution to later in your program using lazy evaluation patterns.
+| File | Description |
+| :--- | :--- |
+| [`async-simple.py`](./async-simple.py) | Async session initialization, `ainstruct()` for asynchronous instruction execution, streaming responses with `ModelOption.STREAM`, and lazy compute evaluation. |
+| [`async-with-lazy-compute.py`](./async-with-lazy-compute.py) | Combining async operations with lazy evaluation, creating `ModelOutputThunk` objects, and deferred computation patterns. |
+| [`async-iterator.py`](./async-iterator.py) | Consuming a streamed response with `async for delta in response`, using `async with` so an early exit cancels the in-flight generation. |
 
 ## See Also
 

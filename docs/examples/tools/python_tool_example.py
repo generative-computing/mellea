@@ -5,7 +5,9 @@ Each example uses `tier="local_unsafe"` — an explicit trust decision meaning
 the model-generated code will run as a direct subprocess with no container
 isolation, no filesystem or network restrictions, and no memory/CPU limits.
 This tier is appropriate for trusted, development-time use.  For production or
-untrusted code, use `tier="docker"` or `tier="docker_unsafe"`.
+untrusted code, use `tier="docker"` or `tier="docker_unsafe"`. See the "Execution
+tiers" section of https://docs.mellea.ai/how-to/tools-and-agents#execution-tiers
+for the available tiers and when to use each.
 
 Package-install story
 ---------------------
@@ -21,6 +23,9 @@ Pass `artifact_dir=<Path>` to collect files the code writes.  Only files
 produced by a **successful** execution are surfaced.  When `artifact_dir` is
 omitted, a per-call tempdir is created; it is kept alive as long as the
 returned `ExecutionResult` holds artifacts, and cleaned up otherwise.
+
+Usage:
+    uv run python docs/examples/tools/python_tool_example.py
 """
 
 import tempfile

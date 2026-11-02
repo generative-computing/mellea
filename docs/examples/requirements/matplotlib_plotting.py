@@ -3,6 +3,12 @@
 
 This example demonstrates how to use MatplotlibHeadlessBackend, PlotFileSaved,
 and PlotDependenciesAvailable requirements to validate code that generates plots.
+
+Prerequisites:
+    uv pip install matplotlib numpy
+
+Usage:
+    uv run python docs/examples/requirements/matplotlib_plotting.py
 """
 
 from mellea.core import ModelOutputThunk

@@ -14,6 +14,14 @@ Demonstrates:
   interleaved
 - Using `payload.streaming_id` to tell interleaved events apart — the same key a
   real consumer (dashboard, metrics sink, websocket) would demultiplex on
+
+Prerequisites:
+    uv sync --extra hooks
+    ollama serve
+    ollama pull granite4.2:3b
+
+Usage:
+    uv run python docs/examples/streaming/multi_stream_events.py
 """
 
 import asyncio

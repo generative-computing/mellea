@@ -33,6 +33,11 @@ from dataclasses import dataclass
 from typing import Generic
 
 from ...core import Requirement, S, SamplingStrategy
+from ..requirements.plotting.matplotlib import (
+    MatplotlibHeadlessBackend,
+    PlotDependenciesAvailable,
+    PlotFileSaved,
+)
 from ..requirements.python_tools import python_code_generation_requirements
 from .feedback import ModelFriendlyRepairStrategy
 
@@ -131,9 +136,7 @@ def python_code_generation_sampling(
         use_sandbox=use_sandbox,
     )
 
-    strategy = ModelFriendlyRepairStrategy(
-        loop_budget=loop_budget, requirements=requirements
-    )
+    strategy = ModelFriendlyRepairStrategy(loop_budget=loop_budget)
 
     return SamplingPreset(
         requirements=requirements,
@@ -208,18 +211,6 @@ def python_plotting_sampling(
             ...     loop_budget=2,
             ... )
     """
-    try:
-        from ..requirements.plotting.matplotlib import (
-            MatplotlibHeadlessBackend,
-            PlotDependenciesAvailable,
-            PlotFileSaved,
-        )
-    except ImportError as e:
-        raise ImportError(
-            "Matplotlib requirements not available. "
-            "Install with: uv sync --extra plotting"
-        ) from e
-
     python_reqs = python_code_generation_requirements(
         allowed_imports=allowed_imports,
         output_limit_chars=10_000,
@@ -235,9 +226,7 @@ def python_plotting_sampling(
 
     all_reqs = python_reqs + plotting_reqs
 
-    strategy = ModelFriendlyRepairStrategy(
-        loop_budget=loop_budget, requirements=all_reqs
-    )
+    strategy = ModelFriendlyRepairStrategy(loop_budget=loop_budget)
 
     return SamplingPreset(
         requirements=all_reqs,

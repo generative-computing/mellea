@@ -1,5 +1,17 @@
 # pytest: ollama, e2e
-"""Example demonstrating the @tool decorator for cleaner tool definitions."""
+"""Example demonstrating the @tool decorator for cleaner tool definitions.
+
+The default run uses mock tools and needs no model. `example_with_llm()` passes the
+tools to a model; it is commented out at the bottom of the file, so uncomment it
+and start Ollama to try it.
+
+Prerequisites:
+    ollama pull granite4.2:3b
+    ollama serve
+
+Usage:
+    uv run python docs/examples/tools/tool_decorator_example.py
+"""
 
 import ast
 

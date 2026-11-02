@@ -1,4 +1,13 @@
 # pytest: ollama, e2e
+"""Sampling and evaluation strategies with lazy computations.
+
+Prerequisites:
+    ollama serve
+    ollama pull granite4:latest
+
+Usage:
+    uv run python docs/examples/melp/lazy_fib_sample.py
+"""
 
 import asyncio
 
