@@ -15,7 +15,13 @@ from cli.serve.app import (
     _response_store,
     make_responses_endpoint,
 )
-from cli.serve.models import InputContent, Response, ResponseInputItem, ResponseRequest
+from cli.serve.models import (
+    ChatCompletionMessageToolCall,
+    InputContent,
+    Response,
+    ResponseInputItem,
+    ResponseRequest,
+)
 from cli.serve.streaming import stream_response_chunks
 from mellea.backends.model_options import ModelOption
 from mellea.core.base import ModelOutputThunk
@@ -1127,6 +1133,70 @@ class TestResponsesEndpointNonStreaming:
         )
         assert isinstance(response, Response)
         assert response.output_text == "ok"
+
+    @pytest.mark.asyncio
+    async def test_empty_function_call_output_allowed(self, mock_module):
+        """A tool result with empty output is accepted (OpenAI allows "")."""
+        req = ResponseRequest(
+            model="m",
+            input=[
+                ResponseInputItem(type="function_call_output", call_id="c1", output="")
+            ],
+        )
+        mock_module.serve.return_value = ModelOutputThunk("ok")
+        endpoint = make_responses_endpoint(mock_module)
+        resp = await endpoint(req)
+        assert isinstance(resp, Response)
+
+    @pytest.mark.asyncio
+    async def test_empty_text_block_function_call_output_allowed(self, mock_module):
+        """A tool result whose output parts are all empty text is accepted."""
+        req = ResponseRequest(
+            model="m",
+            input=[
+                ResponseInputItem(
+                    type="function_call_output",
+                    call_id="c1",
+                    output=[InputContent(type="input_text", text="")],
+                )
+            ],
+        )
+        mock_module.serve.return_value = ModelOutputThunk("ok")
+        endpoint = make_responses_endpoint(mock_module)
+        resp = await endpoint(req)
+        assert isinstance(resp, Response)
+
+    @pytest.mark.asyncio
+    async def test_instructions_assistant_tool_calls_allowed(self, mock_module):
+        """An assistant item with tool_calls keeps its exemption in instructions."""
+        req = ResponseRequest(
+            model="m",
+            instructions=[
+                ResponseInputItem(
+                    role="assistant",
+                    content=None,
+                    tool_calls=[
+                        ChatCompletionMessageToolCall(
+                            id="call_1",
+                            type="function",
+                            function={"name": "get_weather", "arguments": "{}"},
+                        )
+                    ],
+                )
+            ],
+            input="hello",
+        )
+        mock_module.serve.return_value = ModelOutputThunk("ok")
+        endpoint = make_responses_endpoint(mock_module)
+        resp = await endpoint(req)
+        assert isinstance(resp, Response)
+
+        # The instructions item kept its tool_calls through conversion.
+        messages = mock_module.serve.call_args.kwargs["input"]
+        assert messages[0].role == "assistant"
+        assert messages[0].tool_calls is not None
+        assert messages[1].role == "user"
+        assert messages[1].content == "hello"
 
     @pytest.mark.asyncio
     async def test_client_options_passed_when_declared(

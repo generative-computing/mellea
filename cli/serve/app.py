@@ -361,13 +361,14 @@ def _build_model_options_from_response_request(request: ResponseRequest) -> dict
 class _InvalidMessageContentError(ValueError):
     """Raised by `_validate_message_content`, carrying the failing field path.
 
-    Attributes:
+    Args:
+        message: Human-readable error text for the 400 response body.
         param: Request field path of the offending message (e.g.
             `messages[0].content`), surfaced in the 400 response's `param`.
     """
 
     def __init__(self, message: str, param: str) -> None:
-        """Stores the param path alongside the human-readable message."""
+        """Stores both arguments verbatim on the error."""
         super().__init__(message)
         self.param = param
 
@@ -394,12 +395,13 @@ def _validate_message_content(
 ) -> None:
     """Reject messages whose content is null, empty, or contentless blocks.
 
-    Both endpoints accept `ChatMessage` requests whose `content` may be
-    `None`, `""`, `[]`, or a list of empty text blocks at pydantic-parse
-    time, so a user turn without content would otherwise reach `serve()`
-    as an empty turn and return 200. The one legitimate empty case is an
-    assistant turn carrying tool calls — the OpenAI APIs allow
-    `content: null` there — so those are exempt.
+    After pydantic parsing and input conversion, both endpoints can hand
+    `serve()` a `ChatMessage` whose `content` is `None`, `""`, `[]`, or a
+    list of empty text blocks, so a turn without content would otherwise
+    reach `serve()` and return 200. Two kinds of turn may legitimately be
+    empty, per the OpenAI APIs: an assistant turn that requested calls
+    (`content: null` allowed there), and a tool/function result paired
+    with its call (empty content allowed; `null` is not).
 
     Args:
         messages: The message list about to be passed to `serve()`. Only
@@ -415,25 +417,37 @@ def _validate_message_content(
     Raises:
         _InvalidMessageContentError: If the list is empty with
             `require_non_empty` set, or a message has empty content without
-            tool calls (the endpoints convert this to a 400, matching how
-            `input_file` content is handled).
+            a tool-call pairing (the endpoints convert this to a 400 that
+            names the offending field in `param`).
     """
     if require_non_empty and not messages:
         raise _InvalidMessageContentError(
             f"At least one message is required in {field!r}.", field
         )
     for index, message in enumerate(messages):
-        if _content_is_empty(message.content):
-            if message.role == "assistant" and (
-                message.tool_calls or message.function_call
-            ):
-                continue
-            raise _InvalidMessageContentError(
-                f"Message at index {index} (role={message.role!r}) has null "
-                "or empty content. Only assistant messages with tool calls "
-                "may omit content.",
-                f"{field}[{index}].content",
-            )
+        if not _content_is_empty(message.content):
+            continue
+        # A turn may be empty only when its payload lives in tool fields:
+        # an assistant turn that requested calls, or a tool/function result
+        # paired with its call. A tool that returned nothing legitimately
+        # sends an empty result, but `null` content is still rejected —
+        # the OpenAI APIs require a result value.
+        if message.role == "assistant" and (
+            message.tool_calls or message.function_call
+        ):
+            continue
+        if (
+            message.role in ("tool", "function")
+            and (message.tool_call_id is not None or message.name is not None)
+            and message.content is not None
+        ):
+            continue
+        raise _InvalidMessageContentError(
+            f"Message at index {index} (role={message.role!r}) has null "
+            "or empty content. Only assistant messages with tool calls or "
+            "tool results paired with a call may be empty.",
+            f"{field}[{index}].content",
+        )
 
 
 def _convert_input_content_to_message_content(
@@ -526,6 +540,25 @@ def _convert_response_input_to_messages(
             return cast(Literal["system", "user", "assistant", "tool", "function"], r)
         raise ValueError(f"Unexpected role: {r!r}")
 
+    def _message_item_to_chat_message(item: ResponseInputItem) -> ChatMessage:
+        """Convert a message-shaped item, carrying tool-turn fields.
+
+        Used for both `input` and `instructions` items so the two fields
+        convert identically — an assistant item with tool_calls keeps its
+        content exemption no matter which field carried it.
+        """
+        return ChatMessage(
+            role=_role(item.role),
+            content=_convert_input_content_to_message_content(item.content),
+            tool_call_id=item.tool_call_id,
+            # item.tool_calls is validated at parse time
+            # (ChatCompletionMessageToolCall); dump to the dict wire shape
+            # ChatMessage carries.
+            tool_calls=(
+                [tc.model_dump() for tc in item.tool_calls] if item.tool_calls else None
+            ),
+        )
+
     messages: list[ChatMessage] = []
 
     if instructions:
@@ -533,8 +566,7 @@ def _convert_response_input_to_messages(
             messages.append(ChatMessage(role="system", content=instructions))
         else:
             for item in instructions:
-                content = _convert_input_content_to_message_content(item.content)
-                messages.append(ChatMessage(role=_role(item.role), content=content))
+                messages.append(_message_item_to_chat_message(item))
 
     if input_data is None:
         return messages
@@ -579,22 +611,7 @@ def _convert_response_input_to_messages(
                         )
                     )
             else:
-                content = _convert_input_content_to_message_content(item.content)
-                messages.append(
-                    ChatMessage(
-                        role=_role(item.role),
-                        content=content,
-                        tool_call_id=item.tool_call_id,
-                        # item.tool_calls is validated at parse time
-                        # (ChatCompletionMessageToolCall); dump to the dict
-                        # wire shape ChatMessage carries.
-                        tool_calls=(
-                            [tc.model_dump() for tc in item.tool_calls]
-                            if item.tool_calls
-                            else None
-                        ),
-                    )
-                )
+                messages.append(_message_item_to_chat_message(item))
 
     return messages
 
@@ -869,18 +886,14 @@ def make_responses_endpoint(module):
 
             return response
 
-        except _InvalidMessageContentError as e:
-            return create_openai_error_response(
-                status_code=400,
-                message=f"Invalid request: {e!s}",
-                error_type="invalid_request_error",
-                param=e.param,
-            )
         except ValueError as e:
+            # Message-content validation failures carry a `param` path;
+            # other ValueErrors (e.g. bad JSON schemas) have none.
             return create_openai_error_response(
                 status_code=400,
                 message=f"Invalid request: {e!s}",
                 error_type="invalid_request_error",
+                param=getattr(e, "param", None),
             )
         except Exception:
             logger.exception("Unhandled error in responses endpoint")
@@ -1019,19 +1032,14 @@ def make_chat_endpoint(module):
                 system_fingerprint=system_fingerprint,
                 usage=build_completion_usage(output),
             )  # type: ignore
-        except _InvalidMessageContentError as e:
-            return create_openai_error_response(
-                status_code=400,
-                message=f"Invalid request: {e!s}",
-                error_type="invalid_request_error",
-                param=e.param,
-            )
         except ValueError as e:
-            # Handle validation errors or invalid input
+            # Handle validation errors or invalid input; message-content
+            # failures carry a `param` path, other ValueErrors do not.
             return create_openai_error_response(
                 status_code=400,
                 message=f"Invalid request: {e!s}",
                 error_type="invalid_request_error",
+                param=getattr(e, "param", None),
             )
         except Exception:
             logger.exception("Unhandled error in chat-completion handler")

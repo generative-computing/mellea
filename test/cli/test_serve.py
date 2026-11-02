@@ -455,6 +455,147 @@ class TestChatEndpoint:
         mock_module.serve.assert_not_called()
 
     @pytest.mark.asyncio
+    async def test_empty_tool_result_allowed(self, mock_module):
+        """A tool result with empty-string content is accepted (OpenAI allows "")."""
+        request = ChatCompletionRequest(
+            model="test-model",
+            messages=[
+                ChatMessage(role="user", content="Delete the temp file"),
+                ChatMessage(
+                    role="assistant",
+                    content=None,
+                    tool_calls=[
+                        {
+                            "id": "call_1",
+                            "type": "function",
+                            "function": {"name": "delete_file", "arguments": "{}"},
+                        }
+                    ],
+                ),
+                ChatMessage(role="tool", content="", tool_call_id="call_1"),
+            ],
+        )
+
+        mock_module.serve.return_value = ModelOutputThunk("Deleted")
+        endpoint = make_chat_endpoint(mock_module)
+        response = await endpoint(request)
+
+        assert isinstance(response, ChatCompletion)
+        mock_module.serve.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_null_tool_result_rejected(self, mock_module):
+        """A tool result with null content is rejected even with a tool_call_id."""
+        request = ChatCompletionRequest(
+            model="test-model",
+            messages=[
+                ChatMessage(role="user", content="Delete the temp file"),
+                ChatMessage(
+                    role="assistant",
+                    content=None,
+                    tool_calls=[
+                        {
+                            "id": "call_1",
+                            "type": "function",
+                            "function": {"name": "delete_file", "arguments": "{}"},
+                        }
+                    ],
+                ),
+                ChatMessage(role="tool", content=None, tool_call_id="call_1"),
+            ],
+        )
+
+        endpoint = make_chat_endpoint(mock_module)
+        response = await endpoint(request)
+
+        assert isinstance(response, JSONResponse)
+        assert response.status_code == 400
+        body = json.loads(response.body)
+        assert body["error"]["param"] == "messages[2].content"
+        mock_module.serve.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_empty_text_block_tool_result_allowed(self, mock_module):
+        """A tool result whose parts are all empty text is accepted, like ""."""
+        request = ChatCompletionRequest(
+            model="test-model",
+            messages=[
+                ChatMessage(role="user", content="Delete the temp file"),
+                ChatMessage(
+                    role="assistant",
+                    content=None,
+                    tool_calls=[
+                        {
+                            "id": "call_1",
+                            "type": "function",
+                            "function": {"name": "delete_file", "arguments": "{}"},
+                        }
+                    ],
+                ),
+                ChatMessage(
+                    role="tool",
+                    content=[{"type": "text", "text": ""}],
+                    tool_call_id="call_1",
+                ),
+            ],
+        )
+
+        mock_module.serve.return_value = ModelOutputThunk("Deleted")
+        endpoint = make_chat_endpoint(mock_module)
+        response = await endpoint(request)
+
+        assert isinstance(response, ChatCompletion)
+        mock_module.serve.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_empty_legacy_function_result_allowed(self, mock_module):
+        """A legacy function-role result with empty content is accepted."""
+        request = ChatCompletionRequest(
+            model="test-model",
+            messages=[
+                ChatMessage(role="user", content="Delete the temp file"),
+                ChatMessage(
+                    role="assistant",
+                    content=None,
+                    function_call={"name": "delete_file", "arguments": "{}"},
+                ),
+                ChatMessage(role="function", content="", name="delete_file"),
+            ],
+        )
+
+        mock_module.serve.return_value = ModelOutputThunk("Deleted")
+        endpoint = make_chat_endpoint(mock_module)
+        response = await endpoint(request)
+
+        assert isinstance(response, ChatCompletion)
+        mock_module.serve.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_null_legacy_function_result_rejected(self, mock_module):
+        """A function-role result with null content is rejected even with a name."""
+        request = ChatCompletionRequest(
+            model="test-model",
+            messages=[
+                ChatMessage(role="user", content="Delete the temp file"),
+                ChatMessage(
+                    role="assistant",
+                    content=None,
+                    function_call={"name": "delete_file", "arguments": "{}"},
+                ),
+                ChatMessage(role="function", content=None, name="delete_file"),
+            ],
+        )
+
+        endpoint = make_chat_endpoint(mock_module)
+        response = await endpoint(request)
+
+        assert isinstance(response, JSONResponse)
+        assert response.status_code == 400
+        body = json.loads(response.body)
+        assert body["error"]["param"] == "messages[2].content"
+        mock_module.serve.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_null_content_allowed_for_assistant_tool_calls(self, mock_module):
         """An assistant turn with tool calls may omit content (OpenAI spec)."""
         request = ChatCompletionRequest(
