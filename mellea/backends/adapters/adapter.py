@@ -1212,11 +1212,11 @@ class AdapterMixin(Backend, abc.ABC):
         # against the catalogue's pinned SHA, so reporting the unresolved
         # `None` would mislabel an effectively-pinned invocation as unpinned.
         revision: str | None
-        if isinstance(adapter.weights, WeightsBinding):
+        if isinstance(adapter.weights, LocalFileBinding):
             try:
                 revision = adapter.weights.resolved_revision()
             except Exception:
-                revision = getattr(adapter.weights, "revision", None)
+                revision = adapter.weights.revision
         else:
             revision = cast(str | None, getattr(adapter.weights, "revision", None))
         binding_type = adapter.weights.binding_type
