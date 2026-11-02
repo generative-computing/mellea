@@ -1049,16 +1049,30 @@ class TestResponsesEndpointNonStreaming:
         mock_module.serve.assert_not_called()
 
     @pytest.mark.asyncio
-    @pytest.mark.parametrize("content", [None, []])
+    @pytest.mark.parametrize("content", [None, [], ""])
     async def test_empty_content_message_returns_400(self, mock_module, content):
-        """A message with null or empty-list content is rejected, not passed on."""
+        """A message with null, empty-list, or empty-string content is rejected."""
         req = ResponseRequest(
             model="m", input=[ResponseInputItem(role="user", content=content)]
         )
         endpoint = make_responses_endpoint(mock_module)
         resp = await endpoint(req)
         assert resp.status_code == 400
+        # The 400 names the offending field so clients can locate the message
+        body = json.loads(resp.body)
+        assert body["error"]["param"] == "input[0].content"
         # serve() was never called with a None user turn
+        mock_module.serve.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_empty_conversation_returns_400(self, mock_module):
+        """An input with no messages, instructions, or prior history returns 400."""
+        req = ResponseRequest(model="m", input=[])
+        endpoint = make_responses_endpoint(mock_module)
+        resp = await endpoint(req)
+        assert resp.status_code == 400
+        body = json.loads(resp.body)
+        assert body["error"]["param"] == "input"
         mock_module.serve.assert_not_called()
 
     @pytest.mark.asyncio

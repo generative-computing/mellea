@@ -358,33 +358,56 @@ def _build_model_options_from_response_request(request: ResponseRequest) -> dict
     return result
 
 
-def _validate_message_content(messages: list) -> None:
-    """Reject messages whose content is null or an empty list.
+class _InvalidMessageContentError(ValueError):
+    """Raised by `_validate_message_content`, carrying the failing field path.
+
+    Attributes:
+        param: Request field path of the offending message (e.g.
+            `messages[0].content`), surfaced in the 400 response's `param`.
+    """
+
+    def __init__(self, message: str, param: str) -> None:
+        """Stores the param path alongside the human-readable message."""
+        super().__init__(message)
+        self.param = param
+
+
+def _validate_message_content(messages: list, field: str) -> None:
+    """Reject empty message lists and messages with null or empty content.
 
     Both endpoints accept `ChatMessage` requests whose `content` may be
-    `None` or `[]` at pydantic-parse time, so a user turn without content
-    would otherwise reach `serve()` as a `None` turn and return 200. The one
-    legitimate empty case is an assistant turn carrying tool calls — the
-    OpenAI APIs allow `content: null` there — so those are exempt.
+    `None`, `""`, or `[]` at pydantic-parse time, so a user turn without
+    content would otherwise reach `serve()` as an empty turn and return
+    200. The one legitimate empty case is an assistant turn carrying tool
+    calls — the OpenAI APIs allow `content: null` there — so those are
+    exempt.
 
     Args:
         messages: The message list about to be passed to `serve()`.
+        field: Name of the request field the list was assembled from (e.g.
+            `messages` or `input`), used to build the `param` path in the
+            400 response.
 
     Raises:
-        ValueError: If a message has null or empty content without tool
-            calls (the endpoints convert this to a 400, matching how
-            `input_file` content is handled).
+        _InvalidMessageContentError: If the list is empty, or a message has
+            null or empty content without tool calls (the endpoints convert
+            this to a 400, matching how `input_file` content is handled).
     """
+    if not messages:
+        raise _InvalidMessageContentError(
+            f"At least one message is required in {field!r}.", field
+        )
     for index, message in enumerate(messages):
-        if message.content is None or message.content == []:
+        if message.content in (None, [], ""):
             if message.role == "assistant" and (
                 message.tool_calls or message.function_call
             ):
                 continue
-            raise ValueError(
+            raise _InvalidMessageContentError(
                 f"Message at index {index} (role={message.role!r}) has null "
                 "or empty content. Only assistant messages with tool calls "
-                "may omit content."
+                "may omit content.",
+                f"{field}[{index}].content",
             )
 
 
@@ -661,7 +684,11 @@ def make_responses_endpoint(module):
             # previous_response_id this reduces to instructions + input.
             messages = instruction_messages + prior_messages + input_messages
 
-            _validate_message_content(messages)
+            # Validate the assembled conversation: instructions, prior
+            # history, and the new input. `field="input"` names the request
+            # field clients reason about, even though instructions may shift
+            # the index of the offending message.
+            _validate_message_content(messages, field="input")
 
             # The conversation to persist: prior turns + this request's new
             # input. Instructions are excluded on purpose (see note above) so
@@ -815,10 +842,13 @@ def make_responses_endpoint(module):
             return response
 
         except ValueError as e:
+            # Message-content validation failures carry a `param` path;
+            # other ValueErrors (e.g. bad JSON schemas) have none.
             return create_openai_error_response(
                 status_code=400,
                 message=f"Invalid request: {e!s}",
                 error_type="invalid_request_error",
+                param=e.param if isinstance(e, _InvalidMessageContentError) else None,
             )
         except Exception:
             logger.exception("Unhandled error in responses endpoint")
@@ -853,7 +883,7 @@ def make_chat_endpoint(module):
 
             # Reject null/empty message content before it reaches serve()
             # as a None turn (400, matching the responses endpoint).
-            _validate_message_content(request.messages)
+            _validate_message_content(request.messages, field="messages")
 
             completion_id = "chatcmpl-" + "".join(
                 secrets.choice(_BASE62) for _ in range(29)
@@ -961,6 +991,7 @@ def make_chat_endpoint(module):
                 status_code=400,
                 message=f"Invalid request: {e!s}",
                 error_type="invalid_request_error",
+                param=e.param if isinstance(e, _InvalidMessageContentError) else None,
             )
         except Exception:
             logger.exception("Unhandled error in chat-completion handler")
