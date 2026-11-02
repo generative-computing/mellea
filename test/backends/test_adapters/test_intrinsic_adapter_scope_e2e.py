@@ -85,7 +85,7 @@ def _assert_single_success_invocation(mock_invoke: MagicMock) -> None:
     invocation = invocations[0]
     assert invocation.outcome == "success"
     assert invocation.name == "uncertainty"
-    assert invocation.adapter_type == "lora"
+    assert invocation.adapter_type == "alora"
     assert invocation.binding_type == "local_file"
     assert invocation.revision == _UNCERTAINTY_REVISION
 

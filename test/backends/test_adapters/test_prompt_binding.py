@@ -44,9 +44,14 @@ def test_prompt_binding_activate_logs_at_info(caplog):
     binding = PromptBinding(name="answerability", target_model_name="any")
     with caplog.at_level(logging.INFO, logger="mellea"):
         binding.activate()
-    assert any(
-        "Prompt fallback activated" in r.message and "answerability" in r.message
-        for r in caplog.records
+        binding.activate()
+    # Logged once per binding, not once per call.
+    assert (
+        sum(
+            "Prompt fallback activated" in r.message and "answerability" in r.message
+            for r in caplog.records
+        )
+        == 1
     )
 
 

@@ -465,7 +465,6 @@ def test_name_field_accepted_by_make_config_dict():
         "name": "my_intrinsic_display_name",
     }
     result = intrinsics_util.make_config_dict(config_dict=config_with_name)
-    assert result is not None
     assert result["name"] == "my_intrinsic_display_name"
     # Other optional fields are filled with None
     assert result["parameters"] is None
@@ -479,7 +478,6 @@ def test_name_field_accepted_by_make_config_dict():
         "transformations": None,
     }
     result2 = intrinsics_util.make_config_dict(config_dict=config_without_name)
-    assert result2 is not None
     assert result2["name"] is None
 
 

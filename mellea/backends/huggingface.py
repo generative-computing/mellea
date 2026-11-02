@@ -113,6 +113,7 @@ from .adapters.adapter import (
     _composed_adapter_key,
     _discover_embedded_adapters,
     _fire_invocation_complete,
+    validate_prompt_config,
 )
 from .adapters.catalog import AdapterType
 from .backend import FormatterBackend
@@ -479,8 +480,8 @@ def _alora_qualified_name_for_activation_check(
     """
     if isinstance(adapter, EmbeddedIntrinsicAdapter):
         return None
-    # `.identity.adapter_type` (a `Literal["lora", "alora"]` string), not
-    # `.adapter_type` (an `AdapterType` enum member only `IntrinsicAdapter`
+    # `.identity.adapter_type` (a `Literal["lora", "alora", "prompt"]` string),
+    # not `.adapter_type` (an `AdapterType` enum member only `IntrinsicAdapter`
     # carries): every adapter shape this method accepts — the shim and the
     # composed `_AdapterCore` alike — sets `.identity`, so checking it once
     # here covers both without a shape-specific attribute read.
@@ -3142,15 +3143,16 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             adapter (AdapterInput): The adapter to register. Must be a
                 `LocalHFAdapter`, `LocalFileBinding`, `EmbeddedIntrinsicAdapter`,
                 or a composed `Adapter`; other adapter realities are rejected.
-            config (dict | None): Raw io.yaml config for a composed `Adapter`
-                whose `weights` is an `EmbeddedBinding`. Required for that
-                shape (its config cannot be cheaply re-derived later, unlike a
-                `LocalFileBinding`'s); rejected for every other shape.
+            config (dict | None): Raw io.yaml config for a composed `Adapter`.
+                Required for an `EmbeddedBinding` (its config cannot be cheaply
+                re-derived later, unlike a `LocalFileBinding`'s) and optional for
+                a `PromptBinding` (self-fetched from io.yaml when omitted);
+                rejected for every other shape.
 
         Raises:
             TypeError: If `adapter` is not a supported local or embedded
-                adapter, or `config` is given for a shape other than a
-                composed `EmbeddedBinding` adapter.
+                adapter, or `config` is given for a shape other than a composed
+                `EmbeddedBinding` or `PromptBinding` adapter.
             ValueError: If `adapter` is a composed `Adapter` whose `weights` is
                 an `EmbeddedBinding` and `config` is not given — registering it
                 without one would make it discoverable but permanently unable
@@ -3276,6 +3278,12 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                         config
                         if config is not None
                         else self._obtain_prompt_io_yaml_config(binding)
+                    )
+                    validate_prompt_config(
+                        prompt_config,
+                        name=binding.name,
+                        source=f"on model slot {binding.target_model_name!r} "
+                        f"in {binding.repo_id}",
                     )
                     with self._adapter_activation_lock():
                         self._composed_adapter_configs[key] = prompt_config

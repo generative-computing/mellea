@@ -305,12 +305,16 @@ def _make_intrinsic_backend_stub(stub_backend):
     # Composed-Adapter counterpart of _generate_intrinsic_with_adapter_scope
     # above — same bypass, for the same reason (these tests exercise
     # option-merging/logits capture, not activation semantics).
-    stub_backend._generate_composed_local_file_with_adapter_scope = (
-        lambda adapter, generate_func, *args, **kwargs: generate_func(*args, **kwargs)
+    stub_backend._generate_composed_local_file_with_adapter_scope = MagicMock(
+        side_effect=lambda adapter, generate_func, *args, **kwargs: generate_func(
+            *args, **kwargs
+        )
     )
     # Prompt-fallback counterpart (weightless; no adapter_scope).
-    stub_backend._generate_composed_prompt = (
-        lambda adapter, generate_func, *args, **kwargs: generate_func(*args, **kwargs)
+    stub_backend._generate_composed_prompt = MagicMock(
+        side_effect=lambda adapter, generate_func, *args, **kwargs: generate_func(
+            *args, **kwargs
+        )
     )
     return stub_backend
 
@@ -909,38 +913,13 @@ def test_generate_composed_prompt_rejects_non_prompt_binding():
         )
 
 
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "binding, adapter_type",
-    [
-        (
-            LocalFileBinding(
-                name="answerability",
-                adapter_type=AdapterType.ALORA,
-                repo_id="ibm-granite/granitelib-rag-r1.0",
-                revision="abc123",
-            ),
-            "alora",
-        ),
-        (
-            PromptBinding(
-                name="answerability",
-                repo_id="ibm-granite/granitelib-rag-r1.0",
-                revision="abc123",
-                target_model_name="granite-4.1-3b",
-            ),
-            "prompt",
-        ),
-    ],
-    ids=["alora", "prompt"],
-)
-async def test_composed_adapter_drives_generate_from_intrinsic(
-    stub_backend, binding, adapter_type
-):
-    """A composed `Adapter` (not the `IntrinsicAdapter` shim) drives the full
-    `_generate_from_intrinsic` path for both a trained (LocalFile) adapter and a
-    prompt fallback — name/config resolution, the composed LocalFile and prompt
-    dispatch, and normal post-processing — end to end (Epic #929, issue #1144).
+async def _drive_composed_adapter_from_intrinsic(stub_backend, binding, adapter_type):
+    """Drives `_generate_from_intrinsic` for a composed `Adapter` to resolution.
+
+    Returns `(backend, payloads)`: the stub backend, for dispatch assertions, and
+    the invocation-complete payloads fired via `_core.invoke_hook` while
+    `output._gen.process` resolves (empty for the local-file path, whose dispatch
+    is stubbed out).
     """
     from mellea.backends.adapters._core import Adapter as _AdapterCore
     from mellea.backends.adapters.io_contracts import get_io_contract
@@ -997,6 +976,10 @@ async def test_composed_adapter_drives_generate_from_intrinsic(
         ),
         patch("builtins.open", mock_open(read_data="key: value")),
         patch("yaml.safe_load", return_value={"parameters": {}}),
+        patch("mellea.backends.adapters._core.has_plugins", return_value=True),
+        patch(
+            "mellea.backends.adapters._core.invoke_hook", new_callable=AsyncMock
+        ) as mock_invoke,
     ):
         output = await LocalHFBackend._generate_from_intrinsic(
             backend,
@@ -1015,6 +998,58 @@ async def test_composed_adapter_drives_generate_from_intrinsic(
                 await output._gen.process(output, item)
                 processed = True
         assert processed, "the composed adapter path must produce a response"
+
+    payloads = [
+        call.args[1]
+        for call in mock_invoke.call_args_list
+        if call.args[0] is HookType.ADAPTER_FUNCTION_INVOCATION_COMPLETE
+    ]
+    return backend, payloads
+
+
+@pytest.mark.asyncio
+async def test_composed_adapter_drives_generate_from_intrinsic(stub_backend):
+    """A composed LocalFile `Adapter` dispatches through the local-file path."""
+    binding = LocalFileBinding(
+        name="answerability",
+        adapter_type=AdapterType.ALORA,
+        repo_id="ibm-granite/granitelib-rag-r1.0",
+        revision="abc123",
+    )
+
+    backend, _ = await _drive_composed_adapter_from_intrinsic(
+        stub_backend, binding, "alora"
+    )
+
+    backend._generate_composed_local_file_with_adapter_scope.assert_called_once()
+    backend._generate_composed_prompt.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_composed_prompt_adapter_drives_generate_from_intrinsic(stub_backend):
+    """A composed `PromptBinding` dispatches through the prompt path and fires an
+    invocation-complete payload tagged `binding_type="prompt"` with the revision.
+    """
+    binding = PromptBinding(
+        name="answerability",
+        repo_id="ibm-granite/granitelib-rag-r1.0",
+        revision="abc123",
+        target_model_name="granite-4.1-3b",
+    )
+
+    backend, payloads = await _drive_composed_adapter_from_intrinsic(
+        stub_backend, binding, "prompt"
+    )
+
+    backend._generate_composed_prompt.assert_called_once()
+    backend._generate_composed_local_file_with_adapter_scope.assert_not_called()
+
+    assert len(payloads) == 1
+    assert payloads[0].binding_type == "prompt"
+    assert payloads[0].adapter_type == "prompt"
+    assert payloads[0].revision == "abc123"
+    assert payloads[0].outcome == "success"
+    assert payloads[0].error is None
 
 
 def _setup_mismatched_alora_stub(stub_backend, *, adapter_name="answerability"):
@@ -1598,6 +1633,33 @@ def test_add_adapter_composed_prompt_self_fetches_config_when_none():
 
     assert backend._composed_adapters["answerability_prompt"] is composed
     assert backend._composed_adapter_configs["answerability_prompt"] == fetched
+
+
+def test_add_adapter_composed_prompt_without_usable_instruction_raises():
+    """add_adapter rejects a prompt config with no usable instruction and registers
+    nothing, mirroring the resolve walk's guard."""
+    from mellea.backends.adapters._core import Adapter as _AdapterCore
+    from mellea.backends.adapters.io_contracts import get_io_contract
+
+    backend = _make_backend()
+    composed = _AdapterCore(
+        identity=Identity(
+            name="answerability", adapter_type="prompt", capability="answerability"
+        ),
+        io_contract=get_io_contract("answerability"),
+        weights=PromptBinding(
+            name="answerability",
+            repo_id="ibm-granite/granitelib-rag-r1.0",
+            revision="abc123",
+            target_model_name="granite-4.1-3b",
+        ),
+    )
+
+    with pytest.raises(ValueError, match="instruction"):
+        backend.add_adapter(composed, config={"parameters": {}})
+
+    assert "answerability_prompt" not in backend._composed_adapters
+    assert "answerability_prompt" not in backend._composed_adapter_configs
 
 
 def test_generate_embedded_with_generation_lock_deactivates_peft_state():

@@ -13,6 +13,7 @@ import pathlib
 import yaml
 
 # Local
+from ....backends.adapters.catalog import AdapterType
 from .constants import (
     BASE_MODEL_TO_CANONICAL_NAME,
     OLD_LAYOUT_REPOS,
@@ -33,7 +34,7 @@ class AdapterNotFoundError(ValueError):
 
 def make_config_dict(
     config_file: str | pathlib.Path | None = None, config_dict: dict | None = None
-) -> dict | None:
+) -> dict:
     """Create a configuration dictionary from YAML file or dict.
 
     This function is not a public API and is not intended for use outside this library.
@@ -134,7 +135,12 @@ def adapter_subpath(
     Returns:
         Subpath relative to the repo root, e.g. `"certainty/granite-4.1-3b/lora"` or
         `"answerability/any/prompt"`.
+
+    Raises:
+        ValueError: `adapter_type` is not a valid `AdapterType` value.
     """
+    adapter_type = AdapterType(adapter_type).value
+
     # Normalize target model name if a normalization exists.
     target_model_name = BASE_MODEL_TO_CANONICAL_NAME.get(
         target_model_name, target_model_name

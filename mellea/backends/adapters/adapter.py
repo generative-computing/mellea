@@ -312,8 +312,8 @@ def _composed_adapter_key(adapter: "_AdapterCore") -> str:
     `adapter.weights.qualified_name` (`LocalFileBinding`'s own key) so a
     backend's `_added_adapters` (keyed on the binding) and `_composed_adapters`
     (keyed on this function) agree — which holds because `Identity.adapter_type`
-    is the `Literal["lora", "alora"]` string and `AdapterType.LORA.value`/
-    `AdapterType.ALORA.value` are those same two strings. `LocalHFBackend.add_adapter`
+    is the `Literal["lora", "alora", "prompt"]` string and each
+    `AdapterType` member's `.value` is the matching string. `LocalHFBackend.add_adapter`
     enforces this at registration time for a `LocalFileBinding` (see the
     `NOTE(#1516)` on the `Adapter` dataclass); a composed `Adapter` whose
     `identity.adapter_type` disagrees with its own `weights.adapter_type`
@@ -567,6 +567,29 @@ def _fire_invocation_complete(
 AdapterInput: TypeAlias = Adapter | _AdapterCore | LocalFileBinding
 
 
+def validate_prompt_config(config: dict, *, name: str, source: str) -> None:
+    """Raise if a prompt io.yaml `config` is not usable for a prompt fallback.
+
+    `instruction` is optional in the io.yaml schema but required for a prompt
+    fallback, which injects it at rewrite time.
+
+    Args:
+        config: The parsed prompt io.yaml mapping.
+        name: The adapter function name, for the error message.
+        source: Where the config came from (repo/slot/path), for the error message.
+
+    Raises:
+        ValueError: `config` lacks a non-empty `instruction`.
+    """
+    instruction = config.get("instruction")
+    if not isinstance(instruction, str) or not instruction.strip():
+        raise ValueError(
+            f"Prompt io.yaml for adapter function {name!r} ({source}) has no "
+            f"usable 'instruction' (missing or empty), which a prompt fallback "
+            f"requires."
+        )
+
+
 def _register_available_composed_adapter(
     backend: "AdapterMixin", name: str, base: str, metadata: IntrinsicsCatalogEntry
 ) -> None:
@@ -636,20 +659,14 @@ def _register_available_composed_adapter(
             "model-agnostic 'any' prompt, which is sub-par relative to a "
             "model-specific one."
         )
-    prompt_config = make_config_dict(config_file=io_yaml_path)
-    if prompt_config is None:
+    source = f"on model slot {target_model!r} in {metadata.repo_id} at {io_yaml_path}"
+    try:
+        prompt_config = make_config_dict(config_file=io_yaml_path)
+    except ValueError as e:
         raise ValueError(
-            f"Prompt io.yaml for {name!r} at {io_yaml_path} is empty or did not "
-            f"parse to a mapping."
-        )
-    instruction = prompt_config.get("instruction")
-    if not isinstance(instruction, str) or not instruction.strip():
-        raise ValueError(
-            f"Prompt io.yaml for adapter function {name!r} on model slot "
-            f"{target_model!r} in {metadata.repo_id} at {io_yaml_path} has no "
-            f"usable 'instruction' (missing or empty), which a prompt fallback "
-            f"requires."
-        )
+            f"Prompt io.yaml for adapter function {name!r} ({source}) is invalid: {e}"
+        ) from e
+    validate_prompt_config(prompt_config, name=name, source=source)
     backend.add_adapter(
         _AdapterCore(
             identity=Identity(
@@ -1194,14 +1211,12 @@ class AdapterMixin(Backend, abc.ABC):
         # lazily-resolved binding (`revision=None`) still downloads and runs
         # against the catalogue's pinned SHA, so reporting the unresolved
         # `None` would mislabel an effectively-pinned invocation as unpinned.
-        # `resolved_revision()` is not on the `WeightsBinding` base, so both the
-        # lookup and the call are guarded.
         revision: str | None
-        if isinstance(adapter.weights, LocalFileBinding):
+        if isinstance(adapter.weights, WeightsBinding):
             try:
                 revision = adapter.weights.resolved_revision()
             except Exception:
-                revision = adapter.weights.revision
+                revision = getattr(adapter.weights, "revision", None)
         else:
             revision = cast(str | None, getattr(adapter.weights, "revision", None))
         binding_type = adapter.weights.binding_type

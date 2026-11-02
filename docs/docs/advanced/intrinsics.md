@@ -347,6 +347,10 @@ not one of the built-in adapter functions — see
 
 ## Prompt fallback
 
+> **Coming soon:** No catalog repo ships prompt `io.yaml` files yet, so prompt fallback
+> is not yet reachable in practice. The mechanism below is in place and will work once
+> prompts are published.
+
 Not every capability has a trained adapter for every model. When no aLoRA or LoRA
 adapter exists for a capability on the target model, resolution falls back to a
 **prompt**: a hand-authored instruction (packaged as an `io.yaml`) run against the
@@ -362,8 +366,8 @@ Resolution walks the chain in order and uses the first rung that exists:
    less accurate than a model-tuned one).
 
 The fallback is transparent: the same helper calls (`rag.check_answerability`,
-`core.requirement_check`, …) and `Intrinsic` components work unchanged — there is no
-adapter to register and nothing to activate. A prompt fallback carries no weights (it
+`core.requirement_check`, …) work unchanged — there is no adapter to register and
+nothing to activate. A prompt fallback carries no weights (it
 is a `PromptBinding`; see below) and runs the intrinsic's instruction against the base
 model, parsing the response through the same output contract a trained adapter uses.
 

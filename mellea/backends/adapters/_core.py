@@ -875,6 +875,7 @@ class PromptBinding(WeightsBinding):
         self.repo_id = repo_id
         self.revision = revision
         self.target_model_name = target_model_name
+        self._logged_activation = False
 
     @property
     def qualified_name(self) -> str:
@@ -899,7 +900,10 @@ class PromptBinding(WeightsBinding):
         """No-op: a prompt fallback has no weights to stage."""
 
     def activate(self) -> None:
-        """Logs that the soft (prompt) adapter fired, at real-adapter severity."""
+        """Logs at INFO, once per binding, that this capability runs as a prompt fallback."""
+        if self._logged_activation:
+            return
+        self._logged_activation = True
         MelleaLogger.get_logger().info(
             f"Prompt fallback activated for {self.name!r} "
             f"(model slot {self.target_model_name!r})."

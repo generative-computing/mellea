@@ -61,6 +61,14 @@ def test_adapter_subpath_lora_and_alora_slots():
     )
 
 
+def test_adapter_subpath_rejects_invalid_type():
+    # A bad slot must raise ValueError (not AdapterNotFoundError, which the
+    # resolution walk swallows) so it can't silently fall through to a prompt.
+    with pytest.raises(ValueError, match="aLoRA") as exc:
+        adapter_subpath("answerability", "any", _NEW_REPO, adapter_type="aLoRA")
+    assert not isinstance(exc.value, AdapterNotFoundError)
+
+
 def test_resolve_prompt_io_yaml_prefers_model_specific():
     model_path = pathlib.Path("/cache/answerability/granite-4.2-8b/prompt/io.yaml")
     with patch(
