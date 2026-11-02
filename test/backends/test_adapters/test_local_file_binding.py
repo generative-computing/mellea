@@ -337,6 +337,61 @@ def test_activate_delegates_to_backend_verb():
     backend.activate_peft_adapter.assert_called_once_with(binding.qualified_name)
 
 
+def test_activate_reinjects_weights_dropped_since_prepare():
+    """`activate()` re-loads when the PEFT model dropped the weights after prepare().
+
+    An `unload_peft_adapter()` between `prepare()` and `activate()` deletes the
+    weights from the PEFT model while leaving the registration intact, so the
+    first `activate_peft_adapter()` (PEFT's `set_adapter`) raises `ValueError`.
+    `activate()` must re-load via `load_peft_adapter()` and retry, rather than
+    treat `prepare()`'s injection as a one-time guarantee — the unload/reuse
+    resilience the removed `IntrinsicAdapter` shim gave (PR #1700 follow-up).
+    """
+    backend = _fake_backend()
+    binding = LocalFileBinding(name="answerability")
+    binding.bind_backend(backend)
+    binding.prepare()
+    backend.load_peft_adapter.reset_mock()
+
+    # First set_adapter fails (weights dropped); the post-reload retry succeeds.
+    backend.activate_peft_adapter.side_effect = [
+        ValueError(
+            f"Adapter with name {binding.qualified_name} not found. "
+            "Please pass the correct adapter name among []"
+        ),
+        None,
+    ]
+
+    binding.activate()
+
+    backend.load_peft_adapter.assert_called_once_with(binding.qualified_name)
+    assert backend.activate_peft_adapter.call_count == 2
+    assert binding._active
+
+
+def test_activate_propagates_when_reload_does_not_recover():
+    """A `ValueError` that re-loading can't fix still propagates (no masking/loop).
+
+    The retry re-loads once and re-activates once; if `set_adapter` still raises
+    (e.g. the name was never registered, not merely unloaded), the second
+    failure surfaces rather than being swallowed or retried forever.
+    """
+    backend = _fake_backend()
+    binding = LocalFileBinding(name="answerability")
+    binding.bind_backend(backend)
+    binding.prepare()
+    backend.load_peft_adapter.reset_mock()
+
+    backend.activate_peft_adapter.side_effect = ValueError("still not found")
+
+    with pytest.raises(ValueError, match="still not found"):
+        binding.activate()
+
+    backend.load_peft_adapter.assert_called_once_with(binding.qualified_name)
+    assert backend.activate_peft_adapter.call_count == 2
+    assert not binding._active
+
+
 def test_deactivate_delegates_to_backend_verb():
     backend = _fake_backend()
     binding = LocalFileBinding(name="answerability")

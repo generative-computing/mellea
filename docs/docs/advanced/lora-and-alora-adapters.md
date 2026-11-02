@@ -261,15 +261,10 @@ all. The check activates only where an aLoRA is actually the adapter in play tod
   `ValueError` (chained from the `AloraActivationError`) instead -- consistent with
   how a missing adapter is handled, and for the same reason: a yes/no LLMaJ answer
   cannot be parsed by the adapter's JSON `output_to_bool`.
-- **The deprecated `IntrinsicAdapter` shim**, but not on its first call: the shim's
-  PEFT weights load lazily inside generation, so the check has nothing to compare
-  against yet the first time. From the second call onward the weights are already
-  loaded and the check applies normally (Epic #929, issue #1144 tracks removing the
-  shim entirely).
 
 A direct adapter-function call reaching this check has no fallback layer below it and
 lets `AloraActivationError` propagate, so the caller sees a clear error instead of a
-silently wrong score -- but today that only happens on one of the three paths above,
+silently wrong score -- but today that only happens on one of the two paths above,
 not on an unmodified default installation calling `core.check_certainty(...)` or
 similar. Server-mediated and embedded adapter deployments activate outside Mellea and
 are not covered by this check at all.

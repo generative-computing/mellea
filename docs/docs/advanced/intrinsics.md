@@ -375,9 +375,10 @@ not one of the built-in adapter functions — see
 weights binding into a single, inspectable object. Both `LocalHFBackend` and
 `OpenAIBackend` accept a composed `Adapter` directly via `add_adapter` —
 dispatching on the weights binding's reality (`LocalFileBinding` for
-LocalFile/PEFT, `EmbeddedBinding` for Embedded/Granite Switch) — alongside
-the deprecated shim classes, which remain functional for now (Epic #929,
-issue #1144). An `EmbeddedBinding` adapter additionally requires `add_adapter`'s
+LocalFile/PEFT, `EmbeddedBinding` for Embedded/Granite Switch). The composed
+`Adapter` is now the only registration path — the earlier shim classes have
+been removed (Epic #929, issue #1144). An `EmbeddedBinding` adapter
+additionally requires `add_adapter`'s
 `config=` argument (the raw io.yaml mapping) — `add_adapter` raises `ValueError`
 without it, since that reality's config cannot be cheaply re-derived later; see
 below.
