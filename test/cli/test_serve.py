@@ -367,6 +367,49 @@ class TestChatEndpoint:
         mock_module.serve.assert_not_called()
 
     @pytest.mark.asyncio
+    async def test_empty_text_block_content_rejected(self, mock_module):
+        """A content list whose only block is empty text returns 400."""
+        request = ChatCompletionRequest(
+            model="test-model",
+            messages=[ChatMessage(role="user", content=[{"type": "text", "text": ""}])],
+        )
+
+        endpoint = make_chat_endpoint(mock_module)
+        response = await endpoint(request)
+
+        assert isinstance(response, JSONResponse)
+        assert response.status_code == 400
+        body = json.loads(response.body)
+        assert body["error"]["param"] == "messages[0].content"
+        mock_module.serve.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_image_block_makes_empty_text_substantive(self, mock_module):
+        """An image block alongside empty text is valid multimodal content."""
+        request = ChatCompletionRequest(
+            model="test-model",
+            messages=[
+                ChatMessage(
+                    role="user",
+                    content=[
+                        {"type": "text", "text": ""},
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": "https://example.com/cat.png"},
+                        },
+                    ],
+                )
+            ],
+        )
+
+        mock_module.serve.return_value = ModelOutputThunk("A cat")
+        endpoint = make_chat_endpoint(mock_module)
+        response = await endpoint(request)
+
+        assert isinstance(response, ChatCompletion)
+        mock_module.serve.assert_called_once()
+
+    @pytest.mark.asyncio
     async def test_null_content_allowed_for_assistant_function_call(self, mock_module):
         """An assistant turn with a legacy function_call may omit content."""
         request = ChatCompletionRequest(

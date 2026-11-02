@@ -372,33 +372,58 @@ class _InvalidMessageContentError(ValueError):
         self.param = param
 
 
-def _validate_message_content(messages: list, field: str) -> None:
-    """Reject empty message lists and messages with null or empty content.
+def _content_is_empty(content: str | list | None) -> bool:
+    """True when message content carries no text or other media.
+
+    Covers null, empty-string, and empty-list content, plus a content-block
+    list whose every block is a text block with empty text. A list holding
+    an image or audio block is substantive multimodal content, not empty.
+    """
+    if content in (None, "", []):
+        return True
+    if isinstance(content, list):
+        return all(
+            getattr(block, "type", None) == "text" and not getattr(block, "text", "")
+            for block in content
+        )
+    return False
+
+
+def _validate_message_content(
+    messages: list, field: str, *, require_non_empty: bool = False
+) -> None:
+    """Reject messages whose content is null, empty, or contentless blocks.
 
     Both endpoints accept `ChatMessage` requests whose `content` may be
-    `None`, `""`, or `[]` at pydantic-parse time, so a user turn without
-    content would otherwise reach `serve()` as an empty turn and return
-    200. The one legitimate empty case is an assistant turn carrying tool
-    calls — the OpenAI APIs allow `content: null` there — so those are
-    exempt.
+    `None`, `""`, `[]`, or a list of empty text blocks at pydantic-parse
+    time, so a user turn without content would otherwise reach `serve()`
+    as an empty turn and return 200. The one legitimate empty case is an
+    assistant turn carrying tool calls — the OpenAI APIs allow
+    `content: null` there — so those are exempt.
 
     Args:
-        messages: The message list about to be passed to `serve()`.
-        field: Name of the request field the list was assembled from (e.g.
-            `messages` or `input`), used to build the `param` path in the
-            400 response.
+        messages: The message list about to be passed to `serve()`. Only
+            client-supplied messages belong here: server-stored history is
+            excluded so the server's own (possibly empty) assistant replies
+            cannot block chained requests.
+        field: Name of the request field the list came from (e.g. `messages`
+            or `input`), used to build the `param` path in the 400 response.
+        require_non_empty: Also reject an empty list. Set for request fields
+            OpenAI requires to be non-empty (`messages`, `input`); leave
+            unset for optional fields like `instructions`.
 
     Raises:
-        _InvalidMessageContentError: If the list is empty, or a message has
-            null or empty content without tool calls (the endpoints convert
-            this to a 400, matching how `input_file` content is handled).
+        _InvalidMessageContentError: If the list is empty with
+            `require_non_empty` set, or a message has empty content without
+            tool calls (the endpoints convert this to a 400, matching how
+            `input_file` content is handled).
     """
-    if not messages:
+    if require_non_empty and not messages:
         raise _InvalidMessageContentError(
             f"At least one message is required in {field!r}.", field
         )
     for index, message in enumerate(messages):
-        if message.content in (None, [], ""):
+        if _content_is_empty(message.content):
             if message.role == "assistant" and (
                 message.tool_calls or message.function_call
             ):
@@ -657,6 +682,15 @@ def make_responses_endpoint(module):
                 None, request.instructions
             )
 
+            # Validate only what the client sent in this request. Stored
+            # history is excluded on purpose: it was validated when first
+            # accepted, and the server's own (possibly empty) assistant
+            # replies must not block chained requests.
+            _validate_message_content(
+                input_messages, field="input", require_non_empty=True
+            )
+            _validate_message_content(instruction_messages, field="instructions")
+
             # Prepend history from a previous response if the client is
             # continuing an existing conversation. The stored history holds only
             # the conversation turns (input items + assistant replies), never
@@ -683,12 +717,6 @@ def make_responses_endpoint(module):
             # conversation and then this request's new input. With no
             # previous_response_id this reduces to instructions + input.
             messages = instruction_messages + prior_messages + input_messages
-
-            # Validate the assembled conversation: instructions, prior
-            # history, and the new input. `field="input"` names the request
-            # field clients reason about, even though instructions may shift
-            # the index of the offending message.
-            _validate_message_content(messages, field="input")
 
             # The conversation to persist: prior turns + this request's new
             # input. Instructions are excluded on purpose (see note above) so
@@ -841,14 +869,18 @@ def make_responses_endpoint(module):
 
             return response
 
-        except ValueError as e:
-            # Message-content validation failures carry a `param` path;
-            # other ValueErrors (e.g. bad JSON schemas) have none.
+        except _InvalidMessageContentError as e:
             return create_openai_error_response(
                 status_code=400,
                 message=f"Invalid request: {e!s}",
                 error_type="invalid_request_error",
-                param=e.param if isinstance(e, _InvalidMessageContentError) else None,
+                param=e.param,
+            )
+        except ValueError as e:
+            return create_openai_error_response(
+                status_code=400,
+                message=f"Invalid request: {e!s}",
+                error_type="invalid_request_error",
             )
         except Exception:
             logger.exception("Unhandled error in responses endpoint")
@@ -883,7 +915,9 @@ def make_chat_endpoint(module):
 
             # Reject null/empty message content before it reaches serve()
             # as a None turn (400, matching the responses endpoint).
-            _validate_message_content(request.messages, field="messages")
+            _validate_message_content(
+                request.messages, field="messages", require_non_empty=True
+            )
 
             completion_id = "chatcmpl-" + "".join(
                 secrets.choice(_BASE62) for _ in range(29)
@@ -985,13 +1019,19 @@ def make_chat_endpoint(module):
                 system_fingerprint=system_fingerprint,
                 usage=build_completion_usage(output),
             )  # type: ignore
+        except _InvalidMessageContentError as e:
+            return create_openai_error_response(
+                status_code=400,
+                message=f"Invalid request: {e!s}",
+                error_type="invalid_request_error",
+                param=e.param,
+            )
         except ValueError as e:
             # Handle validation errors or invalid input
             return create_openai_error_response(
                 status_code=400,
                 message=f"Invalid request: {e!s}",
                 error_type="invalid_request_error",
-                param=e.param if isinstance(e, _InvalidMessageContentError) else None,
             )
         except Exception:
             logger.exception("Unhandled error in chat-completion handler")

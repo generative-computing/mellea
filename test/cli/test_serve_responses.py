@@ -1065,15 +1065,68 @@ class TestResponsesEndpointNonStreaming:
         mock_module.serve.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_empty_conversation_returns_400(self, mock_module):
-        """An input with no messages, instructions, or prior history returns 400."""
-        req = ResponseRequest(model="m", input=[])
+    @pytest.mark.parametrize("instructions", [None, "You are a poet"])
+    async def test_empty_input_returns_400(self, mock_module, instructions):
+        """An empty input array returns 400, even when instructions are present."""
+        req = ResponseRequest(model="m", input=[], instructions=instructions)
         endpoint = make_responses_endpoint(mock_module)
         resp = await endpoint(req)
         assert resp.status_code == 400
         body = json.loads(resp.body)
         assert body["error"]["param"] == "input"
         mock_module.serve.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_empty_text_block_content_returns_400(self, mock_module):
+        """A content list whose only block is empty text is rejected."""
+        req = ResponseRequest(
+            model="m",
+            input=[
+                ResponseInputItem(
+                    role="user", content=[InputContent(type="input_text", text="")]
+                )
+            ],
+        )
+        endpoint = make_responses_endpoint(mock_module)
+        resp = await endpoint(req)
+        assert resp.status_code == 400
+        body = json.loads(resp.body)
+        assert body["error"]["param"] == "input[0].content"
+        mock_module.serve.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_param_index_ignores_instructions(self, mock_module):
+        """The 400 param indexes into the client's input, not the assembled list."""
+        req = ResponseRequest(
+            model="m",
+            instructions="Be helpful",
+            input=[ResponseInputItem(role="user", content=None)],
+        )
+        endpoint = make_responses_endpoint(mock_module)
+        resp = await endpoint(req)
+        assert resp.status_code == 400
+        body = json.loads(resp.body)
+        assert body["error"]["param"] == "input[0].content"
+
+    @pytest.mark.asyncio
+    async def test_chained_request_after_empty_assistant_reply(self, mock_module):
+        """A stored empty assistant reply must not 400 a chained request."""
+        mock_module.serve.return_value = ModelOutputThunk("")
+        endpoint = make_responses_endpoint(mock_module)
+
+        # First request: the model returns no text, so the stored history's
+        # final assistant turn has content "".
+        first = await endpoint(ResponseRequest(model="m", input="first"))
+        assert isinstance(first, Response)
+        assert first.status == "completed"
+
+        # The follow-up chains via previous_response_id and must succeed.
+        mock_module.serve.return_value = ModelOutputThunk("ok")
+        response = await endpoint(
+            ResponseRequest(model="m", input="follow-up", previous_response_id=first.id)
+        )
+        assert isinstance(response, Response)
+        assert response.output_text == "ok"
 
     @pytest.mark.asyncio
     async def test_client_options_passed_when_declared(
