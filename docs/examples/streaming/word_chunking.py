@@ -17,6 +17,13 @@ The trade-off vs. SentenceChunking: validators that need sentence-level context
 (grammar, coherence) cannot operate correctly at word granularity because each
 chunk carries only a single token.  Use WordChunking when the check is
 token-local — forbidden words, length budgets, numeric thresholds.
+
+Prerequisites:
+    ollama serve
+    ollama pull granite4.2:3b
+
+Usage:
+    uv run python docs/examples/streaming/word_chunking.py
 """
 
 import asyncio
