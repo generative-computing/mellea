@@ -15,6 +15,7 @@ from unittest.mock import MagicMock
 import pytest
 from pydantic import BaseModel
 
+import mellea.stdlib.functional as mfuncs
 from mellea import generative
 from mellea.core import (
     Backend,
@@ -553,6 +554,8 @@ def test_describe_function_return_type():
         (Literal["yes", "no"], '"yes" | "no"'),
         (str | None, "string | null"),
         (list[str], "[string, ...]"),
+        (tuple[int, str], "[integer, string]"),
+        (tuple[int, ...], "[integer, ...]"),
         (dict, "object"),
         (
             _Team,
@@ -566,6 +569,50 @@ def test_result_shape(return_type, expected):
 
     fn.__annotations__["return"] = return_type
     assert generative(fn).format_for_llm().args["result_shape"] == expected
+
+
+def test_result_shape_falls_back_when_return_type_has_no_json_schema():
+    # `model_json_schema()` raises for a type like `Callable`. That runs at
+    # decoration time, so it must degrade to `any` instead of failing the import of
+    # the module defining the stub.
+    from collections.abc import Callable
+
+    @generative
+    def make_adder() -> Callable[[int], int]: ...
+
+    assert make_adder.format_for_llm().args["result_shape"] == "any"
+
+
+def test_format_type_drops_locals_and_outer_class_prefix():
+    # `__qualname__` would render `...<locals>.Local` and `Outer.Inner`.
+    class Local(BaseModel):
+        x: int
+
+    class Outer:
+        class Inner(BaseModel):
+            y: int
+
+    assert _format_type(Local) == "Local"
+    assert _format_type(list[Outer.Inner]) == "list[Inner]"
+
+    @generative
+    def build() -> Local: ...
+
+    assert build._function._function_dict["return_type"] == "Local"
+    assert "<locals>" not in build._function._function_dict["signature"]
+
+
+def test_get_argument_escapes_string_values_as_json():
+    # A raw `f'"{val}"'` let an embedded quote end the value early and a newline
+    # break the `- name: value` line; every other value already renders as JSON.
+    def fn(text: str) -> None:
+        pass
+
+    value = get_argument(fn, "text", 'he said "hi"\nline2')._argument_dict["value"]
+    assert value == '"he said \\"hi\\"\\nline2"'
+    assert json.loads(value) == 'he said "hi"\nline2'
+    # Non-ASCII text stays readable rather than becoming `\u` escapes.
+    assert get_argument(fn, "text", "café")._argument_dict["value"] == '"café"'
 
 
 def test_result_shape_recursive_model_terminates():
@@ -685,6 +732,23 @@ class _FixedJSONBackend(Backend):
 
     async def _generate_from_raw(self, *args, **kwargs):
         raise NotImplementedError
+
+
+def test_non_stub_component_parsing_to_none_still_fails():
+    """Only generative stubs may parse to `None`; any other component still trips the invariant.
+
+    The relaxation for `-> X | None` stubs is scoped to `GenerativeStub`, so a component
+    whose `_parse` returns `None` by mistake keeps failing loudly.
+    """
+    from mellea.stdlib.components import Instruction
+
+    class _ParsesToNone(Instruction):
+        def _parse(self, computed: ModelOutputThunk) -> Any:
+            return None
+
+    backend = _FixedJSONBackend("anything")
+    with pytest.raises(AssertionError, match="non-None parsed_repr"):
+        mfuncs.act(_ParsesToNone("describe"), SimpleContext(), backend)
 
 
 def test_sync_stub_returns_none_result():

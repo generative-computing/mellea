@@ -1567,15 +1567,18 @@ class ModelOutputThunk(Generic[S]):
             await self._gen.post_process(self)
 
             self._set_parsed_repr()
-            # A `Component` whose type parameter admits `None` (e.g. a `@generative`
-            # stub returning `str | None`) can legitimately parse to `None`, so only
-            # non-`Component` actions — whose parsed repr is the computed string — are
-            # held to a non-`None` parsed repr.
-            assert self.parsed_repr is not None or isinstance(
-                self._call.action, Component
-            ), (
-                "enforce constraint that a computed ModelOutputThunk has a non-None parsed_repr"
-            )
+            if self.parsed_repr is None:
+                # A `@generative` stub whose return type admits `None` (e.g.
+                # `-> str | None`) legitimately parses `{"result": null}` to `None`.
+                # Every other action is still held to a non-`None` parsed repr, so a
+                # component whose `_parse` returns `None` by mistake still fails here.
+                # Deferred import: `genstub` imports `mellea.core`, so a top-level
+                # import here would be circular.
+                from ..stdlib.components.genstub import GenerativeStub
+
+                assert isinstance(self._call.action, GenerativeStub), (
+                    "enforce constraint that a computed ModelOutputThunk has a non-None parsed_repr"
+                )
 
             # --- generation_post_call hook ---
             if has_plugins(HookType.GENERATION_POST_CALL):

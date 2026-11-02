@@ -108,7 +108,8 @@ class FunctionDict(TypedDict):
 
     Attributes:
         name (str): The function's `__name__`.
-        signature (str): The function's parameter signature as a string.
+        signature (str): The function's parameter signature as a string. Not used
+            by the default `GenerativeStub.jinja2`; kept for custom templates.
         docstring (str | None): The function's docstring, or `None` if absent.
         return_type (str): The function's return annotation as a string, or
             `Any` if it has none.
@@ -249,7 +250,9 @@ def _format_type(annotation: Any) -> str:
     `inspect.formatannotation` drops the `builtins.` prefix but keeps every other
     module path (`tasks.Person`, `__main__.Person`), and `str(type)` renders a class
     as `<class 'str'>`. Neither path carries meaning for the model, so this
-    renders every type by its qualified name. A postponed annotation that could
+    renders every type by its bare `__name__` — which also drops the
+    `main.<locals>.` prefix of a class defined inside a function, and the outer
+    class of a nested one. A postponed annotation that could
     not be resolved is a string, and renders bare (`Decimal`, not `'Decimal'`) so
     it is not mistaken for a string-typed value.
     """
@@ -276,16 +279,15 @@ def _format_type(annotation: Any) -> str:
     if origin is Union or origin is types.UnionType:
         return " | ".join(_format_type(a) for a in args)
     if origin is not None and args:
-        name = getattr(origin, "__qualname__", None) or _format_type(origin)
+        name = getattr(origin, "__name__", None) or _format_type(origin)
         return f"{name}[{', '.join(_format_type(a) for a in args)}]"
     if isinstance(annotation, type):
-        return annotation.__qualname__
+        return annotation.__name__
     return inspect.formatannotation(annotation)
 
 
-def _format_signature(func: Callable) -> str:
-    """Render `func`'s signature for a prompt, with every annotation via `_format_type`."""
-    sig = resolve_signature_annotations(func)
+def _format_signature(sig: inspect.Signature) -> str:
+    """Render a signature for a prompt, with every annotation via `_format_type`."""
     params = []
     for p in sig.parameters.values():
         text = p.name
@@ -301,14 +303,16 @@ def _format_signature(func: Callable) -> str:
 
 
 def _format_value(val: Any) -> str:
-    """Render an argument value for a prompt: strings quoted, structured values as JSON.
+    """Render an argument value for a prompt as JSON.
 
     Pydantic models, dataclasses, dicts and lists render as JSON, which is what the
     model also emits for structured output; `str()` would show a Pydantic model as
-    `field='value' other=[Thought(...)]`.
+    `field='value' other=[Thought(...)]`. Strings are JSON-encoded too, so an
+    embedded quote or newline is escaped rather than ending the quoted value early
+    or breaking the `- name: value` line.
     """
     if isinstance(val, str):
-        return f'"{val}"'
+        return json.dumps(val, ensure_ascii=False)
     try:
         return json.dumps(pydantic_core.to_jsonable_python(val), ensure_ascii=False)
     except Exception:
@@ -360,6 +364,14 @@ def _json_shape_inner(
             return "{string: " + _json_shape_inner(extra, defs, seen) + ", ...}"
         return "object"
     if kind == "array":
+        # A fixed-length tuple (`tuple[int, str]`) lists one schema per position.
+        prefix = schema.get("prefixItems")
+        if isinstance(prefix, list) and prefix:
+            return (
+                "[" + ", ".join(_json_shape_inner(p, defs, seen) for p in prefix) + "]"
+            )
+        if schema.get("maxItems") == 0:  # `tuple[()]`
+            return "[]"
         items = schema.get("items")
         if isinstance(items, dict) and items:
             return "[" + _json_shape_inner(items, defs, seen) + ", ...]"
@@ -367,6 +379,29 @@ def _json_shape_inner(
     if kind in ("string", "integer", "number", "boolean", "null"):
         return kind
     return "any"
+
+
+def _result_shape(response_model: type[BaseModel]) -> str:
+    """Return the compact JSON shape of `response_model`'s `result` field.
+
+    A return type with no JSON schema (e.g. `-> Callable[[int], int]`) makes
+    `model_json_schema()` raise. That runs at decoration time, so degrade to the
+    `any` shape with a debug log, as `create_response_format` does for an
+    unresolvable return type, rather than failing the module's import. Such a stub
+    still fails when called, where structured output needs the schema.
+    """
+    try:
+        schema = response_model.model_json_schema()
+    except Exception as e:
+        MelleaLogger.get_logger().debug(
+            "Could not build a JSON schema for '%s' (%s); "
+            "falling back to the `any` result shape in the prompt: %s",
+            response_model.__name__,
+            type(e).__name__,
+            e,
+        )
+        return "any"
+    return _json_shape(schema["properties"]["result"], schema.get("$defs", {}))
 
 
 def describe_function(func: Callable) -> FunctionDict:
@@ -385,13 +420,12 @@ def describe_function(func: Callable) -> FunctionDict:
     # postponed string, and `_format_signature` renders it bare — `-> Decimal` —
     # because `str(inspect.Signature)` would quote it as `-> 'Decimal'`, which a
     # small model can read as "returns a string".
+    sig = resolve_signature_annotations(func)
     return {
         "name": func.__name__,
-        "signature": _format_signature(func),
+        "signature": _format_signature(sig),
         "docstring": inspect.getdoc(func),
-        "return_type": _format_type(
-            resolve_signature_annotations(func).return_annotation
-        ),
+        "return_type": _format_type(sig.return_annotation),
     }
 
 
@@ -541,10 +575,7 @@ class GenerativeStub(Component[R], Generic[P, R]):
         functools.update_wrapper(self, func)
 
         self._response_model = create_response_format(self._function._func)
-        response_schema = self._response_model.model_json_schema()
-        self._result_shape: str = _json_shape(
-            response_schema["properties"]["result"], response_schema.get("$defs", {})
-        )
+        self._result_shape: str = _result_shape(self._response_model)
 
         # Set when calling the decorated func.
         self.precondition_requirements: list[Requirement] = []
