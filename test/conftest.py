@@ -87,18 +87,25 @@ def _check_ollama_available():
 # Default matches scripts/start_llamacpp.sh, which serves Granite 4.2 3b on 8080.
 LLAMACPP_DEFAULT_BASE_URL = "http://127.0.0.1:8080/v1"
 
+# Default matches scripts/start_llamacpp_switch.sh, which serves a Granite Switch
+# model on 8081 so it can run beside the base-Granite server.
+LLAMACPP_SWITCH_DEFAULT_BASE_URL = "http://127.0.0.1:8081/v1"
+
 # Property keys llama-server returns from /props. Both predate its OpenAI-compatible
 # endpoints, so fingerprinting on them holds across llama.cpp versions. Pinned in
 # test/test_llamacpp_detection.py against a captured /props payload.
 LLAMACPP_PROPS_KEYS = ("default_generation_settings", "total_slots")
 
 
-def _check_llamacpp_available():
+def _check_llamacpp_available(
+    env_var: str = "LLAMACPP_BASE_URL", default_url: str = LLAMACPP_DEFAULT_BASE_URL
+):
     """Check whether a local llama.cpp server is loaded and ready to serve.
 
-    Reads `LLAMACPP_BASE_URL` (default `http://127.0.0.1:8080/v1`) and probes
-    `/props`, requiring a 200 whose JSON body carries `LLAMACPP_PROPS_KEYS`. One
-    request settles both halves of the gate:
+    Reads the base URL from `env_var` (default `LLAMACPP_BASE_URL`), falling back
+    to `default_url` (default `LLAMACPP_DEFAULT_BASE_URL`), and probes `/props`,
+    requiring a 200 whose JSON body carries `LLAMACPP_PROPS_KEYS`. One request
+    settles both halves of the gate:
 
     - Ready, not merely bound. llama-server accepts connections while it is still
       downloading and loading weights, answering every endpoint 503 "Loading model"
@@ -117,7 +124,7 @@ def _check_llamacpp_available():
     import json
     import urllib.request
 
-    base_url = os.environ.get("LLAMACPP_BASE_URL", LLAMACPP_DEFAULT_BASE_URL)
+    base_url = os.environ.get(env_var, default_url)
     props_url = base_url.rstrip("/").removesuffix("/v1") + "/props"
     try:
         with urllib.request.urlopen(props_url, timeout=2) as resp:
@@ -145,6 +152,7 @@ def get_system_capabilities():
         "has_api_keys": {},
         "has_ollama": False,
         "has_llamacpp": False,
+        "has_llamacpp_switch": False,
     }
 
     # Detect GPU (CUDA for NVIDIA, MPS for Apple Silicon)
@@ -210,6 +218,10 @@ def get_system_capabilities():
 
     # Detect a local llama.cpp server (started by scripts/start_llamacpp.sh)
     capabilities["has_llamacpp"] = _check_llamacpp_available()
+    # ...and the Granite Switch one (started by scripts/start_llamacpp_switch.sh)
+    capabilities["has_llamacpp_switch"] = _check_llamacpp_available(
+        "LLAMACPP_SWITCH_BASE_URL", LLAMACPP_SWITCH_DEFAULT_BASE_URL
+    )
 
     _capabilities_cache = capabilities
     return capabilities
@@ -549,6 +561,10 @@ def pytest_collection_modifyitems(config, items):
         reason="llama.cpp server not reachable (start scripts/start_llamacpp.sh, "
         "or set LLAMACPP_BASE_URL)"
     )
+    skip_llamacpp_switch = pytest.mark.skip(
+        reason="llama.cpp Switch server not reachable (start "
+        "scripts/start_llamacpp_switch.sh, or set LLAMACPP_SWITCH_BASE_URL)"
+    )
 
     # Auto-apply 'unit' marker to tests without explicit granularity markers.
     # This enables `pytest -m unit` without per-file maintenance burden.
@@ -576,6 +592,12 @@ def pytest_collection_modifyitems(config, items):
 
         if item.get_closest_marker("llamacpp") and not capabilities["has_llamacpp"]:
             item.add_marker(skip_llamacpp)
+
+        if (
+            item.get_closest_marker("llamacpp_switch")
+            and not capabilities["has_llamacpp_switch"]
+        ):
+            item.add_marker(skip_llamacpp_switch)
 
         # Auto-apply unit marker
         if not any(item.get_closest_marker(m) for m in _NON_UNIT):
