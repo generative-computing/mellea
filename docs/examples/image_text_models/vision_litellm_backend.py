@@ -1,6 +1,19 @@
 # pytest: litellm, e2e, ollama
 
-"""Examples of using vision models with LiteLLM backend."""
+"""Examples of using vision models with LiteLLM backend.
+
+Demonstrates passing PIL images to `m.instruct()` and `m.chat()` using
+`LiteLLMBackend` with an Ollama vision model, covering both text chat and
+multimodal inputs.
+
+Prerequisites:
+    uv sync --extra litellm
+    ollama serve
+    ollama pull hf.co/ibm-granite/granite-vision-4.1-4b-GGUF:Q4_K_M
+
+Usage:
+    uv run python docs/examples/image_text_models/vision_litellm_backend.py
+"""
 
 import os
 import pathlib

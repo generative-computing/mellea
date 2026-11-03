@@ -1,80 +1,19 @@
 # Vision/Multimodal Examples
 
 This directory contains examples for working with vision-language models that can process both images and text.
+For a step-by-step guide, see
+[Use Images and Vision Models](../../docs/how-to/use-images-and-vision.md).
 
-## Files
+## Examples
 
-### [vision_ollama_chat.py](./vision_ollama_chat.py)
-Demonstrates using vision models through Ollama backend with chat interface.
-
-**Key Features:**
-- Loading and processing images
-- Using vision models for image understanding
-- Chat-based interaction with images
-
-### [vision_openai_examples.py](./vision_openai_examples.py)
-Shows how to use OpenAI-compatible vision models (including local VLLM servers).
-
-### [vision_litellm_backend.py](./vision_litellm_backend.py)
-Examples using LiteLLM backend for vision model access.
+| File | Description |
+| :--- | :--- |
+| [`vision_ollama_chat.py`](./vision_ollama_chat.py) | Demonstrates using vision models through Ollama backend with chat interface. |
+| [`vision_openai_examples.py`](./vision_openai_examples.py) | Shows how to use OpenAI-compatible vision models (including local VLLM servers). |
+| [`vision_litellm_backend.py`](./vision_litellm_backend.py) | Examples using LiteLLM backend for vision model access. |
 
 ## Supporting Files
 
-### pointing_up.jpg
+### [pointing_up.jpg](./pointing_up.jpg)
+
 Sample image used in the examples for testing vision capabilities.
-
-## Concepts Demonstrated
-
-- **Multimodal Input**: Combining text and images in prompts
-- **Vision Understanding**: Asking questions about image content
-- **Backend Flexibility**: Using different backends (Ollama, OpenAI, LiteLLM) for vision
-- **Image Processing**: Loading and formatting images for LLM consumption
-
-## Basic Usage
-
-```python
-from mellea import start_session
-from mellea.stdlib.components import Message
-
-# Load image
-with open("pointing_up.jpg", "rb") as f:
-    image_data = f.read()
-
-# Create session with vision model
-m = start_session(model_id="llava:7b")
-
-# Ask about the image
-response = m.chat(
-    Message(
-        role="user",
-        content="What do you see in this image?",
-        images=[image_data]
-    )
-)
-```
-
-## Supported Models
-
-- **Ollama**: granite-vision-4.1 as
-  `hf.co/ibm-granite/granite-vision-4.1-4b-GGUF:Q4_K_M` (pulled from Hugging
-  Face rather than the Ollama library, so the full tag is required), plus
-  llava, bakllava, llava-phi3, moondream, and qwen2.5vl:7b.
-- **OpenAI**: gpt-4-vision-preview, gpt-4o
-- **LiteLLM**: Various vision models through unified interface
-
-## Prerequisites
-
-Pull a vision-capable model before running these examples:
-
-```bash
-ollama pull qwen2.5vl:7b         # ~4.7 GB — used in vision_openai_examples.py
-
-# granite-vision-4.1 is the current-generation Granite vision model. It is not in
-# the Ollama library, so pull IBM's official GGUF build from Hugging Face:
-ollama pull hf.co/ibm-granite/granite-vision-4.1-4b-GGUF:Q4_K_M   # ~3.3 GB
-```
-
-## Related Documentation
-
-- See `test/backends/test_vision_*.py` for more examples
-- See `mellea/stdlib/components/chat.py` for Message API
