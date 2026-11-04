@@ -49,12 +49,17 @@ invented claim (30 `invented` + 4 `long`).
   - `partial` fails unless `allow_partial_support`;
   - `NA` is ignored;
   - a sentence with no record, an unknown label, or offsets outside the response is
-    errored. An exception from either adapter call (a contract error after #1719, bad
-    JSON, truncated output) is also errored. Errored counts as a fail and as a hard failure.
+    errored. A `ValueError` or `AdapterSchemaMismatchError` from either adapter call (bad
+    JSON, truncated output, a contract error) is also errored. Errored counts as a fail
+    and as a hard failure.
 
 Run each arm in both modes. Arm 2 runs on both binding shapes (`--binding` labels the
 results; `--backend-factory module:function` supplies a non-default backend such as
 Granite Switch).
+
+Any other exception stops the run: running out of memory, a failed adapter download or a
+bad `--backend-factory` says nothing about the adapter, so it must not count against the
+hard-failure gate.
 
 ## What is measured (per arm, mode and binding)
 
@@ -66,8 +71,16 @@ Granite Switch).
 - Hard failures over all repeats.
 - Stability: items whose verdict changes across repeats (`--repeats 3`, temperature 0).
 - Latency (median, p90) and tokens per validation. Tokens are summed from
-  `generation.usage` through a scoped plugin, and are left empty if a backend does not
-  report usage.
+  `generation.usage` through a scoped plugin. A row's totals stay empty unless every
+  generation call in that validation reported usage, and the row keeps both counts. This
+  depends on the call path, not only the backend: on `LocalHFBackend` adapter calls report
+  no usage, so arm 2 has no totals there and neither does arm 1, whose `find_citations`
+  call is an adapter call. Token costs on that binding need another source.
+- Provenance, on every row: `--model`, and the name, revision and binding type of each
+  adapter that ran.
+
+Tokens and adapter provenance need the `hooks` extra. Without it the run warns and leaves
+those fields empty.
 
 The first repeat is the primary verdict for every comparison. The other repeats only
 feed the stability count.
@@ -75,16 +88,21 @@ feed the stability count.
 ## Running (GPU)
 
 ```bash
-H="python -m test.stdlib.requirements.groundedness_eval.harness"
-$H run --arm prompts --out results/prompts_strict.jsonl
-$H run --arm prompts --allow-partial-support --out results/prompts_lenient.jsonl
-$H run --arm adapter --out results/adapter_strict.jsonl
-$H run --arm adapter --allow-partial-support --out results/adapter_lenient.jsonl
-$H compare results/prompts_strict.jsonl results/adapter_strict.jsonl \
-    --margin 0.05 --max-hard-failure 0.02 --rule mcnemar
+uv run python -m test.stdlib.requirements.groundedness_eval.harness run --arm prompts --out results/prompts_strict.jsonl
+uv run python -m test.stdlib.requirements.groundedness_eval.harness run --arm prompts --allow-partial-support --out results/prompts_lenient.jsonl
+uv run python -m test.stdlib.requirements.groundedness_eval.harness run --arm adapter --out results/adapter_strict.jsonl
+uv run python -m test.stdlib.requirements.groundedness_eval.harness run --arm adapter --allow-partial-support --out results/adapter_lenient.jsonl
+uv run python -m test.stdlib.requirements.groundedness_eval.harness compare results/prompts_strict.jsonl results/adapter_strict.jsonl --margin 0.05 --max-hard-failure 0.02 --rule margin
 ```
 
-Runs append to `--out` and skip finished items, so an interrupted run resumes.
+Use one `--out` file per arm, mode, binding and model. `compare` refuses a file that mixes
+them, has items missing, has an unfinished repeat, or holds the wrong arm, and it refuses
+two files with different models or adapter revisions. Run it once per binding.
+
+Runs append to `--out` and skip finished rows, so an interrupted run resumes. A run that
+stopped on an exception wrote no row for that item, so resuming retries it. Recorded hard
+failures are not retried: retrying until an item succeeds would hide flaky adapter
+failures from the 2% gate. After changing the adapter, write to a new file.
 
 ## Decision rule: proposal, to be agreed on #1721 before any run
 
@@ -93,14 +111,19 @@ Runs append to `--out` and skip finished items, so an interrupted run resumes.
 | Set | the 128 items above |
 | Primary verdict | repeat 0 of 3 |
 | Margin | 5 percentage points, for false fails and for misses, in each mode |
-| Paired test | exact McNemar on the items where the arms disagree, α = 0.05 |
-| "No worse" | rule `mcnemar`: arm 2's rate is at most arm 1's + 5 points, and McNemar does not show arm 2 making more of that error |
+| "No worse" | rule `margin`: arm 2's rate is at most arm 1's + 5 points |
 | Hard failures | arm 2 under 2% of validations, on each binding |
 
-**Why `mcnemar`, not `ci`.** The harness also computes a strict non-inferiority
-reading (`--rule ci`: the upper end of the 95% paired bootstrap CI must be within the
-margin). On this set that reading is too demanding. Suppose the two arms each miss
-3 of the 34 invented-claim items, but different ones. Their miss rates are equal, yet
-the CI is wide enough to call arm 2 worse. `test_rules_differ_when_arms_tie_with_disagreements`
-reproduces this. Making `ci` workable at a 5-point margin would need a much larger
-set. Both readings are always reported, so the choice stays visible.
+**This is a margin rule, with no significance test behind it.** It allows arm 2 one more
+miss of the 34 invented-claim items, three more false fails of 74 in strict mode, and four
+more of 94 in lenient mode. Exact McNemar cannot add anything here: whenever the margin
+passes on this set, p is above 0.05, one-sided or two-sided
+(`test_mcnemar_cannot_fire_inside_the_margin`). The test could only fire with about 120
+invented-claim items. The p-value is still reported, for information.
+
+**Why `margin`, not `ci`.** The harness also computes a strict non-inferiority reading
+(`--rule ci`: the upper end of the 95% paired bootstrap CI must be within the margin). On
+this set that reading is too demanding. Suppose the two arms each miss 3 of the 34
+invented-claim items, but different ones. Their miss rates are equal, yet the CI is wide
+enough to call arm 2 worse (`test_margin_and_ci_readings_differ_when_arms_tie_with_disagreements`).
+Both readings are always reported, so the choice stays visible.

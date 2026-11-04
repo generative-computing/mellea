@@ -5,6 +5,7 @@
 
 import json
 from collections import Counter
+from dataclasses import replace
 
 import pytest
 
@@ -47,6 +48,8 @@ def test_gold_sentences_match_the_adapter_split(item):
     """Gold labels line up one-to-one with the sentences the adapter sees."""
     spans = sentence_spans(item.response)
     assert [item.response[b:e] for b, e in spans] == [s["text"] for s in item.sentences]
+    # The adapter's offsets assume single spaces between sentences.
+    assert " ".join(s["text"] for s in item.sentences) == item.response
     assert all(s["label"] in LABELS for s in item.sentences)
 
 
@@ -151,6 +154,23 @@ def test_paired_difference_ci():
     assert diff == pytest.approx(0.2) and lo <= 0.2 <= hi and lo > 0
     with pytest.raises(ValueError):
         paired_difference_ci([True], [True, False])
+
+
+@pytest.mark.parametrize(
+    ("n", "extra_errors"),
+    [(34, 1), (74, 3), (94, 4)],
+    ids=["miss", "strict", "lenient"],
+)
+def test_mcnemar_cannot_fire_inside_the_margin(n, extra_errors):
+    """On this set, the rule is the 5-point margin and nothing more."""
+    largest = 0
+    for b in range(n + 1):
+        for c in range(b + 1, n - b + 1):
+            if (c - b) / n <= 0.05:
+                largest = max(largest, c - b)
+                two_sided = mcnemar_exact(b, c)
+                assert two_sided >= 0.05 and two_sided / 2 >= 0.05
+    assert largest == extra_errors
 
 
 # ------------------------------------------------------------- metrics, decision
@@ -284,38 +304,297 @@ async def test_run_arm_writes_and_resumes(tmp_path, monkeypatch):
     assert {r["repeat"] for r in rows} == {0, 1}
 
 
-async def test_arm_exceptions_become_hard_failures(monkeypatch):
-    async def broken(item, backend, lenient):
-        raise RuntimeError("adapter not loaded")
+async def test_unexpected_exceptions_stop_the_run_and_retry_on_resume(
+    tmp_path, monkeypatch
+):
+    calls = []
 
-    monkeypatch.setitem(harness.ARMS, "broken", broken)
-    (o,) = await harness.run_arm(
-        ITEMS[:1], "broken", None, allow_partial_support=False, binding="t"
+    async def flaky(item, backend, lenient):
+        calls.append(item.id)
+        if len(calls) == 2:
+            raise RuntimeError("CUDA out of memory")
+        return {"passed": True, "errored": False}
+
+    monkeypatch.setitem(harness.ARMS, "flaky", flaky)
+    out = tmp_path / "flaky.jsonl"
+    kwargs = {"allow_partial_support": False, "binding": "t", "out": out}
+    with pytest.raises(RuntimeError):
+        await harness.run_arm(ITEMS[:3], "flaky", None, **kwargs)
+    assert [r.item_id for r in harness.read_outcomes(out)] == [ITEMS[0].id]
+    await harness.run_arm(ITEMS[:3], "flaky", None, **kwargs)
+    assert [r.item_id for r in harness.read_outcomes(out)] == [i.id for i in ITEMS[:3]]
+
+
+async def test_recorded_hard_failures_are_not_retried(tmp_path, monkeypatch):
+    calls = []
+
+    async def bad_output(item, backend, lenient):
+        calls.append(item.id)
+        return {"passed": None, "errored": True, "error": "x", "error_type": "E"}
+
+    monkeypatch.setitem(harness.ARMS, "bad", bad_output)
+    kwargs = {
+        "allow_partial_support": False,
+        "binding": "t",
+        "out": tmp_path / "bad.jsonl",
+    }
+    await harness.run_arm(ITEMS[:1], "bad", None, **kwargs)
+    assert await harness.run_arm(ITEMS[:1], "bad", None, **kwargs) == []
+    assert len(calls) == 1
+
+
+async def test_a_different_model_is_not_skipped_on_resume(tmp_path, monkeypatch):
+    async def fake(item, backend, lenient):
+        return {"passed": True, "errored": False}
+
+    monkeypatch.setitem(harness.ARMS, "fake", fake)
+    kwargs = {
+        "allow_partial_support": False,
+        "binding": "t",
+        "out": tmp_path / "m.jsonl",
+    }
+    await harness.run_arm(ITEMS[:1], "fake", None, model="a", **kwargs)
+    (o,) = await harness.run_arm(ITEMS[:1], "fake", None, model="b", **kwargs)
+    assert o.model == "b"
+
+
+class _Backend:
+    def __init__(self, resolve_error=None):
+        self.resolve_error = resolve_error
+
+    def resolve_adapter(self, name):
+        if self.resolve_error:
+            raise self.resolve_error
+
+
+def _patch_adapters(monkeypatch, *, citations=None, flagged=None):
+    from mellea.stdlib.components.intrinsic import rag
+
+    def fake(result):
+        def call(*args, **kwargs):
+            if isinstance(result, Exception):
+                raise result
+            return result
+
+        return call
+
+    monkeypatch.setattr(rag, "find_citations", fake(citations or []))
+    monkeypatch.setattr(rag, "flag_hallucinated_content", fake(flagged or []))
+
+
+@pytest.mark.parametrize("name", ["value", "contract"])
+async def test_adapter_output_errors_are_hard_failures(monkeypatch, name):
+    from mellea.backends.adapters import AdapterSchemaMismatchError
+
+    exc = (
+        ValueError("bad JSON")
+        if name == "value"
+        else AdapterSchemaMismatchError("x", frozenset(), frozenset({"y"}))
     )
-    assert o.errored and o.passed is None and "adapter not loaded" in o.error
+    _patch_adapters(monkeypatch, flagged=exc)
+    raw = await harness.run_adapter_arm(ITEMS[0], _Backend(), False)
+    assert raw["errored"] and raw["passed"] is None
+    assert raw["error_type"] == type(exc).__name__
 
 
-def test_rules_differ_when_arms_tie_with_disagreements():
-    """Equal error counts, a few disagreements: mcnemar passes, the strict CI may not."""
+async def test_other_adapter_arm_errors_propagate(monkeypatch):
+    _patch_adapters(monkeypatch, flagged=RuntimeError("CUDA out of memory"))
+    with pytest.raises(RuntimeError):
+        await harness.run_adapter_arm(ITEMS[0], _Backend(), False)
+
+
+async def test_failed_adapter_resolve_stops_the_run(monkeypatch):
+    """A download failure can be a ValueError; it must not count against the adapter."""
+    _patch_adapters(monkeypatch)
+    with pytest.raises(ValueError):
+        await harness.run_adapter_arm(
+            ITEMS[0], _Backend(resolve_error=ValueError("no model id")), False
+        )
+
+
+async def test_unusable_records_name_their_error_type(monkeypatch):
+    _patch_adapters(monkeypatch)  # no records, so every sentence lacks one
+    raw = await harness.run_adapter_arm(ITEMS[0], _Backend(), False)
+    assert raw["errored"] and raw["error_type"] == "malformed_records"
+
+
+# ------------------------------------------------------------------- call recording
+
+
+def test_partial_token_totals_are_not_stored():
+    rec = harness._CallRecorder()
+    rec.active = True
+    rec.note_generation({"prompt_tokens": 10, "completion_tokens": 2})
+    rec.note_generation(None)  # the HF adapter path reports no usage
+    fields = rec.fields()
+    assert fields["prompt_tokens"] is None and fields["completion_tokens"] is None
+    assert (fields["generation_calls"], fields["generation_calls_with_usage"]) == (2, 1)
+
+
+def test_complete_token_totals_and_adapters_are_stored():
+    rec = harness._CallRecorder()
+    rec.active = True
+    rec.note_generation({"prompt_tokens": 10, "completion_tokens": 2})
+    rec.note_generation({"prompt_tokens": 5, "completion_tokens": 1})
+    rec.note_adapter("citations", "abc", "local_file")
+    rec.note_adapter("citations", "abc", "local_file")
+    fields = rec.fields()
+    assert (fields["prompt_tokens"], fields["completion_tokens"]) == (15, 3)
+    assert fields["adapters"] == [
+        {"name": "citations", "revision": "abc", "binding_type": "local_file"}
+    ]
+
+
+def test_no_generation_calls_means_no_token_total():
+    rec = harness._CallRecorder()
+    rec.active = True
+    assert rec.fields()["prompt_tokens"] is None
+
+
+async def test_scoped_hooks_fill_in_the_row(monkeypatch):
+    pytest.importorskip("cpex")
+    from types import SimpleNamespace
+
+    from mellea.plugins.hooks.adapter_function import (
+        AdapterFunctionInvocationCompletePayload,
+    )
+    from mellea.plugins.hooks.generation import GenerationPostCallPayload
+    from mellea.plugins.manager import invoke_hook
+    from mellea.plugins.types import HookType
+
+    async def fake(item, backend, lenient):
+        output = SimpleNamespace(
+            generation=SimpleNamespace(
+                usage={"prompt_tokens": 7, "completion_tokens": 3}
+            )
+        )
+        await invoke_hook(
+            HookType.GENERATION_POST_CALL,
+            GenerationPostCallPayload(model_output=output),
+        )
+        await invoke_hook(
+            HookType.ADAPTER_FUNCTION_INVOCATION_COMPLETE,
+            AdapterFunctionInvocationCompletePayload(
+                name="citations",
+                revision="abc",
+                binding_type="local_file",
+                adapter_type="lora",
+                outcome="success",
+            ),
+        )
+        return {"passed": True, "errored": False}
+
+    monkeypatch.setitem(harness.ARMS, "fake", fake)
+    (o,) = await harness.run_arm(
+        ITEMS[:1], "fake", None, allow_partial_support=False, binding="t", model="m"
+    )
+    assert (o.prompt_tokens, o.completion_tokens) == (7, 3)
+    assert o.generation_calls == o.generation_calls_with_usage == 1
+    assert o.adapters == [
+        {"name": "citations", "revision": "abc", "binding_type": "local_file"}
+    ]
+    assert o.model == "m"
+
+
+# ---------------------------------------------------------------- compare's inputs
+
+
+def _compare(first, second, **kwargs):
+    return compare(ITEMS, first, second, margin=0.05, max_hard_failure=0.02, **kwargs)
+
+
+def test_compare_rejects_missing_items():
+    with pytest.raises(ValueError, match="missing"):
+        _compare(_outcomes("prompts"), _outcomes("adapter")[:10])
+
+
+def test_compare_rejects_swapped_files():
+    with pytest.raises(ValueError, match="prompts file first"):
+        _compare(_outcomes("adapter"), _outcomes("prompts"))
+
+
+def test_compare_rejects_mixed_bindings():
+    """Clean rows must not dilute another binding's hard failures below the gate."""
+    other = [replace(o, binding="switch") for o in _outcomes("adapter")]
+    with pytest.raises(ValueError, match="mix bindings"):
+        _compare(_outcomes("prompts"), _outcomes("adapter") + other)
+
+
+def test_compare_rejects_mixed_arms():
+    with pytest.raises(ValueError, match="mix arms"):
+        _compare(_outcomes("prompts") + _outcomes("adapter"), _outcomes("adapter"))
+
+
+def test_compare_rejects_duplicate_rows():
+    rows = _outcomes("adapter")
+    with pytest.raises(ValueError, match="duplicate"):
+        _compare(_outcomes("prompts"), rows + rows[:1])
+
+
+def test_compare_rejects_items_outside_the_set():
+    rows = _outcomes("adapter")
+    with pytest.raises(ValueError, match="not in the set"):
+        _compare(_outcomes("prompts"), [*rows, replace(rows[0], item_id="nope")])
+
+
+def test_compare_rejects_an_unfinished_repeat():
+    rows = _outcomes("adapter", repeats=2)
+    with pytest.raises(ValueError, match="different repeats"):
+        _compare(_outcomes("prompts"), rows[:-1])
+
+
+def test_compare_rejects_an_empty_file():
+    with pytest.raises(ValueError, match="no outcomes"):
+        _compare(_outcomes("prompts"), [])
+
+
+def test_compare_rejects_different_models():
+    second = [replace(o, model="other") for o in _outcomes("adapter")]
+    with pytest.raises(ValueError, match="same model"):
+        _compare(_outcomes("prompts"), second)
+
+
+def test_compare_rejects_mixed_adapter_revisions():
+    def at(revision):
+        return [{"name": "citations", "revision": revision, "binding_type": "x"}]
+
+    rows = _outcomes("adapter")
+    second = [replace(rows[0], adapters=at("a")), replace(rows[1], adapters=at("b"))]
+    with pytest.raises(ValueError, match="adapter revisions"):
+        _compare(_outcomes("prompts"), second + rows[2:])
+
+
+def test_report_lists_the_adapters_and_model():
+    used = [{"name": "citations", "revision": "a", "binding_type": "local_file"}]
+    second = [replace(o, adapters=used, model="m") for o in _outcomes("adapter")]
+    first = [replace(o, model="m") for o in _outcomes("prompts")]
+    report = _compare(first, second)
+    assert report["arm2"]["adapters"] == used and report["model"] == "m"
+
+
+def test_margin_and_ci_readings_differ_when_arms_tie_with_disagreements():
+    """Equal error counts, a few disagreements: the margin passes, the CI does not."""
     inv = [i.id for i in ITEMS if i.has_invented_claim]
-    report = compare(
-        ITEMS,
+    report = _compare(
         _outcomes("prompts", wrong_ids=inv[:3]),
         _outcomes("adapter", wrong_ids=inv[3:6]),
-        margin=0.05,
-        max_hard_failure=0.02,
-        rule="mcnemar",
+        rule="margin",
     )
     miss = report["comparison"]["miss"]
     assert miss["diff"] == 0 and miss["mcnemar_p"] == 1.0
-    assert miss["no_worse_mcnemar"] is True and miss["no_worse"] is True
+    assert miss["no_worse_margin"] is True and miss["no_worse"] is True
     assert miss["no_worse_ci"] is False  # 34 items are too few for a 5-point CI
     with pytest.raises(ValueError):
-        compare(
-            ITEMS,
-            _outcomes("prompts"),
-            _outcomes("adapter"),
-            margin=0.05,
-            max_hard_failure=0.02,
-            rule="vibes",
-        )
+        _compare(_outcomes("prompts"), _outcomes("adapter"), rule="vibes")
+
+
+@pytest.mark.parametrize(
+    ("extra_misses", "go"), [(1, True), (2, False)], ids=["one_more", "two_more"]
+)
+def test_margin_allows_one_more_miss_of_34(extra_misses, go):
+    inv = [i.id for i in ITEMS if i.has_invented_claim]
+    report = _compare(
+        _outcomes("prompts"), _outcomes("adapter", wrong_ids=inv[:extra_misses])
+    )
+    assert report["comparison"]["miss"]["n"] == 34
+    assert report["go"] is go
