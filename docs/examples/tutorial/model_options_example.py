@@ -1,4 +1,13 @@
 # pytest: ollama, e2e
+"""Configuring model options and parameters.
+
+Prerequisites:
+    ollama serve
+    ollama pull granite4.2:3b
+
+Usage:
+    uv run python docs/examples/tutorial/model_options_example.py
+"""
 
 import mellea
 from mellea.backends import ModelOption, model_ids

@@ -1,5 +1,5 @@
 # pytest: e2e, ollama, qualitative, slow
-"""Example demonstrating code generation, data extraction, and graph file generation.
+r"""Example demonstrating code generation, data extraction, and graph file generation.
 
 This example shows how to use Mellea to:
 1. Accept user input specifying what data to extract AND how to visualize it
@@ -14,30 +14,12 @@ The pipeline implements a 4-step process:
    headless matplotlib
 4. Code Execution - Execute the code to generate and save graph to file (no display)
 
-## Execution Tier & Safety
+This example uses execution_tier="local" for fast local execution, for
+demonstration purposes. See the "Execution tiers" section of
+https://docs.mellea.ai/how-to/tools-and-agents#execution-tiers for the available
+tiers and when to use each.
 
-This example uses execution_tier="local" for fast local execution. Execution tiers
-control where and how generated code runs:
-
-**Available Tiers:**
-- "static" (default): Parse and import-check only, no execution
-- "local_unsafe": Direct subprocess execution, no isolation, no policy restrictions
-- "local": Subprocess execution with CapabilityPolicy (timeout, resource limits)
-- "docker_unsafe": Docker-isolated execution, no policy restrictions
-- "docker": Docker-isolated execution with CapabilityPolicy (RECOMMENDED for untrusted
-  inputs)
-
-**When to use each tier:**
-- Use "local" ONLY when:
-  * Code source is trusted (internal development)
-  * Running in already-sandboxed environments (CI/CD, containers)
-  * Performance is critical and isolation overhead is unacceptable
-- Use "docker" when:
-  * Code is LLM-generated or from untrusted sources
-  * Running in shared environments or production
-  * Security is more important than speed
-
-**For production use with untrusted code, set execution_tier="docker":**
+For production use with untrusted code, set execution_tier="docker":
 ```python
 PythonExecutionReq(
     execution_tier="docker",  # Container-isolated execution (recommended for
@@ -47,8 +29,26 @@ PythonExecutionReq(
 )
 ```
 
-This example uses "local" for demonstration purposes. Change to "docker" for production.
-See docs/examples/requirements/README.md for more details.
+Prerequisites:
+    uv pip install matplotlib numpy
+    ollama pull granite4.2:3b
+    ollama serve
+
+Usage:
+    # Default sample data with predefined requests
+    uv run python docs/examples/requirements/code_generation_and_execution.py
+
+    # Custom CSV file
+    uv run python docs/examples/requirements/code_generation_and_execution.py \
+      --csv /path/to/data.csv
+
+    # Interactive mode
+    uv run python docs/examples/requirements/code_generation_and_execution.py \
+      --interactive
+
+    # Combined options
+    uv run python docs/examples/requirements/code_generation_and_execution.py \
+      --csv /path/to/data.csv --interactive --output /tmp
 """
 
 import argparse

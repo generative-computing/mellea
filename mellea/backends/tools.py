@@ -52,6 +52,11 @@ class MelleaTool(AbstractMelleaTool[P, R]):
         tool_call (Callable[P, R]): The underlying Python callable to invoke when the tool is run.
         as_json_tool (dict[str, Any]): The OpenAI-compatible JSON schema dict describing
             the tool's parameters.
+        positional_only (Sequence[str]): Names of the underlying callable's
+            positional-only parameters, in signature order. Tool calls always arrive
+            as keyword arguments, so `run` reorders these into positional slots before
+            invoking `tool_call`. Defaults to `()` for callables that have none (or
+            whose signature is not introspected, as for wrapped tools).
 
     """
 
@@ -61,17 +66,28 @@ class MelleaTool(AbstractMelleaTool[P, R]):
     name: str
     _as_json_tool: dict[str, Any]
     _call_tool: Callable[P, R]
+    _positional_only: tuple[str, ...]
 
     def __init__(
-        self, name: str, tool_call: Callable[P, R], as_json_tool: dict[str, Any]
+        self,
+        name: str,
+        tool_call: Callable[P, R],
+        as_json_tool: dict[str, Any],
+        *,
+        positional_only: Sequence[str] = (),
     ) -> None:
-        """Initialize the tool with a name, tool call and as_json_tool dict."""
+        """Initialize the tool with a name, tool call, as_json_tool dict, and positional-only parameter names."""
         self.name = name
         self._as_json_tool = as_json_tool
         self._call_tool = tool_call
+        self._positional_only = tuple(positional_only)
 
     def run(self, *args: P.args, **kwargs: P.kwargs) -> R:
         """Run the tool with the given arguments.
+
+        Positional-only parameters supplied by keyword (as model tool calls always
+        are) are reordered into positional arguments so the underlying callable
+        accepts them; all other arguments are forwarded unchanged.
 
         Args:
             *args: Positional arguments forwarded to the underlying callable.
@@ -80,6 +96,18 @@ class MelleaTool(AbstractMelleaTool[P, R]):
         Returns:
             R: The return value of the underlying callable.
         """
+        if self._positional_only and not args:
+            # Pass positional-only params positionally, stopping at the first
+            # one the call didn't supply: names after a gap stay in kwargs, so
+            # the callable raises its own clear TypeError instead of binding
+            # them to earlier slots. Guarded on `not args` so an explicit
+            # positional call (e.g. run(1, 2)) is untouched.
+            positional = []
+            for name in self._positional_only:
+                if name not in kwargs:
+                    break
+                positional.append(kwargs.pop(name))
+            return self._call_tool(*positional, **kwargs)  # type: ignore[arg-type]
         return self._call_tool(*args, **kwargs)
 
     @property
@@ -226,6 +254,14 @@ class MelleaTool(AbstractMelleaTool[P, R]):
         as_json = convert_function_to_ollama_tool(func, tool_name).model_dump(
             exclude_none=True
         )
+        # Collect positional-only parameter names (in signature order) off the
+        # original callable — not any async wrapper below, whose (*args, **kwargs)
+        # signature hides them. `run` uses these to pass such parameters positionally.
+        positional_only = tuple(
+            p.name
+            for p in inspect.signature(func).parameters.values()
+            if p.kind is inspect.Parameter.POSITIONAL_ONLY
+        )
         if inspect.iscoroutinefunction(func):
             async_func = func
 
@@ -233,7 +269,9 @@ class MelleaTool(AbstractMelleaTool[P, R]):
                 return _run_async_in_thread(async_func(*args, **kwargs))
         else:
             tool_call = func  # type: ignore[assignment]
-        return MelleaTool(tool_name, tool_call, as_json)
+        return MelleaTool(
+            tool_name, tool_call, as_json, positional_only=positional_only
+        )
 
 
 @overload

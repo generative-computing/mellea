@@ -17,11 +17,17 @@ sent — without any of those values leaking into `model_options`.
 To ignore the client model ID entirely and always use a fixed backend, simply
 omit the `client_options` parameter (see the simple/ examples).
 
-Run the server:
-    m serve docs/examples/m_serve/model-routing/m_serve_example_model_routing.py
+Prerequisites:
+    ollama serve
+    ollama pull granite4.1:3b
+    ollama pull granite4.1:8b
 
-Test with the client:
-    python docs/examples/m_serve/model-routing/client_model_routing.py
+Usage:
+    Run the server:
+        m serve docs/examples/m_serve/model-routing/m_serve_example_model_routing.py
+
+    Test with the client:
+        python docs/examples/m_serve/model-routing/client_model_routing.py
 """
 
 from typing import Any

@@ -1,178 +1,30 @@
 # M Serve Examples
 
-This directory contains examples for deploying Mellea programs as API services using the `m serve` CLI command.
+This directory contains examples for deploying Mellea programs as API services
+using the `m serve` CLI command. For a full reference, see
+[m serve](../../docs/integrations/m-serve.md).
 
 ## Structure
 
-Each subdirectory contains a server implementation and its matching client(s):
-
-| Subdirectory | Description |
-|---|---|
-| `simple/` | Basic request/response with rejection sampling |
-| `streaming/` | Real-time token streaming via Server-Sent Events (SSE) |
-| `response-format/` | Structured output with `response_format` / JSON schema |
-| `tool-calling/` | Function/tool calling through the API |
-| `multimodal-image/` | Vision model serving with image inputs (Chat Completions + Responses API) |
-| `multimodal-audio/` | Audio-text-to-text serving (llama-server and Ollama/Granite variants) |
-| `pii/` | PII detection service |
-| `model-routing/` | Using or ignoring the client-supplied model ID |
-| `sessions/` | Multi-turn sessions via `previous_response_id` (Responses API) |
+Each subdirectory contains a server implementation and its matching client(s).
 
 Subdirectories marked with a `client_responses*.py` file include a Responses API
 client alongside the standard Chat Completions client. Both clients use the same
 server program — no server changes are needed to use `/v1/responses`.
 
-## Files
+## Examples
 
-### [simple/m_serve_example_simple.py](./simple/m_serve_example_simple.py)
-A simple example showing how to structure a Mellea program for serving as an API.
-
-**Key Features:**
-- Defining a `serve()` function that takes input and returns output
-- Using requirements and sampling strategies in served programs
-- Custom validation functions for API constraints
-- Handling chat message inputs
-
-### [streaming/m_serve_example_streaming.py](./streaming/m_serve_example_streaming.py)
-A dedicated streaming example for `m serve` that supports both modes:
-- `stream=False` returns a normal computed response
-- `stream=True` returns an uncomputed thunk so the server can emit
-  incremental Server-Sent Events (SSE) chunks
-
-### [response-format/m_serve_example_response_format.py](./response-format/m_serve_example_response_format.py)
-Example demonstrating structured output with the `response_format` parameter.
-
-**Key Features:**
-- Supporting the `format` parameter in serve functions
-- Structured output validation with JSON schemas
-- Three format types: `text`, `json_object`, `json_schema`
-
-### [multimodal-image/m_serve_example_multimodal_image.py](./multimodal-image/m_serve_example_multimodal_image.py)
-Example of serving a vision model through `m serve` with image inputs.
-
-### [multimodal-image/client_multimodal_image.py](./multimodal-image/client_multimodal_image.py)
-Client code for testing the multimodal image endpoint with an OpenAI-compatible request.
-
-### [multimodal-audio/m_serve_example_multimodal_audio_llama_server.py](./multimodal-audio/m_serve_example_multimodal_audio_llama_server.py)
-
-Audio-text-to-text serve function using llama-server with a Gemma audio
-checkpoint. Audio and text are sent together in a single request; llama-server
-handles the multimodal fusion natively. Requires a running llama-server with
-`--mmproj` loaded (see prerequisites in the file header).
-
-### [multimodal-audio/m_serve_example_multimodal_audio_granite.py](./multimodal-audio/m_serve_example_multimodal_audio_granite.py)
-
-Audio-text-to-text serve function using a two-step Ollama/Granite pipeline:
-
-1. **granite-speech** (`hf.co/ibm-granite/granite-speech-4.1-2b-GGUF:Q4_K_M`)
-   transcribes the audio via Ollama's OpenAI-compatible
-   `/v1/audio/transcriptions` endpoint.
-2. **granite4.1:3b** answers the user's question with the transcript injected
-   into the prompt.
-
-Both models run locally through Ollama — no llama-server or cloud API needed.
-
-### [multimodal-audio/client_multimodal_audio.py](./multimodal-audio/client_multimodal_audio.py)
-
-Client code for testing any of the multimodal audio endpoints with an
-OpenAI-compatible `input_audio` content part request.
-
-### [pii/pii_serve.py](./pii/pii_serve.py)
-Example of serving a PII (Personally Identifiable Information) detection service.
-
-### [model-routing/m_serve_example_model_routing.py](./model-routing/m_serve_example_model_routing.py)
-Example showing how to use `client_options` to route on the client-supplied `model` field.
-
-**Key Concepts:**
-- The `model` field in an OpenAI-compatible request is routing/metadata: `m serve` echoes
-  it back in the response but does **not** include it in `model_options`.
-- Declare `client_options` in `serve()` and `m serve` passes the full raw client request
-  as a dict, giving access to `model` and every other field without them leaking into
-  `model_options` to be used by the backend.
-- To ignore the client model ID entirely, omit `client_options` (see the `simple/` examples).
-
-### [model-routing/client_model_routing.py](./model-routing/client_model_routing.py)
-Client code demonstrating routing via the standard `model` field and fallback to the default backend.
-
-### [simple/client.py](./simple/client.py)
-Client code for testing the served API endpoints with non-streaming requests
-via `/v1/chat/completions`.
-
-### [simple/client_responses.py](./simple/client_responses.py)
-Client code for testing the same server via `/v1/responses`, printing
-`output_text` from the response.
-
-### [streaming/client_streaming.py](./streaming/client_streaming.py)
-Client code demonstrating streaming responses using Server-Sent Events (SSE)
-against `streaming/m_serve_example_streaming.py` via `/v1/chat/completions`.
-
-### [streaming/client_responses_streaming.py](./streaming/client_responses_streaming.py)
-Client code demonstrating the Responses API semantic streaming events
-(`response.output_text.delta`) against `streaming/m_serve_example_streaming.py`.
-
-### [response-format/client_response_format.py](./response-format/client_response_format.py)
-Client code demonstrating all three `response_format` types with examples.
-
-### [tool-calling/m_serve_example_tool_calling.py](./tool-calling/m_serve_example_tool_calling.py)
-Example of serving a function with tool calling capabilities through `m serve`.
-
-### [tool-calling/client_tool_calling.py](./tool-calling/client_tool_calling.py)
-Client code for testing tool calling via `/v1/chat/completions`, demonstrating
-function invocation through the API.
-
-### [tool-calling/client_responses_tool_calling.py](./tool-calling/client_responses_tool_calling.py)
-Client code for testing tool calling via `/v1/responses`, demonstrating
-`function_call` output items and follow-up requests.
-
-### [tool-calling/client_streaming_tool_calling.py](./tool-calling/client_streaming_tool_calling.py)
-Client code demonstrating streaming responses combined with tool calling.
-
-### tool-calling/m_serve_example_tool_calling_server_side.py
-Example of server-side tool execution: the `serve()` function runs the full
-agentic loop (model → tools → re-prompt) before returning. The client receives
-a complete answer in one request with no `function_call` items to handle.
-
-### tool-calling/client_responses_tool_calling_server_side.py
-Client code for testing server-side tool calling via `/v1/responses`.
-Contrast with `client_responses_tool_calling.py`: this client sends one request
-and gets a fully-resolved answer, while the other handles `function_call` items
-and makes follow-up requests itself.
-
-## Concepts Demonstrated
-
-- **API Deployment**: Exposing Mellea programs as REST APIs
-- **Input Handling**: Processing structured inputs (chat messages, requirements)
-- **Output Formatting**: Returning appropriate response types
-- **Validation in Production**: Using requirements in deployed services
-- **Model Options**: Passing model configuration through API
-- **Streaming Responses**: Real-time token streaming via Server-Sent Events (SSE)
-- **Structured Output**: Using `response_format` for JSON schema validation
-- **Multimodal Inputs**: Sending text plus image content to vision-capable models
-- **Audio-Text-to-Text**: Sending base64-encoded audio alongside text in a chat request; the model responds in text (not transcription)
-- **Model Routing**: Reading the client `model` field via `client_options` to route to an allowlisted backend
-
-## Basic Pattern
-
-```python
-from mellea import start_session
-from mellea.stdlib.sampling import RejectionSamplingStrategy
-from mellea.core import Requirement
-
-def serve(input: list[ChatMessage],
-          requirements: list[str] | None = None,
-          model_options: dict | None = None):
-    """Main serving function - called by m serve."""
-    message = input[-1].content
-
-    session = start_session()
-    result = session.instruct(
-        description=message,
-        requirements=requirements or [],
-        strategy=RejectionSamplingStrategy(loop_budget=3),
-        model_options=model_options
-    )
-    return result
-```
+| Subdirectory | Description |
+| :--- | :--- |
+| [`simple/`](./simple/) | Basic request/response with rejection sampling |
+| [`streaming/`](./streaming/) | Real-time token streaming via Server-Sent Events (SSE) |
+| [`response-format/`](./response-format/) | Structured output with `response_format` / JSON schema |
+| [`tool-calling/`](./tool-calling/) | Function/tool calling through the API |
+| [`multimodal-image/`](./multimodal-image/) | Vision model serving with image inputs (Chat Completions + Responses API) |
+| [`multimodal-audio/`](./multimodal-audio/) | Audio-text-to-text serving (llama-server and Ollama/Granite variants) |
+| [`pii/`](./pii/) | PII detection service |
+| [`model-routing/`](./model-routing/) | Using or ignoring the client-supplied model ID |
+| [`sessions/`](./sessions/) | Multi-turn sessions via `previous_response_id` (Responses API) |
 
 ## Running the Server
 
@@ -522,15 +374,3 @@ The `m serve` command registers:
 
 Both POST endpoints call the same `serve()` function in your program.
 FastAPI's interactive docs are available at `GET /docs` while the server is running.
-
-## Use Cases
-
-- **Production Deployment**: Deploy Mellea programs as microservices
-- **API Integration**: Integrate with existing systems via REST API
-- **Scalability**: Run multiple instances behind a load balancer
-- **Monitoring**: Add logging and metrics to served programs
-
-## Related Documentation
-
-- See `cli/serve/` for server implementation
-- See `mellea/stdlib/session.py` for session management

@@ -1,5 +1,20 @@
 # pytest: skip_always
-"""PII Purifier using Mellea Framework."""
+"""PII Purifier using Mellea Framework.
+
+Demonstrates a PII-scrubbing `serve()` function: uses spaCy NER to heuristically
+detect PII in the model's output and retries via `RejectionSamplingStrategy` until
+all person names, email addresses, phone numbers, and addresses are replaced with XXX.
+
+Prerequisites:
+    uv pip install spacy
+    uv pip install pip
+    uv run python -m spacy download en_core_web_sm
+    ollama serve
+    ollama pull granite4.1:3b
+
+Usage:
+    m serve docs/examples/m_serve/pii/pii_serve.py
+"""
 
 import spacy
 

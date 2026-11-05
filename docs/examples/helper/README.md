@@ -4,12 +4,9 @@ This directory contains helper functions and utilities used across multiple exam
 
 ## Files
 
-### [helpers.py](./helpers.py)
-Common utility functions used by example scripts.
-
-**Key Functions:**
-- `w()`: Text wrapping function for pretty-printing long outputs
-- Other formatting and display utilities
+| File | Description |
+| :--- | :--- |
+| [`helpers.py`](./helpers.py) | Common utility functions used by example scripts. Key functions: `w()`, a text wrapping function for pretty-printing long outputs, and other formatting and display utilities. |
 
 ## Usage
 

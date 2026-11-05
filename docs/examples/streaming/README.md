@@ -1,98 +1,20 @@
 # Real-Time Streaming of LLM Responses
 
 This directory contains examples of streaming LLM responses in real-time, with support for chunked validation and progressive output.
-
-## Prerequisites
-
-These examples require a running Ollama instance:
-
-```bash
-ollama serve
-```
+For the concepts, see [Use Async and Streaming](../../docs/how-to/use-async-and-streaming.md)
+and [Tutorial 06: Streaming Validation](../../docs/tutorials/06-streaming-validation.md).
 
 ## Examples
 
-### Basic Streaming with Chunking
-
-```bash
-uv run validated_streaming.py
-```
-
-Demonstrates:
-- Streaming token-by-token generation
-- Sentence-level chunking via `stream()`
-- Per-chunk validation with custom `_stream_validate()` methods
-- Iterating typed stream events via `stream(as_events=True)`
-- Early exit on validation failure
-
-### Word-Level Chunking
-
-```bash
-uv run word_chunking.py
-```
-
-Demonstrates:
-- Word-based chunking strategy
-- Progressive output with word boundaries
-- Custom chunking implementations
-
-### Paragraph-Level Chunking
-
-```bash
-uv run paragraph_chunking.py
-```
-
-Demonstrates:
-- Paragraph-based chunking strategy
-- Processing longer text segments
-- Multi-paragraph validation
-
-### Custom Chunking Strategies
-
-```bash
-uv run custom_chunking.py
-```
-
-Demonstrates:
-- Implementing custom chunking logic
-- Defining custom stream validators
-- Advanced streaming patterns
-
-### Per-Requirement Chunking
-
-```bash
-uv run per_requirement_chunking.py
-```
-
-Demonstrates:
-- Each `Requirement` carrying its own `chunking=` strategy, independent of the stream's
-- Sentence-level and word-level requirements validating one stream at once
-
-### Events Across Multiple Concurrent Streams
-
-```bash
-uv run multi_stream_events.py
-```
-
-Demonstrates:
-- Consuming `STREAMING_EVENT` hook events with a small plugin
-- Correlating events across multiple concurrent streams by `streaming_id`
-
-## Key Concepts
-
-**Streaming**: Receive LLM output token-by-token in real-time instead of waiting for complete generation.
-
-**Chunking**: Group tokens into meaningful units (words, sentences, paragraphs) for validation and processing.
-
-**Stream Validation**: Apply requirements at chunk level for early exit—stop generation when a constraint is violated.
-
-**Stream Events**: Observe a run's lifecycle as typed events — iterate them for one stream with `stream(as_events=True)`, or subscribe the `STREAMING_EVENT` hook to watch many streams at once:
-- `ChunkEvent` — A new chunk of text
-- `QuickCheckEvent` — Initial validation result
-- `FullValidationEvent` — Complete validation after full generation
-- `StreamingDoneEvent` — Generation complete
-- `CompletedEvent` — Stream exited (success or not)
-- `ErrorEvent` — An exception occurred mid-stream
+| File | Description |
+| :--- | :--- |
+| [`validated_streaming.py`](./validated_streaming.py) | Streaming token-by-token generation, sentence-level chunking via `stream()`, per-chunk validation with custom `_stream_validate()` methods, iterating typed stream events via `stream(as_events=True)`, and early exit on validation failure. |
+| [`word_chunking.py`](./word_chunking.py) | Word-based chunking strategy, progressive output with word boundaries, and custom chunking implementations. |
+| [`paragraph_chunking.py`](./paragraph_chunking.py) | Paragraph-based chunking strategy, processing longer text segments, and multi-paragraph validation. |
+| [`custom_chunking.py`](./custom_chunking.py) | Implementing custom chunking logic, defining custom stream validators, and advanced streaming patterns. |
+| [`per_requirement_chunking.py`](./per_requirement_chunking.py) | Each `Requirement` carrying its own `chunking=` strategy, independent of the stream's; sentence-level and word-level requirements validating one stream at once. |
+| [`multi_stream_events.py`](./multi_stream_events.py) | Consuming `STREAMING_EVENT` hook events with a small plugin, and correlating events across multiple concurrent streams by `streaming_id`. |
+| [`sampling_streaming.py`](./sampling_streaming.py) | Passing `strategy=` to `stream()` so an attempt that fails mid-stream is aborted and repaired, observing `RetryEvent`s, and reading per-attempt history from `streamer.attempts`. |
 
 ## See Also
 

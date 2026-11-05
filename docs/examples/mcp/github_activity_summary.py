@@ -7,8 +7,10 @@ Demonstrates the mellea MCP workflow:
   3. Drive multi-turn tool use with mellea's react() loop
 
 Prerequisites:
-    pip install 'mellea[tools]'
+    uv sync --extra tools
     export GITHUB_TOKEN=<token with repo + read:user scopes>
+    ollama pull granite4.1:8b
+    ollama serve
 
 Usage:
     uv run python docs/examples/mcp/github_activity_summary.py

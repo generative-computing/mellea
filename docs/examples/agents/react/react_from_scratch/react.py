@@ -1,4 +1,16 @@
 # pytest: ollama, e2e, qualitative
+"""ReACT agent implementation built from scratch.
+
+Demonstrates implementing the ReACT (Reasoning and Acting) loop from first
+principles, combining tool selection, argument generation, and observation.
+
+Prerequisites:
+    ollama serve
+    ollama pull granite4.2:3b
+
+Usage:
+    uv run python docs/examples/agents/react/react_from_scratch/react.py
+"""
 
 import datetime
 import inspect

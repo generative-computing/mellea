@@ -16,6 +16,21 @@ general code generation, which this preset reflects in its defaults:
 - loop_budget=3 (vs. 2 for code generation)
 - use_sandbox=True (vs. False for code generation)
 - timeout_seconds=10 (vs. 5 for code generation)
+
+Most examples in this file override the default with `use_sandbox=False`, so the
+generated code is parsed but not executed, and imports are checked only when
+`allowed_imports` is set. The exception is `example_without_output_path`, which
+keeps the sandbox default and needs a running Docker daemon. The default
+llm-sandbox image is amd64-only, so that example may not pass on Apple Silicon.
+
+Prerequisites:
+    uv sync --extra sandbox
+    uv pip install matplotlib numpy
+    ollama serve
+    ollama pull granite4.2:3b
+
+Usage:
+    uv run python docs/examples/sampling/python_plotting_preset.py
 """
 
 import tempfile
@@ -33,7 +48,7 @@ def example_scatter_plot():
     The preset ensures:
     1. matplotlib.use('Agg') is called for headless rendering
     2. plt.savefig(output_path) is called with the specified path
-    3. Code executes without errors in isolated sandbox
+    3. Code parses without errors (static validation, since `use_sandbox=False`)
     """
     session = mellea.start_session()
 
@@ -91,6 +106,16 @@ def example_without_output_path():
     Demonstrates using the preset when you don't care about a specific output path.
     The preset validates that matplotlib dependencies are available but doesn't
     enforce a specific savefig() call.
+
+    Note: this is the only function in this file that uses the plotting preset's
+    sandbox default (`use_sandbox=True`). It requires a running Docker daemon and
+    `mellea[sandbox]` installed (`uv sync --extra sandbox`). The default sandbox
+    image (`ghcr.io/vndee/sandbox-python-311-bullseye`) ships matplotlib, so the
+    example can pass as shipped — provided Docker is available and the image runs
+    on your architecture (the image is amd64-only). If Docker is unavailable, the
+    run reports `Valid: X/Y` with the unmet requirement listed as "sandbox
+    execution with policy", and the script still prints "✓ completed" because it
+    does not check the sampling result.
     """
     session = mellea.start_session()
 
@@ -153,7 +178,7 @@ def example_with_custom_parameters():
     Demonstrates fine-tuning the preset's parameters:
     - loop_budget: More repair attempts for complex plots
     - timeout_seconds: Longer timeout for rendering-heavy plots
-    - use_sandbox: Keep sandbox enabled for security
+    - use_sandbox: Disabled here so the example runs without Docker
     """
     session = mellea.start_session()
 

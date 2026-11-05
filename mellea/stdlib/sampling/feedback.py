@@ -357,7 +357,7 @@ class ModelFriendlyRepairStrategy(RepairTemplateStrategy):
     improves LLM performance on repair tasks compared to generic validation reasons.
 
     Example:
-        >>> strategy = ModelFriendlyRepairStrategy(loop_budget=2, requirements=[...])
+        >>> strategy = ModelFriendlyRepairStrategy(loop_budget=2)
         >>> result = session.instruct(
         ...     "Write Python code",
         ...     requirements=[...],

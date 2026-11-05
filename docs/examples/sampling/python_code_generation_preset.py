@@ -11,6 +11,17 @@ The preset handles:
 4. Import restrictions (optional allowlist)
 5. Output size limits
 6. Model-friendly repair feedback for each failure type
+
+By default (`use_sandbox=False`) the generated code is parsed but not executed,
+and imports are checked only when `allowed_imports` is set. Pass
+`use_sandbox=True` to run the code in a Docker sandbox instead.
+
+Prerequisites:
+    ollama serve
+    ollama pull granite4.2:3b
+
+Usage:
+    uv run python docs/examples/sampling/python_code_generation_preset.py
 """
 
 import mellea

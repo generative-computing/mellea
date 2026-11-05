@@ -1,6 +1,19 @@
 # pytest: ollama, e2e
 
-"""Examples using vision models with OpenAI backend."""
+"""Examples using vision models with OpenAI backend.
+
+Demonstrates passing `ImageBlock` and PIL images to `m.instruct()` and
+`m.chat()` using the OpenAI-compatible backend pointed at a local Ollama
+endpoint. Also shows how to send a follow-up with an empty `images=[]` to
+return to text-only mode.
+
+Prerequisites:
+    ollama serve
+    ollama pull qwen2.5vl:7b
+
+Usage:
+    uv run python docs/examples/image_text_models/vision_openai_examples.py
+"""
 
 import os
 import pathlib

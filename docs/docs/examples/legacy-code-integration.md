@@ -9,7 +9,7 @@ using the `@mify` decorator. `@mify` adds the `MifiedProtocol` interface to a
 class or instance so you can pass it directly to session methods like `m.act()`,
 `m.query()`, and `m.transform()`.
 
-**Source file:** `docs/examples/mify/mify.py`
+**Source file:** [`docs/examples/mify/mify.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/mify/mify.py)
 
 ## Concepts covered
 

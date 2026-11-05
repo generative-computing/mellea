@@ -8,11 +8,16 @@ output from the model. The server supports three format types:
 - json_object: Unstructured JSON output
 - json_schema: Structured output validated against a JSON schema
 
-Run the server:
-    m serve docs/examples/m_serve/response-format/m_serve_example_response_format.py
+Prerequisites:
+    ollama serve
+    ollama pull granite4.2:3b
 
-Test with the client:
-    python docs/examples/m_serve/response-format/client_response_format.py
+Usage:
+    Run the server:
+        m serve docs/examples/m_serve/response-format/m_serve_example_response_format.py
+
+    Test with the client:
+        python docs/examples/m_serve/response-format/client_response_format.py
 """
 
 from typing import Any

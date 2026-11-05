@@ -1,6 +1,19 @@
-# pytest: ollama, qualitative, llm
+# pytest: ollama, qualitative, e2e
 
-"""Example of how to use async with lazy compute and streaming."""
+"""Example of how to use async with lazy compute and streaming.
+
+Demonstrates:
+- Combining async operations with lazy evaluation
+- Creating ModelOutputThunk objects
+- Deferred computation patterns
+
+Prerequisites:
+    ollama serve
+    ollama pull granite4.2:3b
+
+Usage:
+    uv run python docs/examples/async/async-with-lazy-compute.py
+"""
 
 import asyncio
 import re
