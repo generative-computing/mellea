@@ -655,6 +655,8 @@ async def cap_tokens(payload, ctx):
 
 **Fires:** When a sampling strategy begins execution.
 
+`stream` runs do not fire the `sampling_loop_*` hooks; they use the [streaming pipeline](#streaming-pipeline) hooks and `RetryEvent` instead.
+
 **Payload fields:** `strategy_name`, `action`, `context`, `requirements`, `loop_budget`
 
 **Writable fields:** `loop_budget`
