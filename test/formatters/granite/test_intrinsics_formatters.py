@@ -465,7 +465,6 @@ def test_name_field_accepted_by_make_config_dict():
         "name": "my_intrinsic_display_name",
     }
     result = intrinsics_util.make_config_dict(config_dict=config_with_name)
-    assert result is not None
     assert result["name"] == "my_intrinsic_display_name"
     # Other optional fields are filled with None
     assert result["parameters"] is None
@@ -479,7 +478,6 @@ def test_name_field_accepted_by_make_config_dict():
         "transformations": None,
     }
     result2 = intrinsics_util.make_config_dict(config_dict=config_without_name)
-    assert result2 is not None
     assert result2["name"] is None
 
 
@@ -723,7 +721,7 @@ def test_run_transformers(yaml_json_combo_with_model, gh_run):
             cfg.base_model_id,
             cfg.repo_id,
             revision=cfg.revision,
-            alora=cfg.is_alora,
+            adapter_type="alora" if cfg.is_alora else "lora",
         )
     except requests.exceptions.HTTPError:
         pytest.xfail("Downloads fail on CI server because repo is private")
@@ -889,7 +887,7 @@ def test_run_ollama(yaml_json_combo_for_ollama):
             cfg.base_model_id,
             cfg.repo_id,
             revision=cfg.revision,
-            alora=cfg.is_alora,
+            adapter_type="alora" if cfg.is_alora else "lora",
         )
     except requests.exceptions.HTTPError:
         pytest.xfail("Downloads fail on CI server because repo is private")

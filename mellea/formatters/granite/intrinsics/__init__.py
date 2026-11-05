@@ -6,11 +6,18 @@
 # Local
 from .input import IntrinsicsRewriter
 from .output import IntrinsicsResultProcessor
-from .util import obtain_io_yaml, obtain_lora
+from .util import (
+    AdapterNotFoundError,
+    obtain_io_yaml,
+    obtain_lora,
+    resolve_prompt_io_yaml,
+)
 
 __all__ = (
+    "AdapterNotFoundError",
     "IntrinsicsResultProcessor",
     "IntrinsicsRewriter",
     "obtain_io_yaml",
     "obtain_lora",
+    "resolve_prompt_io_yaml",
 )

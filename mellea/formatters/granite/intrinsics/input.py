@@ -245,8 +245,6 @@ class IntrinsicsRewriter(ChatCompletionRewriter):
     ):
         """Initialize IntrinsicsRewriter from a YAML config file or dict."""
         config = make_config_dict(config_file, config_dict)
-        if config is None:
-            raise ValueError("config cannot be None")
         self.config = config
 
         if self.config["parameters"] is not None and not isinstance(

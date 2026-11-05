@@ -45,10 +45,12 @@ class AdapterType(enum.Enum):
     Attributes:
         LORA (str): Standard LoRA adapter; value `"lora"`.
         ALORA (str): aLoRA adapter (shares model KV cache across adapter functions); value `"alora"`.
+        PROMPT (str): Weightless prompt fallback used when no trained adapter exists; value `"prompt"`.
     """
 
     LORA = "lora"
     ALORA = "alora"
+    PROMPT = "prompt"
 
 
 class IntrinsicsCatalogEntry(pydantic.BaseModel):

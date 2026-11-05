@@ -165,6 +165,34 @@ def require_api_key(*env_vars: str):
     return pytest.mark.skipif(False, reason="")
 
 
+def require_hf_token():
+    """Skip unless a Hugging Face token is available.
+
+    Unlike `require_api_key("HF_TOKEN")`, this accepts a token from *either* the
+    `HF_TOKEN` environment variable *or* a `hf auth login` session (the token
+    store `huggingface_hub.get_token()` reads). That makes Hub-auth tests run both
+    for a locally-logged-in developer and in CI (which supplies `HF_TOKEN`). It
+    only checks that a token is present, not that it is valid or unexpired.
+
+    Example:
+        ```python
+        @require_hf_token()
+        def test_reads_a_private_repo(): ...
+        ```
+    """
+    try:
+        import huggingface_hub
+
+        has_token = bool(huggingface_hub.get_token())
+    except Exception:
+        has_token = False
+    if not has_token:
+        return pytest.mark.skipif(
+            True, reason="No Hugging Face token (set HF_TOKEN or run `hf auth login`)"
+        )
+    return pytest.mark.skipif(False, reason="")
+
+
 # ---------------------------------------------------------------------------
 # NLTK data
 # ---------------------------------------------------------------------------
