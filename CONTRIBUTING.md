@@ -432,6 +432,7 @@ as it can corrupt state.
 
 1. **Find or create an issue** for your change:
    - **1a. Issue already exists** — add a comment asking to be assigned the issue
+      - **1a(1). Multiple assignment requests** - assignment is performed on a first come first assigned basis. If you have requested to be assigned prior to a second contributor opening a PR who has not asked for assignment, you will be still be assigned and given priority on your PR and contribution.  When multiple assignment requests exist, if the original assignee shows no activity within a week of assignment and hasn't communicated that they're still working on it, they'll be nudged and given one business day to respond. If they do not respond, the issue may be reassigned to other interested contributors.
    - **1b. No issue exists** — open an issue describing the change
 2. **Fork the repository** (if you haven't already)
 3. **Create a branch** in your fork using appropriate naming
