@@ -14,7 +14,7 @@ For the built-in catalog adapters, see [`intrinsics/`](../intrinsics/README.md).
 | [`101_example.py`](./101_example.py) | Comparing aLoRA-backed requirement validation against LLM-as-a-judge, using the catalog-native `requirement-check` adapter (not a custom one — see `stembolts_intrinsic.py` for loading your own). |
 | [`102_example.py`](./102_example.py) | Interactive loop that exercises the custom `stembolts` adapter — skip-marked because it blocks on stdin in an infinite loop. |
 | [`stembolts_intrinsic.py`](./stembolts_intrinsic.py) | Helper module for loading and calling the fully custom `stembolts` adapter (no standalone entry point — `102_example.py` consumes it). |
-| [`make_training_data.py`](./make_training_data.py) | Utility for preparing training datasets for adapter training. |
+| [`make_training_data.py`](./make_training_data.py) | Converts raw JSONL into `{item, label}` training data, validating labels against a JSON schema (`jsonschema`). |
 | [`example_readme_generator.py`](./example_readme_generator.py) | Programmatic README generation for adapters. |
 | [`stembolt_failure_dataset.jsonl`](./stembolt_failure_dataset.jsonl) | Training data in the `{item, label}` format that `m alora train` expects. |
 | [`stembolt_customer_data.jsonl`](./stembolt_customer_data.jsonl) | Raw data used as input to `make_training_data.py`. |
@@ -26,12 +26,12 @@ For the built-in catalog adapters, see [`intrinsics/`](../intrinsics/README.md).
 First, we need to clone Mellea and put ourselves into this directory:
 
 ```bash
-git clone https://github.com/generative-computing/mellea;
-cd mellea;
-uv venv .venv;
-source .venv/bin/activate;
-uv pip install -e ".[all]";
-pushd docs/examples/aLora/;
+git clone https://github.com/generative-computing/mellea
+cd mellea
+uv venv .venv
+source .venv/bin/activate
+uv pip install -e ".[all]"
+pushd docs/examples/aLora/
 ```
 
 Now let's train a model:
@@ -52,8 +52,7 @@ m alora train \
 ## Upload Models
 
 If model training succeeds, you will need to upload your model as an adapter function.
-Uploading requires a Hugging Face account; run `huggingface-cli login` first, or
-`m alora upload` and `m alora add-readme` fail with "Hugging Face token not found".
+Uploading requires a Hugging Face account; run `huggingface-cli login` first.
 
 ```bash
 # WARNING: running this command will upload your model weights to huggingface.co !!!
@@ -112,7 +111,7 @@ The generator will display the README and ask for confirmation before uploading 
 Compose the adapter from an `Identity`, an output contract, and a `LocalFileBinding`,
 then register it on a `LocalHFBackend` with `backend.add_adapter()`. The code is in
 [LoRA and aLoRA adapters](../../docs/advanced/lora-and-alora-adapters.md), and
-`stembolts_intrinsic.py` is a complete, runnable version with the `stembolts` adapter;
-replace its `repo_id` (`nfulton/stembolts`) with `$HF_USERNAME/stembolts` to use your
+`stembolts_intrinsic.py` is the helper module `102_example.py` imports to load the
+`stembolts` adapter; replace its `repo_id` (`nfulton/stembolts`) with `$HF_USERNAME/stembolts` to use your
 own upload. A custom, non-catalog adapter has no catalog entry to resolve `revision`
 from, so pin it explicitly (`revision="main"`).

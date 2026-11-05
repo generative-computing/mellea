@@ -1,10 +1,9 @@
 # SOFAI (Slow and Fast AI) Examples
 
 This directory contains examples of the SOFAI sampling strategy - a two-tier approach
-using fast and slow models. For usage guidance and `s2_solver_mode`, see
+using fast and slow models. For usage guidance, `s2_solver_mode`, `judge_backend`, and
+`feedback_strategy`, see
 [Inference-time scaling](../../docs/advanced/inference-time-scaling.md#sofai--dual-model-escalation).
-The `SOFAISamplingStrategy` docstring in `mellea/stdlib/sampling/sofai.py` documents
-the remaining options, including `judge_backend` and `feedback_strategy`.
 
 ## Examples
 

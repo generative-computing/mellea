@@ -36,7 +36,7 @@ from mellea.backends.huggingface import LocalHFBackend
 from mellea.stdlib.components import Intrinsic, Message
 from mellea.stdlib.context import ChatContext
 
-# This is an example for how you would directly use intrinsics. See `mellea/stdlib/intrinsics/rag.py`
+# This is an example for how you would directly use intrinsics. See `mellea/stdlib/components/intrinsic/rag.py`
 # for helper functions.
 
 backend = LocalHFBackend(model_id=model_ids.IBM_GRANITE_4_1_3B)

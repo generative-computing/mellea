@@ -20,7 +20,7 @@ see [`granite-switch/`](../granite-switch/README.md). To train your own adapter,
 | [`query_rewrite.py`](./query_rewrite.py) | Demonstrates rewriting queries for better retrieval. |
 | [`requirement_check.py`](./requirement_check.py) | Demonstrates validating requirements against model outputs. |
 | [`uncertainty.py`](./uncertainty.py) | Demonstrates assessing model certainty about its response. |
-| [`uncertainty_ollama.py`](./uncertainty_ollama.py) | `core.check_certainty()` on `OllamaModelBackend` using an Ollama model that bundles the uncertainty aLoRA. |
+| [`uncertainty_ollama.py`](./uncertainty_ollama.py) | `core.check_certainty()` on `OllamaModelBackend` using an Ollama model that bundles the uncertainty aLoRA (deprecated, see [#1633](https://github.com/generative-computing/mellea/issues/1633)). |
 | [`factuality_detection.py`](./factuality_detection.py) | Demonstrates detecting factually incorrect statements. |
 | [`factuality_correction.py`](./factuality_correction.py) | Demonstrates automatically correcting factual errors. |
 | [`guardian_core.py`](./guardian_core.py) | Demonstrates comprehensive safety checks (harm, bias, groundedness). |

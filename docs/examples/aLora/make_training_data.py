@@ -1,6 +1,6 @@
 # pytest: skip, huggingface, e2e
 # SKIP REASON: documentation only.
-"""Converting raw JSONL into the `{item, label}` training format for aLoRA training.
+r"""Converting raw JSONL into the `{item, label}` training format for aLoRA training.
 
 Reads a JSONL file whose rows carry `item`, `defective_part`, and `diag_likelihood`
 (such as `stembolt_customer_data.jsonl`), validates each label against the

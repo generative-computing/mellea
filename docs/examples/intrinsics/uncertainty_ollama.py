@@ -1,6 +1,12 @@
 # pytest: e2e, ollama
 """Example usage of the uncertainty/certainty intrinsic with Ollama.
 
+**Deprecated:** Ollama v0.34.1 and later can no longer build LoRA/aLoRA adapter
+models, so the build step below fails on current Ollama and the script exits
+without running. It only runs on Ollama v0.34.0 or earlier (CI pins 0.33.1), or with
+`MELLEA_OLLAMA_UNCERTAINTY_MODEL` set to a tag built on one. See
+https://github.com/generative-computing/mellea/issues/1633.
+
 Evaluates how certain the model is about its response to a user question.
 The context should contain a user question followed by an assistant answer.
 
@@ -10,7 +16,8 @@ Ollama can retain one model identity (mapped through `adapter_models`). Unless
 `MELLEA_OLLAMA_UNCERTAINTY_MODEL` names an existing tag, the script builds one by
 running `test/scripts/build_ollama_uncertainty_adapter.sh` (needs `git`, `uv`, and
 network access to download the base model and adapter). If the build fails, the
-script prints "SKIPPED" and exits with status 0.
+script prints "SKIPPED" and exits with status 0, which the examples runner reports
+as a pass.
 
 Prerequisites:
     uv sync --extra switch   # downloads the adapter's io.yaml
