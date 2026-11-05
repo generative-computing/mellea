@@ -1,6 +1,6 @@
 name: Bug Report
 type: Bug
-title: "[Bug]: "
+title: "bug: "
 description: Report a bug encountered while using Mellea
 labels:
   - bug

@@ -1,6 +1,5 @@
 name: Feature request
 type: Feature
-title: "[Feature]: "
 description: New feature request in Mellea
 labels:
   - enhancement
