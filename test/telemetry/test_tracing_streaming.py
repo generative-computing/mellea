@@ -62,6 +62,8 @@ def test_start_streaming_span_stamps_attrs_and_stashes_under_id(enabled_tracing)
             has_requirements=True,
             requirement_count=2,
             chunking_strategy="SentenceChunking",
+            strategy_type="RejectionSamplingStrategy",
+            loop_budget=3,
         )
 
     fake_tracer.start_span.assert_called_once_with("stream")
@@ -70,8 +72,27 @@ def test_start_streaming_span_stamps_attrs_and_stashes_under_id(enabled_tracing)
     assert attrs["mellea.streaming.has_requirements"] is True
     assert attrs["mellea.streaming.requirement_count"] == 2
     assert attrs["mellea.streaming.chunking_strategy"] == "SentenceChunking"
+    assert attrs["mellea.streaming.strategy_type"] == "RejectionSamplingStrategy"
+    assert attrs["mellea.streaming.loop_budget"] == 3
     # The correlation id is the in-flight key, not a span attribute.
     assert "mellea.streaming_id" not in attrs
+
+
+def test_start_streaming_span_omits_strategy_attrs_without_strategy(enabled_tracing):
+    fake_span, fake_tracer = _patch_app_tracer()
+    with patch(
+        "mellea.telemetry.tracing.get_application_tracer", return_value=fake_tracer
+    ):
+        start_streaming_span(
+            "sid-plain",
+            has_requirements=False,
+            requirement_count=0,
+            chunking_strategy="none",
+        )
+
+    attrs = _attrs(fake_span)
+    assert "mellea.streaming.strategy_type" not in attrs
+    assert "mellea.streaming.loop_budget" not in attrs
 
 
 def test_finish_streaming_span_success_records_completed_attrs(enabled_tracing):
@@ -88,11 +109,13 @@ def test_finish_streaming_span_success_records_completed_attrs(enabled_tracing):
             model="gpt-4o",
             provider="openai",
             full_text_length=11,
+            iterations_used=2,
         )
 
     fake_span.end.assert_called_once()
     attrs = _attrs(fake_span)
     assert attrs["mellea.streaming.full_text_length"] == 11
+    assert attrs["mellea.streaming.iterations_used"] == 2
     assert attrs["gen_ai.request.model"] == "gpt-4o"
     assert attrs["gen_ai.provider.name"] == "openai"
     fake_span.record_exception.assert_not_called()

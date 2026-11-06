@@ -731,10 +731,16 @@ class DecodeSentences(AddFieldsTransformation):
         document_ids = prepare_output.get("document_ids")
         message_indices = prepare_output.get("message_indices")
 
-        if not isinstance(value, int):
+        if isinstance(value, bool) or not isinstance(value, int):
             raise TypeError(
                 f"Expected integer sentence number at path {path}, but "
                 f"found non-integer value {value} of type {type(value)}"
+            )
+        num_sentences = len(begins)
+        if value < 0 or value >= num_sentences:
+            raise ValueError(
+                f"Sentence number {value} at path {path} is out of range for "
+                f"{num_sentences} sentence(s)"
             )
         sentence_num = value
 
@@ -1419,8 +1425,6 @@ class IntrinsicsResultProcessor(ChatCompletionResultProcessor):
                 declares `REQUIRES_JSON = False` is not the first rule.
         """
         config = make_config_dict(config_file, config_dict)
-        if config is None:
-            raise ValueError("config cannot be None")
         self.config = config
 
         # Set up transformation rules for the target model's JSON output

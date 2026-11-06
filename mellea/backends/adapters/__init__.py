@@ -12,6 +12,7 @@ from ._core import (
     Identity,
     IOContract,
     LocalFileBinding,
+    PromptBinding,
     ServerMediatedBinding,
     WeightsBinding,
 )
@@ -45,6 +46,7 @@ __all__ = [
     "IntrinsicAdapter",
     "LocalFileBinding",
     "LocalHFAdapter",
+    "PromptBinding",
     "ServerMediatedBinding",
     "WeightsBinding",
     "fetch_intrinsic_metadata",

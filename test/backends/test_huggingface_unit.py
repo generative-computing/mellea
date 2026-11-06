@@ -5,6 +5,7 @@
 
 import asyncio
 import json
+import logging
 import threading
 import time
 import warnings
@@ -41,7 +42,13 @@ from mellea.backends.adapters import (
     IntrinsicAdapter,
     ServerMediatedBinding,
 )
-from mellea.backends.adapters._core import Identity
+from mellea.backends.adapters._core import (
+    Adapter,
+    Identity,
+    IOContract,
+    LocalFileBinding,
+    PromptBinding,
+)
 from mellea.backends.adapters.adapter import (
     EmbeddedIntrinsicAdapter,
     _ShimWeightsBinding,
@@ -298,8 +305,16 @@ def _make_intrinsic_backend_stub(stub_backend):
     # Composed-Adapter counterpart of _generate_intrinsic_with_adapter_scope
     # above — same bypass, for the same reason (these tests exercise
     # option-merging/logits capture, not activation semantics).
-    stub_backend._generate_composed_local_file_with_adapter_scope = (
-        lambda adapter, generate_func, *args, **kwargs: generate_func(*args, **kwargs)
+    stub_backend._generate_composed_local_file_with_adapter_scope = MagicMock(
+        side_effect=lambda adapter, generate_func, *args, **kwargs: generate_func(
+            *args, **kwargs
+        )
+    )
+    # Prompt-fallback counterpart (weightless; no adapter_scope).
+    stub_backend._generate_composed_prompt = MagicMock(
+        side_effect=lambda adapter, generate_func, *args, **kwargs: generate_func(
+            *args, **kwargs
+        )
     )
     return stub_backend
 
@@ -712,7 +727,7 @@ async def test_embedded_intrinsic_invocation_complete_fires_error_on_generation_
 ):
     # A failure in the backend's own generation call never reaches
     # granite_formatters_processing — avalue() raises it straight off the
-    # queue — so _await_embedded_generation must fire outcome="error" instead.
+    # queue — so _await_generation_reporting_error must fire outcome="error" instead.
     pytest.importorskip("cpex", reason="cpex not installed — install mellea[hooks]")
     backend = _make_intrinsic_backend_stub(stub_backend)
     backend.processing = AsyncMock(return_value=None)
@@ -773,9 +788,9 @@ async def test_embedded_intrinsic_invocation_complete_fires_error_on_generation_
 async def test_legacy_peft_intrinsic_never_fires_embedded_invocation_complete(
     stub_backend,
 ):
-    # Drives the legacy PEFT path (embedded_identity=None) and pins that it
-    # never fires the embedded helper — guards the isinstance check that
-    # gates embedded_identity from silently double-firing.
+    # Drives the legacy PEFT path (shim weights, not Embedded/Prompt) and pins
+    # that it never fires invocation-complete — guards the isinstance check that
+    # gates the emit on adapter.weights from silently double-firing.
     pytest.importorskip("cpex", reason="cpex not installed — install mellea[hooks]")
     backend = _make_intrinsic_backend_stub(stub_backend)
     backend.processing = AsyncMock(return_value=None)
@@ -836,39 +851,93 @@ async def test_legacy_peft_intrinsic_never_fires_embedded_invocation_complete(
     assert HookType.ADAPTER_FUNCTION_INVOCATION_COMPLETE not in fired_hook_types
 
 
-@pytest.mark.asyncio
-async def test_composed_adapter_drives_generate_from_intrinsic(stub_backend):
-    """A composed `Adapter` (not the `IntrinsicAdapter` shim) drives the full
-    `_generate_from_intrinsic` path — name/config resolution, the composed
-    `_generate_composed_local_file_with_adapter_scope` dispatch, and normal
-    post-processing — end to end (Epic #929, issue #1144).
-    """
-    from mellea.backends.adapters._core import (
-        Adapter as _AdapterCore,
-        Identity,
-        LocalFileBinding,
+class _StubPromptContract(IOContract):
+    """Minimal IOContract; the prompt generation path never reads it."""
+
+    def build_prompt(self, **kwargs: object):
+        raise NotImplementedError
+
+    def parse(self, raw: str) -> dict[str, object]:
+        return {}
+
+
+def _make_prompt_generate_stub():
+    """A stub carrying only what `_generate_composed_prompt` touches."""
+    model = SimpleNamespace(
+        active_adapters=MagicMock(return_value=[]), set_adapter=MagicMock()
     )
-    from mellea.backends.adapters.catalog import AdapterType
+    return SimpleNamespace(
+        _generation_lock=threading.RLock(),
+        _model=model,
+        deactivate_peft_adapter=MagicMock(),
+    )
+
+
+def test_generate_composed_prompt_runs_on_clean_base_model(caplog):
+    """The weightless prompt path clears any PEFT adapter, logs activation, generates."""
+    stub = _make_prompt_generate_stub()
+    adapter = Adapter(
+        identity=Identity(
+            name="answerability", adapter_type="prompt", capability="answerability"
+        ),
+        io_contract=_StubPromptContract(),
+        weights=PromptBinding(name="answerability", target_model_name="granite-4.2-8b"),
+    )
+
+    with caplog.at_level(logging.INFO, logger="mellea"):
+        out = LocalHFBackend._generate_composed_prompt(
+            stub, adapter, lambda *a, **k: "generated", "tok", stub._model, {}, {}
+        )
+
+    assert out == "generated"
+    # No adapter_scope on this path — the base model is cleared before generating.
+    stub.deactivate_peft_adapter.assert_called_once_with("")
+    # The soft adapter's activation is surfaced at real-adapter severity.
+    assert any("Prompt fallback activated" in r.message for r in caplog.records)
+
+
+def test_generate_composed_prompt_rejects_non_prompt_binding():
+    """It guards its contract: a non-PromptBinding composed Adapter is a TypeError."""
+    stub = _make_prompt_generate_stub()
+    adapter = Adapter(
+        identity=Identity(
+            name="answerability", adapter_type="alora", capability="answerability"
+        ),
+        io_contract=_StubPromptContract(),
+        weights=EmbeddedBinding(),
+    )
+
+    with pytest.raises(TypeError, match="PromptBinding"):
+        LocalHFBackend._generate_composed_prompt(
+            stub, adapter, lambda *a, **k: "x", "tok", stub._model, {}, {}
+        )
+
+
+async def _drive_composed_adapter_from_intrinsic(stub_backend, binding, adapter_type):
+    """Drives `_generate_from_intrinsic` for a composed `Adapter` to resolution.
+
+    Returns `(backend, payloads)`: the stub backend, for dispatch assertions, and
+    the invocation-complete payloads fired via `_core.invoke_hook` while
+    `output._gen.process` resolves (empty for the local-file path, whose dispatch
+    is stubbed out).
+    """
+    from mellea.backends.adapters._core import Adapter as _AdapterCore
     from mellea.backends.adapters.io_contracts import get_io_contract
 
     backend = _make_intrinsic_backend_stub(stub_backend)
     backend.processing = AsyncMock(return_value=None)
-    binding = LocalFileBinding(
-        name="answerability",
-        adapter_type=AdapterType.ALORA,
-        repo_id="ibm-granite/granitelib-rag-r1.0",
-        revision="abc123",
-    )
     composed = _AdapterCore(
         identity=Identity(
-            name="answerability", adapter_type="alora", capability="answerability"
+            name="answerability", adapter_type=adapter_type, capability="answerability"
         ),
         io_contract=get_io_contract("answerability"),
         weights=binding,
     )
     backend._added_adapters = {}
-    backend._composed_adapters = {"answerability_alora": composed}
-    backend._composed_adapter_configs = {"answerability_alora": {"parameters": {}}}
+    backend._composed_adapters = {f"answerability_{adapter_type}": composed}
+    backend._composed_adapter_configs = {
+        f"answerability_{adapter_type}": {"parameters": {}}
+    }
     backend.base_model_name = "granite-4.1-3b"
 
     def fake_transformers_inputs(request, tokenizer, model, ll_tokenizer=None):
@@ -907,6 +976,10 @@ async def test_composed_adapter_drives_generate_from_intrinsic(stub_backend):
         ),
         patch("builtins.open", mock_open(read_data="key: value")),
         patch("yaml.safe_load", return_value={"parameters": {}}),
+        patch("mellea.backends.adapters._core.has_plugins", return_value=True),
+        patch(
+            "mellea.backends.adapters._core.invoke_hook", new_callable=AsyncMock
+        ) as mock_invoke,
     ):
         output = await LocalHFBackend._generate_from_intrinsic(
             backend,
@@ -924,7 +997,59 @@ async def test_composed_adapter_drives_generate_from_intrinsic(stub_backend):
             if item is not None:
                 await output._gen.process(output, item)
                 processed = True
-        assert processed, "the composed local-file path must produce a response"
+        assert processed, "the composed adapter path must produce a response"
+
+    payloads = [
+        call.args[1]
+        for call in mock_invoke.call_args_list
+        if call.args[0] is HookType.ADAPTER_FUNCTION_INVOCATION_COMPLETE
+    ]
+    return backend, payloads
+
+
+@pytest.mark.asyncio
+async def test_composed_adapter_drives_generate_from_intrinsic(stub_backend):
+    """A composed LocalFile `Adapter` dispatches through the local-file path."""
+    binding = LocalFileBinding(
+        name="answerability",
+        adapter_type=AdapterType.ALORA,
+        repo_id="ibm-granite/granitelib-rag-r1.0",
+        revision="abc123",
+    )
+
+    backend, _ = await _drive_composed_adapter_from_intrinsic(
+        stub_backend, binding, "alora"
+    )
+
+    backend._generate_composed_local_file_with_adapter_scope.assert_called_once()
+    backend._generate_composed_prompt.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_composed_prompt_adapter_drives_generate_from_intrinsic(stub_backend):
+    """A composed `PromptBinding` dispatches through the prompt path and fires an
+    invocation-complete payload tagged `binding_type="prompt"` with the revision.
+    """
+    binding = PromptBinding(
+        name="answerability",
+        repo_id="ibm-granite/granitelib-rag-r1.0",
+        revision="abc123",
+        target_model_name="granite-4.1-3b",
+    )
+
+    backend, payloads = await _drive_composed_adapter_from_intrinsic(
+        stub_backend, binding, "prompt"
+    )
+
+    backend._generate_composed_prompt.assert_called_once()
+    backend._generate_composed_local_file_with_adapter_scope.assert_not_called()
+
+    assert len(payloads) == 1
+    assert payloads[0].binding_type == "prompt"
+    assert payloads[0].adapter_type == "prompt"
+    assert payloads[0].revision == "abc123"
+    assert payloads[0].outcome == "success"
+    assert payloads[0].error is None
 
 
 def _setup_mismatched_alora_stub(stub_backend, *, adapter_name="answerability"):
@@ -1273,19 +1398,22 @@ async def test_alora_activation_guard_abort_hook_reports_shim_as_pinned_local_fi
 
 
 @pytest.mark.asyncio
-async def test_requirement_reroute_falls_back_to_llm_as_a_judge_on_activation_failure(
-    caplog,
-):
+@pytest.mark.parametrize("explicit_alora", [False, True], ids=["plain", "explicit"])
+async def test_requirement_reroute_on_activation_failure(caplog, explicit_alora):
     """AC1's "treated as unavailable" arm, delivered through the real routing path.
 
     A plain `Requirement` auto-reroutes to `requirement-check_alora`
     (`default_to_constraint_checking_alora=True`, the default). When that
     adapter's activation guard fires, `_generate_from_context` must catch
-    `AloraActivationError` and fall back to LLM-as-a-judge — the exact same
-    treatment the adjacent `alora_req_adapter is None` branch already gives
-    an adapter that was never registered at all. Without that catch, this
-    call would raise straight out of `.validate()`/a sampling loop instead of
-    degrading gracefully.
+    `AloraActivationError` and fall back to LLMaJ — auto-rerouting
+    is only an optimisation. Without that catch, this call would raise
+    straight out of `.validate()`/a sampling loop instead of degrading
+    gracefully.
+
+    An explicit `ALoraRequirement` is a request for the adapter, and its
+    output_to_bool parses adapter JSON, so the same failure raises
+    `ValueError` (chained from the `AloraActivationError`) instead of falling
+    back to a yes/no answer it could never parse.
 
     Uses `_make_backend()` (a real `LocalHFBackend` over a mocked model/
     tokenizer), not the bare `SimpleNamespace` stub: `_generate_from_context`
@@ -1295,9 +1423,13 @@ async def test_requirement_reroute_falls_back_to_llm_as_a_judge_on_activation_fa
     """
     import logging
 
-    from mellea.backends.adapters._core import Adapter as _AdapterCore, LocalFileBinding
+    from mellea.backends.adapters._core import (
+        Adapter as _AdapterCore,
+        AloraActivationError,
+        LocalFileBinding,
+    )
     from mellea.backends.adapters.io_contracts import get_io_contract
-    from mellea.stdlib.requirements import Requirement
+    from mellea.stdlib.requirements import ALoraRequirement, Requirement
 
     backend = _make_backend()
     backend.default_to_constraint_checking_alora = True
@@ -1336,7 +1468,11 @@ async def test_requirement_reroute_falls_back_to_llm_as_a_judge_on_activation_fa
         return mot
 
     ctx = ChatContext().add(Message("user", "hi")).add(Message("assistant", "hello"))
-    req = Requirement("The response should be a greeting.")
+    req: Requirement = (
+        ALoraRequirement("The response should be a greeting.")
+        if explicit_alora
+        else Requirement("The response should be a greeting.")
+    )
 
     with (
         patch(
@@ -1365,6 +1501,14 @@ async def test_requirement_reroute_falls_back_to_llm_as_a_judge_on_activation_fa
         patch.object(backend, "do_generate_walk", AsyncMock(return_value=None)),
         caplog.at_level(logging.WARNING),
     ):
+        if explicit_alora:
+            with pytest.raises(ValueError, match="failed to activate \\(") as excinfo:
+                await backend._generate_from_context(req, ctx, model_options={})
+            assert isinstance(excinfo.value.__cause__, AloraActivationError)
+            assert standard_calls == [], (
+                "an explicit ALoraRequirement must not fall back"
+            )
+            return
         mot, _ = await backend._generate_from_context(req, ctx, model_options={})
 
     assert standard_calls == [req], (
@@ -1435,6 +1579,87 @@ def test_composed_local_file_config_is_derived_once_at_registration_not_on_the_l
     mock_obtain.assert_called_once()
     assert name1 == name2 == "answerability"
     assert config1 is config2
+
+
+def test_add_adapter_registers_composed_prompt_binding():
+    """add_adapter accepts a composed PromptBinding with config= and registers it
+    (the config-gate PromptBinding arm and the prompt registration branch)."""
+    from mellea.backends.adapters._core import Adapter as _AdapterCore
+    from mellea.backends.adapters.io_contracts import get_io_contract
+
+    backend = _make_backend()
+    composed = _AdapterCore(
+        identity=Identity(
+            name="answerability", adapter_type="prompt", capability="answerability"
+        ),
+        io_contract=get_io_contract("answerability"),
+        weights=PromptBinding(
+            name="answerability",
+            repo_id="ibm-granite/granitelib-rag-r1.0",
+            revision="abc123",
+            target_model_name="granite-4.1-3b",
+        ),
+    )
+    config = {"instruction": "Answer the question.", "parameters": {}}
+
+    backend.add_adapter(composed, config=config)
+
+    assert backend._composed_adapters["answerability_prompt"] is composed
+    assert backend._composed_adapter_configs["answerability_prompt"] == config
+
+
+def test_add_adapter_composed_prompt_self_fetches_config_when_none():
+    """A composed PromptBinding added without config= self-fetches its io.yaml."""
+    from mellea.backends.adapters._core import Adapter as _AdapterCore
+    from mellea.backends.adapters.io_contracts import get_io_contract
+
+    backend = _make_backend()
+    composed = _AdapterCore(
+        identity=Identity(
+            name="answerability", adapter_type="prompt", capability="answerability"
+        ),
+        io_contract=get_io_contract("answerability"),
+        weights=PromptBinding(
+            name="answerability",
+            repo_id="ibm-granite/granitelib-rag-r1.0",
+            revision="abc123",
+            target_model_name="granite-4.1-3b",
+        ),
+    )
+    fetched = {"instruction": "Answer the question.", "parameters": {}}
+
+    with patch.object(backend, "_obtain_prompt_io_yaml_config", return_value=fetched):
+        backend.add_adapter(composed)
+
+    assert backend._composed_adapters["answerability_prompt"] is composed
+    assert backend._composed_adapter_configs["answerability_prompt"] == fetched
+
+
+def test_add_adapter_composed_prompt_without_usable_instruction_raises():
+    """add_adapter rejects a prompt config with no usable instruction and registers
+    nothing, mirroring the resolve walk's guard."""
+    from mellea.backends.adapters._core import Adapter as _AdapterCore
+    from mellea.backends.adapters.io_contracts import get_io_contract
+
+    backend = _make_backend()
+    composed = _AdapterCore(
+        identity=Identity(
+            name="answerability", adapter_type="prompt", capability="answerability"
+        ),
+        io_contract=get_io_contract("answerability"),
+        weights=PromptBinding(
+            name="answerability",
+            repo_id="ibm-granite/granitelib-rag-r1.0",
+            revision="abc123",
+            target_model_name="granite-4.1-3b",
+        ),
+    )
+
+    with pytest.raises(ValueError, match="instruction"):
+        backend.add_adapter(composed, config={"parameters": {}})
+
+    assert "answerability_prompt" not in backend._composed_adapters
+    assert "answerability_prompt" not in backend._composed_adapter_configs
 
 
 def test_generate_embedded_with_generation_lock_deactivates_peft_state():
@@ -4148,7 +4373,8 @@ async def test_alora_requirement_dispatch_honors_explicit_adapter_types_override
     hardcoded `self._find_adapter(adapter_name, ("alora",))` regardless of
     what `adapter_types` the caller passed to `ALoraRequirement` — a custom,
     LoRA-only adapter could never be found this way, silently falling back
-    to regular generation.
+    to regular generation. An explicit `ALoraRequirement` that can't find its
+    adapter now raises instead, so the lookup is observed via the raise.
     """
     from mellea.stdlib.requirements.requirement import ALoraRequirement
 
@@ -4163,16 +4389,45 @@ async def test_alora_requirement_dispatch_honors_explicit_adapter_types_override
     def fake_find_adapter(name, adapter_types=None):
         captured["name"] = name
         captured["adapter_types"] = adapter_types
-        return None  # not registered; falls back to regular generation below
+        return None  # not registered; an explicit ALoraRequirement raises
 
     with (
         patch.object(backend, "_find_adapter", side_effect=fake_find_adapter),
         patch.object(
             LocalHFBackend, "_generate_from_context_standard", new_callable=AsyncMock
         ) as mock_standard,
+        pytest.raises(ValueError, match="no 'my-custom-check' adapter registered"),
     ):
-        mock_standard.return_value = (MagicMock(), ctx)
         await backend._generate_from_context(action, ctx, model_options={})
 
     assert captured["name"] == "my-custom-check"
     assert captured["adapter_types"] == ("lora",)
+    mock_standard.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_plain_requirement_falls_back_when_adapter_not_registered():
+    """A plain `Requirement` falls back to LLMaJ when no adapter is registered.
+
+    The raise and the fallback are one `isinstance` check apart in
+    `_generate_from_context`. This test ensures that check doesn't also raise
+    for a plain `Requirement`, leaving most users (who never register the
+    adapter) unable to use requirements at all.
+    """
+    from mellea.stdlib.requirements.requirement import Requirement
+
+    backend = _make_backend()
+    backend.default_to_constraint_checking_alora = True
+    ctx = ChatContext().add(Message("user", "hi")).add(Message("assistant", "hello"))
+
+    with patch.object(
+        LocalHFBackend,
+        "_generate_from_context_standard",
+        new_callable=AsyncMock,
+        return_value=MagicMock(),
+    ) as mock_standard:
+        await backend._generate_from_context(
+            Requirement("Be polite."), ctx, model_options={}
+        )
+
+    mock_standard.assert_awaited_once()

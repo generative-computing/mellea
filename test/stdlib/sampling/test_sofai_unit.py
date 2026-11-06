@@ -203,5 +203,163 @@ def test_select_best_attempt_single():
     assert SOFAISamplingStrategy._select_best_attempt(val) == 0
 
 
+# --- repair() / S2 feedback (issue #1497) ---
+
+
+def test_repair_includes_description_when_reason_is_generic():
+    """A generic validator reason must not suppress the requirement description."""
+    from mellea.stdlib.context import ChatContext
+
+    req = Requirement(description="Response must be fewer than 100 words")
+    past_val = [
+        [(req, ValidationResult(result=False, reason="Requirement not satisfied."))]
+    ]
+    action, _ = SOFAISamplingStrategy.repair(
+        ChatContext(), ChatContext(), [], [], past_val
+    )
+    assert isinstance(action, Message)
+    assert "Response must be fewer than 100 words" in action.content
+    assert "Requirement not satisfied." not in action.content
+
+
+def test_repair_appends_meaningful_reason_as_detail():
+    """A meaningful validator reason is appended alongside the description."""
+    from mellea.stdlib.context import ChatContext
+
+    req = Requirement(description="Response must be fewer than 100 words")
+    past_val = [
+        [(req, ValidationResult(result=False, reason="The response was 150 words."))]
+    ]
+    action, _ = SOFAISamplingStrategy.repair(
+        ChatContext(), ChatContext(), [], [], past_val
+    )
+    assert isinstance(action, Message)
+    assert "Response must be fewer than 100 words" in action.content
+    assert "(detail: The response was 150 words.)" in action.content
+
+
+def test_repair_renders_placeholder_for_missing_description():
+    """A None description renders as [no description], not the literal None."""
+    from mellea.stdlib.context import ChatContext
+
+    req = Requirement(description=None)
+    past_val = [
+        [(req, ValidationResult(result=False, reason="Requirement not satisfied."))]
+    ]
+    action, _ = SOFAISamplingStrategy.repair(
+        ChatContext(), ChatContext(), [], [], past_val
+    )
+    assert isinstance(action, Message)
+    assert "* [no description]" in action.content
+
+
+def test_repair_skips_detail_when_reason_equals_description():
+    """A bare yes/no judge sets reason to the description; it must not repeat."""
+    from mellea.stdlib.context import ChatContext
+
+    req = Requirement(description="Response must be fewer than 100 words")
+    past_val = [
+        [
+            (
+                req,
+                ValidationResult(
+                    result=False, reason="Response must be fewer than 100 words"
+                ),
+            )
+        ]
+    ]
+    action, _ = SOFAISamplingStrategy.repair(
+        ChatContext(), ChatContext(), [], [], past_val
+    )
+    assert isinstance(action, Message)
+    assert action.content.count("Response must be fewer than 100 words") == 1
+
+
+def test_s2_best_attempt_feedback_includes_description_when_reason_is_generic():
+    """The S2 best-attempt prompt keeps the description under a generic reason."""
+    from unittest.mock import MagicMock
+
+    from mellea.core import Backend, ComputedModelOutputThunk, ModelOutputThunk
+    from mellea.stdlib.context import ChatContext
+
+    strategy = SOFAISamplingStrategy(MagicMock(spec=Backend), MagicMock(spec=Backend))
+    req = Requirement(description="State the opening time.")
+    scores = [
+        [(req, ValidationResult(result=False, reason="Requirement not satisfied."))]
+    ]
+    results = [
+        ComputedModelOutputThunk(ModelOutputThunk(value="The museum opens at 9am."))
+    ]
+    action, _ = strategy._prepare_s2_context(
+        "best_attempt",
+        Message("user", "State the museum's opening time."),
+        ChatContext(),
+        ChatContext(),
+        Message("user", "prior"),
+        results,
+        scores,
+        1,
+    )
+    assert isinstance(action, Message)
+    assert "State the opening time." in action.content
+    assert "Requirement not satisfied." not in action.content
+
+
+def test_s2_best_attempt_renders_placeholder_for_missing_description():
+    """The S2 best-attempt prompt renders [no description] for a None description."""
+    from unittest.mock import MagicMock
+
+    from mellea.core import Backend, ComputedModelOutputThunk, ModelOutputThunk
+    from mellea.stdlib.context import ChatContext
+
+    strategy = SOFAISamplingStrategy(MagicMock(spec=Backend), MagicMock(spec=Backend))
+    req = Requirement(description=None)
+    scores = [
+        [(req, ValidationResult(result=False, reason="Requirement not satisfied."))]
+    ]
+    results = [
+        ComputedModelOutputThunk(ModelOutputThunk(value="The museum opens at 9am."))
+    ]
+    action, _ = strategy._prepare_s2_context(
+        "best_attempt",
+        Message("user", "State the museum's opening time."),
+        ChatContext(),
+        ChatContext(),
+        Message("user", "prior"),
+        results,
+        scores,
+        1,
+    )
+    assert isinstance(action, Message)
+    assert "- [no description]" in action.content
+
+
+def test_s2_best_attempt_skips_detail_when_reason_equals_description():
+    """The S2 best-attempt prompt does not duplicate a description-valued reason."""
+    from unittest.mock import MagicMock
+
+    from mellea.core import Backend, ComputedModelOutputThunk, ModelOutputThunk
+    from mellea.stdlib.context import ChatContext
+
+    strategy = SOFAISamplingStrategy(MagicMock(spec=Backend), MagicMock(spec=Backend))
+    req = Requirement(description="State the opening time.")
+    scores = [[(req, ValidationResult(result=False, reason="State the opening time."))]]
+    results = [
+        ComputedModelOutputThunk(ModelOutputThunk(value="The museum opens at 9am."))
+    ]
+    action, _ = strategy._prepare_s2_context(
+        "best_attempt",
+        Message("user", "State the museum's opening time."),
+        ChatContext(),
+        ChatContext(),
+        Message("user", "prior"),
+        results,
+        scores,
+        1,
+    )
+    assert isinstance(action, Message)
+    assert action.content.count("State the opening time.") == 1
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

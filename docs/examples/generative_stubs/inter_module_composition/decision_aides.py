@@ -1,4 +1,9 @@
 # pytest: ollama, e2e
+"""Modular decision-making and recommendation generative stubs.
+
+Defines reusable `@generative` stubs for business decisions, risk mitigation
+strategies, and creative recommendations.
+"""
 
 from mellea import generative
 

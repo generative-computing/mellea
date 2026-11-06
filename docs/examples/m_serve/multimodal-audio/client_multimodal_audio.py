@@ -6,7 +6,7 @@ import requests
 
 PORT = 8080
 
-client = openai.OpenAI(api_key="na", base_url=f"http://0.0.0.0:{PORT}/v1")
+client = openai.OpenAI(api_key="na", base_url=f"http://localhost:{PORT}/v1")
 
 # "Roses are red, violets are blue." — the same sample used in mellea's audio tests.
 _AUDIO_URL = "https://ai.google.dev/gemma/docs/audio/roses-are.wav"

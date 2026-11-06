@@ -4,18 +4,39 @@
 # Re-exported so callers can import from cli.serve.models instead of mellea.serve.models
 __all__ = [
     "ChatMessage",
+    "ContextManagementConfig",
     "ImageUrlContent",
     "InputAudioContent",
     "InputAudioData",
+    "InputContent",
     "MessageContent",
+    "OutputTextContent",
+    "PromptCacheOptions",
+    "Response",
+    "ResponseError",
+    "ResponseFunctionCall",
+    "ResponseInputItem",
+    "ResponseOutputItem",
+    "ResponseOutputMessage",
+    "ResponseRequest",
+    "ResponseTextConfig",
+    "ResponseTool",
+    "ResponseUsage",
     "TextContent",
 ]
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, RootModel, model_validator
+from pydantic import BaseModel, Field, RootModel, field_validator, model_validator
 
-from mellea.helpers.openai_compatible_helpers import CompletionUsage
+from mellea.helpers.openai_compatible_helpers import (
+    CompletionUsage,
+    OutputTextContent,
+    ResponseFunctionCall,
+    ResponseOutputItem,
+    ResponseOutputMessage,
+    ResponseUsage,
+)
 from mellea.serve.models import (
     ChatMessage,
     ImageUrlContent,
@@ -54,6 +75,7 @@ class FunctionDefinition(BaseModel):
     name: str
     description: str | None = None
     parameters: FunctionParameters
+    strict: bool | None = None
 
 
 class ToolFunction(BaseModel):
@@ -77,17 +99,65 @@ class JsonSchemaFormat(BaseModel):
 
 
 class ResponseFormat(BaseModel):
+    """Response format configuration for structured outputs.
+
+    Accepts both the Chat Completions nested shape
+    (`{"type": "json_schema", "json_schema": {"name", "schema", "strict"}}`)
+    and the flat Responses API / SDK shape
+    (`{"type": "json_schema", "name", "schema", "strict"}`). Flat fields are
+    folded into `json_schema` at parse time so consumers only ever see the
+    nested shape.
+    """
+
     type: Literal["text", "json_object", "json_schema"]
 
     json_schema: JsonSchemaFormat | None = None
     """JSON Schema definition when type is 'json_schema'."""
 
+    # Flat (Responses API / SDK) json_schema fields. Accepted at the edge
+    # and folded into `json_schema` by _fold_flat_json_schema; excluded from
+    # serialization so consumers only ever see the nested shape.
+    name: str | None = Field(default=None, exclude=True)
+    schema_: dict[str, Any] | None = Field(default=None, alias="schema", exclude=True)
+    strict: bool | None = Field(default=None, exclude=True)
+
+    @model_validator(mode="after")
+    def _fold_flat_json_schema(self) -> "ResponseFormat":
+        if (
+            self.type == "json_schema"
+            and self.json_schema is None
+            and self.name is not None
+        ):
+            # Construct via the "schema" alias (mypy's pydantic plugin
+            # expects the alias for aliased fields).
+            self.json_schema = JsonSchemaFormat(
+                name=self.name, schema=self.schema_ or {}, strict=self.strict
+            )
+        return self
+
     @model_validator(mode="after")
     def validate_json_schema_required(self) -> "ResponseFormat":
         """Validate that json_schema is provided when type is 'json_schema'."""
         if self.type == "json_schema" and self.json_schema is None:
-            raise ValueError("json_schema field is required when type is 'json_schema'")
+            raise ValueError(
+                "json_schema field is required when type is 'json_schema' "
+                "(send the nested 'json_schema' object or flat 'name'/'schema' keys)"
+            )
         return self
+
+
+class ResponseTextConfig(BaseModel):
+    """Configuration for the Responses API `text` request parameter.
+
+    Mirrors the OpenAI SDK's `text` argument
+    (`text={"format": {...}, "verbosity": "low"}`). `format` is lifted into
+    the top-level `format` field of `ResponseRequest` at parse time.
+    """
+
+    format: ResponseFormat | None = None
+
+    verbosity: Literal["low", "medium", "high"] | None = None
+    """Accepted for OpenAI compatibility; currently ignored by `m serve`."""
 
 
 class StreamOptions(BaseModel):
@@ -332,3 +402,266 @@ class OpenAIErrorResponse(BaseModel):
 
     error: OpenAIError
     """The error object."""
+
+
+# ---------------------------------------------------------------------------
+# Responses API models
+# ---------------------------------------------------------------------------
+
+
+class InputContent(BaseModel):
+    """Content part in a Responses API input item.
+
+    `output_text` blocks appear when a client replays a previous
+    response's output (the `store=False` pattern: `input=response.output
+    + [...]`); their `annotations` are ignored.
+    """
+
+    type: Literal["input_text", "input_image", "input_file", "output_text"]
+    text: str | None = None
+    image_url: str | None = None
+    file_id: str | None = None
+
+
+class ResponseInputItem(BaseModel):
+    """A single input item for the Responses API.
+
+    Accepts message items (`{"role": ..., "content": ...}`, optionally with
+    an explicit `type: "message"`), tool-result items
+    (`{"type": "function_call_output", "call_id": ..., "output": ...}`),
+    and replayed assistant function calls
+    (`{"type": "function_call", "call_id", "name", "arguments"}`) as sent
+    by the OpenAI SDK.
+    """
+
+    type: Literal["message", "function_call", "function_call_output"] | None = None
+    role: Literal["user", "assistant", "developer", "system", "tool"] | None = None
+    content: str | list[InputContent] | None = None
+    tool_call_id: str | None = None
+    tool_calls: list[ChatCompletionMessageToolCall] | None = None
+    """Assistant-turn tool calls in the Chat Completions wire shape."""
+    # function_call / function_call_output shapes:
+    call_id: str | None = None
+    name: str | None = None
+    arguments: str | None = None
+    output: str | list[InputContent] | None = None
+
+    @model_validator(mode="after")
+    def _require_role_or_item_type(self) -> "ResponseInputItem":
+        if self.role is None and self.type not in (
+            "function_call",
+            "function_call_output",
+        ):
+            raise ValueError(
+                "Input item requires a 'role' (message item) or "
+                "type='function_call' / type='function_call_output'."
+            )
+        if self.type == "function_call" and (self.call_id is None or self.name is None):
+            raise ValueError("type='function_call' items require 'call_id' and 'name'.")
+        if self.type == "function_call_output" and self.call_id is None:
+            raise ValueError(
+                "type='function_call_output' items require 'call_id' — "
+                "providers reject a tool result that pairs with no call."
+            )
+        return self
+
+
+class ResponseTool(BaseModel):
+    """Tool declaration accepted by the Responses API.
+
+    Accepts both the OpenAI Responses API / SDK flat function shape
+    (`{"type": "function", "name", "parameters", "strict"}`) and the nested
+    Chat Completions shape (`{"type": "function", "function": {...}}`).
+    Flat fields are folded into `function` at parse time so `serve()` always
+    receives the nested shape.
+
+    Only `type: "function"` is currently supported by m serve. The other
+    types (`web_search`, `file_search`, `mcp`, `code_interpreter`)
+    are accepted by the schema so that requests are parsed and rejected with
+    a clear 400 error rather than a Pydantic validation failure.
+    """
+
+    type: Literal["function", "web_search", "file_search", "mcp", "code_interpreter"]
+    function: FunctionDefinition | None = None
+    # Flat (Responses API / SDK) function-tool fields. Accepted at the edge
+    # and folded into `function` by _fold_flat_function; excluded from
+    # serialization so `serve()` only ever sees the nested shape.
+    name: str | None = Field(default=None, exclude=True)
+    description: str | None = Field(default=None, exclude=True)
+    parameters: dict[str, Any] | None = Field(default=None, exclude=True)
+    strict: bool | None = Field(default=None, exclude=True)
+
+    @model_validator(mode="after")
+    def _fold_flat_function(self) -> "ResponseTool":
+        if self.type == "function" and self.function is None and self.name is not None:
+            self.function = FunctionDefinition(
+                name=self.name,
+                description=self.description,
+                parameters=FunctionParameters(root=self.parameters or {}),
+                strict=self.strict,
+            )
+        return self
+
+
+class ContextManagementConfig(BaseModel):
+    """Context compaction configuration."""
+
+    compact_threshold: float | None = None
+    strategy: Literal["auto", "manual"] | None = None
+
+
+class PromptCacheOptions(BaseModel):
+    """Prompt caching settings."""
+
+    enabled: bool | None = None
+    breakpoint: str | None = None
+
+
+class ResponseRequest(BaseModel):
+    """Request body for POST /v1/responses."""
+
+    model_config = {"extra": "allow"}
+
+    model: str
+    """Model to use (e.g. gpt-5.6, o1)."""
+
+    input: str | list[ResponseInputItem]
+    """Text, image, or file inputs."""
+
+    instructions: str | list[ResponseInputItem] | None = None
+    """System/developer context for the response."""
+
+    requirements: list[str | None] | None = Field(default_factory=list)
+    """Mellea requirements - passed separately to serve()."""
+
+    tools: list[ResponseTool] | None = None
+    tool_choice: Literal["none", "auto", "required"] | dict[str, Any] | None = None
+    max_output_tokens: int | None = None
+    temperature: float | None = Field(default=1.0, ge=0, le=2)
+    top_p: float | None = Field(default=1.0, ge=0, le=1)
+    stream: bool | None = False
+    store: bool | None = True
+    conversation: str | None = None
+    """Conversation id. The SDK's object form ({"id": ...}) is accepted and
+    collapsed to its id string at parse time."""
+
+    previous_response_id: str | None = None
+    background: bool | None = False
+    include: list[str] | None = None
+    parallel_tool_calls: bool | None = True
+    context_management: (
+        list[ContextManagementConfig] | ContextManagementConfig | None
+    ) = None
+    """Accepted for OpenAI compatibility (the SDK sends a list); ignored."""
+    prompt_cache_options: PromptCacheOptions | None = None
+    format: ResponseFormat | None = None
+    """Response format configuration for structured outputs.
+
+    The OpenAI SDK sends structured output as `text={"format": {...}}`; the
+    flat `text.format` is lifted into this field at parse time. This
+    top-level field is the canonical (and alias) location, accepting both
+    the nested and flat shapes.
+
+    Configuring `{ "type": "json_schema" }` enables Structured Outputs,
+    which ensures the model will match your supplied JSON schema.
+    The default format is `{ "type": "text" }`.
+    """
+
+    # SDK `text` parameter. Accepted at the edge and lifted into `format`
+    # by _lift_text_format; excluded from serialization so serve() only ever
+    # sees the canonical `format` field.
+    text: ResponseTextConfig | None = Field(default=None, exclude=True)
+
+    extra: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("conversation", mode="before")
+    @classmethod
+    def _normalize_conversation(cls, value: Any) -> Any:
+        # The OpenAI SDK accepts conversation={"id": ...} alongside a bare id
+        # string; collapse the object form to its id so the field stays a
+        # string and the conversation echo round-trips.
+        if isinstance(value, dict) and "id" in value:
+            return value["id"]
+        return value
+
+    @model_validator(mode="after")
+    def _normalize_tool_choice(self) -> "ResponseRequest":
+        # The OpenAI Responses API / SDK sends a specific-function choice as
+        # the flat {"type": "function", "name": ...}; the Chat Completions
+        # shape is {"type": "function", "function": {"name": ...}}. Normalize
+        # the flat form to the nested one so serve() (and the shipped
+        # examples) read a single consistent shape. String choices
+        # ("none"/"auto"/"required") pass through unchanged.
+        tc = self.tool_choice
+        if (
+            isinstance(tc, dict)
+            and tc.get("type") == "function"
+            and "function" not in tc
+            and tc.get("name") is not None
+        ):
+            self.tool_choice = {"type": "function", "function": {"name": tc["name"]}}
+        return self
+
+    @model_validator(mode="after")
+    def _lift_text_format(self) -> "ResponseRequest":
+        # The OpenAI Responses API / SDK sends structured output as
+        # text={"format": {...}} rather than a top-level `format`. Lift the
+        # nested format into the canonical top-level field so the endpoint's
+        # format handling sees one consistent location. When both are sent,
+        # the top-level `format` wins (only lift when it is None), matching
+        # the nested-wins rule of ResponseTool._fold_flat_function.
+        if (
+            self.format is None
+            and self.text is not None
+            and self.text.format is not None
+        ):
+            self.format = self.text.format
+        return self
+
+
+class ResponseError(BaseModel):
+    """Error object embedded in a failed Responses API response."""
+
+    code: str
+    message: str
+    param: str | None = None
+
+
+class Response(BaseModel):
+    """A completed response from POST /v1/responses."""
+
+    id: str
+    """Unique response identifier (resp_…)."""
+
+    created_at: int
+    """Unix timestamp of when the response was created."""
+
+    expires_at: int | None = None
+    """Unix timestamp after which this response is no longer retrievable.
+
+    Set to `created_at + TTL` when `store=True` (the default); `None`
+    when `store=False` because the response is never persisted and cannot
+    be retrieved via `GET /v1/responses/{id}`. The TTL is controlled by
+    the `--response-ttl` server flag (default: 1800 seconds / 30 minutes).
+    """
+
+    model: str
+    """Model used to generate the response."""
+
+    status: Literal["completed", "failed", "in_progress", "incomplete"]
+    output: list[ResponseOutputMessage | ResponseFunctionCall | ResponseOutputItem]
+    """Typed output items (messages, function calls, etc.).
+
+    Uses a union type to ensure Pydantic serializes subclass-specific fields
+    (e.g., `content` and `role` for messages, `name` and `arguments`
+    for function calls) rather than stripping them to the base class schema.
+    """
+
+    output_text: str
+    """Convenience field: concatenated text from all output message items."""
+
+    error: ResponseError | None = None
+    incomplete_details: dict[str, Any] | None = None
+    usage: ResponseUsage
+    conversation: str | None = None
+    previous_response_id: str | None = None

@@ -1,6 +1,19 @@
 # pytest: ollama, e2e
 
-"""Example to run m serve with true streaming support."""
+"""Example to run m serve with true streaming support.
+
+Supports both normal and streaming responses from the same `serve()`
+function: returns a computed `ComputedModelOutputThunk` for non-streaming
+requests, and an uncomputed `ModelOutputThunk` for streaming requests so
+the server can emit incremental Server-Sent Events (SSE) chunks.
+
+Prerequisites:
+    ollama serve
+    ollama pull granite4.2:3b
+
+Usage:
+    m serve docs/examples/m_serve/streaming/m_serve_example_streaming.py
+"""
 
 from typing import Any
 

@@ -8,6 +8,19 @@
 #   "boto3" # including so that this example works before the next release.
 # ]
 # ///
+"""Example of using Bedrock models through Mellea's LiteLLM backend.
+
+Creates a Bedrock-backed `LiteLLMBackend` for a Mistral Devstral model and asks
+it which model it is. Based on litellm's docs:
+https://docs.litellm.ai/docs/providers/bedrock
+
+Prerequisites:
+    export AWS_BEARER_TOKEN_BEDROCK=<your API key goes here>
+
+Usage:
+    uv run docs/examples/bedrock/bedrock_litellm_example.py
+"""
+
 import os
 
 import mellea

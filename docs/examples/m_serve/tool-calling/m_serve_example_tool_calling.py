@@ -12,6 +12,13 @@ This file supports two distinct usage patterns:
 The direct `__main__` smoke test is intentionally separate from the
 OpenAI-compatible server flow because local `session.instruct(...)` calls
 should use `MelleaTool` objects directly.
+
+Prerequisites:
+    ollama serve
+    ollama pull granite4:micro-h
+
+Usage:
+    m serve docs/examples/m_serve/tool-calling/m_serve_example_tool_calling.py
 """
 
 import os

@@ -19,7 +19,7 @@ import json
 import openai
 
 PORT = 8080
-BASE_URL = f"http://0.0.0.0:{PORT}/v1"
+BASE_URL = f"http://localhost:{PORT}/v1"
 
 # Create OpenAI client pointing to our m serve endpoint
 client = openai.OpenAI(api_key="not-needed", base_url=BASE_URL)

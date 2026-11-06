@@ -1,5 +1,4 @@
 # pytest: llamacpp, e2e
-
 """Example: run a Mellea session against a local llama.cpp server.
 
 llama-server speaks the OpenAI chat-completions API, so Mellea reaches it through
@@ -13,6 +12,9 @@ Prerequisites:
     That serves Granite 4.2 3b on http://127.0.0.1:8080 under the alias
     `ibm-granite/granite-4.2-3b`, which is the name `IBM_GRANITE_4_2_3B` resolves
     to for the openai backend. Set LLAMACPP_BASE_URL to point somewhere else.
+
+Usage:
+    uv run python docs/examples/llamacpp_session.py
 """
 
 import os

@@ -69,7 +69,7 @@ class BaseMBRDSampling(RejectionSamplingStrategy):
             before majority vote.
         loop_budget (int): Inner rejection-sampling loop count. Must be > 0.
         requirements (list[Requirement] | None): Requirements to validate
-            against. If `None`, uses per-call requirements.
+            against, merged with any per-call requirements.
 
     Attributes:
         symmetric (bool): Whether the similarity metric is symmetric, allowing
@@ -262,7 +262,8 @@ class MajorityVotingStrategyForMath(BaseMBRDSampling):
             to `False`.
         weighted (bool): Not yet implemented. Defaults to `False`.
         loop_budget (int): Rejection-sampling loop count. Defaults to `1`.
-        requirements (list[Requirement] | None): Requirements to validate against.
+        requirements (list[Requirement] | None): Requirements to validate
+            against, merged with any per-call requirements.
 
     Attributes:
         match_types (list[str]): Extraction target types used for parsing math
@@ -381,7 +382,8 @@ class MBRDRougeLStrategy(BaseMBRDSampling):
         number_of_samples (int): Number of samples to generate. Defaults to `8`.
         weighted (bool): Not yet implemented. Defaults to `False`.
         loop_budget (int): Rejection-sampling loop count. Defaults to `1`.
-        requirements (list[Requirement] | None): Requirements to validate against.
+        requirements (list[Requirement] | None): Requirements to validate
+            against, merged with any per-call requirements.
 
     Attributes:
         match_types (list[str]): Rouge metric names used for scoring (`["rougeL"]`).

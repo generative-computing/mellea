@@ -1,6 +1,17 @@
 # pytest: ollama, e2e, qualitative, slow
+"""React examples using the Mellea library's framework.
 
-"""React examples using the Mellea library's framework."""
+Demonstrates the ReACT (Reasoning and Acting) loop with tool integration,
+using Mellea's stdlib react() function and LangChain tool interoperability.
+
+Prerequisites:
+    uv pip install langchain-community ddgs
+    ollama serve
+    ollama pull granite4.2:3b
+
+Usage:
+    uv run python docs/examples/agents/react/react_using_mellea.py
+"""
 
 import asyncio
 

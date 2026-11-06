@@ -1,12 +1,13 @@
 # pytest: unit
-"""ThresholdCompactor — gate an inner Compactor on conversation size.
+"""ThresholdCompactor — gate an inner compactor on conversation size.
 
-Reads `ModelOutputThunk.generation.usage` from the most recent thunk
-in the context. For a chat backend, `total_tokens` on that thunk is
-`prompt_tokens` (full conversation history sent to the model) plus
-`completion_tokens` (the reply), so it tracks *cumulative* context
-size — not just one call's isolated tokens. The inner compactor fires
-once that running size exceeds the configured threshold.
+Reads `ModelOutputThunk.generation.usage` from the most recent thunk in the context.
+For a chat backend, `total_tokens` on that thunk is `prompt_tokens` (full conversation
+history sent to the model) plus `completion_tokens` (the reply), tracking cumulative
+context size. The inner compactor fires once running size exceeds the threshold.
+
+Usage:
+    uv run python docs/examples/context/threshold_compactor.py
 """
 
 from mellea.core.base import ModelOutputThunk

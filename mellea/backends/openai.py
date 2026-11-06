@@ -64,8 +64,9 @@ from ._options import resolve_model_options
 from .adapters import EmbeddedActivationRequest, EmbeddedBinding, Identity
 from .adapters._core import (
     Adapter as _AdapterCore,
-    _await_embedded_generation,
-    _fire_embedded_invocation_complete,
+    WeightsBinding,
+    _afire_invocation_complete,
+    _await_generation_reporting_error,
 )
 from .adapters.adapter import (
     AdapterInput,
@@ -906,7 +907,8 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 parse tool-call responses.
 
         Raises:
-            ValueError: If `action` is an `ALoraRequirement` but `ctx` renders no
+            ValueError: If `action` is an `ALoraRequirement` and its adapter is
+                unavailable (not registered on this backend), or `ctx` renders no
                 conversation, leaving the requirement-check adapter nothing to judge.
             ValueError: If no user-role message has non-whitespace text,
                 images, audio, or documents.
@@ -955,11 +957,11 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 )
                 alora_req_adapter = self._find_adapter(adapter_name, search_types)
                 if alora_req_adapter is None:
-                    if reroute_to_alora and isinstance(action, ALoraRequirement):
-                        MelleaLogger.get_logger().warning(
-                            f"attempted to use an AloraRequirement but backend {self} "
-                            f"doesn't have the specified adapter added {adapter_name}; "
-                            f"defaulting to regular generation"
+                    if isinstance(action, ALoraRequirement):
+                        raise ValueError(
+                            f"cannot validate an ALoraRequirement: backend {self} has "
+                            f"no {adapter_name!r} adapter registered. Register one with "
+                            "backend.add_adapter(), or use a plain Requirement."
                         )
                     reroute_to_alora = False
 
@@ -1305,7 +1307,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 d["role"] = m.role
             messages_dicts.append(d)
 
-        chat_response = _await_embedded_generation(
+        chat_response = _await_generation_reporting_error(
             self._async_client.chat.completions.create(
                 model=self._model_id,
                 messages=messages_dicts,  # type: ignore
@@ -1314,6 +1316,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 **api_params,
             ),
             adapter.identity,
+            adapter.weights,
         )
 
         # --- wire up ModelOutputThunk with intrinsic post-processing ------
@@ -1329,6 +1332,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             rewritten: granite_formatters.ChatCompletion,
             result_processor: granite_formatters.IntrinsicsResultProcessor,
             identity: Identity,
+            weights: "WeightsBinding | EmbeddedBinding",
         ):
             """Accumulate content and apply intrinsic result processing."""
             import json as _json
@@ -1337,7 +1341,8 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             # response with an empty choices list raises IndexError there
             # (openai.py's processing() indexes chunk.choices[0].message
             # unguarded), and that must still fire outcome="error" rather
-            # than skip the fire site entirely.
+            # than skip the emit entirely.
+            error: BaseException | None = None
             try:
                 # Delegate standard metadata storage to the shared processing method.
                 await self.processing(mot, chunk)
@@ -1349,21 +1354,26 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 # then raise — the exact bug #1559 reverted.
                 mot._underlying_value = res.choices[0].message.content
             except _json.JSONDecodeError as e:
-                await _fire_embedded_invocation_complete(
-                    identity=identity, outcome="schema_error", error=e
-                )
+                error = e
                 raise ValueError(
                     f"Intrinsic did not return a JSON: "
                     f"{chunk.choices[0].message.content}"
                 ) from e
-            except Exception as e:
-                await _fire_embedded_invocation_complete(
-                    identity=identity, outcome="error", error=e
-                )
+            except BaseException as e:
+                error = e
                 raise
-            else:
-                await _fire_embedded_invocation_complete(
-                    identity=identity, outcome="success", error=None
+            finally:
+                await _afire_invocation_complete(
+                    identity=identity,
+                    weights=weights,
+                    outcome=(
+                        "success"
+                        if error is None
+                        else "schema_error"
+                        if isinstance(error, _json.JSONDecodeError)
+                        else "error"
+                    ),
+                    error=error,
                 )
 
         # Processing functions only pass the ModelOutputThunk (and current chunk
@@ -1373,6 +1383,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             rewritten=rewritten,
             result_processor=result_processor,
             identity=adapter.identity,
+            weights=adapter.weights,
         )
 
         output._gen.post_process = functools.partial(
@@ -1472,8 +1483,6 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         # Convert our linearized context into a sequence of chat messages. Template formatters have a standard way of doing this.
         messages: list[Message] = self.formatter.to_chat_messages(linearized_context)
         messages.extend(self.formatter.to_chat_messages([action]))
-        # ALoraRequirement may arrive here when no adapter is registered;
-        # _generate is responsible for logging a warning in that case.
 
         # Issue #1597: refuse to send an empty user prompt; see
         # `has_user_content` for why whitespace-only text still counts as empty.

@@ -1,4 +1,14 @@
 # pytest: ollama, e2e
+"""Working with table data structures.
+
+Prerequisites:
+    uv pip install pandas
+    ollama serve
+    ollama pull granite4.2:3b
+
+Usage:
+    uv run python docs/examples/tutorial/table_mobject.py
+"""
 
 from io import StringIO
 

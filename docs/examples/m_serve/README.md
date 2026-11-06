@@ -1,148 +1,30 @@
 # M Serve Examples
 
-This directory contains examples for deploying Mellea programs as API services using the `m serve` CLI command.
+This directory contains examples for deploying Mellea programs as API services
+using the `m serve` CLI command. For a full reference, see
+[m serve](../../docs/integrations/m-serve.md).
 
 ## Structure
 
-Each subdirectory contains a server implementation and its matching client(s):
+Each subdirectory contains a server implementation and its matching client(s).
+
+Subdirectories marked with a `client_responses*.py` file include a Responses API
+client alongside the standard Chat Completions client. Both clients use the same
+server program — no server changes are needed to use `/v1/responses`.
+
+## Examples
 
 | Subdirectory | Description |
-|---|---|
-| `simple/` | Basic request/response with rejection sampling |
-| `streaming/` | Real-time token streaming via Server-Sent Events (SSE) |
-| `response-format/` | Structured output with `response_format` / JSON schema |
-| `tool-calling/` | Function/tool calling through the API |
-| `multimodal-image/` | Vision model serving with image inputs |
-| `multimodal-audio/` | Audio-text-to-text serving (llama-server and Ollama/Granite variants) |
-| `pii/` | PII detection service |
-| `model-routing/` | Using or ignoring the client-supplied model ID |
-
-## Files
-
-### [simple/m_serve_example_simple.py](./simple/m_serve_example_simple.py)
-A simple example showing how to structure a Mellea program for serving as an API.
-
-**Key Features:**
-- Defining a `serve()` function that takes input and returns output
-- Using requirements and sampling strategies in served programs
-- Custom validation functions for API constraints
-- Handling chat message inputs
-
-### [streaming/m_serve_example_streaming.py](./streaming/m_serve_example_streaming.py)
-A dedicated streaming example for `m serve` that supports both modes:
-- `stream=False` returns a normal computed response
-- `stream=True` returns an uncomputed thunk so the server can emit
-  incremental Server-Sent Events (SSE) chunks
-
-### [response-format/m_serve_example_response_format.py](./response-format/m_serve_example_response_format.py)
-Example demonstrating structured output with the `response_format` parameter.
-
-**Key Features:**
-- Supporting the `format` parameter in serve functions
-- Structured output validation with JSON schemas
-- Three format types: `text`, `json_object`, `json_schema`
-
-### [multimodal-image/m_serve_example_multimodal_image.py](./multimodal-image/m_serve_example_multimodal_image.py)
-Example of serving a vision model through `m serve` with image inputs.
-
-### [multimodal-image/client_multimodal_image.py](./multimodal-image/client_multimodal_image.py)
-Client code for testing the multimodal image endpoint with an OpenAI-compatible request.
-
-### [multimodal-audio/m_serve_example_multimodal_audio_llama_server.py](./multimodal-audio/m_serve_example_multimodal_audio_llama_server.py)
-
-Audio-text-to-text serve function using llama-server with a Gemma audio
-checkpoint. Audio and text are sent together in a single request; llama-server
-handles the multimodal fusion natively. Requires a running llama-server with
-`--mmproj` loaded (see prerequisites in the file header).
-
-### [multimodal-audio/m_serve_example_multimodal_audio_granite.py](./multimodal-audio/m_serve_example_multimodal_audio_granite.py)
-
-Audio-text-to-text serve function using a two-step Ollama/Granite pipeline:
-
-1. **granite-speech** (`hf.co/ibm-granite/granite-speech-4.1-2b-GGUF:Q4_K_M`)
-   transcribes the audio via Ollama's OpenAI-compatible
-   `/v1/audio/transcriptions` endpoint.
-2. **granite4.1:3b** answers the user's question with the transcript injected
-   into the prompt.
-
-Both models run locally through Ollama — no llama-server or cloud API needed.
-
-### [multimodal-audio/client_multimodal_audio.py](./multimodal-audio/client_multimodal_audio.py)
-
-Client code for testing any of the multimodal audio endpoints with an
-OpenAI-compatible `input_audio` content part request.
-
-### [pii/pii_serve.py](./pii/pii_serve.py)
-Example of serving a PII (Personally Identifiable Information) detection service.
-
-### [model-routing/m_serve_example_model_routing.py](./model-routing/m_serve_example_model_routing.py)
-Example showing how to use `client_options` to route on the client-supplied `model` field.
-
-**Key Concepts:**
-- The `model` field in an OpenAI-compatible request is routing/metadata: `m serve` echoes
-  it back in the response but does **not** include it in `model_options`.
-- Declare `client_options` in `serve()` and `m serve` passes the full raw client request
-  as a dict, giving access to `model` and every other field without them leaking into
-  `model_options` to be used by the backend.
-- To ignore the client model ID entirely, omit `client_options` (see the `simple/` examples).
-
-### [model-routing/client_model_routing.py](./model-routing/client_model_routing.py)
-Client code demonstrating routing via the standard `model` field and fallback to the default backend.
-
-### [simple/client.py](./simple/client.py)
-Client code for testing the served API endpoints with non-streaming requests.
-
-### [streaming/client_streaming.py](./streaming/client_streaming.py)
-Client code demonstrating streaming responses using Server-Sent Events (SSE)
-against `streaming/m_serve_example_streaming.py`.
-
-### [response-format/client_response_format.py](./response-format/client_response_format.py)
-Client code demonstrating all three `response_format` types with examples.
-
-### [tool-calling/m_serve_example_tool_calling.py](./tool-calling/m_serve_example_tool_calling.py)
-Example of serving a function with tool calling capabilities through `m serve`.
-
-### [tool-calling/client_tool_calling.py](./tool-calling/client_tool_calling.py)
-Client code for testing tool calling endpoints, demonstrating function invocation through the API.
-
-### [tool-calling/client_streaming_tool_calling.py](./tool-calling/client_streaming_tool_calling.py)
-Client code demonstrating streaming responses combined with tool calling.
-
-## Concepts Demonstrated
-
-- **API Deployment**: Exposing Mellea programs as REST APIs
-- **Input Handling**: Processing structured inputs (chat messages, requirements)
-- **Output Formatting**: Returning appropriate response types
-- **Validation in Production**: Using requirements in deployed services
-- **Model Options**: Passing model configuration through API
-- **Streaming Responses**: Real-time token streaming via Server-Sent Events (SSE)
-- **Structured Output**: Using `response_format` for JSON schema validation
-- **Multimodal Inputs**: Sending text plus image content to vision-capable models
-- **Audio-Text-to-Text**: Sending base64-encoded audio alongside text in a chat request; the model responds in text (not transcription)
-- **Model Routing**: Reading the client `model` field via `client_options` to route to an allowlisted backend
-
-## Basic Pattern
-
-```python
-from mellea import start_session
-from mellea.stdlib.sampling import RejectionSamplingStrategy
-from mellea.core import Requirement
-
-def serve(input: list[ChatMessage],
-          requirements: list[str] | None = None,
-          model_options: dict | None = None):
-    """Main serving function - called by m serve."""
-    message = input[-1].content
-
-    session = start_session()
-    result = session.instruct(
-        description=message,
-        requirements=requirements or [],
-        strategy=RejectionSamplingStrategy(loop_budget=3),
-        model_options=model_options
-    )
-    return result
-```
+| :--- | :--- |
+| [`simple/`](./simple/) | Basic request/response with rejection sampling |
+| [`streaming/`](./streaming/) | Real-time token streaming via Server-Sent Events (SSE) |
+| [`response-format/`](./response-format/) | Structured output with `response_format` / JSON schema |
+| [`tool-calling/`](./tool-calling/) | Function/tool calling through the API |
+| [`multimodal-image/`](./multimodal-image/) | Vision model serving with image inputs (Chat Completions + Responses API) |
+| [`multimodal-audio/`](./multimodal-audio/) | Audio-text-to-text serving (llama-server and Ollama/Granite variants) |
+| [`pii/`](./pii/) | PII detection service |
+| [`model-routing/`](./model-routing/) | Using or ignoring the client-supplied model ID |
+| [`sessions/`](./sessions/) | Multi-turn sessions via `previous_response_id` (Responses API) |
 
 ## Running the Server
 
@@ -186,6 +68,30 @@ m serve docs/examples/m_serve/multimodal-image/m_serve_example_multimodal_image.
 uv run python docs/examples/m_serve/multimodal-image/client_multimodal_image.py
 ```
 
+**Responses API Support:**
+
+The `/v1/responses` endpoint also supports multimodal inputs with image content blocks.
+Both endpoints (`/v1/chat/completions` and `/v1/responses`) handle multimodal content
+identically — the same server code works for both APIs.
+
+```bash
+# Test via Responses API
+uv run python docs/examples/m_serve/multimodal-image/client_responses_multimodal.py
+```
+
+**Content Block Format:**
+
+The Responses API uses a slightly different content block format than Chat Completions:
+
+| API | Text Block | Image Block |
+|-----|-----------|-------------|
+| Chat Completions | `{"type": "text", "text": "..."}` | `{"type": "image_url", "image_url": {"url": "..."}}` |
+| Responses | `{"type": "input_text", "text": "..."}` | `{"type": "input_image", "image_url": "..."}` |
+
+The server automatically converts Responses API format to the internal ChatMessage format,
+so your Mellea program receives the same multimodal `ChatMessage` objects regardless of
+which API endpoint the client uses.
+
 ### Multimodal Audio (llama-server + Gemma)
 
 Requires a local llama-server with an audio-capable Gemma checkpoint and
@@ -220,15 +126,30 @@ uv run python docs/examples/m_serve/multimodal-audio/client_multimodal_audio.py
 
 ### Tool Calling
 
+**Client-side tool execution** (client handles `function_call` items):
+
 ```bash
-# Start the tool calling example server
+# Start the server
 uv run m serve docs/examples/m_serve/tool-calling/m_serve_example_tool_calling.py
 
-# In another terminal, test with the tool calling client
+# Test via Chat Completions API
 uv run python docs/examples/m_serve/tool-calling/client_tool_calling.py
 
-# Or test with streaming tool calling
+# Test via Responses API (handles function_call items + follow-up)
+uv run python docs/examples/m_serve/tool-calling/client_responses_tool_calling.py
+
+# Test streaming + tool calling
 uv run python docs/examples/m_serve/tool-calling/client_streaming_tool_calling.py
+```
+
+**Server-side tool execution** (server runs full agentic loop, returns complete answer):
+
+```bash
+# Start the server-side tool calling server
+uv run m serve docs/examples/m_serve/tool-calling/m_serve_example_tool_calling_server_side.py
+
+# Test via Responses API — single request, complete answer
+uv run python docs/examples/m_serve/tool-calling/client_responses_tool_calling_server_side.py
 ```
 
 ### Model Routing
@@ -241,9 +162,19 @@ uv run m serve docs/examples/m_serve/model-routing/m_serve_example_model_routing
 uv run python docs/examples/m_serve/model-routing/client_model_routing.py
 ```
 
+### Multi-Turn Sessions
+
+```bash
+# Start the sessions example server
+m serve docs/examples/m_serve/sessions/m_serve_example_sessions.py
+
+# In another terminal, run the session client
+python docs/examples/m_serve/sessions/client_responses_sessions.py
+```
+
 ## Response Format Support
 
-The server supports structured output via the `response_format` parameter, which allows you to control the format of the model's response. This is compatible with OpenAI's response format API.
+The server supports structured output via the `text` parameter (Responses API, `text={"format": {...}}` — the shape the OpenAI SDK sends) or the `response_format` parameter (Chat Completions API), which allows you to control the format of the model's response. This is compatible with OpenAI's response format API. A top-level `format` parameter on `/v1/responses` is also accepted as an alias.
 
 **Three Format Types:**
 
@@ -256,12 +187,13 @@ The server supports structured output via the `response_format` parameter, which
 - Schema validation for structured outputs
 - OpenAI-compatible API
 - Works with the `format` parameter in serve functions
+- Supported on both `/v1/chat/completions` and `/v1/responses` endpoints
 
-**Example - JSON Schema:**
+**Example - JSON Schema (Chat Completions API):**
 ```python
 import openai
 
-client = openai.OpenAI(api_key="na", base_url="http://0.0.0.0:8080/v1")
+client = openai.OpenAI(api_key="na", base_url="http://localhost:8080/v1")
 
 # Define a schema for structured output
 person_schema = {
@@ -289,6 +221,29 @@ response = client.chat.completions.create(
 
 # Response will be valid JSON matching the schema
 print(response.choices[0].message.content)
+```
+
+**Example - JSON Schema (Responses API):**
+```python
+import openai
+
+client = openai.OpenAI(api_key="na", base_url="http://localhost:8080/v1")
+
+response = client.responses.create(
+    input="Generate a person named Alice",
+    model="granite4:micro-h",
+    text={
+        "format": {
+            "type": "json_schema",
+            "name": "Person",
+            "schema": person_schema,
+            "strict": True,
+        }
+    },
+)
+
+# Response will be valid JSON matching the schema
+print(response.output_text)
 ```
 
 **Server Implementation:**
@@ -333,7 +288,7 @@ not token-by-token streaming.
 ```python
 import openai
 
-client = openai.OpenAI(api_key="na", base_url="http://0.0.0.0:8080/v1")
+client = openai.OpenAI(api_key="na", base_url="http://localhost:8080/v1")
 
 # Enable streaming with stream=True
 stream = client.chat.completions.create(
@@ -347,21 +302,75 @@ for chunk in stream:
         print(chunk.choices[0].delta.content, end="", flush=True)
 ```
 
+## Multi-Turn Sessions (Responses API)
+
+The Responses API stores completed responses **in memory** and lets clients
+continue a conversation without resending history.  Each response carries an
+`id` (e.g. `resp_abc123`); pass it as `previous_response_id` in the next
+request and the server reconstructs the full history automatically.
+
+> **Note:** the store is in-process only.  Sessions are lost when the server
+> restarts.  For durable persistence across restarts, store the response `id`
+> externally and resend the full history when reconnecting.
+
+```python
+import openai
+
+client = openai.OpenAI(api_key="na", base_url="http://localhost:8080/v1")
+
+# Turn 1
+r1 = client.responses.create(model="granite4.1:3b", input="My name is Alice.")
+print(r1.output_text)    # "Nice to meet you, Alice!"
+print(r1.expires_at)     # Unix timestamp when the session will be evicted
+
+# Turn 2 — only send the new message, not the history
+r2 = client.responses.create(
+    model="granite4.1:3b",
+    input="What is my name?",
+    previous_response_id=r1.id,
+)
+print(r2.output_text)   # "Your name is Alice."
+```
+
+Pass `store=False` if you don't need history chaining and want to skip storing
+the response altogether (e.g. for sensitive inputs):
+
+```python
+r = client.responses.create(model="granite4.1:3b", input="...", store=False)
+# r.expires_at is None — response is never persisted
+```
+
+Stored responses can also be retrieved by ID:
+
+```bash
+curl http://localhost:8080/v1/responses/resp_abc123
+```
+
+Sessions expire after 30 minutes by default.  Pass `--response-ttl <seconds>`
+to `m serve` to change the TTL:
+
+```bash
+m serve my_app.py --response-ttl 3600   # 1-hour sessions
+```
+
+At most 1000 responses are kept in memory; when the cap is reached the
+oldest stored responses are dropped first.  Pass
+`--max-stored-responses <n>` to change it:
+
+```bash
+m serve my_app.py --max-stored-responses 5000
+```
+
+See `sessions/` for a full runnable example.
+
 ## API Endpoints
 
-The `m serve` command automatically creates:
-- `POST /generate`: Main generation endpoint
-- `GET /health`: Health check endpoint
-- `GET /docs`: API documentation (Swagger UI)
+The `m serve` command registers:
 
-## Use Cases
+- `POST /v1/chat/completions` — OpenAI Chat Completions API
+- `POST /v1/responses` — OpenAI Responses API (supports `previous_response_id` sessions)
+- `GET /v1/responses/{id}` — Retrieve a stored response by ID
+- `GET /health` — health check
 
-- **Production Deployment**: Deploy Mellea programs as microservices
-- **API Integration**: Integrate with existing systems via REST API
-- **Scalability**: Run multiple instances behind a load balancer
-- **Monitoring**: Add logging and metrics to served programs
-
-## Related Documentation
-
-- See `cli/serve/` for server implementation
-- See `mellea/stdlib/session.py` for session management
+Both POST endpoints call the same `serve()` function in your program.
+FastAPI's interactive docs are available at `GET /docs` while the server is running.
