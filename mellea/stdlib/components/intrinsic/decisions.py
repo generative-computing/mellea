@@ -961,7 +961,8 @@ def score(
             when the answer distribution did not concentrate on the
             options; or when labels were not returned beyond the
             missing-label bound.
-        TypeError: When `state` is a `Context` other than a `ChatContext`.
+        TypeError: When `state` is a `Context` other than a `ChatContext`, or
+            when `levels` is a mapping or a string rather than a list.
         AdapterSchemaMismatchError: When the readout output does not match
             the capability's contract.
         AloraActivationError: When the invocation marker does not occur
@@ -976,6 +977,12 @@ def score(
         sev.probabilities   # {"0": 0.05, "1": 0.20, "2": 0.75}
         ```
     """
+    if isinstance(levels, (Mapping, str)):
+        raise TypeError(
+            "levels must be a list of level descriptions, low to high; got "
+            f"{type(levels).__name__}, which would send its keys or characters "
+            "as the levels."
+        )
     raw = _decide_raw(
         state, backend, question, list(levels), model_options=model_options
     )

@@ -289,6 +289,15 @@ class TestScore:
         answer = decisions.score(_STATE, backend, "q?", ["low", "high"])
         assert answer.score == pytest.approx(0.5)
 
+    @pytest.mark.parametrize(
+        "levels", [{"0": "low", "1": "high"}, "lh"], ids=["mapping", "str"]
+    )
+    def test_score_rejects_levels_that_are_not_a_list(self, levels, monkeypatch):
+        """A mapping or string would silently send its keys or characters."""
+        backend = _stub_backend(_rule_output({"A": -1.0, "B": -1.0}), monkeypatch)
+        with pytest.raises(TypeError, match="levels"):
+            decisions.score(_STATE, backend, "q?", levels)
+
 
 # ---------------------------------------------------------------------------
 # Answer-type behaviour
