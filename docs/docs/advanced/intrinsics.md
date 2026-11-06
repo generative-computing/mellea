@@ -47,6 +47,28 @@ from mellea.backends.huggingface import LocalHFBackend
 backend = LocalHFBackend(model_id="ibm-granite/granite-4.1-3b")
 ```
 
+## Choosing a model
+
+Models differ in which adapter functions they provide, and no single published
+Granite Switch checkpoint provides all of them. At the time of writing:
+
+- **Decisions** (`decide`, `choose`, `score`): `granite-switch-4.1-8b` or
+  `granite-switch-4.1-30b`.
+- **RAG and core adapter functions** (answerability, citations,
+  requirement-check, uncertainty, and the others on this page): a
+  `granite-switch-4.1-*-preview` checkpoint, or plain Granite 4.1 with the
+  granitelib adapters on `LocalHFBackend`.
+- **`guardian-core`**: any of the Switch checkpoints above.
+- **Decisions and RAG or core adapter functions together**: two backends, one
+  per model.
+
+Check the model's Hugging Face model card before choosing (and, for a Switch
+checkpoint, its `adapter_index.json`), since new checkpoints may change this
+list. Calling an adapter function the model does not provide raises a
+`ValueError` naming the adapter function and the model. The
+[checkpoint table](#use-a-local-granite-switch-checkpoint) lists each Switch
+checkpoint's embedded set.
+
 ## How temperature affects scores
 
 Some adapter functions, such as `core.requirement_check()` and
@@ -154,7 +176,9 @@ backend = LocalHFBackend(
 ```
 
 Only adapter functions listed in the checkpoint's `adapter_index.json` are
-available, and the published checkpoints embed different sets:
+available, whether the checkpoint runs locally or is served via vLLM. The
+published checkpoints embed different sets; at the time of writing they are as
+below, and the model card on Hugging Face is the authoritative list:
 
 | Checkpoint | Embedded adapter functions |
 | ---------- | -------------------------- |
@@ -206,7 +230,8 @@ control flow: `if` on a probability, route on a choice, threshold a score.
 ### Serving
 
 Serve a checkpoint such as `ibm-granite/granite-switch-4.1-8b` via vLLM
-with `--max-logprobs 20` (the readout requests up to 20), installing the
+with `--max-logprobs` at 20 or more (20 is vLLM's default; the readout
+requests up to 20), installing the
 [granite-switch](https://pypi.org/project/granite-switch/) package alongside
 vLLM (the `GraniteSwitchForCausalLM` architecture is plugin-registered, not
 in upstream vLLM). On vLLM 0.30.0 and later the backend also asks the server

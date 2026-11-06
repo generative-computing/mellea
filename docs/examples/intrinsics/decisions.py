@@ -12,7 +12,7 @@ first generated token. One forward pass per decision.
 
 Requires a Granite Switch checkpoint that embeds the decision adapter
 function (e.g. `ibm-granite/granite-switch-4.1-8b`), served via vLLM with
-`--max-logprobs 20`. Point the example at it with:
+`--max-logprobs` at 20 or more (vLLM's default). Point the example at it with:
 
 ```
 SWITCH_DECISIONS_BASE_URL=http://localhost:8000/v1 \\
@@ -41,7 +41,7 @@ if base_url is None:
     print(
         "SKIPPED: no decision endpoint configured. Serve a Granite Switch "
         "checkpoint with the decision adapter function via vLLM "
-        "(--max-logprobs 20), then set SWITCH_DECISIONS_BASE_URL "
+        "(--max-logprobs at least 20, the default), then set SWITCH_DECISIONS_BASE_URL "
         "(e.g. http://localhost:8000/v1) to run this example."
     )
     sys.exit(0)

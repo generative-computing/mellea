@@ -7,10 +7,13 @@ description: "Route support tickets with decide, choose, and score. Each answer 
 > purely as an example. Discussion of the appropriate decision APIs is ongoing,
 > and this API may change or be removed at any time without a deprecation period.
 
-**Prerequisites:** a Granite Switch model with the decision adapter,
-served via vLLM on `localhost:8000` (see the
-[adapter-functions page](../advanced/intrinsics.md#decisions-typed-one-token-answers)
-if you have not set this up). This tutorial takes about 10 minutes.
+**Prerequisites:** a Granite Switch model with the decision adapter, such as
+`granite-switch-4.1-8b`, served via vLLM on `localhost:8000`. The preview
+checkpoints do not include it (see
+[Choosing a model](../advanced/intrinsics.md#choosing-a-model)). Serving setup
+is on the
+[adapter-functions page](../advanced/intrinsics.md#decisions-typed-one-token-answers).
+This tutorial takes about 10 minutes.
 
 ## What you are building
 
@@ -248,8 +251,8 @@ you see it, check your endpoint is running the correct model with the
 right chat template. It does not fire for off-topic questions (the
 model picks a label even for nonsensical input).
 
-**Server rejected the logprobs request.** vLLM needs `--max-logprobs
-20` (the default). If set lower, the server returns an HTTP 400 when
+**Server rejected the logprobs request.** vLLM needs `--max-logprobs`
+at 20 or more (20 is the default). If set lower, the server returns an HTTP 400 when
 the decision call asks for 20 logprobs.
 
 **Invocation marker in your text.** The adapter activates at the
