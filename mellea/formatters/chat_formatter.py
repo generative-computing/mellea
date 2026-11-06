@@ -105,4 +105,24 @@ class ChatFormatter(Formatter):
                 case _:
                     return Message(role=role, content=self.print(c))
 
-        return [_to_msg(c) for c in cs]
+        messages = [_to_msg(c) for c in cs]
+
+        # Repair pass: components whose `_parse` reduces a model turn to text
+        # (for example `Instruction`) lose the turn's `tool_calls` above, so a
+        # following `tool` message would reference a call the provider never
+        # saw. When a `tool` message immediately answers the turn, rebuild it
+        # with `Message._parse`, which carries the provider-shaped `tool_calls`
+        # and reasoning onto the assistant message. Guarding on the following
+        # message keeps calls the caller never answered from going out as
+        # dangling `tool_calls`, which strict providers also reject.
+        for i in range(len(messages) - 1):
+            output = cs[i]
+            if (
+                isinstance(output, ModelOutputThunk)
+                and output.tool_calls
+                and getattr(messages[i], "tool_calls", None) is None
+                and getattr(messages[i + 1], "role", None) == "tool"
+            ):
+                messages[i] = Message._parse_output(output)
+
+        return messages
