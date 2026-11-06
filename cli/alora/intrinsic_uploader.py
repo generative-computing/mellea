@@ -17,9 +17,9 @@ from typing import Literal
 
 try:
     from huggingface_hub import (
-        HfFolder,
         RepoUrl,
         create_repo,
+        get_token,
         upload_file,
         upload_folder,
     )
@@ -68,12 +68,13 @@ def upload_intrinsic(
             one `"/"` separator.
         OSError: If no Hugging Face authentication token is found.
     """
+    temp_dir = None
     try:
         assert os.path.exists(weight_path)
         assert os.path.exists(io_yaml)
         assert private, "not implemented."
 
-        token = HfFolder.get_token()
+        token = get_token()
         if token is None:
             raise OSError(
                 "Hugging Face token not found. Run `huggingface-cli login` first."
@@ -129,4 +130,5 @@ def upload_intrinsic(
             )
     finally:
         # Clean up temporary directory
-        shutil.rmtree(temp_dir)
+        if temp_dir is not None:
+            shutil.rmtree(temp_dir)

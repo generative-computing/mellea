@@ -12,7 +12,7 @@ variable or `huggingface-cli login`.
 import os
 
 try:
-    from huggingface_hub import HfApi, HfFolder, create_repo, upload_folder
+    from huggingface_hub import create_repo, get_token, upload_folder
 except ImportError as e:
     raise ImportError(
         "The 'm alora upload' command requires extra dependencies. "
@@ -37,7 +37,7 @@ def upload_model(weight_path: str, model_name: str, private: bool = True):
         raise FileNotFoundError(f"Adapter directory not found: {weight_path}")
 
     # Create repo if not exists
-    token = HfFolder.get_token()
+    token = get_token()
     if token is None:
         raise OSError(
             "Hugging Face token not found. Run `huggingface-cli login` first."

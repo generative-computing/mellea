@@ -208,7 +208,7 @@ def alora_add_readme(
         SystemExit: If the user declines to upload the generated README.
     """
     try:
-        from huggingface_hub import HfFolder, create_repo, upload_file
+        from huggingface_hub import create_repo, get_token, upload_file
     except ImportError as e:
         raise ImportError(
             "The 'm alora' command requires extra dependencies. "
@@ -245,7 +245,7 @@ def alora_add_readme(
         else:
             assert continue_answer == "yes"
 
-        token = HfFolder.get_token()
+        token = get_token()
         if token is None:
             raise OSError(
                 "Hugging Face token not found. Run `huggingface-cli login` first."
