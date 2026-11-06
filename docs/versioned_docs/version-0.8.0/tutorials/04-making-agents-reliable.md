@@ -18,7 +18,7 @@ By the end you will have covered:
 
 **Prerequisites:** [Tutorial 02](./02-streaming-and-async.md) and
 [Tutorial 03](./03-using-generative-stubs.md) complete,
-`pip install mellea`, Ollama running locally with `granite4.1:3b` downloaded.
+`pip install mellea`, Ollama running locally with `granite4.2:3b` downloaded.
 
 ---
 
