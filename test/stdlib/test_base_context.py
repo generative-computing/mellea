@@ -494,5 +494,128 @@ def test_context_add_and_retrieve_model_output_thunk():
     assert mot in ctx.view_for_generation()
 
 
+# ---------------------------------------------------------------------------
+# Measured token usage corrects the len // 4 estimate (issue #1319)
+# ---------------------------------------------------------------------------
+
+
+def _measured_reply(total_tokens, model, receipt, action):
+    # A reply as a backend leaves it: measured usage, the model that produced
+    # it, and the record of what was sent (receipt + action).
+    reply = ModelOutputThunk(value="r" * 100)
+    reply.generation.usage = {"total_tokens": total_tokens}
+    reply.generation.model = model
+    reply._call.context = receipt
+    reply._call.action = action
+    return reply
+
+
+def test_view_for_generation_measured_usage_drops_more_than_estimate():
+    # Each item renders to 100 chars, so len // 4 guesses 25 tokens each:
+    # 75 in total, under the 97-token budget (int(130 * 0.75)).
+    # The reply's usage measures those items at 150 tokens, twice the
+    # guess, so each counts as 50 and only the reply fits the budget.
+    tiny = ModelIdentifier(hf_model_name="org/tiny-model", context_length=130)
+    question0 = CBlock("q" * 100)
+    question1 = CBlock("w" * 100)
+    reply = ModelOutputThunk(value="r" * 100)
+    reply.generation.usage = {
+        "prompt_tokens": 120,
+        "completion_tokens": 30,
+        "total_tokens": 150,
+    }
+    reply.generation.model = "org/tiny-model"
+    reply._call.context = [question0]
+    reply._call.action = question1
+    ctx = ChatContext(model_id=tiny).add(question0).add(question1).add(reply)
+    result = ctx.view_for_generation()
+    assert result == [reply]
+
+
+def test_view_for_generation_measured_usage_keeps_more_than_estimate():
+    # Four 100-char items guess 25 tokens each: 100 in total, over the
+    # 97-token budget, so the plain estimate drops the oldest item.
+    # The reply was generated from [q1] + q2 (q0 had already been trimmed),
+    # and measures those three items at 39 tokens against a guess of 75.
+    # The ratio 0.52 applies to every item, q0 included: 13 each, 52 in
+    # total, so all four fit.
+    tiny = ModelIdentifier(hf_model_name="org/tiny-model", context_length=130)
+    q0, q1, q2 = CBlock("a" * 100), CBlock("b" * 100), CBlock("c" * 100)
+    reply = _measured_reply(39, "org/tiny-model", [q1], q2)
+    ctx = ChatContext(model_id=tiny).add(q0).add(q1).add(q2).add(reply)
+    assert ctx.view_for_generation() == [q0, q1, q2, reply]
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        "no_usage",
+        "zero_usage",
+        "other_model",
+        "context_without_model",
+        "no_receipt",
+        "receipt_mismatch",
+        "receipt_longer_than_history",
+        "action_mismatch",
+    ],
+)
+def test_view_for_generation_unverified_usage_falls_back_to_estimate(case):
+    # Same setup as the test above, where the measured usage keeps all four
+    # items. When the usage cannot be matched to these items, the plain
+    # estimate (25 each, 100 in total) is used and the oldest item is dropped.
+    tiny = ModelIdentifier(hf_model_name="org/tiny-model", context_length=130)
+    q0, q1, q2 = CBlock("a" * 100), CBlock("b" * 100), CBlock("c" * 100)
+    reply = _measured_reply(39, "org/tiny-model", [q1], q2)
+    ctx = ChatContext(model_id=tiny)
+    if case == "no_usage":
+        reply.generation.usage = None
+    elif case == "zero_usage":
+        reply.generation.usage = {"total_tokens": 0}
+    elif case == "other_model":
+        reply.generation.model = "org/other-model"
+    elif case == "context_without_model":
+        ctx = ChatContext(token_context_length_limit=130)
+    elif case == "no_receipt":
+        reply._call.context = None
+    elif case == "receipt_mismatch":
+        reply._call.context = [q0]
+    elif case == "receipt_longer_than_history":
+        reply._call.context = [CBlock("z" * 100), q0, q1]
+    elif case == "action_mismatch":
+        reply._call.action = q1
+    ctx = ctx.add(q0).add(q1).add(q2).add(reply)
+    assert ctx.view_for_generation() == [q1, q2, reply]
+
+
+def test_view_for_generation_measured_usage_scales_items_after_reply():
+    # q2 was added after the reply, so its size was never measured. The
+    # ratio (150 measured / 75 guessed = 2) still applies to it: every item
+    # counts as 50, and only q2 fits the 97-token budget. The plain
+    # estimate would keep q1, the reply and q2 (75 tokens).
+    tiny = ModelIdentifier(hf_model_name="org/tiny-model", context_length=130)
+    q0, q1, q2 = CBlock("a" * 100), CBlock("b" * 100), CBlock("c" * 100)
+    reply = _measured_reply(150, "org/tiny-model", [q0], q1)
+    ctx = ChatContext(model_id=tiny).add(q0).add(q1).add(reply).add(q2)
+    assert ctx.view_for_generation() == [q2]
+
+
+@pytest.mark.parametrize(
+    ("model_id", "name", "expected"),
+    [
+        ("granite4:micro", "granite4:micro", True),
+        ("granite4:micro", "granite4:small", False),
+        (ModelIdentifier(hf_model_name="org/m", ollama_name="m:7b"), "m:7b", True),
+        (ModelIdentifier(hf_model_name="org/m", ollama_name="m:7b"), "org/m", True),
+        (ModelIdentifier(hf_model_name="org/m"), "org/other", False),
+        (None, "org/m", False),
+        (ModelIdentifier(hf_model_name="org/m"), None, False),
+    ],
+)
+def test_model_matches(model_id, name, expected):
+    from mellea.stdlib.context.chat import _model_matches
+
+    assert _model_matches(model_id, name) is expected
+
+
 if __name__ == "__main__":
     pytest.main([__file__])

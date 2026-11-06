@@ -21,7 +21,7 @@ See `docs/examples/context/` for full usage examples.
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Protocol, TypeAlias, TypeVar
+from typing import TYPE_CHECKING, Any, Protocol, TypeAlias, TypeVar
 
 from mellea.core import CBlock, Context, ModelOutputThunk, Span
 from mellea.core.backend import Backend
@@ -108,6 +108,46 @@ def pin_system_and_initial_user(components: list[Span]) -> int:
     return i
 
 
+def _last_usage_thunk(ctx: Context) -> ModelOutputThunk | None:
+    """Return the most recent `ModelOutputThunk` that has token usage.
+
+    Walks `ctx` newest to oldest and returns the first thunk whose
+    `generation.usage` is populated.
+
+    Args:
+        ctx (Context): The context to search.
+
+    Returns:
+        ModelOutputThunk | None: The latest thunk with usage, or `None`
+        if no thunk in the context has usage yet.
+    """
+    for c in reversed(ctx.as_list()):
+        if isinstance(c, ModelOutputThunk) and c.generation.usage is not None:
+            return c
+    return None
+
+
+def _usage_total(usage: dict[str, Any]) -> int | None:
+    """Return the total token count from a usage dictionary.
+
+    Uses `total_tokens` when present; otherwise falls back to
+    `prompt_tokens + completion_tokens`.
+
+    Args:
+        usage (dict[str, Any]): A `generation.usage` dictionary.
+
+    Returns:
+        int | None: The total token count, or `None` if it is not
+        greater than zero.
+    """
+    total = usage.get("total_tokens")
+    if total is None:
+        pt = usage.get("prompt_tokens") or 0
+        ct = usage.get("completion_tokens") or 0
+        total = pt + ct
+    return total if total and total > 0 else None
+
+
 def _last_usage_tokens(ctx: Context) -> int | None:
     """Return cumulative token count of the conversation as of the most recent turn.
 
@@ -123,16 +163,10 @@ def _last_usage_tokens(ctx: Context) -> int | None:
     is missing. Returns `None` if no usable token count can be recovered
     (typical before the first model call completes).
     """
-    for c in reversed(ctx.as_list()):
-        if isinstance(c, ModelOutputThunk) and c.generation.usage is not None:
-            usage = c.generation.usage
-            total = usage.get("total_tokens")
-            if total is None:
-                pt = usage.get("prompt_tokens") or 0
-                ct = usage.get("completion_tokens") or 0
-                total = pt + ct
-            return total if total and total > 0 else None
-    return None
+    thunk = _last_usage_thunk(ctx)
+    if thunk is None or thunk.generation.usage is None:
+        return None
+    return _usage_total(thunk.generation.usage)
 
 
 class Compactor(Protocol):
