@@ -1,11 +1,17 @@
 # pytest: huggingface, e2e
-
 """Example usage of the hallucination detection intrinsic for RAG applications.
 
-To run this script from the root of the Mellea source tree, use the command:
-```
-uv run python docs/examples/intrinsics/hallucination_detection.py
-```
+Demonstrates `rag.flag_hallucinated_content()`, which flags the sentences of an
+assistant response that are not supported by the retrieved documents.
+
+Runs the model locally, so it needs a GPU or Apple Silicon Mac; the model and
+adapter are downloaded from Hugging Face on first run.
+
+Prerequisites:
+    uv sync --extra hf
+
+Usage:
+    uv run python docs/examples/intrinsics/hallucination_detection.py
 """
 
 import json

@@ -1,15 +1,18 @@
 # pytest: huggingface, e2e
-
 """Example usage of the context attribution intrinsic.
 
 Intrinsic function that finds sentences in prior conversation messages and RAG
 documents that were most important to the LLM in generating each sentence in
 the assistant response.
 
-To run this script from the root of the Mellea source tree, use the command:
-```
-uv run python docs/examples/intrinsics/context_attribution.py
-```
+Runs the model locally, so it needs a GPU or Apple Silicon Mac; the model and
+adapter are downloaded from Hugging Face on first run.
+
+Prerequisites:
+    uv sync --extra hf
+
+Usage:
+    uv run python docs/examples/intrinsics/context_attribution.py
 """
 
 import json

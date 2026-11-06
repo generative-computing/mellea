@@ -1,11 +1,19 @@
 # pytest: huggingface, e2e
-
 """Example usage of the answerability intrinsic for RAG applications.
 
-To run this script from the root of the Mellea source tree, use the command:
-```
-uv run python docs/examples/intrinsics/answerability.py
-```
+Demonstrates `rag.check_answerability()`, which scores whether a set of retrieved
+documents contains enough information to answer a question. The script runs the
+check twice: once with a document that contains the answer and once with a
+document that does not.
+
+Runs the model locally, so it needs a GPU or Apple Silicon Mac; the model and
+adapter are downloaded from Hugging Face on first run.
+
+Prerequisites:
+    uv sync --extra hf
+
+Usage:
+    uv run python docs/examples/intrinsics/answerability.py
 """
 
 from mellea import model_ids, start_backend
