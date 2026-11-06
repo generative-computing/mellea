@@ -246,7 +246,7 @@ tool_result = m.instruct(
 )
 
 if tool_result.tool_calls:
-    for tc in result.tool_calls:
+    for tc in tool_result.tool_calls:
         output = tc.call_func()
         m.ctx = m.ctx.add(ToolMessage("tool", str(output), output, tc.name, tc.args, tc))
 
