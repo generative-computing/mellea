@@ -206,6 +206,51 @@ For most structured extraction or transformation tasks, `SimpleContext` (the def
 is the right choice. Reserve `ChatContext` for applications where conversational
 coherence is genuinely required.
 
+## Compaction
+
+When a conversation grows too large to reset at a clean breakpoint, the `Compactor`
+protocol lets you shrink it automatically. Pass a compactor to `ChatContext` and it
+runs on every `add()` call; pass one to `react()` and it runs once per agent turn.
+
+Two compactors are built in:
+
+- **`WindowCompactor(size=N)`** — keeps the most recent `N` components. The default
+  pin predicate (`pin_system`) preserves a leading system message outside the window.
+  Use `pin_system_and_initial_user` to also keep the first user turn, or `pin_nothing`
+  for a pure last-N sliding window.
+- **`ThresholdCompactor(inner, threshold=T)`** — gates any inner compactor on the
+  conversation's cumulative token count (read from the most recent thunk's
+  `total_tokens`). The inner compactor fires only once the running size exceeds `T`.
+
+```python
+from mellea.stdlib.context import ChatContext, ThresholdCompactor, WindowCompactor
+
+# Compact only when the conversation exceeds 2 000 tokens
+ctx = ChatContext(
+    compactor=ThresholdCompactor(WindowCompactor(size=10), threshold=2000)
+)
+```
+
+For agentic loops, pass `compactor=` to `react()` and use `pin_react_initiator` so
+the goal and tool registrations survive compaction:
+
+```python
+from mellea.stdlib.components.react import pin_react_initiator
+from mellea.stdlib.context import WindowCompactor
+from mellea.stdlib.frameworks.react import react
+
+result, ctx = await react(
+    goal="...",
+    context=ctx,
+    backend=backend,
+    tools=[...],
+    compactor=WindowCompactor(size=5, pin_predicate=pin_react_initiator),
+)
+```
+
+See the examples in [`docs/examples/context/`](https://github.com/generative-computing/mellea/tree/main/docs/examples/context) for
+`WindowCompactor`, `ThresholdCompactor`, custom compactors, and ReACT integration.
+
 ## Why explicit context management matters
 
 Implicit context — a global chat history that grows without bounds — is a common

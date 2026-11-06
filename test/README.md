@@ -12,7 +12,7 @@ unit tests you also need Ollama running locally:
 
 ```bash
 ollama serve &
-ollama pull granite4:micro
+ollama pull granite4.2:3b
 ollama pull granite4:micro-h
 ```
 

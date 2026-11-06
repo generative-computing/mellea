@@ -227,7 +227,6 @@ def test_identity_requirement_check_underscore_no_warning():
 def test_known_capabilities_contains_no_hyphens():
     # No hyphenated name should leak into KNOWN_CAPABILITIES.  If a future
     # catalog entry uses hyphens in `name` without setting `capability`, this
-    # catches it immediately.
     hyphenated = [cap for cap in KNOWN_CAPABILITIES if "-" in cap]
     assert hyphenated == [], f"Hyphenated capabilities found: {hyphenated}"
 
@@ -235,7 +234,8 @@ def test_known_capabilities_contains_no_hyphens():
 def test_known_capabilities_count_matches_catalog():
     # Every catalog entry must contribute exactly one distinct effective_capability.
     # If two entries resolve to the same token, the frozenset shrinks and this fails.
-    assert len(KNOWN_CAPABILITIES) == len(_INTRINSICS_CATALOG_ENTRIES)
+    # The decision capability is unioned in on top of the catalog-derived names.
+    assert len(KNOWN_CAPABILITIES) == len(_INTRINSICS_CATALOG_ENTRIES) + 1
 
 
 # ---------------------------------------------------------------------------

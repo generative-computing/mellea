@@ -1,6 +1,18 @@
 # pytest: ollama, e2e
 
-"""Example to run m serve."""
+"""Example to run m serve.
+
+Demonstrates structuring a Mellea program for serving as an API with
+`m serve`: defines a `serve()` function that applies two `Requirement`
+constraints and a `RejectionSamplingStrategy` before returning.
+
+Prerequisites:
+    ollama serve
+    ollama pull granite4.2:3b
+
+Usage:
+    m serve docs/examples/m_serve/simple/m_serve_example_simple.py
+"""
 
 import mellea
 from mellea.core import ModelOutputThunk, Requirement, SamplingResult

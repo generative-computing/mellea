@@ -1,20 +1,23 @@
 # pytest: ollama, e2e
+"""Email generation constrained by natural language requirements.
+
+Demonstrates constraining outputs using string-based requirements in
+`m.instruct()`. Mellea automatically checks requirements against the output
+and repairs the result if needed.
+
+Usage:
+    uv run python docs/examples/instruct_validate_repair/101_email_with_requirements.py
+"""
 
 from docs.examples.helper import w
 from mellea import start_session
 from mellea.backends import ModelOption
 
-# create a session using Granite 4 Micro 3B on Ollama and a simple context [see below]
 m = start_session(model_options={ModelOption.MAX_NEW_TOKENS: 200})
 
-# write an email with automatic requirement checking.
 email_v1 = m.instruct(
     "Write an email to invite all interns to the office party.",
     requirements=["be formal", "Use 'Dear Interns' as greeting."],
 )
 
-# print result
 print(f"***** email ****\n{w(email_v1)}\n*******")
-
-# # optionally, for debugging.. print last prompt
-# print(f"Prompt:\n{w(m.last_prompt())}")

@@ -9,12 +9,12 @@ description: "Use Hugging Face smolagents tools inside a Mellea session."
 call. The Hugging Face ecosystem provides many pre-built tools — `PythonInterpreterTool`,
 `DuckDuckGoSearchTool`, `WikipediaSearchTool`, and others.
 
-**Prerequisites:** `pip install 'mellea[smolagents]'`
+**Prerequisites:** `pip install 'mellea[tools]'`
 
 ## Using smolagents tools
 
 ```python
-# Requires: mellea[smolagents], mellea[ollama]
+# Requires: mellea[tools], mellea[ollama]
 # Returns: ModelOutputThunk
 from mellea import start_session
 from mellea.backends import ModelOption

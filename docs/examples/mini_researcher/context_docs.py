@@ -1,4 +1,9 @@
 # pytest: ollama, e2e
+"""Sample RAG documents for the mini_researcher example.
+
+Defines four `RAGDocument` instances (HashiCorp, DataStax, Apptio, Red Hat)
+used as the retrieval corpus in `researcher.py`.
+"""
 
 from dataclasses import dataclass
 

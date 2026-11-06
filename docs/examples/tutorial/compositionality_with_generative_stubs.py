@@ -1,4 +1,13 @@
 # pytest: ollama, e2e
+"""Tutorial on composing generative functions.
+
+Prerequisites:
+    ollama serve
+    ollama pull granite4.2:3b
+
+Usage:
+    uv run python docs/examples/tutorial/compositionality_with_generative_stubs.py
+"""
 
 from mellea import generative
 

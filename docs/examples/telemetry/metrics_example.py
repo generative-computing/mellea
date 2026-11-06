@@ -7,36 +7,42 @@ This example shows how to use metrics with different exporters:
 - OTLP: Export to OpenTelemetry Protocol collectors
 - Prometheus: Expose HTTP endpoint for Prometheus scraping
 
-Run with different configurations:
+For OTLP Collector and Prometheus setup instructions, see:
+docs/docs/observability/metrics.md
 
-# 1. Console exporter (simplest - for debugging)
-export MELLEA_METRICS_ENABLED=true
-export MELLEA_METRICS_CONSOLE=true
-python metrics_example.py
+Prerequisites:
+    uv sync --extra telemetry
+    ollama serve
+    ollama pull granite4.2:3b
 
-# 2. OTLP exporter (production observability)
-export MELLEA_METRICS_ENABLED=true
-export MELLEA_METRICS_OTLP=true
-export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
-export OTEL_SERVICE_NAME=mellea-metrics-example
-python metrics_example.py
+Usage:
+    Run with different configurations:
 
-# 3. Prometheus exporter (Prometheus monitoring)
-export MELLEA_METRICS_ENABLED=true
-export MELLEA_METRICS_PROMETHEUS=true
-python metrics_example.py
-# Then access metrics at: curl http://localhost:9464/metrics
+    # 1. Console exporter (simplest - for debugging)
+    export MELLEA_METRICS_ENABLED=true
+    export MELLEA_METRICS_CONSOLE=true
+    uv run python docs/examples/telemetry/metrics_example.py
 
-# 4. Multiple exporters simultaneously
-export MELLEA_METRICS_ENABLED=true
-export MELLEA_METRICS_CONSOLE=true
-export MELLEA_METRICS_OTLP=true
-export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
-export MELLEA_METRICS_PROMETHEUS=true
-python metrics_example.py
+    # 2. OTLP exporter (production observability)
+    export MELLEA_METRICS_ENABLED=true
+    export MELLEA_METRICS_OTLP=true
+    export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+    export OTEL_SERVICE_NAME=mellea-metrics-example
+    uv run python docs/examples/telemetry/metrics_example.py
 
-# For OTLP Collector and Prometheus setup instructions, see:
-# docs/docs/evaluation-and-observability/metrics.md
+    # 3. Prometheus exporter (Prometheus monitoring)
+    export MELLEA_METRICS_ENABLED=true
+    export MELLEA_METRICS_PROMETHEUS=true
+    uv run python docs/examples/telemetry/metrics_example.py
+    # Then access metrics at: curl http://localhost:9464/metrics
+
+    # 4. Multiple exporters simultaneously
+    export MELLEA_METRICS_ENABLED=true
+    export MELLEA_METRICS_CONSOLE=true
+    export MELLEA_METRICS_OTLP=true
+    export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+    export MELLEA_METRICS_PROMETHEUS=true
+    uv run python docs/examples/telemetry/metrics_example.py
 """
 
 import os

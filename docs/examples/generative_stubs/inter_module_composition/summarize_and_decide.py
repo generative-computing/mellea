@@ -1,4 +1,12 @@
 # pytest: ollama, e2e
+"""Pipeline composing modular summarization and decision-making stubs.
+
+Demonstrates importing and composing modular `@generative` stubs across separate
+modules into an end-to-end meeting analysis and risk mitigation decision workflow.
+
+Usage:
+    uv run python docs/examples/generative_stubs/inter_module_composition/summarize_and_decide.py
+"""
 
 from typing import Literal
 

@@ -1,4 +1,13 @@
 # pytest: ollama, e2e
+"""Generative stubs with preconditions and sampling requirements.
+
+Demonstrates using `precondition_requirements` and postcondition `requirements`
+with `RejectionSamplingStrategy` on `@generative` functions, including handling
+`PreconditionException` on input validation failure.
+
+Usage:
+    uv run python docs/examples/generative_stubs/generative_stubs_with_requirements.py
+"""
 
 from typing import Literal
 

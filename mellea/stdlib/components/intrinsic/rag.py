@@ -218,7 +218,11 @@ def find_citations(
 
     Raises:
         ValueError: When the model output is not valid JSON, is not a
-            JSON array, or contains a non-object element.
+            JSON array, contains a non-object element, or contains a
+            sentence index that is negative or out of range for the decoded
+            source sentences.
+        TypeError: When sentence decoding encounters a non-integer (or
+            `bool`) sentence index in the model output.
         AdapterSchemaMismatchError: When any record in the output is missing a
             required field.
         AloraActivationError: When the resolved adapter is an aLoRA whose
@@ -254,15 +258,30 @@ def flag_hallucinated_content(
     user question are faithful to the retrieved document snippets. Sentences that do
     not align with the retrieved snippets are flagged as potential hallucinations.
 
-    The `faithfulness` field in each record is a string label (e.g.
-    `"faithful"`, `"hallucinated"`); coercion to a boolean is the caller's
-    responsibility.
+    The `faithfulness` field in each record is one of the four string labels
+    defined by the adapter's `io.yaml` schema:
+    - `"faithful"` — the sentence is fully supported by the retrieved documents.
+    - `"partial"` — the sentence is only partially supported by the retrieved
+      documents.
+    - `"unfaithful"` — the sentence is not supported by (or contradicts) the
+      retrieved documents.
+    - `"NA"` — faithfulness does not apply (for example, the sentence makes no
+      factual claim that needs grounding in the documents).
+
+    Coercion to a boolean is the caller's responsibility.
 
     Output contract — each record must contain: `response_begin`,
     `response_end`, `response_text`, `faithfulness`, `explanation`.  A
-    record missing any of these keys raises
-    :class:`~mellea.backends.adapters.AdapterSchemaMismatchError`; extra optional
-    keys do not raise (forward-compatible).
+    record missing any of these keys raises `AdapterSchemaMismatchError`;
+    extra optional keys do not raise (forward-compatible).  In addition, the
+    contract validates that `faithfulness` is one of `"faithful"`, `"partial"`,
+    `"unfaithful"`, or `"NA"`; `response_begin` and `response_end` are `int`
+    (not `bool`) with `response_begin <= response_end`; and `explanation` is a
+    `str`.  Duplicate records for the same `(response_begin, response_end)`
+    span that agree on `faithfulness` are deduplicated (keeping the first
+    record), whereas duplicate spans with conflicting `faithfulness` values or
+    distinct spans whose half-open intervals `[response_begin, response_end)`
+    overlap raise `AdapterSchemaMismatchError`.
 
     Args:
         response: The assistant's response to the user's question in the last turn
@@ -284,9 +303,17 @@ def flag_hallucinated_content(
 
     Raises:
         ValueError: When the model output is not valid JSON, is not a
-            JSON array, or contains a non-object element.
+            JSON array, contains a non-object element, or contains a
+            sentence index that is negative or out of range for the decoded
+            response sentences.
+        TypeError: When sentence decoding encounters a non-integer (or
+            `bool`) sentence index in the model output.
         AdapterSchemaMismatchError: When any record in the output is missing a
-            required field.
+            required field, has an invalid `faithfulness` label, has non-`int`
+            (or `bool`) or inverted span offsets (`response_begin > response_end`),
+            has a non-`str` `explanation`, has conflicting `faithfulness`
+            labels for the same `(response_begin, response_end)` span, or has
+            overlapping `[response_begin, response_end)` spans.
         AloraActivationError: When the resolved adapter is an aLoRA whose
             declared activation sequence is absent from the assembled prompt.
     """

@@ -1,4 +1,22 @@
 # pytest: ollama, qualitative, e2e, slow
+"""Mini Researcher: a RAG-based research assistant with validation.
+
+Demonstrates a multi-step research pipeline using Mellea:
+
+1. Input safety check with a Guardian model (`granite3-guardian:2b`).
+2. Task-specific document summarization via `session.instruct()`.
+3. Outline generation with structured output (`SectionTitles` Pydantic model)
+   and `RejectionSamplingStrategy`.
+4. Full report synthesis with word-count validation.
+
+Prerequisites:
+    ollama serve
+    ollama pull granite4.1:3b
+    ollama pull granite3-guardian:2b
+
+Usage:
+    uv run python docs/examples/mini_researcher/researcher.py
+"""
 
 from collections.abc import Callable
 from functools import cache
@@ -191,7 +209,7 @@ def step_write_full_report(
         description="Context:\n{{context}}\nSummarize the relevant information available into a detailed report on how {{current_subtopic}} impacts {{main_topic}}.\n\nFollow this outline:\n{{outline}}",
         requirements=[req_focus, req_length, req_language, req_tone],
         user_variables=user_args,
-        strategy=RejectionSamplingStrategy(loop_budget=2, requirements=[req_length]),
+        strategy=RejectionSamplingStrategy(loop_budget=2),
         return_sampling_results=True,
     )
 

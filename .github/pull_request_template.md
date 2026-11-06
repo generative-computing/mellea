@@ -1,4 +1,5 @@
 # Pull Request
+Thanks for sending a pull request! Please make sure you read the [contributing guidelines](https://github.com/generative-computing/mellea/blob/main/CONTRIBUTING.md).
 
 ## Issue
 Fixes #

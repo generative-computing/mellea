@@ -150,7 +150,11 @@ def find_context_attributions(
 
     Raises:
         ValueError: When the model output is not valid JSON, is not a
-            JSON array, or contains a non-object element.
+            JSON array, contains a non-object element, or contains a
+            sentence index that is negative or out of range for the decoded
+            source sentences.
+        TypeError: When sentence decoding encounters a non-integer (or
+            `bool`) sentence index in the model output.
         AdapterSchemaMismatchError: When any record in the output is missing a
             required field.
         AloraActivationError: When the resolved adapter is an aLoRA whose

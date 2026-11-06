@@ -8,6 +8,10 @@ server's in-memory session store. Pass the `id` from a previous
 response as `previous_response_id` in the next request and the server
 reconstructs the history automatically.
 
+Prerequisites:
+    ollama serve
+    ollama pull granite4.2:3b
+
 Usage:
     1. Start the server:
        m serve docs/examples/m_serve/sessions/m_serve_example_sessions.py

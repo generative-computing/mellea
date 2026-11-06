@@ -1,4 +1,20 @@
 # pytest: ollama, e2e
+"""Making custom Python objects LLM-compatible with @mify.
+
+Demonstrates the `@mify` decorator for integrating custom classes and ad-hoc
+objects with Mellea, including class-level decoration, ad-hoc mification,
+`stringify_func` for custom string representations, `query_type` and
+`template_order` for template integration, `fields_include` with inline
+templates, and `funcs_include` for exposing class methods as tools.
+
+Prerequisites:
+    uv sync --extra docling
+    ollama serve
+    ollama pull granite4.2:3b
+
+Usage:
+    uv run python docs/examples/mify/mify.py
+"""
 
 from mellea.stdlib.components.docs.richdocument import TableQuery
 from mellea.stdlib.components.mify import MifiedProtocol, mify

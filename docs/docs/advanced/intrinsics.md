@@ -15,6 +15,10 @@ LoRA/aLoRA weights are loaded locally, selected from an embedded checkpoint, or
 bundled into an Ollama model — faster and more reliable than prompting a
 general-purpose model for these specialised micro-tasks.
 
+When no trained adapter exists for a capability on the target model, resolution
+transparently falls back to a hand-authored prompt run against the base model, so the
+capability stays available — see [Prompt fallback](#prompt-fallback).
+
 > **Backend note:** Adapter functions work with three backends:
 >
 > - **LocalHFBackend** — loads LoRA/aLoRA adapters from the catalog at runtime.
@@ -42,6 +46,28 @@ from mellea.backends.huggingface import LocalHFBackend
 
 backend = LocalHFBackend(model_id="ibm-granite/granite-4.1-3b")
 ```
+
+## Choosing a model
+
+Models differ in which adapter functions they provide, and no single published
+Granite Switch checkpoint provides all of them. At the time of writing:
+
+- **Decisions** (`decide`, `choose`, `score`): `granite-switch-4.1-8b` or
+  `granite-switch-4.1-30b`.
+- **RAG and core adapter functions** (answerability, citations,
+  requirement-check, uncertainty, and the others on this page): a
+  `granite-switch-4.1-*-preview` checkpoint, or plain Granite 4.1 with the
+  granitelib adapters on `LocalHFBackend`.
+- **`guardian-core`**: any of the Switch checkpoints above.
+- **Decisions and RAG or core adapter functions together**: two backends, one
+  per model.
+
+Check the model's Hugging Face model card before choosing (and, for a Switch
+checkpoint, its `adapter_index.json`), since new checkpoints may change this
+list. Calling an adapter function the model does not provide raises a
+`ValueError` naming the adapter function and the model. The
+[checkpoint table](#use-a-local-granite-switch-checkpoint) lists each Switch
+checkpoint's embedded set.
 
 ## How temperature affects scores
 
@@ -150,7 +176,26 @@ backend = LocalHFBackend(
 ```
 
 Only adapter functions listed in the checkpoint's `adapter_index.json` are
-available. Mellea warns once if Granite Switch's installed package metadata
+available, whether the checkpoint runs locally or is served via vLLM. The
+published checkpoints embed different sets; at the time of writing they are as
+below, and the model card on Hugging Face is the authoritative list:
+
+| Checkpoint | Embedded adapter functions |
+| ---------- | -------------------------- |
+| `granite-switch-4.1-8b`, `granite-switch-4.1-30b` | `decision`, `guardian-core` |
+| `granite-switch-4.1-{3b,8b,30b}-preview` | `answerability`, `citations`, `context-attribution`, `factuality-correction`, `factuality-detection`, `guardian-core`, `hallucination_detection`, `policy-guardrails`, `query_clarification`, `query_rewrite`, `requirement-check`, `uncertainty` |
+
+No published checkpoint carries both `decision` and the RAG or core adapter
+functions, so an application that needs both uses two backends. Adapter
+functions a checkpoint does not embed are still available as standalone
+LoRA or aLoRA adapters on the matching Granite 4.1 base model, from
+[granitelib-core](https://huggingface.co/ibm-granite/granitelib-core-r1.0),
+[granitelib-rag](https://huggingface.co/ibm-granite/granitelib-rag-r1.0), and
+[granitelib-guardian](https://huggingface.co/ibm-granite/granitelib-guardian-r1.0). Without a
+`requirement-check` adapter, plain requirements are validated by the model
+itself rather than rerouted to the adapter.
+
+Mellea warns once if Granite Switch's installed package metadata
 does not yet include Mellea's resolved Transformers version; the warning
 disappears after Granite Switch publishes compatible metadata.
 
@@ -169,6 +214,198 @@ backend = OpenAIBackend(
     load_embedded_adapters=True,
 )
 ```
+
+## Decisions: typed one-token answers
+
+> **Experimental:** the decision API (`decide`, `choose`, `score`) is provided
+> purely as an example. Discussion of the appropriate decision APIs is ongoing,
+> and this API may change or be removed at any time without a deprecation period.
+
+Some Granite Switch checkpoints embed a **decision** adapter function (named
+`decision`). It answers a fixed-answer question about some state
+with a probability, a choice, or a score — read from the model's first
+generated token, so a decision costs one forward pass and is fast enough for
+control flow: `if` on a probability, route on a choice, threshold a score.
+
+### Serving
+
+Serve a checkpoint such as `ibm-granite/granite-switch-4.1-8b` via vLLM
+with `--max-logprobs` at 20 or more (20 is vLLM's default; the readout
+requests up to 20), installing the
+[granite-switch](https://pypi.org/project/granite-switch/) package alongside
+vLLM (the `GraniteSwitchForCausalLM` architecture is plugin-registered, not
+in upstream vLLM). On vLLM 0.30.0 and later the backend also asks the server
+for the logprobs of the exact label token ids (`logprob_token_ids`, ids taken
+from the server's `/tokenize`), so a label outside the top 20 cannot be
+missed. Other servers, and older vLLM, keep the top-20 request. Use a
+checkpoint that embeds `decision` (the preview checkpoints in the table
+above do not):
+
+```python
+from mellea.backends.huggingface import LocalHFBackend
+from mellea.backends.openai import OpenAIBackend
+from mellea.formatters import TemplateFormatter
+
+MODEL = "ibm-granite/granite-switch-4.1-8b"
+
+# Served via vLLM or llama-server:
+backend = OpenAIBackend(
+    model_id=MODEL,
+    formatter=TemplateFormatter(model_id=MODEL),
+    base_url="http://localhost:8000/v1",
+    api_key="EMPTY",
+    load_embedded_adapters=True,
+)
+
+# Or locally, on CUDA or Apple MPS:
+backend = LocalHFBackend(model_id=MODEL, load_embedded_adapters=True)
+```
+
+Decisions also work against [llama.cpp](https://github.com/ggml-org/llama.cpp)'s
+`llama-server` and the HuggingFace backend (`LocalHFBackend` with
+`granite-switch[hf]>=0.1.1`). Runnable examples:
+[`decisions.py`](../../examples/intrinsics/decisions.py) (vLLM) and
+[`decisions_llamacpp.py`](../../examples/intrinsics/decisions_llamacpp.py).
+
+Both serving backends accept `adapter_revision` to pin the Hub revision
+used for embedded-adapter discovery. Pin it to the same commit your
+server loaded, so a mid-flight Hub update cannot silently change the
+adapter configuration your client reads:
+
+```python
+backend = OpenAIBackend(
+    model_id="ibm-granite/granite-switch-4.1-8b",
+    base_url="http://localhost:8000/v1",
+    load_embedded_adapters=True,
+    adapter_revision="<commit-sha>",
+)
+```
+
+For a step-by-step tutorial covering a realistic triage workflow,
+custom true/false descriptions, conversational state, and error
+handling, see [Tutorial: One-Token
+Decisions](../tutorials/09-one-token-decisions.md).
+
+### The API
+
+```python
+from mellea.stdlib.components.intrinsic import decisions
+
+# Predicate: a probability you threshold. Ordering operators delegate to
+# .probability, so this reads naturally:
+if decisions.decide(ticket, backend, "Does this require urgent attention?") >= 0.7:
+    escalate(ticket)
+
+# Choice: the best option key plus the distribution.
+route = decisions.choose(
+    ticket,
+    backend,
+    "Which team handles this?",
+    {"payments": "Payout failures and refunds", "account": "Login and account access"},
+)
+route.choice        # "payments"
+route.probabilities # {"payments": 0.91, "account": 0.09}
+
+# Score: expected level (may land between levels) plus per-level probabilities.
+sev = decisions.score(ticket, backend, "How urgent is this?",
+                      ["can wait a week", "this week", "today"])
+sev.score           # 1.7
+sev.probabilities   # {"0": 0.05, "1": 0.20, "2": 0.75}
+```
+
+`state` (the first argument) is the thing being judged: a string, a dict or
+list (rendered as JSON), or a `ChatContext` for conversational state. A
+`ChatContext` forwards its own messages as the state (no separate state turn
+is rendered for it); any other `Context` type raises a `TypeError`. A
+conversational state sends the conversation's turns as they are, without the
+`State:` header that plain data gets. The adapter was trained on a single
+block of state, so check long or multi-turn conversations on your own
+examples. A Pydantic model or dataclass is rendered as the JSON of its
+fields.
+All three helpers take `model_options`, but every decision-critical
+setting (`max_completion_tokens=1`, greedy `temperature=0.0`, `top_p` and
+`top_k`, logprobs, the sized `top_logprobs`, no streaming) is pinned by
+the capability contract. Logit-shaping options (`logit_bias`, the
+frequency, presence and repetition penalties, a custom `logits_processor`)
+are rejected too. A conflicting option raises rather than silently
+breaking the readout, whether it is passed per call or set on the backend.
+`enable_thinking` is the exception: the decision template has no thinking
+branch, so any value you set is dropped and the call proceeds.
+Special-token strings in your text are split with an invisible word
+joiner, so state, question and option text cannot forge a turn or switch
+the adapter. That covers the `<|name|>` family (role markers, end of text,
+adapter control tokens) and the tag tokens of the Switch checkpoints
+(`<tool_call>`, `<think>`, `<schema>` and the like), so tool and reasoning
+markup in a state is read as plain text. Ordinary text is unchanged.
+On `LocalHFBackend` the label probabilities are read from the raw
+logits at the label token ids, so no generation option can move them. The
+probabilities are the model's own and are not calibrated against ground
+truth; fit a calibration on labelled data before acting on a threshold.
+`choose` takes 2-10 options and `score` 2-10
+levels. When serving with vLLM, do not enable
+`--logprobs-mode processed_logprobs`; the decision readout expects
+raw logprobs, and applying temperature before returning them would
+distort the probabilities.
+
+### How it works
+
+The adapter is trained on a specific prompt layout: a fixed system prompt
+("You are a decision engine…"), a state turn (`State:\n<your state>`), and
+a decision turn (`### DECISION\nQuestion:\n…\nOptions:\nA: …\nB: …\n…`).
+Mellea assembles this layout from the capability's configuration and sends
+it to the model, which generates exactly one token — the answer label
+(`A`, `B`, `C`, …).
+
+The answer is decoded from that token's logprob distribution: the top-20
+logprobs are read from the response, the option labels are matched by exact
+token identity, and a restricted softmax over the used labels produces the
+probability distribution. For `decide`, the labels map to
+`[false, true]` (so `.probability` is P(true)); for `choose`, the
+argmax label maps back to the option key; for `score`, the expected level
+is computed from the per-level probabilities.
+
+The capability's prompt layout is carried by Mellea as an interim
+configuration, merged field by field into the checkpoint's published
+`io.yaml` at adapter discovery: a field the published file omits gets the
+carried value, and a field it publishes wins over the carried one (with a
+warning naming both). The merged configuration is validated at discovery;
+if it is invalid (for example, a published field breaks a placeholder the
+rewriter depends on), the decision capability is not registered and the
+error from `decide`/`choose`/`score` says why.
+
+### Answer semantics
+
+A bare `if answer:` is always `True` — test `answer.probability`, compare
+`answer.choice == "..."`, or compare a `PredicateAnswer`/`ScoreAnswer`
+directly against a number (ordering operators delegate to the primary
+field). `confidence` on choice and score answers is an uncalibrated
+distribution-shape statistic, not a probability of correctness. For a
+choice it is the top probability rescaled so a uniform distribution reads 0
+and certainty reads 1, `(max(p) − 1/K) / (1 − 1/K)`. For a score it is 1
+minus the expected distance from the most likely level, divided by the mean
+distance every level has from the scale midpoint. Both follow the OpenAI
+decisions specification's formulas, and both reproduce its worked examples.
+
+### Failure modes
+
+Failure is loud, never silent:
+
+- **Label-mass floor**: if the answer distribution does not concentrate on
+  the declared options (mass < 0.5), the call raises. This usually indicates a serving or template problem.
+- **Missing labels**: if the server cannot return enough logprobs to see
+  all option labels, the call raises with a server-configuration hint
+  (vLLM: check `--max-logprobs`).
+- **Marker contamination**: if the invocation marker (`### DECISION`)
+appears in the state, question, or options text (not just the decision
+turn), the call raises `AloraActivationError` — the adapter would activate
+  at the wrong position.
+- **Parameter conflicts**: a caller `model_options` key that conflicts
+  with a pinned decision-critical setting (e.g. `MAX_NEW_TOKENS: 64`)
+  raises rather than silently breaking the readout.
+
+Every decision is logged with its question, answer distribution, label
+mass, and latency; set `MELLEA_LOGS_LEVEL=DEBUG` to also log option
+descriptions and the full state.
 
 ## Answerability
 
@@ -369,18 +606,55 @@ For a fully custom, non-catalog adapter — your own trained LoRA/aLoRA weights,
 not one of the built-in adapter functions — see
 [Adding a custom adapter function in 20 lines](../tutorials/07-custom-adapter-function.md).
 
+## Prompt fallback
+
+> **Coming soon:** No catalog repo ships prompt `io.yaml` files yet, so prompt fallback
+> is not yet reachable in practice. The mechanism below is in place and will work once
+> prompts are published.
+
+Not every capability has a trained adapter for every model. When no aLoRA or LoRA
+adapter exists for a capability on the target model, resolution falls back to a
+**prompt**: a hand-authored instruction (packaged as an `io.yaml`) run against the
+plain base model. This keeps the capability available — including on models a LoRA
+cannot be loaded into — rather than failing.
+
+Resolution walks the chain in order and uses the first rung that exists:
+
+1. a model-specific aLoRA adapter,
+2. a model-specific LoRA adapter,
+3. a model-specific prompt,
+4. a model-agnostic `any` prompt (Mellea logs a warning, since an `any` prompt is
+   less accurate than a model-tuned one).
+
+The fallback is transparent: the same helper calls (`rag.check_answerability`,
+`core.requirement_check`, …) work unchanged — there is no adapter to register and
+nothing to activate. A prompt fallback carries no weights (it
+is a `PromptBinding`; see below) and runs the intrinsic's instruction against the base
+model, parsing the response through the same output contract a trained adapter uses.
+
+Transparency is about interface, not accuracy: a model-specific prompt still runs the
+base model, so its output — a `requirement-check` score, say — reflects the model's own
+judgement rather than a trained adapter's calibrated one. The `any` prompt is weaker
+still. To see which rung served a capability, read the resolved binding's
+`binding_type`:
+
+```python
+# -> "local_file", "prompt", or "embedded"
+backend.resolve_adapter("requirement-check").weights.binding_type
+```
+
 ## Composable adapter construction (advanced)
 
 `Adapter` composes an `Identity`, an output contract (`IOContract`), and a
 weights binding into a single, inspectable object. Both `LocalHFBackend` and
 `OpenAIBackend` accept a composed `Adapter` directly via `add_adapter` —
 dispatching on the weights binding's reality (`LocalFileBinding` for
-LocalFile/PEFT, `EmbeddedBinding` for Embedded/Granite Switch) — alongside
-the deprecated shim classes, which remain functional for now (Epic #929,
-issue #1144). An `EmbeddedBinding` adapter additionally requires `add_adapter`'s
-`config=` argument (the raw io.yaml mapping) — `add_adapter` raises `ValueError`
-without it, since that reality's config cannot be cheaply re-derived later; see
-below.
+LocalFile/PEFT, `EmbeddedBinding` for Embedded/Granite Switch, `PromptBinding`
+for a weightless prompt fallback) — alongside the deprecated shim classes,
+which remain functional for now (Epic #929, issue #1144). An `EmbeddedBinding`
+adapter additionally requires `add_adapter`'s `config=` argument (the raw
+io.yaml mapping) — `add_adapter` raises `ValueError` without it, since that
+reality's config cannot be cheaply re-derived later; see below.
 
 Each weights binding models how its deployment turns an adapter on.
 `LocalFileBinding` downloads and loads LoRA/aLoRA weights, so it exposes a
@@ -429,13 +703,19 @@ switch_backend.register_embedded_adapter_model(
 )
 ```
 
+`PromptBinding` has no weights to manage, so there is nothing to load or activate.
+Its lifecycle verbs are no-ops (`activate()` only logs that the fallback fired), and
+generation runs against the base model with the injected instruction. You never
+construct one directly; `resolve_adapter` registers it when the chain lands on a
+prompt.
+
 Weights-binding support by backend today:
 
-| Backend | `LocalFileBinding` (LocalFile/PEFT) | `EmbeddedBinding` (Embedded/Granite Switch) | `ServerMediatedBinding` |
-| --- | --- | --- | --- |
-| `LocalHFBackend` | ✅ shipping — `add_adapter` accepts a composed `Adapter` or a bare `LocalFileBinding` directly | ✅ shipping — `load_embedded_adapters=True`, or `add_adapter(adapter, config=...)`/`register_embedded_adapter_model` with a composed `Adapter` | — |
-| `OpenAIBackend` | — | ✅ shipping — `load_embedded_adapters=True`, or `add_adapter(adapter, config=...)`/`register_embedded_adapter_model` with a composed `Adapter` | — |
-| `OllamaModelBackend` | — | — | ✅ model selection through `adapter_models` for catalogued adapter functions; lifecycle telemetry is tracked separately |
+| Backend | `LocalFileBinding` (LocalFile/PEFT) | `EmbeddedBinding` (Embedded/Granite Switch) | `ServerMediatedBinding` | `PromptBinding` (prompt fallback) |
+| --- | --- | --- | --- | --- |
+| `LocalHFBackend` | ✅ shipping — `add_adapter` accepts a composed `Adapter` or a bare `LocalFileBinding` directly | ✅ shipping — `load_embedded_adapters=True`, or `add_adapter(adapter, config=...)`/`register_embedded_adapter_model` with a composed `Adapter` | — | ✅ shipping — registered by `resolve_adapter` when the fallback chain lands on a prompt |
+| `OpenAIBackend` | — | ✅ shipping — `load_embedded_adapters=True`, or `add_adapter(adapter, config=...)`/`register_embedded_adapter_model` with a composed `Adapter` | — | — |
+| `OllamaModelBackend` | — | — | ✅ model selection through `adapter_models` for catalogued adapter functions; lifecycle telemetry is tracked separately | — |
 
 `ServerMediatedBinding` currently supports Ollama's bundled-model path. A full
 server-mediated lifecycle and telemetry contract is tracked separately.

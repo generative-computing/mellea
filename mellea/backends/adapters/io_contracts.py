@@ -12,7 +12,7 @@ wrong constant was a silent mismatch.
 
 :data:`_INTRINSIC_IO_CONTRACTS` is the single source of truth instead: it is keyed by the
 adapter function's catalog name (:attr:`~mellea.backends.adapters.catalog.IntrinsicsCatalogEntry.name`,
-e.g. `"guardian-core"` — the same string passed to `call_intrinsic` and
+e.g. `"guardian-core"`; the same string passed to `call_intrinsic` and
 `resolve_adapter`). The shim adapters in `adapter.py` read from it at construction
 (via :func:`get_io_contract`); the high-level helpers reach it indirectly, through
 the adapter `resolve_adapter` returns. Declaring a capability's contract anywhere
@@ -34,6 +34,7 @@ from ._core import (
     _DictContract,
     _ListContract,
 )
+from .capabilities import DECISION_CAPABILITY
 from .catalog import known_intrinsic_names
 
 
@@ -41,7 +42,7 @@ class _PolicyGuardrailsContract(IOContract):
     """Validate policy-guardrails adapter output: exactly one of `label` or `score`.
 
     The adapter returns either `{"label": "Yes"|"No"|"Ambiguous"}` or
-    `{"score": "Yes"|"No"|"Ambiguous"}` — never both, never neither.
+    `{"score": "Yes"|"No"|"Ambiguous"}`; never both, never neither.
     """
 
     def build_prompt(self, **_kwargs: object) -> Component:
@@ -131,13 +132,106 @@ class _GuardianCheckContract(IOContract):
         return data
 
 
+class _DecisionContract(IOContract):
+    """Validate one-token decision readout output from the `first_token` rule.
+
+    Expected shape (the `first_token` transformation rule's output, as it
+    reaches `call_intrinsic` through the result processor's JSON round-trip):
+    a dict holding the sampled top-1 token (`"token"`), a mapping of each
+    pool label found among the returned logprobs to its logprob
+    (`"label_logprobs"`), the smallest logprob across all returned tokens
+    (`"min_returned_logprob"`), and the configured label pool
+    (`"labels"`).
+    `label_logprobs` carries raw (full-vocabulary) logprobs and may be
+    empty or partial; the caller's label-mass check decides whether the
+    distribution is usable. `labels` is the capability's configured label
+    pool, which the caller checks covers the requested options.
+    """
+
+    _REQUIRED_KEYS = frozenset(
+        {"token", "label_logprobs", "min_returned_logprob", "labels"}
+    )
+
+    def build_prompt(self, **_kwargs: object) -> Component:
+        raise NotImplementedError(_BUILD_PROMPT_NOT_IMPLEMENTED)
+
+    def parse(self, raw: str) -> dict[str, object]:
+        """Parse and validate one-token decision readout output.
+
+        Args:
+            raw (str): Raw JSON string from the `first_token` rule.
+
+        Returns:
+            dict[str, object]: Parsed output dict with `token` (the sampled
+            top-1 token string), `label_logprobs` (mapping label to raw
+            logprob), `min_returned_logprob` (the smallest logprob across
+            all returned tokens), and `labels` (the configured label pool).
+
+        Raises:
+            ValueError: When *raw* is not valid JSON or is not a JSON object.
+            AdapterSchemaMismatchError: When any required key is missing or
+                has the wrong type, or when `label_logprobs` maps to
+                non-numeric values.
+        """
+        data = json.loads(raw)
+        if not isinstance(data, dict):
+            raise ValueError(
+                f"Decision readout output must be a JSON object, "
+                f"got {type(data).__name__}."
+            )
+        missing = self._REQUIRED_KEYS - frozenset(data.keys())
+        if missing:
+            raise AdapterSchemaMismatchError(
+                "decision", frozenset(data.keys()), self._REQUIRED_KEYS
+            )
+        if not isinstance(data["token"], str):
+            raise AdapterSchemaMismatchError(
+                "decision",
+                frozenset(data.keys()),
+                self._REQUIRED_KEYS,
+                "'token' must be a string",
+            )
+        label_logprobs = data["label_logprobs"]
+        if not isinstance(label_logprobs, dict) or not all(
+            isinstance(k, str)
+            and isinstance(v, (int, float))
+            and not isinstance(v, bool)
+            for k, v in label_logprobs.items()
+        ):
+            raise AdapterSchemaMismatchError(
+                "decision",
+                frozenset(data.keys()),
+                self._REQUIRED_KEYS,
+                "'label_logprobs' must map label strings to numbers",
+            )
+        if not isinstance(data["min_returned_logprob"], (int, float)) or isinstance(
+            data["min_returned_logprob"], bool
+        ):
+            raise AdapterSchemaMismatchError(
+                "decision",
+                frozenset(data.keys()),
+                self._REQUIRED_KEYS,
+                "'min_returned_logprob' must be a number",
+            )
+        if not isinstance(data["labels"], list) or not all(
+            isinstance(label, str) for label in data["labels"]
+        ):
+            raise AdapterSchemaMismatchError(
+                "decision",
+                frozenset(data.keys()),
+                self._REQUIRED_KEYS,
+                "'labels' must be a list of strings",
+            )
+        return data
+
+
 class _RequirementCheckContract(IOContract):
     """Validate requirement-check output: `{"requirement_check": {"score": <0.0-1.0 float>}}`.
 
     Consolidates the score-range validation that both production consumers of this
-    capability's output — `core.requirement_check()`
+    capability's output; `core.requirement_check()`
     (`mellea/stdlib/components/intrinsic/core.py`) and `requirement_check_to_bool()`
-    (`mellea/stdlib/requirements/requirement.py`) — used to hand-roll independently,
+    (`mellea/stdlib/requirements/requirement.py`); used to hand-roll independently,
     into one declared contract, per issue #1516.
     """
 
@@ -186,6 +280,169 @@ class _RequirementCheckContract(IOContract):
         return data
 
 
+_HALLUCINATION_REQUIRED_KEYS: frozenset[str] = frozenset(
+    {"response_begin", "response_end", "response_text", "faithfulness", "explanation"}
+)
+_HALLUCINATION_FAITHFULNESS_LABELS: tuple[str, ...] = (
+    "faithful",
+    "partial",
+    "unfaithful",
+    "NA",
+)
+
+
+class _HallucinationDetectionContract(IOContract):
+    """Validate and deduplicate `hallucination_detection` adapter output.
+
+    Unlike other contracts in this module (which return parsed data unchanged),
+    `parse()` drops duplicate records that share `(response_begin, response_end)`
+    and agree on `faithfulness` (keeping the first record). Duplicate spans that
+    disagree on `faithfulness`, or distinct spans whose half-open intervals
+    `[response_begin, response_end)` overlap, raise `AdapterSchemaMismatchError`.
+
+    The `faithfulness` value set (`"faithful"`, `"partial"`, `"unfaithful"`,
+    `"NA"`) is closed on purpose (fail-closed): on Granite Switch, `io.yaml`
+    comes from the served model's `io_configs/` while this contract comes from
+    Mellea's registry, so a Switch release adding a new label raises
+    `AdapterSchemaMismatchError` until Mellea is upgraded.
+    """
+
+    def build_prompt(self, **_kwargs: object) -> Component:
+        raise NotImplementedError(_BUILD_PROMPT_NOT_IMPLEMENTED)
+
+    def parse(self, raw: str) -> dict[str, object]:
+        """Parse, validate, and deduplicate `hallucination_detection` output.
+
+        Args:
+            raw (str): Raw JSON string from the model.
+
+        Returns:
+            dict[str, object]: `{"items": <list of validated, deduplicated dicts>}`.
+
+        Raises:
+            ValueError: When `raw` is not valid JSON, is not a JSON array, or
+                contains a non-object element.
+            AdapterSchemaMismatchError: When any record is missing a required key,
+                has an invalid `faithfulness` value, has non-`int` (or `bool`) or
+                inverted span offsets (`response_begin > response_end`), has a
+                non-`str` `explanation`, conflicts on `faithfulness` for a repeated
+                `(response_begin, response_end)` span, or overlaps another span's
+                half-open interval `[response_begin, response_end)`.
+        """
+        data = json.loads(raw)
+        if not isinstance(data, list):
+            raise ValueError(
+                f"Adapter 'hallucination_detection' output must be a JSON array, "
+                f"got {type(data).__name__}."
+            )
+
+        seen_spans: dict[tuple[int, int], str] = {}
+        accepted_spans: list[tuple[int, int, frozenset[str]]] = []
+        deduplicated: list[dict[str, object]] = []
+
+        for item in data:
+            if not isinstance(item, dict):
+                raise ValueError(
+                    f"Adapter 'hallucination_detection' output array must contain "
+                    f"only JSON objects, got a {type(item).__name__} element."
+                )
+            observed = frozenset(item.keys())
+            missing = _HALLUCINATION_REQUIRED_KEYS - observed
+            if missing:
+                raise AdapterSchemaMismatchError(
+                    "hallucination_detection", observed, _HALLUCINATION_REQUIRED_KEYS
+                )
+
+            faithfulness = item["faithfulness"]
+            if not isinstance(faithfulness, str):
+                valid_labels = ", ".join(
+                    repr(lbl) for lbl in _HALLUCINATION_FAITHFULNESS_LABELS
+                )
+                raise AdapterSchemaMismatchError(
+                    "hallucination_detection",
+                    observed,
+                    _HALLUCINATION_REQUIRED_KEYS,
+                    f"`faithfulness` must be a `str` (one of {valid_labels}), "
+                    f"got {type(faithfulness).__name__}",
+                )
+            if faithfulness not in _HALLUCINATION_FAITHFULNESS_LABELS:
+                valid_labels = ", ".join(
+                    repr(lbl) for lbl in _HALLUCINATION_FAITHFULNESS_LABELS
+                )
+                raise AdapterSchemaMismatchError(
+                    "hallucination_detection",
+                    observed,
+                    _HALLUCINATION_REQUIRED_KEYS,
+                    f"invalid `faithfulness` value {faithfulness!r}; expected one of "
+                    f"{valid_labels} (upgrade `mellea` if the upstream adapter added "
+                    f"a new label)",
+                )
+
+            begin = item["response_begin"]
+            if isinstance(begin, bool) or not isinstance(begin, int):
+                raise AdapterSchemaMismatchError(
+                    "hallucination_detection",
+                    observed,
+                    _HALLUCINATION_REQUIRED_KEYS,
+                    f"`response_begin` must be `int` (not `bool`), "
+                    f"got {type(begin).__name__}",
+                )
+            end = item["response_end"]
+            if isinstance(end, bool) or not isinstance(end, int):
+                raise AdapterSchemaMismatchError(
+                    "hallucination_detection",
+                    observed,
+                    _HALLUCINATION_REQUIRED_KEYS,
+                    f"`response_end` must be `int` (not `bool`), "
+                    f"got {type(end).__name__}",
+                )
+            if begin > end:
+                raise AdapterSchemaMismatchError(
+                    "hallucination_detection",
+                    observed,
+                    _HALLUCINATION_REQUIRED_KEYS,
+                    f"`response_begin` ({begin}) must be <= `response_end` ({end})",
+                )
+
+            explanation = item["explanation"]
+            if not isinstance(explanation, str):
+                raise AdapterSchemaMismatchError(
+                    "hallucination_detection",
+                    observed,
+                    _HALLUCINATION_REQUIRED_KEYS,
+                    f"`explanation` must be a `str`, got {type(explanation).__name__}",
+                )
+
+            span = (begin, end)
+            if span in seen_spans:
+                if seen_spans[span] != faithfulness:
+                    raise AdapterSchemaMismatchError(
+                        "hallucination_detection",
+                        observed,
+                        _HALLUCINATION_REQUIRED_KEYS,
+                        f"conflicting `faithfulness` values ({seen_spans[span]!r} vs "
+                        f"{faithfulness!r}) for duplicate span {span}",
+                    )
+                continue
+
+            seen_spans[span] = faithfulness
+            accepted_spans.append((begin, end, observed))
+            deduplicated.append(item)
+
+        for i, (a_begin, a_end, _) in enumerate(accepted_spans):
+            for b_begin, b_end, b_observed in accepted_spans[i + 1 :]:
+                if max(a_begin, b_begin) < min(a_end, b_end):
+                    raise AdapterSchemaMismatchError(
+                        "hallucination_detection",
+                        b_observed,
+                        _HALLUCINATION_REQUIRED_KEYS,
+                        f"overlapping response spans [{a_begin}, {a_end}) and "
+                        f"[{b_begin}, {b_end})",
+                    )
+
+        return {"items": deduplicated}
+
+
 _INTRINSIC_IO_CONTRACTS: dict[str, IOContract] = {
     "answerability": _DictContract("answerability", frozenset({"answerability"})),
     "query_rewrite": _DictContract("query_rewrite", frozenset({"rewritten_question"})),
@@ -206,18 +463,7 @@ _INTRINSIC_IO_CONTRACTS: dict[str, IOContract] = {
             }
         ),
     ),
-    "hallucination_detection": _ListContract(
-        "hallucination_detection",
-        frozenset(
-            {
-                "response_begin",
-                "response_end",
-                "response_text",
-                "faithfulness",
-                "explanation",
-            }
-        ),
-    ),
+    "hallucination_detection": _HallucinationDetectionContract(),
     "policy-guardrails": _PolicyGuardrailsContract(),
     "guardian-core": _GuardianCheckContract(),
     "factuality-detection": _DictContract("factuality-detection", frozenset({"score"})),
@@ -242,10 +488,13 @@ _INTRINSIC_IO_CONTRACTS: dict[str, IOContract] = {
         ),
     ),
 }
+# The decision capability's contract, keyed by the canonical name
+# (capabilities.py).
+_INTRINSIC_IO_CONTRACTS[DECISION_CAPABILITY] = _DecisionContract()
 # Canonical output contract for every built-in adapter function, keyed by its
 # catalog `name` (see module docstring). Capture the built-in names before
 # `CustomIntrinsicAdapter` can extend the global catalogue at runtime, then keep
-# the registry exhaustive over that fixed set at import time — mirroring the
+# the registry exhaustive over that fixed set at import time; mirroring the
 # duplicate-`effective_capability` check in catalog.py.
 _BUILTIN_INTRINSIC_NAMES = frozenset(known_intrinsic_names())
 _missing_contracts = _BUILTIN_INTRINSIC_NAMES - set(_INTRINSIC_IO_CONTRACTS)
@@ -262,7 +511,7 @@ def get_io_contract(name: str) -> IOContract:
 
     Args:
         name (str): Catalog name of the adapter function (e.g. `"answerability"`,
-            `"guardian-core"`) — :attr:`~mellea.backends.adapters.catalog.IntrinsicsCatalogEntry.name`,
+            `"guardian-core"`); :attr:`~mellea.backends.adapters.catalog.IntrinsicsCatalogEntry.name`,
             never :attr:`~mellea.backends.adapters.catalog.IntrinsicsCatalogEntry.effective_capability`.
             This is the same string passed to
             :func:`~mellea.stdlib.components.intrinsic._util.call_intrinsic` and
@@ -272,7 +521,7 @@ def get_io_contract(name: str) -> IOContract:
         IOContract: The contract declared in :data:`_INTRINSIC_IO_CONTRACTS` for
             `name`. Adapter functions outside the catalog (e.g. one registered
             through the deprecated `CustomIntrinsicAdapter`) fall back to a dict
-            contract with no required keys — permissive about *which* keys are
+            contract with no required keys; permissive about *which* keys are
             present, but still requires the parsed JSON to be an object; a
             top-level array or scalar still raises `ValueError`, since Mellea has
             no declared schema for these adapter functions to relax that far.

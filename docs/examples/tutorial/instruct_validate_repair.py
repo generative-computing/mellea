@@ -1,4 +1,13 @@
 # pytest: ollama, e2e
+"""Walkthrough of the instruct-validate-repair paradigm.
+
+Prerequisites:
+    ollama serve
+    ollama pull granite4.2:3b
+
+Usage:
+    uv run python docs/examples/tutorial/instruct_validate_repair.py
+"""
 
 from mellea.core import Requirement
 from mellea.stdlib.requirements import check, req, simple_validate
