@@ -18,7 +18,7 @@ By the end you will have covered:
 
 **Prerequisites:** [Tutorial 02](./02-streaming-and-async.md) and
 [Tutorial 03](./03-using-generative-stubs.md) complete,
-`pip install mellea`, Ollama running locally with `granite4.1:3b` downloaded.
+`pip install mellea`, Ollama running locally with `granite4.2:3b` downloaded.
 
 ---
 
@@ -66,9 +66,9 @@ result = m.instruct(
 )
 
 if result.tool_calls:
-    for name, tc in result.tool_calls.items():
+    for tc in result.tool_calls:
         output = tc.call_func()
-        m.ctx = m.ctx.add(ToolMessage("tool", str(output), output, name, tc.args, tc))
+        m.ctx = m.ctx.add(ToolMessage("tool", str(output), output, tc.name, tc.args, tc))
     print(str(m.instruct("Answer the original question using the tool results.", tool_calls=False)))
 else:
     print(str(result))
