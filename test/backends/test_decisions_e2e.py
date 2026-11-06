@@ -12,7 +12,9 @@ served via vLLM (or any OpenAI-compatible server) with `--max-logprobs 20`:
 
 Falls back to VLLM_SWITCH_TEST_BASE_URL / GRANITE_SWITCH_MODEL_ID (the
 env vars used by the other switch intrinsics e2e tests and the nightly
-script), so a single server configuration drives both batteries.
+script; `/v1` is appended to that server root), so a single server
+configuration drives both batteries. That server must embed the decision
+adapter function (the released 8b or 30b, not a preview checkpoint).
 
 Skips with an actionable reason when the endpoint is not configured.
 
@@ -49,10 +51,20 @@ from mellea.stdlib.components import Message
 from mellea.stdlib.components.intrinsic import decisions
 from mellea.stdlib.context import ChatContext
 
-_BASE_URL = (
-    os.environ.get("SWITCH_DECISIONS_BASE_URL")
-    or os.environ.get("VLLM_SWITCH_TEST_BASE_URL", "")
-).rstrip("/")
+
+def _configured_base_url() -> str:
+    """The OpenAI base URL (ending in `/v1`) of the configured endpoint, or ""."""
+    explicit = os.environ.get("SWITCH_DECISIONS_BASE_URL", "").rstrip("/")
+    if explicit:
+        return explicit
+    # The nightly's VLLM_SWITCH_TEST_BASE_URL is the server root, without /v1.
+    root = os.environ.get("VLLM_SWITCH_TEST_BASE_URL", "").rstrip("/")
+    if not root:
+        return ""
+    return root if root.endswith("/v1") else f"{root}/v1"
+
+
+_BASE_URL = _configured_base_url()
 _MODEL_ID = os.environ.get("SWITCH_DECISIONS_MODEL_ID") or os.environ.get(
     "GRANITE_SWITCH_MODEL_ID", ""
 )
