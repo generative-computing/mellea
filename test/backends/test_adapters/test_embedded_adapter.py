@@ -277,6 +277,76 @@ class TestFromModelDirectory:
         with pytest.raises(ValueError, match="escapes the model directory"):
             EmbeddedIntrinsicAdapter.from_model_directory(model_dir)
 
+    def _hf_cache_snapshot(self, tmp_path):
+        """Build `<repo>/blobs/<hash>` plus `<repo>/snapshots/<rev>/...` symlinks."""
+        repo = tmp_path / "models--org--switch"
+        blobs = repo / "blobs"
+        blobs.mkdir(parents=True)
+        snap = repo / "snapshots" / "abc123"
+        (snap / "io_configs" / "answerability").mkdir(parents=True)
+        blob = blobs / "deadbeef"
+        blob.write_text(yaml.dump(_ANSWERABILITY_CONFIG))
+        (snap / "io_configs" / "answerability" / "io.yaml").symlink_to(blob)
+        index_blob = blobs / "indexblob"
+        index_blob.write_text(
+            json.dumps(
+                {
+                    "adapters": [
+                        {
+                            "adapter_name": "answerability",
+                            "technology": "alora",
+                            "io_config": "io_configs/answerability/io.yaml",
+                        }
+                    ]
+                }
+            )
+        )
+        (snap / "adapter_index.json").symlink_to(index_blob)
+        return repo, snap
+
+    def test_hf_cache_snapshot_symlinks_into_blobs_are_allowed(self, tmp_path):
+        """A local Hugging Face cache snapshot loads: its files link into `blobs/`."""
+        _repo, snap = self._hf_cache_snapshot(tmp_path)
+        adapters = EmbeddedIntrinsicAdapter.from_model_directory(snap)
+        assert [a.intrinsic_name for a in adapters] == ["answerability"]
+
+    def test_hf_cache_snapshot_still_rejects_escape_beyond_the_repo_cache(
+        self, tmp_path
+    ):
+        """The widened root is the repo cache dir only, not anything above it."""
+        _repo, snap = self._hf_cache_snapshot(tmp_path)
+        outside = tmp_path / "outside.yaml"
+        outside.write_text(yaml.dump({"model": None}))
+        io_yaml = snap / "io_configs" / "answerability" / "io.yaml"
+        io_yaml.unlink()
+        io_yaml.symlink_to(outside)
+        with pytest.raises(ValueError, match="escapes the model directory"):
+            EmbeddedIntrinsicAdapter.from_model_directory(snap)
+
+    def test_snapshots_name_without_blobs_dir_is_not_widened(self, tmp_path):
+        """A directory merely named `snapshots` gets no extra trust."""
+        outside = tmp_path / "secret.yaml"
+        outside.write_text(yaml.dump({"model": None}))
+        model_dir = tmp_path / "repo" / "snapshots" / "rev"
+        io_dir = model_dir / "io_configs" / "evil"
+        io_dir.mkdir(parents=True)
+        (io_dir / "io.yaml").symlink_to(outside)
+        (model_dir / "adapter_index.json").write_text(
+            json.dumps(
+                {
+                    "adapters": [
+                        {
+                            "adapter_name": "evil",
+                            "technology": "lora",
+                            "io_config": "io_configs/evil/io.yaml",
+                        }
+                    ]
+                }
+            )
+        )
+        with pytest.raises(ValueError, match="escapes the model directory"):
+            EmbeddedIntrinsicAdapter.from_model_directory(model_dir)
+
     def test_adapter_name_key(self, tmp_path):
         """Index with 'adapter_name' key is read correctly."""
         index = {
@@ -316,7 +386,11 @@ class TestFromHub:
 
         mock_dl.assert_called_once_with(
             repo_id="ibm-granite/granite-switch-micro",
-            allow_patterns=["adapter_index.json", "io_configs/**"],
+            allow_patterns=[
+                "adapter_index.json",
+                "io_configs/**",
+                "chat_template.jinja",
+            ],
             cache_dir=str(cache_dir),
             revision="test-rev",
         )
@@ -335,7 +409,11 @@ class TestFromHub:
 
         mock_dl.assert_called_once_with(
             repo_id="ibm-granite/granite-switch-micro",
-            allow_patterns=["adapter_index.json", "io_configs/**"],
+            allow_patterns=[
+                "adapter_index.json",
+                "io_configs/**",
+                "chat_template.jinja",
+            ],
             cache_dir=str(cache_dir),
             revision="main",
         )
@@ -514,7 +592,11 @@ class TestFromSource:
             )
         mock_dl.assert_called_once_with(
             repo_id="ibm-granite/granite-switch-micro",
-            allow_patterns=["adapter_index.json", "io_configs/**"],
+            allow_patterns=[
+                "adapter_index.json",
+                "io_configs/**",
+                "chat_template.jinja",
+            ],
             cache_dir="/tmp/cache",
             revision="v2",
         )

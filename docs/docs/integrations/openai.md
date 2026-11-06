@@ -310,6 +310,10 @@ When served via vLLM, these adapters enable adapter functions (RAG quality
 checks, safety evaluation, requirement validation) through the OpenAI-compatible
 API without loading adapter weights at runtime.
 
+Each Switch checkpoint embeds a different set of adapter functions, so check
+the model card on Hugging Face before choosing one. See
+[Choosing a model](../advanced/intrinsics.md#choosing-a-model).
+
 Start a vLLM server with the Granite Switch model:
 
 ```bash
