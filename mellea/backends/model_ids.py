@@ -195,6 +195,16 @@ IBM_GRANITE_4_TINY_PREVIEW_BASE_7B = ModelIdentifier(
 )
 
 # Pre-Built Granite Switch Models
+IBM_GRANITE_SWITCH_4_1_8B = ModelIdentifier(
+    hf_model_name="ibm-granite/granite-switch-4.1-8b", context_length=131072
+)
+"""Granite Switch Model. Adapters: `decision`, `guardian-core`."""
+
+IBM_GRANITE_SWITCH_4_1_30B = ModelIdentifier(
+    hf_model_name="ibm-granite/granite-switch-4.1-30b", context_length=131072
+)
+"""Granite Switch Model. Adapters: `decision`, `guardian-core`."""
+
 IBM_GRANITE_SWITCH_4_1_3B_PREVIEW = ModelIdentifier(
     hf_model_name="ibm-granite/granite-switch-4.1-3b-preview", context_length=131072
 )

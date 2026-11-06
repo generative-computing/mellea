@@ -154,7 +154,24 @@ backend = LocalHFBackend(
 ```
 
 Only adapter functions listed in the checkpoint's `adapter_index.json` are
-available. Mellea warns once if Granite Switch's installed package metadata
+available, and the published checkpoints embed different sets:
+
+| Checkpoint | Embedded adapter functions |
+| ---------- | -------------------------- |
+| `granite-switch-4.1-8b`, `granite-switch-4.1-30b` | `decision`, `guardian-core` |
+| `granite-switch-4.1-{3b,8b,30b}-preview` | `answerability`, `citations`, `context-attribution`, `factuality-correction`, `factuality-detection`, `guardian-core`, `hallucination_detection`, `policy-guardrails`, `query_clarification`, `query_rewrite`, `requirement-check`, `uncertainty` |
+
+No published checkpoint carries both `decision` and the RAG or core adapter
+functions, so an application that needs both uses two backends. Adapter
+functions a checkpoint does not embed are still available as standalone
+LoRA or aLoRA adapters on the matching Granite 4.1 base model, from
+[granitelib-core](https://huggingface.co/ibm-granite/granitelib-core-r1.0),
+[granitelib-rag](https://huggingface.co/ibm-granite/granitelib-rag-r1.0), and
+[granitelib-guardian](https://huggingface.co/ibm-granite/granitelib-guardian-r1.0). Without a
+`requirement-check` adapter, plain requirements are validated by the model
+itself rather than rerouted to the adapter.
+
+Mellea warns once if Granite Switch's installed package metadata
 does not yet include Mellea's resolved Transformers version; the warning
 disappears after Granite Switch publishes compatible metadata.
 
@@ -195,9 +212,29 @@ vLLM (the `GraniteSwitchForCausalLM` architecture is plugin-registered, not
 in upstream vLLM). On vLLM 0.30.0 and later the backend also asks the server
 for the logprobs of the exact label token ids (`logprob_token_ids`, ids taken
 from the server's `/tokenize`), so a label outside the top 20 cannot be
-missed. Other servers, and older vLLM, keep the top-20 request. Set up the
-backend as in
-[Use a local Granite Switch checkpoint](#use-a-local-granite-switch-checkpoint).
+missed. Other servers, and older vLLM, keep the top-20 request. Use a
+checkpoint that embeds `decision` (the preview checkpoints in the table
+above do not):
+
+```python
+from mellea.backends.huggingface import LocalHFBackend
+from mellea.backends.openai import OpenAIBackend
+from mellea.formatters import TemplateFormatter
+
+MODEL = "ibm-granite/granite-switch-4.1-8b"
+
+# Served via vLLM or llama-server:
+backend = OpenAIBackend(
+    model_id=MODEL,
+    formatter=TemplateFormatter(model_id=MODEL),
+    base_url="http://localhost:8000/v1",
+    api_key="EMPTY",
+    load_embedded_adapters=True,
+)
+
+# Or locally, on CUDA or Apple MPS:
+backend = LocalHFBackend(model_id=MODEL, load_embedded_adapters=True)
+```
 
 Decisions also work against [llama.cpp](https://github.com/ggml-org/llama.cpp)'s
 `llama-server` and the HuggingFace backend (`LocalHFBackend` with
