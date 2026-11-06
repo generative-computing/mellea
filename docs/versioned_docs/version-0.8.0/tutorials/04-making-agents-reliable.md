@@ -66,9 +66,9 @@ result = m.instruct(
 )
 
 if result.tool_calls:
-    for name, tc in result.tool_calls.items():
+    for tc in result.tool_calls:
         output = tc.call_func()
-        m.ctx = m.ctx.add(ToolMessage("tool", str(output), output, name, tc.args, tc))
+        m.ctx = m.ctx.add(ToolMessage("tool", str(output), output, tc.name, tc.args, tc))
     print(str(m.instruct("Answer the original question using the tool results.", tool_calls=False)))
 else:
     print(str(result))
@@ -147,9 +147,9 @@ result = m.instruct(
 )
 
 if result.tool_calls:
-    for name, tc in result.tool_calls.items():
+    for tc in result.tool_calls:
         output = tc.call_func()
-        m.ctx = m.ctx.add(ToolMessage("tool", str(output), output, name, tc.args, tc))
+        m.ctx = m.ctx.add(ToolMessage("tool", str(output), output, tc.name, tc.args, tc))
     print(str(m.instruct(
         "Answer the original question using the tool results.",
         requirements=[
@@ -246,9 +246,9 @@ tool_result = m.instruct(
 )
 
 if tool_result.tool_calls:
-    for name, tc in tool_result.tool_calls.items():
+    for tc in result.tool_calls:
         output = tc.call_func()
-        m.ctx = m.ctx.add(ToolMessage("tool", str(output), output, name, tc.args, tc))
+        m.ctx = m.ctx.add(ToolMessage("tool", str(output), output, tc.name, tc.args, tc))
 
 # Step 2: synthesize with requirements and a retry budget, capturing all attempts.
 sampling = m.instruct(
@@ -342,9 +342,9 @@ tool_result = m.instruct(
 )
 
 if tool_result.tool_calls:
-    for name, tc in tool_result.tool_calls.items():
+    for tc in result.tool_calls:
         output = tc.call_func()
-        m.ctx = m.ctx.add(ToolMessage("tool", str(output), output, name, tc.args, tc))
+        m.ctx = m.ctx.add(ToolMessage("tool", str(output), output, tc.name, tc.args, tc))
 
 response = m.instruct(
     "Answer the original question using the tool results.",
@@ -449,9 +449,9 @@ result = m.instruct(
 )
 
 if result.tool_calls:
-    for name, tc in result.tool_calls.items():
+    for tc in result.tool_calls:
         output = tc.call_func()
-        m.ctx = m.ctx.add(ToolMessage("tool", str(output), output, name, tc.args, tc))
+        m.ctx = m.ctx.add(ToolMessage("tool", str(output), output, tc.name, tc.args, tc))
     response = m.instruct("Answer the original question using the tool results.", tool_calls=False)
 else:
     response = result
@@ -538,9 +538,9 @@ result = m.instruct(
 )
 
 if result.tool_calls:
-    for name, tc in result.tool_calls.items():
+    for tc in result.tool_calls:
         output = tc.call_func()
-        m.ctx = m.ctx.add(ToolMessage("tool", str(output), output, name, tc.args, tc))
+        m.ctx = m.ctx.add(ToolMessage("tool", str(output), output, tc.name, tc.args, tc))
     response = m.instruct(
         "Answer the original question using the tool results.",
         grounding_context={"docs": RETRIEVED_CONTEXT},
