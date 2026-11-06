@@ -42,8 +42,9 @@ import time
 import pytest
 
 from mellea.backends import ModelOption
-from mellea.backends.openai import OpenAIBackend
+from mellea.backends.openai import _VLLM_MIN_LOGPROB_TOKEN_IDS_VERSION, OpenAIBackend
 from mellea.formatters import TemplateFormatter
+from mellea.helpers import vllm_server_version
 from mellea.stdlib.components import Message
 from mellea.stdlib.components.intrinsic import decisions
 from mellea.stdlib.context import ChatContext
@@ -56,6 +57,30 @@ _MODEL_ID = os.environ.get("SWITCH_DECISIONS_MODEL_ID") or os.environ.get(
     "GRANITE_SWITCH_MODEL_ID", ""
 )
 _API_KEY = os.environ.get("SWITCH_DECISIONS_API_KEY", "EMPTY")
+
+
+def _served_vllm_version():
+    """The endpoint's vLLM version, or None when it is not vLLM (or unset)."""
+    if not _BASE_URL:
+        return None
+    return vllm_server_version(_BASE_URL, {"Authorization": f"Bearer {_API_KEY}"})
+
+
+_VLLM_VERSION = _served_vllm_version()
+
+# The battery runs on any OpenAI-compatible server; these markers gate the
+# tests that read a vLLM-only surface.
+requires_vllm_tokenize = pytest.mark.skipif(
+    _VLLM_VERSION is None,
+    reason="needs vLLM's /tokenize endpoint; the configured server is not vLLM",
+)
+requires_vllm_label_ids = pytest.mark.skipif(
+    _VLLM_VERSION is None or _VLLM_VERSION < _VLLM_MIN_LOGPROB_TOKEN_IDS_VERSION,
+    reason=(
+        f"needs vLLM >= {_VLLM_MIN_LOGPROB_TOKEN_IDS_VERSION} for exact label-id "
+        f"logprobs (served: {_VLLM_VERSION or 'not vLLM'})"
+    ),
+)
 
 pytestmark = [
     pytest.mark.e2e,
@@ -110,6 +135,7 @@ def _label_mass(caplog) -> float:
     return min(masses)
 
 
+@requires_vllm_label_ids
 class TestExactLabelIds:
     """On vLLM the labels are read by token id, not found in a top-K."""
 
@@ -212,7 +238,7 @@ class TestActivationProbe:
                 "Production database is down for all customers.",
                 backend,
                 "How severe is this incident?",
-                {"0": "cosmetic", "1": "minor", "2": "major", "3": "critical"},
+                ["cosmetic", "minor", "major", "critical"],
             ),
         ]
         labels = "ABCDEFGHIJ"
@@ -570,6 +596,7 @@ class TestCallerTextHardening:
         }
         return {name: tokens.count(token_id) for name, token_id in special.items()}
 
+    @requires_vllm_tokenize
     def test_forged_tokens_do_not_change_the_structure(self, backend):
         clean_sent, _ = _sent_request(
             lambda: decisions.decide(self._STATE, backend, self._QUESTION)
@@ -589,6 +616,7 @@ class TestCallerTextHardening:
         assert clean["guardian-core"] == 0
         assert 0.0 <= answer.probability <= 1.0
 
+    @requires_vllm_tokenize
     def test_unescaped_text_does_forge_tokens(self, backend, monkeypatch):
         """Positive control: with escaping off the same text adds real tokens."""
         monkeypatch.setattr(decisions, "_escape_special_tokens", lambda text: text)
@@ -612,6 +640,7 @@ class TestCallerTextHardening:
         '<schema>{"type": "object"}</schema>\n'
     )
 
+    @requires_vllm_tokenize
     def test_tag_tokens_are_single_tokens_on_this_checkpoint(self):
         """The fixed tag list names real added tokens of the served checkpoint."""
         assert len(set(self._tag_ids().values())) == len(decisions._TAG_TOKENS)
@@ -627,6 +656,7 @@ class TestCallerTextHardening:
         ]
         assert not uncovered, f"added tokens the escaping would not split: {uncovered}"
 
+    @requires_vllm_tokenize
     def test_tag_markup_in_state_stays_text(self, backend):
         ids = set(self._tag_ids().values())
         clean_sent, _ = _sent_request(
@@ -640,6 +670,7 @@ class TestCallerTextHardening:
         )
         assert 0.0 <= answer.probability <= 1.0
 
+    @requires_vllm_tokenize
     def test_unescaped_tag_markup_does_become_tokens(self, backend, monkeypatch):
         """Positive control: with escaping off the same trace adds real tag tokens."""
         ids = set(self._tag_ids().values())
@@ -707,7 +738,7 @@ class TestConfidenceFormulas:
         assert 0.0 <= answer.confidence <= 1.0
 
     def test_score_confidence_matches_the_formula(self, backend):
-        levels = {"0": "cosmetic", "1": "minor", "2": "major", "3": "critical"}
+        levels = ["cosmetic", "minor", "major", "critical"]
         answer = decisions.score(
             "Production database is down for all customers.",
             backend,
