@@ -240,6 +240,12 @@ class TestActivationProbe:
                 "How severe is this incident?",
                 ["cosmetic", "minor", "major", "critical"],
             ),
+            lambda: decisions.choose(
+                "I was charged twice and cannot log in.",
+                backend,
+                "Which team handles this?",
+                _REFERENCE_OPTIONS,
+            ),
         ]
         labels = "ABCDEFGHIJ"
 
