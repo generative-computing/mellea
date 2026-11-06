@@ -113,5 +113,8 @@ then register it on a `LocalHFBackend` with `backend.add_adapter()`. The code is
 [LoRA and aLoRA adapters](../../docs/advanced/lora-and-alora-adapters.md), and
 `stembolts_intrinsic.py` is the helper module `102_example.py` imports to load the
 `stembolts` adapter; replace its `repo_id` (`nfulton/stembolts`) with `$HF_USERNAME/stembolts` to use your
-own upload. A custom, non-catalog adapter has no catalog entry to resolve `revision`
+own upload. Note that `102_example.py` runs the adapter on
+`ibm-granite/granite-3.3-2b-instruct`, so you also need the upload from the 3.3-2b
+training block above (or change the `model_id` in `102_example.py` to match the base
+model you uploaded). A custom, non-catalog adapter has no catalog entry to resolve `revision`
 from, so pin it explicitly (`revision="main"`).

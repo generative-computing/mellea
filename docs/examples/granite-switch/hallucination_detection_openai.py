@@ -42,7 +42,7 @@ assert SWITCH_MODEL_ID is not None
 backend = OpenAIBackend(
     model_id=SWITCH_MODEL_ID,
     formatter=TemplateFormatter(model_id=SWITCH_MODEL_ID),
-    base_url="http://localhost:8000/v1",
+    base_url=f"{VLLM_BASE_URL}/v1",
     api_key="EMPTY",
     load_embedded_adapters=True,
 )
