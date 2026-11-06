@@ -557,7 +557,7 @@ doc = Document(text=RETRIEVED_CONTEXT, title="Mellea docs")
 check_ctx = ChatContext().add(Message("user", question))
 hallucination_result = rag.flag_hallucinated_content(output_text, [doc], check_ctx, guardian_backend)
 
-flagged = [s for s in hallucination_result if s.get("faithfulness") == "No"]
+flagged = [s for s in hallucination_result if s.get("faithfulness") in ("unfaithful", "partial")]
 if not flagged:
     print("Grounded response:", output_text)
 else:
