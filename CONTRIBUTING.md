@@ -14,7 +14,7 @@ Contribute to the Mellea core, standard library, or fix bugs. This includes:
 - Documentation and examples
 - Tests and CI/CD improvements
 
-**Process:** See the [Pull Request Process](#pull-request-process) section below for detailed steps.
+**Process:** See the [Issue Ownership Guidelines](#issue-ownership-guidelines) and the [Pull Request Process](#pull-request-process) sections for detailed development steps.
 
 ### 2. Applications & Libraries
 Build tools and applications using Mellea. These can be hosted in your own repository. For observability, use a `mellea-` prefix.
@@ -114,6 +114,16 @@ uv run pytest -m "not qualitative"
 | `cli/` | CLI commands (`m serve`, `m alora`, `m decompose`, `m eval`) |
 | `test/` | All tests (run from repo root) |
 | `docs/` | Documentation, examples, tutorials |
+
+## Issue Ownership Guidelines
+
+To ensure issues remain available to active contributors, assigned issues may be reassigned when no progress is being made. Maintainers may reassign inactive issues after a reasonable period of inactivity.
+
+When an issue is assigned:
+- You should provide a progress update within 7 days. A progress update may be a draft PR, a comment describing ongoing work, or an update about any blockers.
+- If a maintainer requests an update, please respond within 3 days. For high-priority issues (for example, P1 issues) or possible bot-based ownership, maintainers may request a faster response.
+- If there is no response to a maintainer's request, or no visible activity for 7 days, maintainers may remove the assignment and make the issue available to others.
+- If you need more time, simply leave a comment. Active communication is generally sufficient to retain an assignment.
 
 ## Coding Standards
 
