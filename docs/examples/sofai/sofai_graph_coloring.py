@@ -1,5 +1,4 @@
 # pytest: ollama, qualitative, e2e
-
 """SOFAI Sampling Strategy Example: Graph Coloring Problem.
 
 This example demonstrates the SOFAI (Slow and Fast AI)
@@ -16,6 +15,14 @@ optional judge_backend feature for LLM-as-Judge validation, you can:
 - Remove the validation_fn parameter from req()
 - Add judge_backend and feedback_strategy parameters to SOFAISamplingStrategy
 - feedback_strategy options: "simple", "first_error", "all_errors"
+
+Prerequisites:
+    ollama serve
+    ollama pull granite4.1:3b
+    ollama pull granite4:latest
+
+Usage:
+    uv run python docs/examples/sofai/sofai_graph_coloring.py
 """
 
 import json

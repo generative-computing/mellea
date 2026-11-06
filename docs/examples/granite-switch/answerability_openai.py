@@ -1,15 +1,20 @@
 # pytest: e2e, vllm, skip
+r"""Example: running the answerability adapter function via OpenAI backend with Granite Switch.
 
-"""Example: running the answerability adapter function via OpenAI backend with Granite Switch.
+Demonstrates `rag.check_answerability()` through `OpenAIBackend` with
+`load_embedded_adapters=True` — the simplest way to use adapter functions with
+Granite Switch. The check runs twice: once with a document that contains the
+answer and once with a document that does not. The script exits with status 1 and a
+"Skipped" message if the vLLM server is not reachable (set `VLLM_SWITCH_TEST_BASE_URL`
+to override the default `http://localhost:8000`).
 
-Requires a vLLM server hosting a Granite Switch model.
-
-To start the server:
+Prerequisites:
+    uv sync --extra switch   # downloads the embedded adapter metadata
     python -m vllm.entrypoints.openai.api_server \
         --model <granite-switch-model-id> \
         --dtype bfloat16 --enable-prefix-caching
 
-To run this script from the root of the Mellea source tree:
+Usage:
     uv run python docs/examples/granite-switch/answerability_openai.py
 """
 
@@ -39,7 +44,7 @@ assert SWITCH_MODEL_ID is not None
 backend = OpenAIBackend(
     model_id=SWITCH_MODEL_ID,
     formatter=TemplateFormatter(model_id=SWITCH_MODEL_ID),
-    base_url="http://localhost:8000/v1",
+    base_url=f"{VLLM_BASE_URL}/v1",
     api_key="EMPTY",
     load_embedded_adapters=True,
 )
