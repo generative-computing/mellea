@@ -2,6 +2,10 @@
 
 """Example usage of the decision adapter functions: decide, choose, and score.
 
+Experimental: provided purely as an example. Discussion of the appropriate
+decision APIs is ongoing, and this API may change or be removed at any time
+without a deprecation period.
+
 Decisions answer a fixed-answer question about some state with a typed
 answer — a probability, a choice key, or a score — read from the model's
 first generated token. One forward pass per decision.

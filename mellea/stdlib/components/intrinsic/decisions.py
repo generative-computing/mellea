@@ -3,6 +3,10 @@
 
 """One-token decision helpers: `decide`, `choose`, and `score`.
 
+Experimental: provided purely as an example. Discussion of the appropriate
+decision APIs is ongoing, and this API may change or be removed at any time
+without a deprecation period.
+
 Ask a model a fixed-answer question about some state (a string, a dict or
 list rendered as JSON, or a `ChatContext` for conversational state) and get
 back a probability, a choice, or a score; never a sentence to parse. The

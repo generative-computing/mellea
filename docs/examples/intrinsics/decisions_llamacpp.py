@@ -2,6 +2,10 @@
 
 """Example: one-token decisions against a llama.cpp server.
 
+Experimental: provided purely as an example. Discussion of the appropriate
+decision APIs is ongoing, and this API may change or be removed at any time
+without a deprecation period.
+
 Decisions answer a fixed-answer question about some state with a typed
 answer (probability, choice, or score) read from the model's first
 generated token. This example shows how to serve a Granite Switch

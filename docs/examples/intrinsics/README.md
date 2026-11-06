@@ -172,6 +172,9 @@ Full example showing multiple adapter functions working together in a RAG pipeli
 
 ## Decisions
 
+**Experimental**, provided purely as an example: the decision API may change
+or be removed at any time.
+
 Typed one-token answers (probability, choice, score) from the decision
 adapter function on Granite Switch checkpoints:
 

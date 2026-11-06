@@ -3,6 +3,10 @@ title: "Tutorial: One-Token Decisions"
 description: "Route support tickets with decide, choose, and score. Each answer costs one forward pass."
 ---
 
+> **Experimental:** the decision API (`decide`, `choose`, `score`) is provided
+> purely as an example. Discussion of the appropriate decision APIs is ongoing,
+> and this API may change or be removed at any time without a deprecation period.
+
 **Prerequisites:** a Granite Switch model with the decision adapter,
 served via vLLM on `localhost:8000` (see the
 [adapter-functions page](../advanced/intrinsics.md#decisions-typed-one-token-answers)

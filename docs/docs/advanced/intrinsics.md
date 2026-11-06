@@ -176,6 +176,10 @@ backend = OpenAIBackend(
 
 ## Decisions: typed one-token answers
 
+> **Experimental:** the decision API (`decide`, `choose`, `score`) is provided
+> purely as an example. Discussion of the appropriate decision APIs is ongoing,
+> and this API may change or be removed at any time without a deprecation period.
+
 Some Granite Switch checkpoints embed a **decision** adapter function (named
 `decision`). It answers a fixed-answer question about some state
 with a probability, a choice, or a score — read from the model's first
