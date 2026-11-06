@@ -16,6 +16,7 @@ import asyncio
 import base64
 import json
 import logging
+import math
 import pathlib
 from copy import deepcopy
 from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
@@ -36,6 +37,7 @@ from mellea.backends.openai import OpenAIBackend
 from mellea.core import ModelOutputThunk, Requirement
 from mellea.stdlib import functional as mfuncs
 from mellea.stdlib.components import Intrinsic, Message
+from mellea.stdlib.components.intrinsic._util import call_intrinsic
 from mellea.stdlib.context import ChatContext, SimpleContext
 from mellea.stdlib.requirements import ALoraRequirement
 
@@ -1359,3 +1361,87 @@ def test_label_ids_fall_back_when_a_label_is_not_one_token():
         ),
     ):
         assert backend._vllm_label_token_ids(["AB"]) is None
+
+
+# ---------------------------------------------------------------------------
+# Probe slots
+# ---------------------------------------------------------------------------
+
+_PROBE_CONFIG = {
+    "model": None,
+    "response_format": None,
+    "transformations": [{"type": "first_token", "labels": ["no", "yes"]}],
+    "instruction": None,
+    "parameters": {"temperature": 0.0, "max_completion_tokens": 1},
+    "sentence_boundaries": None,
+}
+
+
+def _probe_chat_completion() -> ChatCompletion:
+    return ChatCompletion(
+        id="test-probe",
+        created=0,
+        model="granite-switch",
+        object="chat.completion",
+        choices=[
+            Choice(
+                index=0,
+                finish_reason="length",
+                message=ChatCompletionMessage(role="assistant", content="yes"),
+                logprobs=ChoiceLogprobs(
+                    content=[
+                        ChatCompletionTokenLogprob(
+                            token="yes",
+                            logprob=math.log(0.985),
+                            bytes=None,
+                            top_logprobs=[
+                                TopLogprob(token="yes", logprob=math.log(0.985)),
+                                TopLogprob(token="no", logprob=math.log(0.015)),
+                            ],
+                        )
+                    ]
+                ),
+            )
+        ],
+        usage=CompletionUsage(prompt_tokens=10, completion_tokens=1, total_tokens=11),
+    )
+
+
+async def test_probe_slot_is_called_and_read_through_call_intrinsic():
+    """A probe slot is activated by adapter_name and returns label logprobs."""
+    backend = OpenAIBackend(
+        model_id="granite-switch",
+        api_key="fake-key",
+        base_url="http://localhost:9999/v1",
+    )
+    backend.add_adapter(
+        EmbeddedIntrinsicAdapter(
+            intrinsic_name="answerability_probe",
+            config=_PROBE_CONFIG,
+            technology="probe",
+        )
+    )
+    mock_create = AsyncMock(return_value=_probe_chat_completion())
+    mock_client = MagicMock()
+    mock_client.chat.completions.create = mock_create
+    with (
+        patch.object(
+            OpenAIBackend,
+            "_async_client",
+            new_callable=PropertyMock,
+            return_value=mock_client,
+        ),
+        patch.object(OpenAIBackend, "_vllm_label_token_ids", return_value=None),
+    ):
+        result = await asyncio.to_thread(
+            call_intrinsic, "answerability_probe", _make_context(), backend
+        )
+    kwargs = mock_create.call_args.kwargs
+    assert kwargs["extra_body"]["chat_template_kwargs"]["adapter_name"] == (
+        "answerability_probe"
+    )
+    assert "response_format" not in kwargs or kwargs["response_format"] is None
+    assert result["token"] == "yes"
+    assert result["labels"] == ["no", "yes"]
+    probs = {k: math.exp(v) for k, v in result["label_logprobs"].items()}
+    assert probs == pytest.approx({"yes": 0.985, "no": 0.015})
