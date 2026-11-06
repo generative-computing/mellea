@@ -7,7 +7,11 @@ from unittest.mock import MagicMock, patch
 import pytest
 import requests
 
-from mellea.helpers import is_vllm_server_with_structured_output
+from mellea.helpers import (
+    is_vllm_server_with_structured_output,
+    vllm_server_version,
+    vllm_tokenize_single_tokens,
+)
 from mellea.helpers.server_type import _server_type, _ServerType
 
 # --- _server_type ---
@@ -231,3 +235,76 @@ if __name__ == "__main__":
     import pytest
 
     pytest.main([__file__])
+
+
+# --- vllm_server_version ---
+
+
+@patch("mellea.helpers.server_type.requests.get")
+def test_vllm_server_version_parses(mock_get):
+    mock_get.return_value = _mock_version_response("0.30.0")
+    assert str(vllm_server_version(BASE_URL, HEADERS)) == "0.30.0"
+
+
+@patch("mellea.helpers.server_type.requests.get")
+def test_vllm_server_version_none_when_not_ok(mock_get):
+    mock_get.return_value = _mock_version_response("0.30.0", status_code=404)
+    assert vllm_server_version(BASE_URL, HEADERS) is None
+
+
+@patch("mellea.helpers.server_type.requests.get", side_effect=OSError("down"))
+def test_vllm_server_version_none_on_error(mock_get):
+    assert vllm_server_version(BASE_URL, HEADERS) is None
+
+
+@patch("mellea.helpers.server_type.requests.get")
+def test_vllm_server_version_refuses_link_local(mock_get):
+    assert vllm_server_version("http://169.254.169.254/v1", HEADERS) is None
+    mock_get.assert_not_called()
+
+
+# --- vllm_tokenize_single_tokens ---
+
+
+def _tokenize_response(tokens, status_code=200):
+    mock_resp = MagicMock(spec=requests.Response)
+    mock_resp.ok = 200 <= status_code < 400
+    mock_resp.status_code = status_code
+    mock_resp.json.return_value = {"tokens": tokens}
+    return mock_resp
+
+
+@patch("mellea.helpers.server_type.requests.post")
+def test_tokenize_single_tokens_returns_ids_in_order(mock_post):
+    mock_post.side_effect = [_tokenize_response([32]), _tokenize_response([33])]
+    ids = vllm_tokenize_single_tokens(BASE_URL, HEADERS, "m", ["A", "B"])
+    assert ids == [32, 33]
+    first = mock_post.call_args_list[0]
+    assert first.args[0] == "http://localhost:8000/tokenize"
+    assert first.kwargs["json"] == {
+        "model": "m",
+        "prompt": "A",
+        "add_special_tokens": False,
+    }
+    assert first.kwargs["allow_redirects"] is False
+
+
+@patch("mellea.helpers.server_type.requests.post")
+def test_tokenize_rejects_multi_token_label(mock_post):
+    mock_post.return_value = _tokenize_response([1905, 7])
+    with pytest.raises(ValueError, match="single-token"):
+        vllm_tokenize_single_tokens(BASE_URL, HEADERS, "m", ["AB"])
+
+
+@patch("mellea.helpers.server_type.requests.post")
+def test_tokenize_raises_on_server_error(mock_post):
+    mock_post.return_value = _tokenize_response([], status_code=404)
+    with pytest.raises(ValueError, match="404"):
+        vllm_tokenize_single_tokens(BASE_URL, HEADERS, "m", ["A"])
+
+
+@patch("mellea.helpers.server_type.requests.post")
+def test_tokenize_refuses_link_local(mock_post):
+    with pytest.raises(ValueError, match="link-local"):
+        vllm_tokenize_single_tokens("http://169.254.169.254/v1", HEADERS, "m", ["A"])
+    mock_post.assert_not_called()

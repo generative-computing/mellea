@@ -12,6 +12,13 @@ these embedded adapters are activated via control tokens injected by the model's
 chat template. Only the I/O transformation configs are downloaded — no adapter
 weights are transferred.
 
+Each checkpoint embeds its own set of adapter functions, so check the model
+card on Hugging Face. These examples use `granite-switch-4.1-3b-preview`, which
+embeds the RAG and core adapter functions. The released `granite-switch-4.1-8b`
+and `-30b` embed `decision` and `guardian-core` instead (see
+`docs/examples/intrinsics/decisions.py`). See "Choosing a model" in the
+adapter-functions docs for the full list.
+
 ## Prerequisites
 
 ### Local Hugging Face inference

@@ -12,10 +12,19 @@ YAML_OPTIONAL_FIELDS = [
     "instruction",
     "name",
     "parameters",
+    "provenance",
     "sentence_boundaries",
+    "state_template",
+    "system_prompt",
+    "invocation_text",
 ]
 """Fields that may be present in every intrinsic's YAML configuration file. If
-not present, the parsed config dictionary will contain a null value in their place."""
+not present, the parsed config dictionary will contain a null value in their place.
+
+`system_prompt`, `state_template`, and `invocation_text` carry the trained
+prompt layout of one-token decision capabilities (see the `first_token`
+transformation rule in `output.py`). `provenance` is free-form metadata about
+where a configuration came from; it is never sent to the model."""
 
 YAML_JSON_FIELDS = ["response_format"]
 """Fields of the YAML file that contain JSON values as strings"""
@@ -54,3 +63,10 @@ that model."""
 
 TOP_LOGPROBS = 10
 """Number of logprobs we request per token when decoding logprobs."""
+
+TOP_LOGPROBS_MAX = 20
+"""Upper bound on `top_logprobs` for one-token decision readouts.
+
+The `first_token` rule sizes `top_logprobs` to its configured label pool,
+capped at this value; a deployment must allow at least this many
+(vLLM `--max-logprobs`, default 20)."""
