@@ -368,13 +368,16 @@ class TemplateFormatter(ChatFormatter):
                         )
 
             # Only traverse file paths that are in the model id or are prompts/default.
-            for dir in dirs:
-                if dir.lower() == "prompts" or dir.lower() == "default":
-                    continue
-
+            # Prune in place via slice assignment: `os.walk` reads this same list, and
+            # removing items while iterating over it skips the entry after each removal,
+            # which let a non-matching sibling family directory survive and be walked.
+            dirs[:] = [
+                dir
+                for dir in dirs
+                if dir.lower() in ("prompts", "default")
                 # Simplify the directory as well for matching names.
-                if _simplify_model_string(dir.lower()) not in simplified_model_id:
-                    dirs.remove(dir)
+                or _simplify_model_string(dir.lower()) in simplified_model_id
+            ]
 
         return candidate_template
 
