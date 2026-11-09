@@ -26,10 +26,12 @@ capability stays available — see [Prompt fallback](#prompt-fallback).
 >   `load_embedded_adapters=True`; install `mellea[hf]` first. Only
 >   adapter functions embedded in the checkpoint are then available. Requires a
 >   GPU or Apple Silicon Mac.
-> - **OpenAIBackend** — uses a Granite Switch model served via vLLM with
->   `load_embedded_adapters=True`. Only adapter functions embedded in the model are
->   available — check the model's `adapter_index.json` for the list.
->   See `docs/docs/examples/granite-switch/README.md`
+> - **OpenAIBackend** — uses a Granite Switch model served via vLLM or
+>   llama-server with `load_embedded_adapters=True`. Only adapter functions
+>   embedded in the model are available — check the model's
+>   `adapter_index.json` for the list. See
+>   [Granite Switch on llama-server](#granite-switch-on-llama-server) and the
+>   [Granite Switch examples](../../examples/granite-switch/README.md).
 > - **OllamaModelBackend** — uses an Ollama model that bundles the adapter.
 >   Ollama bundles one adapter per model, so pass
 >   `adapter_models={"uncertainty": "<tag>", ...}` to route each adapter function
@@ -157,6 +159,51 @@ single-model serving is important.
 See `docs/examples/intrinsics/uncertainty_ollama.py` for the complete
 executable example.
 
+## Granite Switch on llama-server
+
+`OpenAIBackend` also serves Granite Switch checkpoints from
+[llama-server](https://github.com/ggml-org/llama.cpp) (v0.1.0 or newer, which
+carries the granite-switch architecture; tested on v0.6.0 and v0.9.0), so the
+adapter functions run on a Mac or any machine without a GPU. Adapter
+activation, document-based adapter functions and each adapter's constrained
+decoding work as they do under vLLM.
+
+IBM publishes no Switch GGUF, so `scripts/start_llamacpp_switch.sh` converts a
+checkpoint and serves it on `http://127.0.0.1:8081` (the base-Granite server
+keeps 8080). It needs `llama-server` on `PATH` (`brew install llama.cpp` on
+macOS), plus `git`, `curl` and `uv`; the converter runs from its own pinned
+llama.cpp checkout, whatever llama-server version you have. Pick the checkpoint
+by the adapter functions you need (see [Choosing a model](#choosing-a-model)):
+
+```bash
+# RAG, core and guardian adapter functions: the default 3b preview
+# (~7 GB download, ~9 GB GGUF)
+./scripts/start_llamacpp_switch.sh
+
+# Decisions: the released 8b (~16 GB download, ~16 GB GGUF)
+LLAMACPP_SWITCH_MODEL=ibm-granite/granite-switch-4.1-8b ./scripts/start_llamacpp_switch.sh
+```
+
+Both use port 8081, so run one at a time or set `LLAMACPP_SWITCH_PORT` on the
+second. Then point the backend at it; llama-server ignores the API key, but the
+OpenAI client needs one:
+
+```python
+backend = OpenAIBackend(
+    model_id=MODEL,  # the checkpoint the server converted
+    formatter=TemplateFormatter(model_id=MODEL),
+    base_url="http://127.0.0.1:8081/v1",
+    api_key="llamacpp",
+    load_embedded_adapters=True,
+)
+```
+
+Runnable examples, which skip with the start command when the right server is
+not up:
+[`answerability_llamacpp.py`](../../examples/granite-switch/answerability_llamacpp.py)
+(3b preview) and
+[`decisions_llamacpp.py`](../../examples/intrinsics/decisions_llamacpp.py) (8b).
+
 ## Use a local Granite Switch checkpoint
 
 Granite Switch checkpoints contain their adapter functions already. Pass the
@@ -248,7 +295,7 @@ from mellea.formatters import TemplateFormatter
 
 MODEL = "ibm-granite/granite-switch-4.1-8b"
 
-# Served via vLLM or llama-server:
+# Served via vLLM (or llama-server, on http://127.0.0.1:8081/v1):
 backend = OpenAIBackend(
     model_id=MODEL,
     formatter=TemplateFormatter(model_id=MODEL),
@@ -724,19 +771,6 @@ Discovering *multiple* embedded adapters from a Granite Switch checkpoint or
 Hub repo (rather than one already-known name) still goes through
 `register_embedded_adapter_model`, which builds the composed `Adapter`
 instances for you.
-
-### Granite Switch on llama-server
-
-`OpenAIBackend` also serves Granite Switch checkpoints from
-[llama-server](https://github.com/ggml-org/llama.cpp) (v0.1.0 or newer, which
-carries the granite-switch architecture; tested on v0.6.0): start it with
-`--jinja`, point `base_url` at it, and adapter activation works the same way
-as under vLLM, including the document-based adapter functions and the
-constrained decoding each adapter's `io.yaml` asks for.
-`scripts/start_llamacpp_switch.sh` converts a Switch checkpoint to GGUF and
-serves it locally on port 8081 (the base-Granite server keeps 8080, so both can
-run side by side); `docs/examples/granite-switch/answerability_llamacpp.py` is
-a runnable example that skips with a reason when no such server is reachable.
 
 ---
 

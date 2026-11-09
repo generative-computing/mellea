@@ -27,7 +27,7 @@ see [`granite-switch/`](../granite-switch/README.md). To train your own adapter,
 | [`policy_guardrails.py`](./policy_guardrails.py) | Demonstrates checking compliance with policies. |
 | [`intrinsics.py`](./intrinsics.py) | Direct use of an adapter function via a composed `Adapter`, `Intrinsic`, and `mfuncs.act()`, underneath the helper functions above. |
 | [`decisions.py`](./decisions.py) | **Experimental**: Typed one-token answers (probability, choice, score) from the `decision` adapter function on a Granite Switch checkpoint served via vLLM. See [Decisions](../../docs/advanced/intrinsics.md#decisions-typed-one-token-answers). |
-  | [`decisions_llamacpp.py`](./decisions_llamacpp.py) | **Experimental**: The same decisions, against a Granite Switch checkpoint served via llama.cpp. |
+| [`decisions_llamacpp.py`](./decisions_llamacpp.py) | **Experimental**: The same decisions, against `granite-switch-4.1-8b` served by llama-server (see [Granite Switch on llama-server](../../docs/advanced/intrinsics.md#granite-switch-on-llama-server)). |
 
 ## Architecture
 

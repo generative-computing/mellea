@@ -30,27 +30,18 @@ pre-built by IBM, Mellea includes a list of models in `model_id`.
 
 ## Running on llama.cpp
 
-`answerability_llamacpp.py` needs a local [llama.cpp](https://github.com/ggml-org/llama.cpp)
-server (v0.1.0 or newer, which carries the granite-switch architecture; tested
-on v0.6.0). Start one with:
+`answerability_llamacpp.py` needs llama-server (`brew install llama.cpp` on
+macOS) serving the 3b preview, which `scripts/start_llamacpp_switch.sh` converts
+and serves on `http://127.0.0.1:8081`:
 
 ```bash
-./scripts/start_llamacpp_switch.sh
+./scripts/start_llamacpp_switch.sh   # first run: ~7 GB download, ~9 GB GGUF
+uv run python docs/examples/granite-switch/answerability_llamacpp.py
 ```
 
-The first run downloads the checkpoint from the Hugging Face Hub (~7 GB for the
-3b) and converts it to GGUF (~9 GB more; both cached under
-`~/.cache/mellea/llamacpp-switch-build`). Later runs reuse the cache and start
-in seconds. The server listens on `http://127.0.0.1:8081`, deliberately not the
-base-Granite server's 8080
-([`scripts/start_llamacpp.sh`](../../../scripts/start_llamacpp.sh)), so both can
-run side by side; `LLAMACPP_SWITCH_PORT` changes it.
-
-The example runs whenever that server is reachable (`LLAMACPP_SWITCH_BASE_URL`,
-default `http://127.0.0.1:8081/v1`) and serves the Switch model, and skips with
-an actionable reason otherwise. It never downloads model weights; its first run
-does fetch the small adapter configuration files (`adapter_index.json` and the
-`io_configs/`) from the Hub, which are cached.
+The example skips with the start command when that server is not up. For
+decisions, which need the 8b instead, and for connecting your own code, see
+[Granite Switch on llama-server](../../docs/advanced/intrinsics.md#granite-switch-on-llama-server).
 
 ## Architecture
 
