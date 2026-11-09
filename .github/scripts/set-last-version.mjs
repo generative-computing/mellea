@@ -13,15 +13,12 @@ const configPath = 'docs/docusaurus.config.ts';
 let src = readFileSync(configPath, 'utf8');
 
 // Update lastVersion to the new release tag
-const updated = src.replace(
-  /lastVersion:\s*'[^']*',/,
-  `lastVersion: '${version}',`,
-);
-if (updated === src) {
+const lastVersionPattern = /lastVersion:\s*'[^']*',/;
+if (!lastVersionPattern.test(src)) {
   console.error(`error: lastVersion line not found in ${configPath}`);
   process.exit(1);
 }
-src = updated;
+src = src.replace(lastVersionPattern, `lastVersion: '${version}',`);
 
 writeFileSync(configPath, src);
 console.log(`Set lastVersion to '${version}' in ${configPath}`);
