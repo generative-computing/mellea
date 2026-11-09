@@ -29,7 +29,8 @@
 #   Linux:  https://github.com/ggml-org/llama.cpp/releases (or build from source)
 #
 # The first run downloads the checkpoint (~7 GB for the 3b preview, ~16 GB
-# for the 8b) and the pinned llama.cpp sources, and builds a converter venv under
+# for the 8b) and the pinned llama.cpp sources, and builds a converter venv
+# (CPU torch included, about 0.6 GB) under
 # ${XDG_CACHE_HOME:-~/.cache}/mellea/llamacpp-switch-build. Later runs reuse
 # everything and start in seconds.
 
@@ -55,6 +56,8 @@ LLAMACPP_SWITCH_HOST="${LLAMACPP_SWITCH_HOST:-127.0.0.1}"
 LLAMACPP_SWITCH_QUANT="${LLAMACPP_SWITCH_QUANT:-f16}"
 LLAMACPP_SWITCH_CTX_SIZE="${LLAMACPP_SWITCH_CTX_SIZE:-32768}"
 LLAMACPP_SWITCH_READY_TIMEOUT="${LLAMACPP_SWITCH_READY_TIMEOUT:-600}"
+[[ "$LLAMACPP_SWITCH_READY_TIMEOUT" =~ ^[0-9]+$ ]] \
+    || die "LLAMACPP_SWITCH_READY_TIMEOUT must be a whole number of seconds."
 LLAMACPP_BIN="${LLAMACPP_BIN:-$(command -v llama-server 2>/dev/null || true)}"
 
 # Pinned llama.cpp revision used only for convert_hf_to_gguf.py. This is build
@@ -133,7 +136,8 @@ if [[ ! -f "$GGUF" ]]; then
     fi
     # Idempotent: a no-op when the remote is already configured, which also
     # covers a checkout left behind by an interrupted earlier run.
-    git -C "$LLAMA_CPP_DIR" remote add origin https://github.com/ggml-org/llama.cpp.git 2>/dev/null || true
+    git -C "$LLAMA_CPP_DIR" remote get-url origin >/dev/null 2>&1 \
+        || git -C "$LLAMA_CPP_DIR" remote add origin https://github.com/ggml-org/llama.cpp.git
     git -C "$LLAMA_CPP_DIR" fetch --quiet --depth 1 origin "$LLAMA_CPP_REVISION"
     git -C "$LLAMA_CPP_DIR" checkout --quiet --detach "$LLAMA_CPP_REVISION"
 
@@ -176,7 +180,7 @@ if [[ ! -f "$GGUF" ]]; then
     # Run on the converter venv, not the caller's project environment: this
     # must not sync the user's mellea venv with every extra and group just to
     # download a checkpoint, and it keeps the script independent of cwd.
-    "$CONVERTER_VENV/bin/python" - "$LLAMACPP_SWITCH_MODEL" "$SHADOW_DIR" <<'PY'
+    "$CONVERTER_VENV/bin/python" -I - "$LLAMACPP_SWITCH_MODEL" "$SHADOW_DIR" <<'PY'
 import json
 import sys
 from pathlib import Path

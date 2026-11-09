@@ -224,6 +224,37 @@ def test_collection_capability_gates(monkeypatch):
 
 
 @pytest.mark.parametrize(
+    ("has_llamacpp", "has_llamacpp_switch", "skipped", "reason_fragment"),
+    [
+        (False, True, ["llamacpp"], "start_llamacpp.sh"),
+        (True, False, ["llamacpp_switch"], "start_llamacpp_switch.sh"),
+    ],
+)
+def test_llamacpp_gates_are_independent(
+    has_llamacpp, has_llamacpp_switch, skipped, reason_fragment, monkeypatch
+):
+    """Verify each llama.cpp marker gates only on its own server."""
+    monkeypatch.setattr(
+        example_conftest,
+        "get_system_capabilities",
+        lambda: {
+            "has_gpu": False,
+            "has_ollama": False,
+            "has_api_keys": {},
+            "has_llamacpp": has_llamacpp,
+            "has_llamacpp_switch": has_llamacpp_switch,
+        },
+    )
+    config = _Config()
+    available = ["llamacpp_switch"] if skipped == ["llamacpp"] else ["llamacpp"]
+
+    assert example_conftest._should_skip_collection(available, config) == (False, None)
+    should_skip, reason = example_conftest._should_skip_collection(skipped, config)
+    assert should_skip
+    assert reason_fragment in reason
+
+
+@pytest.mark.parametrize(
     ("option", "markers", "still_gated"),
     [
         (
