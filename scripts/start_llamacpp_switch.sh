@@ -10,7 +10,9 @@
 # Runs in the foreground; Ctrl-C shuts the server down.
 #
 # Why this exists alongside scripts/start_llamacpp.sh: the plain-Granite script
-# serves a prebuilt GGUF, but IBM publishes no Switch GGUF. llama.cpp's
+# serves a prebuilt GGUF, but IBM publishes no GGUF of the Switch previews
+# (the released 8b and 30b have ibm-granite/granite-switch-4.1-{8b,30b}-GGUF,
+# which llama-server can serve directly with -hf). llama.cpp's
 # converter handles GraniteSwitchForCausalLM directly (ggml-org/llama.cpp#25107;
 # see LLAMA_CPP_REVISION below for the revision current checkpoints need), so
 # this script converts from the HF checkpoint. The server is tested on v0.6.0.
@@ -18,7 +20,7 @@
 # Usage:
 #   ./scripts/start_llamacpp_switch.sh                      # 3b preview, port 8081
 #   LLAMACPP_SWITCH_MODEL=ibm-granite/granite-switch-4.1-8b \
-#     ./scripts/start_llamacpp_switch.sh                    # 8b (decision adapter)
+#     ./scripts/start_llamacpp_switch.sh                    # 8b, converted locally
 #   LLAMACPP_SWITCH_PORT=9090 ./scripts/start_llamacpp_switch.sh
 #   LLAMACPP_SWITCH_QUANT=q8_0 ./scripts/start_llamacpp_switch.sh   # untested
 #

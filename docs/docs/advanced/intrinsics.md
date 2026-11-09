@@ -168,21 +168,25 @@ adapter functions run on a Mac or any machine without a GPU. Adapter
 activation, document-based adapter functions and each adapter's constrained
 decoding work as they do under vLLM.
 
-IBM publishes no Switch GGUF, so `scripts/start_llamacpp_switch.sh` converts a
-checkpoint and serves it on `http://127.0.0.1:8081` (the base-Granite server
-keeps 8080). It needs `llama-server` on `PATH` (`brew install llama.cpp` on
-macOS), plus `git`, `curl` and `uv`; the converter runs from its own pinned
-llama.cpp checkout, whatever llama-server version you have. Pick the checkpoint
-by the adapter functions you need (see [Choosing a model](#choosing-a-model)):
+Both commands below serve on `http://127.0.0.1:8081` (the base-Granite server
+keeps 8080) and need `llama-server` on `PATH` (`brew install llama.cpp` on
+macOS). Pick the checkpoint by the adapter functions you need (see
+[Choosing a model](#choosing-a-model)):
 
 ```bash
-# RAG, core and guardian adapter functions: the default 3b preview
-# (~7 GB download, ~9 GB GGUF)
-./scripts/start_llamacpp_switch.sh
+# Decisions and guardian-core: IBM's published 8b GGUF (Q4_K_M, ~6.4 GB).
+# --alias makes the server report the name Mellea's examples look for.
+llama-server -hf ibm-granite/granite-switch-4.1-8b-GGUF:Q4_K_M \
+  --alias ibm-granite/granite-switch-4.1-8b --port 8081 --jinja
 
-# Decisions: the released 8b (~16 GB download, ~16 GB GGUF)
-LLAMACPP_SWITCH_MODEL=ibm-granite/granite-switch-4.1-8b ./scripts/start_llamacpp_switch.sh
+# RAG, core and guardian adapter functions: the 3b preview, which has no
+# published GGUF, so this script converts it (~7 GB download, ~9 GB GGUF)
+./scripts/start_llamacpp_switch.sh
 ```
+
+The script also needs `git`, `curl` and `uv`; its converter runs from its own
+pinned llama.cpp checkout, whatever llama-server version you have. IBM also
+publishes `granite-switch-4.1-30b-GGUF` in the same quantizations.
 
 Both use port 8081, so run one at a time or set `LLAMACPP_SWITCH_PORT` on the
 second. Then point the backend at it; llama-server ignores the API key, but the
@@ -190,7 +194,7 @@ OpenAI client needs one:
 
 ```python
 backend = OpenAIBackend(
-    model_id=MODEL,  # the checkpoint the server converted
+    model_id=MODEL,  # the checkpoint the server serves (its --alias)
     formatter=TemplateFormatter(model_id=MODEL),
     base_url="http://127.0.0.1:8081/v1",
     api_key="llamacpp",

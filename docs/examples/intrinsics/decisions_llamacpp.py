@@ -13,16 +13,16 @@ a Granite Switch checkpoint served by llama-server (llama.cpp v0.1.0 or
 newer). If you have a GPU, the vLLM path (`decisions.py`) is simpler.
 
 The `decision` adapter is embedded in the released `granite-switch-4.1-8b`
-and `-30b`, not the 3b preview the other llama.cpp example uses. Serve the
-8b with:
+and `-30b`, not the 3b preview the other llama.cpp example uses. Serve IBM's
+published 8b GGUF (Q4_K_M, ~6.4 GB, downloaded and cached on first run):
 
 ```bash
-LLAMACPP_SWITCH_MODEL=ibm-granite/granite-switch-4.1-8b \\
-  ./scripts/start_llamacpp_switch.sh
+llama-server -hf ibm-granite/granite-switch-4.1-8b-GGUF:Q4_K_M \\
+  --alias ibm-granite/granite-switch-4.1-8b --port 8081 --jinja
 ```
 
-The first run downloads the checkpoint (~16 GB) and converts it to an f16
-GGUF (~16 GB more). The server listens on `http://127.0.0.1:8081`; set
+`--alias` makes the server report the name this example checks for. The
+server listens on `http://127.0.0.1:8081`; set
 `LLAMACPP_SWITCH_BASE_URL` to point elsewhere. This example skips, naming
 what it found, when no server is reachable or the server is not serving the
 8b.
@@ -48,7 +48,9 @@ except (requests.RequestException, ValueError, KeyError, TypeError):
     # Detected by docs/examples/conftest.py subprocess runner as a skip.
     print(
         f"Skipped: no llama-server ready at {BASE_URL} "
-        "(start scripts/start_llamacpp_switch.sh, or set LLAMACPP_SWITCH_BASE_URL)",
+        "(start llama-server -hf ibm-granite/granite-switch-4.1-8b-GGUF:Q4_K_M "
+        "--alias ibm-granite/granite-switch-4.1-8b --port 8081 --jinja, "
+        "or set LLAMACPP_SWITCH_BASE_URL)",
         file=sys.stderr,
     )
     raise SystemExit(1)
@@ -65,13 +67,14 @@ if model_id not in served:
     print(
         f"Skipped: llama-server at {BASE_URL} is not serving {model_id} "
         f"(found: {', '.join(sorted(served)) or 'nothing'}); start it with "
-        f"LLAMACPP_SWITCH_MODEL={model_id} scripts/start_llamacpp_switch.sh",
+        f"llama-server -hf {model_id}-GGUF:Q4_K_M --alias {model_id} "
+        "--port 8081 --jinja",
         file=sys.stderr,
     )
     raise SystemExit(1)
 
 # The model_id is also used for client-side adapter discovery (io.yaml
-# download), so it must name the checkpoint the server converted.
+# download), so it must name the checkpoint the server serves.
 backend = OpenAIBackend(
     model_id=model_id,
     formatter=TemplateFormatter(model_id=model_id),
