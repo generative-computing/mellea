@@ -262,7 +262,8 @@ backend = LocalHFBackend(model_id=MODEL, load_embedded_adapters=True)
 ```
 
 Decisions also work against [llama.cpp](https://github.com/ggml-org/llama.cpp)'s
-`llama-server` and the HuggingFace backend (`LocalHFBackend` with
+`llama-server` (see [Granite Switch on llama-server](#granite-switch-on-llama-server))
+and the HuggingFace backend (`LocalHFBackend` with
 `granite-switch[hf]>=0.1.1`). Runnable examples:
 [`decisions.py`](../../examples/intrinsics/decisions.py) (vLLM) and
 [`decisions_llamacpp.py`](../../examples/intrinsics/decisions_llamacpp.py).
@@ -723,6 +724,8 @@ Discovering *multiple* embedded adapters from a Granite Switch checkpoint or
 Hub repo (rather than one already-known name) still goes through
 `register_embedded_adapter_model`, which builds the composed `Adapter`
 instances for you.
+
+### Granite Switch on llama-server
 
 `OpenAIBackend` also serves Granite Switch checkpoints from
 [llama-server](https://github.com/ggml-org/llama.cpp) (v0.1.0 or newer, which

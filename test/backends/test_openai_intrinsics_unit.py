@@ -1453,6 +1453,9 @@ async def test_decision_falls_back_to_top_k_without_label_ids():
     with patch.object(OpenAIBackend, "_vllm_label_token_ids", return_value=None):
         kwargs = await _run_decision_call(backend)
     assert "logprob_token_ids" not in kwargs["extra_body"]
+    # No schema, so no grammar constrains the one-token readout on any server.
+    assert "response_format" not in kwargs
+    assert "structured_outputs" not in kwargs["extra_body"]
     assert kwargs["logprobs"] is True
 
 

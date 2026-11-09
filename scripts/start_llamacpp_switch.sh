@@ -16,9 +16,9 @@
 # this script converts from the HF checkpoint. The server is tested on v0.6.0.
 #
 # Usage:
-#   ./scripts/start_llamacpp_switch.sh                      # 3b, port 8081
-#   LLAMACPP_SWITCH_MODEL=ibm-granite/granite-switch-4.1-8b-preview \
-#     ./scripts/start_llamacpp_switch.sh                    # 8b
+#   ./scripts/start_llamacpp_switch.sh                      # 3b preview, port 8081
+#   LLAMACPP_SWITCH_MODEL=ibm-granite/granite-switch-4.1-8b \
+#     ./scripts/start_llamacpp_switch.sh                    # 8b (decision adapter)
 #   LLAMACPP_SWITCH_PORT=9090 ./scripts/start_llamacpp_switch.sh
 #   LLAMACPP_SWITCH_QUANT=q8_0 ./scripts/start_llamacpp_switch.sh   # untested
 #
@@ -28,8 +28,8 @@
 #   macOS:  brew install llama.cpp
 #   Linux:  https://github.com/ggml-org/llama.cpp/releases (or build from source)
 #
-# The first run downloads the checkpoint (~7 GB for the 3b) and the pinned
-# llama.cpp sources, and builds a converter venv under
+# The first run downloads the checkpoint (~7 GB for the 3b preview, ~16 GB
+# for the 8b) and the pinned llama.cpp sources, and builds a converter venv under
 # ${XDG_CACHE_HOME:-~/.cache}/mellea/llamacpp-switch-build. Later runs reuse
 # everything and start in seconds.
 
