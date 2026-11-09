@@ -200,8 +200,8 @@ response, so `result.thinking` and `result.value` are populated separately —
 matching the other backends — rather than leaving the reasoning trace
 embedded raw in `result.value`. This split is skipped for streaming (`m serve`)
 calls, where the reasoning trace still arrives inline in `result.value`;
-incremental splitting for streaming is tracked separately in
-[#1604](https://github.com/generative-computing/mellea/issues/1604).
+incremental splitting for streaming is tracked in
+[#1799](https://github.com/generative-computing/mellea/issues/1799).
 
 ```python
 import mellea

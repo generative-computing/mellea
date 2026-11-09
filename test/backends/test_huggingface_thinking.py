@@ -15,7 +15,12 @@ torch = pytest.importorskip("torch", reason="torch not installed — install mel
 
 import mellea.backends.huggingface as hf_backend
 from mellea.backends import ModelOption
-from mellea.backends.huggingface import LocalHFBackend, _split_think_tags
+from mellea.backends.huggingface import (
+    LocalHFBackend,
+    _native_parse_thinking,
+    _prompt_opens_think,
+    _split_think_tags,
+)
 from mellea.core.base import CBlock, ModelOutputThunk
 from test.backends._granite_tokenizer import (
     _GRANITE_THINKING_MODEL_ID,
@@ -86,6 +91,59 @@ def test_split_think_tags_multiple_close_tags_uses_first() -> None:
     thinking, answer = _split_think_tags("<think>a</think>b</think>c")
     assert thinking == "a"
     assert answer == "b</think>c"
+
+
+def test_split_think_tags_truncated_reasoning_output_opens_think() -> None:
+    """No </think>, but the output itself starts with <think>: also truncated reasoning."""
+    thinking, answer = _split_think_tags("\n<think>\nstill working")
+    assert thinking == "still working"
+    assert answer == ""
+
+
+def test_split_think_tags_close_tag_wins_over_prompt_opens_think() -> None:
+    """A complete block still splits normally when the prompt opened it."""
+    thinking, answer = _split_think_tags(
+        "reasoning</think>answer", prompt_opens_think=True
+    )
+    assert thinking == "reasoning"
+    assert answer == "answer"
+
+
+@pytest.mark.parametrize(
+    ("tail", "expected"),
+    [
+        ("<|im_start|>assistant\n<think>\n", True),
+        ("<|im_start|>assistant\n<think>", True),
+        ("<|im_start|>assistant\n<think></think>", False),
+        ("<|im_start|>assistant\n", False),
+    ],
+)
+def test_prompt_opens_think(tail: str, expected: bool) -> None:
+    """Only a prompt ending in an unclosed <think> counts as opened."""
+
+    class _FakeTok:
+        def decode(self, ids, skip_special_tokens=True):
+            return tail
+
+    ids = torch.tensor([[1, 2, 3, 4, 5, 6, 7, 8, 9]])
+    assert _prompt_opens_think(_FakeTok(), ids) is expected
+    assert _prompt_opens_think(_FakeTok(), {"input_ids": ids}) is expected
+
+
+def test_prompt_opens_think_without_input_ids_or_on_decode_failure() -> None:
+    """Missing ids or a tokenizer that cannot decode must fall back to False."""
+
+    class _FakeTok:
+        def decode(self, ids, skip_special_tokens=True):
+            return "<think>"
+
+    class _Broken:
+        def decode(self, *_a, **_k):
+            raise RuntimeError("boom")
+
+    assert _prompt_opens_think(_FakeTok(), None) is False
+    assert _prompt_opens_think(_Broken(), torch.tensor([[1, 2]])) is False
+    assert _prompt_opens_think(None, torch.tensor([[1, 2]])) is False
 
 
 def _make_backend(
@@ -341,6 +399,168 @@ async def test_post_processing_preserves_answer_mentioning_think_tag() -> None:
     assert mot.value == "The </think> tag marks the end of a reasoning block."
 
 
+async def test_post_processing_truncated_reasoning_goes_to_thinking() -> None:
+    """End-to-end through post_processing: the prompt ends inside an open <think>
+    block and generation stopped before </think>, so mot.value must not carry the
+    unfinished reasoning as if it were the answer."""
+    backend = _make_backend(thinking_template_var="think")
+    object.__setattr__(
+        backend._tokenizer, "decode", lambda ids, **_kw: "assistant\n<think>\n"
+    )
+    mot = ModelOutputThunk(value="step one, step two, and then I")
+    mot._call.action = CBlock("test")
+    mot._call.model_options = {}
+
+    await backend.post_processing(
+        mot,
+        conversation=[],
+        _format=None,
+        tool_calls=False,
+        tools={},
+        seed=None,
+        input_ids=torch.tensor([[1, 2, 3]]),
+    )
+
+    assert mot.thinking == "step one, step two, and then I"
+    assert mot.value == ""
+
+
+async def test_post_processing_plain_answer_not_misfiled_when_prompt_closed() -> None:
+    """A closed prompt block (thinking off: `<think></think>`) with no tags in the
+    output is a normal answer and must stay in mot.value."""
+    backend = _make_backend(thinking_template_var="think")
+    object.__setattr__(
+        backend._tokenizer, "decode", lambda ids, **_kw: "assistant\n<think></think>"
+    )
+    mot = ModelOutputThunk(value="just the answer")
+    mot._call.action = CBlock("test")
+    mot._call.model_options = {}
+
+    await backend.post_processing(
+        mot,
+        conversation=[],
+        _format=None,
+        tool_calls=False,
+        tools={},
+        seed=None,
+        input_ids=torch.tensor([[1, 2, 3]]),
+    )
+
+    assert mot.thinking is None
+    assert mot.value == "just the answer"
+
+
+def _hf_output(prompt_len: int = 3, gen_ids=(7, 8, 9)):
+    from transformers.generation.utils import GenerateDecoderOnlyOutput
+
+    seq = torch.tensor([list(range(1, prompt_len + 1)) + list(gen_ids)])
+    return GenerateDecoderOnlyOutput(sequences=seq)
+
+
+def test_native_parse_thinking_returns_thinking_and_content() -> None:
+    """A template-driven parse yields (thinking, content), reading the generated ids
+    only (prompt sliced off) and passing the prompt ids as `prefix`."""
+
+    class _TemplateTokenizer:
+        response_template: dict = {"fields": {}}
+
+        def __init__(self):
+            self.calls = []
+
+        def parse_response(self, ids, **kwargs):
+            self.calls.append((ids, kwargs))
+            return {"thinking": "plan", "content": "answer"}
+
+    tok = _TemplateTokenizer()
+    prompt = torch.tensor([[1, 2, 3]])
+
+    result = _native_parse_thinking(tok, _hf_output(), prompt)
+
+    assert result == ("plan", "answer")
+    ids, kwargs = tok.calls[0]
+    assert ids.tolist() == [7, 8, 9]
+    assert kwargs["prefix"].tolist() == [1, 2, 3]
+
+
+def test_native_parse_thinking_accepts_reasoning_content_key() -> None:
+    """Templates may name the field `reasoning_content` instead of `thinking`."""
+
+    class _TemplateTokenizer:
+        response_template: dict = {"fields": {}}
+
+        def parse_response(self, ids, **kwargs):
+            return {"reasoning_content": "plan"}
+
+    result = _native_parse_thinking(
+        _TemplateTokenizer(), _hf_output(), torch.tensor([[1, 2, 3]])
+    )
+    assert result == ("plan", "")
+
+
+@pytest.mark.parametrize(
+    "parsed",
+    [
+        {"role": "assistant", "content": "just an answer"},
+        {"role": "assistant"},
+        {"thinking": "", "content": "x"},
+        {"thinking": "plan", "tool_calls": [{"type": "function"}]},
+    ],
+)
+def test_native_parse_thinking_defers_when_nothing_to_split(parsed: dict) -> None:
+    """No reasoning found, or tool calls present, returns None so the string splitter
+    (and the later tool-call scan over the raw text) run exactly as before."""
+
+    class _TemplateTokenizer:
+        response_template: dict = {"fields": {}}
+
+        def parse_response(self, ids, **kwargs):
+            return parsed
+
+    assert (
+        _native_parse_thinking(
+            _TemplateTokenizer(), _hf_output(), torch.tensor([[1, 2, 3]])
+        )
+        is None
+    )
+
+
+def test_native_parse_thinking_skipped_without_template_or_inputs() -> None:
+    """No template, no prompt ids, or no generation output: returns None."""
+
+    class _NoTemplate:
+        pass
+
+    class _WithTemplate:
+        response_template: dict = {"fields": {}}
+
+        def parse_response(self, ids, **kwargs):
+            return {"thinking": "plan"}
+
+    prompt = torch.tensor([[1, 2, 3]])
+    assert _native_parse_thinking(_NoTemplate(), _hf_output(), prompt) is None
+    assert _native_parse_thinking(None, _hf_output(), prompt) is None
+    assert _native_parse_thinking(_WithTemplate(), _hf_output(), None) is None
+    assert _native_parse_thinking(_WithTemplate(), None, prompt) is None
+
+
+@pytest.mark.parametrize("error", [ValueError("bad"), TypeError("old API")])
+def test_native_parse_thinking_falls_back_on_parse_error(error: Exception) -> None:
+    """A parse error must not break generation; it returns None so string splitting runs."""
+
+    class _TemplateTokenizer:
+        response_template: dict = {"fields": {}}
+
+        def parse_response(self, ids, **kwargs):
+            raise error
+
+    assert (
+        _native_parse_thinking(
+            _TemplateTokenizer(), _hf_output(), torch.tensor([[1, 2, 3]])
+        )
+        is None
+    )
+
+
 async def test_post_processing_cache_key_findable_after_split() -> None:
     """Regression test: the LRU cache key computed in post_processing must be
     derived from mot.value *after* the split has run, so a later cache_get() call
@@ -375,6 +595,36 @@ async def test_post_processing_cache_key_findable_after_split() -> None:
     assert mot.value == "the answer"
     cached = backend.cache_get(id(mot.value))
     assert cached is not None
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("template_kwargs", "expected"),
+    [
+        ({"enable_thinking": True}, True),
+        ({"enable_thinking": False}, False),
+        ({}, True),
+    ],
+)
+def test_prompt_opens_think_against_real_granite_template(
+    template_kwargs: dict, expected: bool
+) -> None:
+    """The generation prompt tail from the real granite-4.2 template is classified
+    correctly, so the decode-and-suffix check is not only verified on fake strings."""
+    tok = _try_load_granite_tokenizer(_GRANITE_THINKING_MODEL_ID)
+    if tok is None:
+        pytest.skip(
+            f"{_GRANITE_THINKING_MODEL_ID} not in local HF cache — "
+            "run qualitative tests first"
+        )
+    prompt = tok.apply_chat_template(
+        [{"role": "user", "content": "hi"}],
+        tokenize=False,
+        add_generation_prompt=True,
+        **template_kwargs,
+    )
+    ids = tok(prompt, add_special_tokens=False, return_tensors="pt")["input_ids"]
+    assert _prompt_opens_think(tok, ids) is expected
 
 
 def _render_history(messages: list) -> str:
