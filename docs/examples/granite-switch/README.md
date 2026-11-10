@@ -44,6 +44,18 @@ Not all adapter functions are embedded in every Granite Switch model. Check the
 model's `adapter_index.json` for a definitive list. For Granite Switch models
 pre-built by IBM, Mellea includes a list of models in `model_id`.
 
+A checkpoint may also carry `probe` slots: classifier heads that answer with a
+single label token rather than generating JSON. Mellea loads them like LoRA
+slots, and you invoke them by name (conventionally `<name>_probe`); the `rag.*`
+and `guardian.*` helpers do not route to them yet. The result carries the sampled
+`token`, the label pool, and per-label logprobs (e.g. `{"token": "yes",
+"label_logprobs": {"yes": -0.01, "no": -4.4}, "labels": ["no", "yes"], ...}`).
+
+Label order, and therefore the meaning of each label, comes from the
+checkpoint's `io.yaml`, so a probe's verdicts are only as correct as the
+checkpoint. A slot whose `technology` Mellea does not recognise is skipped with
+a warning; the rest of the index still loads.
+
 ## Files
 
 ### [answerability_local_hf.py](./answerability_local_hf.py)

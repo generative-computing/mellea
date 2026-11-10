@@ -822,8 +822,23 @@ def _discover_embedded_adapters(
     return results, skip_reasons
 
 
-# Supported adapter_index.json `technology` values. A probe is registered as LoRA.
+# Supported adapter_index.json `technology` values. A probe is a classifier head
+# that answers with one label token; it activates and generates like a LoRA, so
+# it is registered as one.
 _EMBEDDED_TECHNOLOGIES = frozenset({"lora", "alora", "probe"})
+
+
+def _is_supported_embedded_technology(technology: object) -> bool:
+    """Return whether an `adapter_index.json` entry names a supported technology.
+
+    Args:
+        technology (object): Raw `technology` value from an index entry.
+
+    Returns:
+        bool: `True` for a supported technology string, `False` for an
+        unsupported technology or a non-string value.
+    """
+    return isinstance(technology, str) and technology in _EMBEDDED_TECHNOLOGIES
 
 
 def get_adapter_for_intrinsic(
@@ -1843,7 +1858,10 @@ class EmbeddedIntrinsicAdapter(_AdapterCore):
         technology (str): Adapter technology in the switch model: `"lora"`,
             `"alora"`, or `"probe"` (a classifier head that answers with one
             label token, registered as LoRA). The chat template places the
-            control token.
+            control token. A probe slot must carry its own adapter function
+            name (conventionally `<name>_probe`): the output contract is keyed
+            by name, so reusing a generative capability's name would apply that
+            capability's schema to the one-token readout.
 
     Attributes:
         intrinsic_name (str): Name of the adapter function this adapter implements.
@@ -1961,7 +1979,7 @@ class EmbeddedIntrinsicAdapter(_AdapterCore):
             if io_config_rel is None:
                 continue
             technology = entry.get("technology", "lora")
-            if technology not in _EMBEDDED_TECHNOLOGIES:
+            if not _is_supported_embedded_technology(technology):
                 # Skip unsupported slots (e.g. "sr") so the rest still load.
                 MelleaLogger.get_logger().warning(
                     "Skipping embedded adapter function %r: technology %r is not "
@@ -2115,6 +2133,12 @@ class EmbeddedIntrinsicAdapter(_AdapterCore):
                     for entry in index.get("adapters", []):
                         io_config_rel = entry.get("io_config")
                         if io_config_rel is None:
+                            continue
+                        if not _is_supported_embedded_technology(
+                            entry.get("technology", "lora")
+                        ):
+                            # `from_model_directory` skips these too, and may do
+                            # so before an io.yaml that isn't there would be read.
                             continue
                         io_config_path = (snapshot_root / io_config_rel).resolve(
                             strict=True

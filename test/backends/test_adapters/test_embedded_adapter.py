@@ -564,6 +564,27 @@ class TestFromHub:
         )
         assert len(materialized_dirs) == 2
 
+    def test_from_hub_skips_unsupported_technology_without_io_config(
+        self, tmp_path, caplog
+    ):
+        """A Hub index skips an unsupported slot before its io.yaml is resolved.
+
+        Materialisation must apply the same technology filter as
+        `from_model_directory`, which skips the slot before reading a file the
+        slot need not publish.
+        """
+        snapshot_dir = _write_mixed_model_dir(tmp_path)
+        with patch("huggingface_hub.snapshot_download", return_value=str(snapshot_dir)):
+            adapters = EmbeddedIntrinsicAdapter.from_hub(
+                "ibm-granite/granite-switch-mixed", cache_dir=str(tmp_path / "cache")
+            )
+
+        assert {(a.intrinsic_name, a.technology) for a in adapters} == {
+            ("answerability", "lora"),
+            ("answerability_probe", "probe"),
+        }
+        assert "future_slot" in caplog.text
+
     def test_missing_huggingface_hub_raises(self):
         with patch.dict("sys.modules", {"huggingface_hub": None}):
             with pytest.raises(ImportError, match="huggingface_hub is required"):

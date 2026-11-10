@@ -1445,3 +1445,44 @@ async def test_probe_slot_is_called_and_read_through_call_intrinsic():
     assert result["labels"] == ["no", "yes"]
     probs = {k: math.exp(v) for k, v in result["label_logprobs"].items()}
     assert probs == pytest.approx({"yes": 0.985, "no": 0.015})
+
+
+async def test_probe_label_order_comes_from_io_yaml():
+    """A probe's labels and logprobs keep the checkpoint's declared order.
+
+    Guards against a code-side label flip: the polarity is the checkpoint's,
+    so an io.yaml declaring `["yes", "no"]` must read back in that order.
+    """
+    backend = OpenAIBackend(
+        model_id="granite-switch",
+        api_key="fake-key",
+        base_url="http://localhost:9999/v1",
+    )
+    backend.add_adapter(
+        EmbeddedIntrinsicAdapter(
+            intrinsic_name="hallucination_detection_probe",
+            config={
+                **_PROBE_CONFIG,
+                "transformations": [{"type": "first_token", "labels": ["yes", "no"]}],
+            },
+            technology="probe",
+        )
+    )
+    mock_create = AsyncMock(return_value=_probe_chat_completion())
+    mock_client = MagicMock()
+    mock_client.chat.completions.create = mock_create
+    with (
+        patch.object(
+            OpenAIBackend,
+            "_async_client",
+            new_callable=PropertyMock,
+            return_value=mock_client,
+        ),
+        patch.object(OpenAIBackend, "_vllm_label_token_ids", return_value=None),
+    ):
+        result = await asyncio.to_thread(
+            call_intrinsic, "hallucination_detection_probe", _make_context(), backend
+        )
+    assert result["token"] == "yes"
+    assert result["labels"] == ["yes", "no"]
+    assert set(result["label_logprobs"]) == {"yes", "no"}
