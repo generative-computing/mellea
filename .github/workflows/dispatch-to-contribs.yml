@@ -18,6 +18,7 @@ on:
 
 jobs:
   dispatch:
+    permissions: {}
     runs-on: ubuntu-latest
     steps:
       - name: Skip pre-releases
