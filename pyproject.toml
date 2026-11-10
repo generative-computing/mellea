@@ -43,7 +43,7 @@ hf = [
     "accelerate>=1.9.0",
     "datasets>=4.0.0",
     "granite-switch[hf]>=0.1.1",
-    "llguidance",
+    "llguidance>=1.8.0", # llguidance #370 (single-match skip lexemes): whitespace_pattern upper bounds only enforced from 1.8.0
     "peft>=0.18.1", # Native aLoRA support added in PEFT 0.18.0
     "transformers>5.5.0,<6.0.0", # 5.5.0 broke granite 4.0
     "trl==0.19.1",

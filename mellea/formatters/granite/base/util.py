@@ -37,6 +37,11 @@ __all__ = ["import_optional"]
 # in issue #1510) while comfortably accommodating 4-space indentation up to 4 levels of
 # nesting (which requires 17 contiguous characters: \n + 16 spaces), while still setting
 # an absolute hard ceiling to completely prevent unlimited/runaway whitespace loops.
+#
+# The upper bound is only enforced on llguidance >= 1.8.0: earlier versions compile
+# the JSON grammar's skip lexeme as re-matchable at a single position, so the bound
+# silently permits unlimited whitespace. The `llguidance>=1.8.0` floor in pyproject.toml
+# and the regression test on _LLGUIDANCE_GRAMMAR_DEFAULTS keep that guarantee in force.
 _LLGUIDANCE_GRAMMAR_DEFAULTS: JsonCompileOptions = {
     "whitespace_pattern": r"[\x20\x0A\x0D\x09]{0,20}"
 }
