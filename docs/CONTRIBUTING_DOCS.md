@@ -316,7 +316,9 @@ Docusaurus renders previous/next page links automatically from the sidebar order
 
 ## Versioning
 
-Docusaurus versioning is integrated into the release pipeline (closes #557). On each final release, `publish-release.yml` automatically snapshots the current docs as a numbered version. A version dropdown in the navbar lets readers switch between the latest release, prior releases, and `Next`.
+Docusaurus versioning is integrated into the release pipeline (closes #557). On each final release, `publish-release.yml` snapshots the docs from the release tag as a numbered version and opens a sync PR to `main` with it. A version dropdown in the navbar lets readers switch between the latest release, prior releases, and `Next`.
+
+Snapshots come from the release branch, not `main`, so a docs fix must land on `release/vX.Y` to reach that minor's snapshots (see [RELEASE.md](../RELEASE.md)). To fix an already-published snapshot, edit `docs/versioned_docs/version-X.Y.Z/` on `main`; merging deploys the fix. Also land the fix on `release/vX.Y`, or the snapshot for the next `X.Y` patch will be built without it.
 
 For pages documenting features that don't yet exist in any released version, use a callout:
 
