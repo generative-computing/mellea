@@ -36,7 +36,7 @@ LATEST_FINAL=$(printf '%s\n%s\n' "${FINALS}" "${VERSION}" | sort -V | tail -1)
 
 git config user.name 'github-actions[bot]'
 git config user.email 'github-actions[bot]@users.noreply.github.com'
-git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+gh auth setup-git
 
 SYNC_BRANCH="chore/docs-snapshot-${VERSION}"
 SYNC_DIR=$(mktemp -d)
@@ -68,6 +68,11 @@ git add "${SNAPSHOT_DOCS}" "${SNAPSHOT_SIDEBAR}" docs/versions.json docs/docusau
 if ! git diff --cached --quiet; then
     git commit -m "docs: snapshot ${VERSION}"
     git push origin "${SYNC_BRANCH}"
+fi
+
+if [ "$(git rev-list --count origin/main..HEAD)" -eq 0 ]; then
+    echo "v${VERSION} docs snapshot is already on main"
+    exit 0
 fi
 
 EXISTING_PR=$(gh pr list --head "${SYNC_BRANCH}" --base main --state open --json number --jq '.[0].number // ""')

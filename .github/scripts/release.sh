@@ -89,7 +89,7 @@ fi
 git config --global user.name 'github-actions[bot]'
 git config --global user.email 'github-actions[bot]@users.noreply.github.com'
 
-git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+gh auth setup-git
 
 if [ "${IS_PRERELEASE}" = "1" ]; then
     if [ "${PUBLISH_PRERELEASES}" = "true" ]; then
