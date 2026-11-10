@@ -9,31 +9,4 @@
 #
 # Rule reference: https://docs.zizmor.sh/audits/
 
-rules:
-
-  # --- cache-poisoning --------------------------------------------------------
-  # astral-sh/setup-uv and actions/setup-node use caching in the
-  # docs-publish build-and-validate job, which is triggered on push to main.
-  # The cache-poisoning risk requires write access to main (branch-protected),
-  # so no external attacker trigger path exists.
-  # Fix tracked in: https://github.com/generative-computing/mellea/issues/1534
-  cache-poisoning:
-    ignore:
-      - docs-publish.yml:75
-      - docs-publish.yml:81
-
-  # --- excessive-permissions --------------------------------------------------
-  # dispatch-to-contribs.yml has no permissions: block, so it inherits the
-  # repo default. The workflow is release-triggered and dispatch-only.
-  # Fix tracked in: https://github.com/generative-computing/mellea/issues/1534
-  excessive-permissions:
-    ignore:
-      - dispatch-to-contribs.yml:20
-
-  # --- artipacked -------------------------------------------------------------
-  # publish-release.yml snapshot-docs job uses persist-credentials implicitly
-  # (no persist-credentials: false) because it pushes commits to main.
-  # Fix tracked in: https://github.com/generative-computing/mellea/issues/1534
-  artipacked:
-    ignore:
-      - publish-release.yml:173
+rules: {}
