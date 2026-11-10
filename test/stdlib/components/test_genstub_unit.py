@@ -775,6 +775,25 @@ def test_sync_stub_returns_none_result():
     assert result == "banana"
 
 
+def test_non_nullable_stub_rejects_null_result():
+    """A stub whose return type excludes `None` still fails on `{"result": null}`.
+
+    The `None` exemption in `ModelOutputThunk` is only safe because the stub's own
+    response model rejects `null` for a non-nullable return type before the
+    invariant is ever checked. This pins that: dropping the `None` exemption to
+    `GenerativeStub` must not let a `-> str` stub silently return `None`.
+    """
+    from pydantic import ValidationError
+
+    @generative
+    def name_fruit(text: str) -> str:
+        """Name the fruit mentioned in the text."""
+
+    backend = _FixedJSONBackend('{"result": null}')
+    with pytest.raises(ValidationError, match="valid string"):
+        name_fruit(context=SimpleContext(), backend=backend, text="x")
+
+
 async def test_async_stub_returns_none_result():
     @generative
     async def identify_fruit(text: str) -> str | None:
