@@ -279,16 +279,18 @@ All sampling metrics include:
 
 | Attribute | Description | Example Values |
 | --------- | ----------- | -------------- |
-| `requirement` | Requirement class name | `LLMaJRequirement`, `PythonExecutionReq`, `ALoraRequirement`, `GuardianCheck` *(deprecated v0.4)* |
-| `reason` | Human-readable failure reason (`mellea.requirement.failures` only) | `"Output did not satisfy constraint"`, `"unknown"` |
+| `requirement` | Requirement class name | `LLMaJRequirement`, `PythonExecutionReq`, `ALoraRequirement` |
+| `reason` | Human-readable failure reason (`mellea.requirement.failures` only). Keep it short and low-cardinality: it is a metric attribute, so do not embed per-request values such as scores or identifiers | `"Output did not satisfy constraint"`, `"LLM judgment"` |
 
 > **Guardian adapter functions and metrics:** `guardian_check()`, `policy_guardrails()`,
 > `factuality_detection()`, and `factuality_correction()` are not `Requirement`
-> subclasses and do not emit `mellea.requirement.checks` or
-> `mellea.requirement.failures` metrics. If you migrate from `GuardianCheck` to
-> Guardian adapter functions, Guardian-related requirement counters will stop appearing
-> in your metrics. Wrap Guardian adapter function calls in a custom `Requirement` subclass
-> if you need to preserve this telemetry.
+> subclasses, so calling them directly emits no `mellea.requirement.checks` or
+> `mellea.requirement.failures` metrics. Wrap the call in a `Requirement` with a
+> `validation_fn` that returns a `ValidationResult`. Both counters are labelled
+> `requirement="Requirement"`, the class name being what labels them, and
+> `mellea.requirement.failures` additionally carries your `reason`. Only failures can
+> be told apart by reason. See
+> [Guardian checks inside a repair loop](../how-to/safety-guardrails.md#guardian-checks-inside-a-repair-loop).
 
 ### Tool counter
 
