@@ -248,7 +248,7 @@ def alora_add_readme(
         token = get_token()
         if token is None:
             raise OSError(
-                "Hugging Face token not found. Run `huggingface-cli login` first."
+                "Hugging Face token not found. Set `HF_TOKEN` or run `hf auth login` first."
             )
 
         create_repo(repo_id=name, token=token, private=True, exist_ok=True)

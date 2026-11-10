@@ -40,7 +40,7 @@ def upload_model(weight_path: str, model_name: str, private: bool = True):
     token = get_token()
     if token is None:
         raise OSError(
-            "Hugging Face token not found. Run `huggingface-cli login` first."
+            "Hugging Face token not found. Set `HF_TOKEN` or run `hf auth login` first."
         )
 
     try:

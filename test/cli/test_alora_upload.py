@@ -14,6 +14,10 @@ import pytest
 pytest.importorskip("huggingface_hub")
 pytest.importorskip("typer")
 
+_MISSING_TOKEN_MESSAGE = (
+    "Hugging Face token not found. Set `HF_TOKEN` or run `hf auth login` first."
+)
+
 
 def test_upload_modules_import_without_hf_folder():
     """Upload modules must import against Hub 1.x, without the removed HfFolder."""
@@ -34,8 +38,9 @@ def test_upload_model_token_lookup(monkeypatch, tmp_path, token):
     monkeypatch.setattr(upload, "upload_folder", upload_folder)
 
     if token is None:
-        with pytest.raises(OSError, match="Hugging Face token not found"):
+        with pytest.raises(OSError) as exc_info:
             upload.upload_model(str(tmp_path), "example/adapter")
+        assert str(exc_info.value) == _MISSING_TOKEN_MESSAGE
         create_repo.assert_not_called()
         upload_folder.assert_not_called()
     else:
@@ -75,8 +80,9 @@ def test_upload_intrinsic_token_lookup(monkeypatch, tmp_path, token):
 
     args = (str(weights), "example/adapter", "example/base", "alora", str(io_yaml))
     if token is None:
-        with pytest.raises(OSError, match="Hugging Face token not found"):
+        with pytest.raises(OSError) as exc_info:
             intrinsic_uploader.upload_intrinsic(*args)
+        assert str(exc_info.value) == _MISSING_TOKEN_MESSAGE
         create_repo.assert_not_called()
         upload_folder.assert_not_called()
     else:
@@ -121,8 +127,9 @@ def test_add_readme_token_lookup(monkeypatch, token):
         io_yaml=None,
     )
     if token is None:
-        with pytest.raises(OSError, match="Hugging Face token not found"):
+        with pytest.raises(OSError) as exc_info:
             alora_add_readme(**args)
+        assert str(exc_info.value) == _MISSING_TOKEN_MESSAGE
         create_repo.assert_not_called()
         upload_file.assert_not_called()
     else:

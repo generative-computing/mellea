@@ -77,7 +77,7 @@ def upload_intrinsic(
         token = get_token()
         if token is None:
             raise OSError(
-                "Hugging Face token not found. Run `huggingface-cli login` first."
+                "Hugging Face token not found. Set `HF_TOKEN` or run `hf auth login` first."
             )
 
         _url: RepoUrl = create_repo(
