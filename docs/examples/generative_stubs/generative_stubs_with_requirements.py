@@ -42,19 +42,18 @@ if __name__ == "__main__":
     )
     # Prompt to the model looked like:
     # ```
-    # Your task is to imitate the output of the following function for the given arguments.
-    # Reply Nothing else but the output of the function.
-
-    # Function:
-    # def classify_sentiment(text: str) -> Literal['positive', 'negative', 'unknown']:
-    #     """Classify the sentiment of the text.
-
-    #     Postconditions:
-    #         - avoid classifying the sentiment as unknown
-    #     """
-
-    # Arguments:
-    # - text: "I love this!"  (type: <class 'str'>)
+    # Task: classify_sentiment
+    #
+    # Classify the sentiment of the text.
+    #
+    # Inputs:
+    # - text: "I love this!"  (type: str)
+    #
+    # Requirements:
+    # - avoid classifying the sentiment as unknown
+    #
+    # Reply in JSON formatted as {"result": <value of type Literal['positive', 'negative', 'unknown']>}, matching this shape:
+    # {"result": "positive" | "negative" | "unknown"}
     # ```
 
     print("\nOutput sentiment is:", sentiment_component)
