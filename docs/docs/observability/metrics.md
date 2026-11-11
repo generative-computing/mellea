@@ -286,10 +286,11 @@ All sampling metrics include:
 > `factuality_detection()`, and `factuality_correction()` are not `Requirement`
 > subclasses, so calling them directly emits no `mellea.requirement.checks` or
 > `mellea.requirement.failures` metrics. Wrap the call in a `Requirement` with a
-> `validation_fn` that returns a `ValidationResult`. Both counters are labelled
-> `requirement="Requirement"`, the class name being what labels them, and
-> `mellea.requirement.failures` additionally carries your `reason`. Only failures can
-> be told apart by reason. See
+> `validation_fn` that returns a `ValidationResult`. Both counters are labelled with
+> the class name, so every such wrapper shows up as `requirement="Requirement"`; only
+> `mellea.requirement.failures` also carries your `reason`. To give a check its own
+> label on both counters, subclass `Requirement` (for example
+> `class HarmCheck(Requirement): ...`). See
 > [Guardian checks inside a repair loop](../how-to/safety-guardrails.md#guardian-checks-inside-a-repair-loop).
 
 ### Tool counter

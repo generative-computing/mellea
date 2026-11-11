@@ -356,7 +356,7 @@ def harm_check(threshold: float = 0.5) -> Requirement:
 result = session.instruct(
     "Reply to this customer complaint.",
     requirements=[harm_check()],
-    strategy=RepairTemplateStrategy(loop_budget=3),
+    strategy=RepairTemplateStrategy(loop_budget=2),
 )
 ```
 
@@ -376,6 +376,8 @@ Because the wrapper is an ordinary `Requirement`, the check also emits
 `mellea.requirement.checks` and `mellea.requirement.failures`. Both are labelled with
 the class name, which for this wrapper is `Requirement`, and only the failures counter
 carries the `reason`, so failures from two such checks are told apart by reason alone.
+To give a check its own label on both counters, subclass `Requirement` (for example
+`class HarmCheck(Requirement): ...`).
 See [Observability and metrics](../observability/metrics.md).
 
 Guardian returns a score and no reasoning text, so repair feedback names the criteria
