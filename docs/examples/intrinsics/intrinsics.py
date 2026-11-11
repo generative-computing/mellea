@@ -1,4 +1,27 @@
 # pytest: huggingface, e2e
+"""Using an adapter function directly with Intrinsic and mfuncs.act().
+
+Demonstrates the lower-level path underneath the `rag`, `core`, and `guardian`
+helper functions: composing an `Adapter` (an `Identity`, an I/O contract, and a
+`LocalFileBinding`) for the catalog's `requirement-check` aLoRA, registering it on
+a `LocalHFBackend` with `add_adapter()`, and invoking it with
+`mfuncs.act(Intrinsic(...))`. The raw JSON output
+(`{"requirement_check": {"score": ...}}`) is printed; `ALoraRequirement` parses
+the same output when validating. Prefer the helper functions for everyday use;
+see `mellea/stdlib/components/intrinsic/` for them.
+
+A commented-out alternative shows loading a local Granite Switch checkpoint
+instead; see `docs/examples/granite-switch/answerability_local_hf.py`.
+
+Runs the model locally, so it needs a GPU or Apple Silicon Mac; the model and
+adapter are downloaded from Hugging Face on first run.
+
+Prerequisites:
+    uv sync --extra hf
+
+Usage:
+    uv run python docs/examples/intrinsics/intrinsics.py
+"""
 
 import mellea.stdlib.functional as mfuncs
 from mellea.backends import model_ids
@@ -13,7 +36,7 @@ from mellea.backends.huggingface import LocalHFBackend
 from mellea.stdlib.components import Intrinsic, Message
 from mellea.stdlib.context import ChatContext
 
-# This is an example for how you would directly use intrinsics. See `mellea/stdlib/intrinsics/rag.py`
+# This is an example for how you would directly use intrinsics. See `mellea/stdlib/components/intrinsic/rag.py`
 # for helper functions.
 
 backend = LocalHFBackend(model_id=model_ids.IBM_GRANITE_4_1_3B)

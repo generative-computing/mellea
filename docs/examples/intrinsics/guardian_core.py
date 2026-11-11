@@ -1,15 +1,22 @@
 # pytest: huggingface, e2e
-
 """Example usage of the guardian-core intrinsic for safety and hallucination detection.
 
 Demonstrates how to use the Granite Guardian 4.0 Micro LoRA adapter
 (guardian-core) through Mellea's intrinsic pipeline for prompt-level risk
 detection, response-level risk detection, and RAG groundedness checking.
 
-To run this script from the root of the Mellea source tree, use the command:
-```
-uv run python docs/examples/intrinsics/guardian_core.py
-```
+The script also covers custom criteria (PII), function-call hallucination, and
+answer relevance. Each check returns a risk score; the script treats a score of
+0.5 or higher as a detected risk.
+
+Runs the model locally, so it needs a GPU or Apple Silicon Mac; the model and
+adapter are downloaded from Hugging Face on first run.
+
+Prerequisites:
+    uv sync --extra hf
+
+Usage:
+    uv run python docs/examples/intrinsics/guardian_core.py
 """
 
 import json

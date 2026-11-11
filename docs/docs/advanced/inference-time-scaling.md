@@ -150,6 +150,17 @@ print(f"Attempts: {len(result.sample_generations)}")
 The `ValidationResult.reason` string is passed to both S1 and S2 as repair guidance —
 write specific, actionable failure reasons for best results.
 
+Pass `judge_backend` to have an LLM judge validate any requirement that has no
+`validation_fn`. `feedback_strategy` sets how much detail the judge returns to S1 as
+repair feedback. It has no effect without `judge_backend`, or for requirements that
+have their own `validation_fn`:
+
+| Strategy | Feedback to S1 |
+| -------- | -------------- |
+| `"simple"` (default) | Pass/fail only; the judge answers yes or no |
+| `"first_error"` | The first mistake the judge finds |
+| `"all_errors"` | Every mistake the judge finds |
+
 > **Full example:** [`docs/examples/sofai/sofai_graph_coloring.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/sofai/sofai_graph_coloring.py)
 
 ## Budget forcing

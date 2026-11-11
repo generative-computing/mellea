@@ -1,11 +1,18 @@
 # pytest: huggingface, e2e
-"""
-Example usage of the query clarification intrinsic for RAG applications.
+"""Example usage of the query clarification intrinsic for RAG applications.
 
-To run this script from the root of the Mellea source tree, use the command:
-```
-uv run python docs/examples/intrinsics/query_clarification.py
-```
+Demonstrates `rag.clarify_query()`, which returns a clarification request when a
+query is ambiguous given the retrieved documents, or "CLEAR" when it is not. The
+script runs one ambiguous query and one clear query.
+
+Runs the model locally, so it needs a GPU or Apple Silicon Mac; the model and
+adapter are downloaded from Hugging Face on first run.
+
+Prerequisites:
+    uv sync --extra hf
+
+Usage:
+    uv run python docs/examples/intrinsics/query_clarification.py
 """
 
 from mellea import model_ids, start_backend
