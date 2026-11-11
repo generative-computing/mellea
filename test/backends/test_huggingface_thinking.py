@@ -94,10 +94,34 @@ def test_split_think_tags_multiple_close_tags_uses_first() -> None:
 
 
 def test_split_think_tags_truncated_reasoning_output_opens_think() -> None:
-    """No </think>, but the output itself starts with <think>: also truncated reasoning."""
-    thinking, answer = _split_think_tags("\n<think>\nstill working")
+    """No </think>, output itself starts with <think>, and generation was cut off:
+    truncated reasoning. Without the truncation signal the text is left untouched."""
+    thinking, answer = _split_think_tags("\n<think>\nstill working", truncated=True)
     assert thinking == "still working"
     assert answer == ""
+
+    thinking, answer = _split_think_tags("\n<think>\nstill working")
+    assert thinking is None
+    assert answer == "\n<think>\nstill working"
+
+
+def test_split_think_tags_truncated_with_signal() -> None:
+    """Prompt-opened think block plus a genuine truncation signal: whole text is thinking."""
+    thinking, answer = _split_think_tags(
+        "step one, step two, and then I", prompt_opens_think=True, truncated=True
+    )
+    assert thinking == "step one, step two, and then I"
+    assert answer == ""
+
+
+def test_split_think_tags_plain_answer_not_truncated_without_signal() -> None:
+    """A prompt-opened think block alone is not evidence of truncation: the model may
+    have answered directly, and that answer must stay intact."""
+    thinking, answer = _split_think_tags(
+        "The answer is 408.", prompt_opens_think=True, truncated=False
+    )
+    assert thinking is None
+    assert answer == "The answer is 408."
 
 
 def test_split_think_tags_close_tag_wins_over_prompt_opens_think() -> None:
@@ -401,15 +425,18 @@ async def test_post_processing_preserves_answer_mentioning_think_tag() -> None:
 
 async def test_post_processing_truncated_reasoning_goes_to_thinking() -> None:
     """End-to-end through post_processing: the prompt ends inside an open <think>
-    block and generation stopped before </think>, so mot.value must not carry the
-    unfinished reasoning as if it were the answer."""
+    block and generation stopped on length before </think>, so mot.value must not
+    carry the unfinished reasoning as if it were the answer."""
     backend = _make_backend(thinking_template_var="think")
     object.__setattr__(
         backend._tokenizer, "decode", lambda ids, **_kw: "assistant\n<think>\n"
     )
+    object.__setattr__(backend._tokenizer, "eos_token_id", 2)
     mot = ModelOutputThunk(value="step one, step two, and then I")
+    mot.raw.response = _hf_output(prompt_len=3, gen_ids=(7, 8, 9))
     mot._call.action = CBlock("test")
-    mot._call.model_options = {}
+    # 3 completion tokens, last token is not EOS -> finish_reasons == ["length"].
+    mot._call.model_options = {ModelOption.MAX_NEW_TOKENS: 3}
 
     await backend.post_processing(
         mot,
@@ -421,8 +448,71 @@ async def test_post_processing_truncated_reasoning_goes_to_thinking() -> None:
         input_ids=torch.tensor([[1, 2, 3]]),
     )
 
+    assert mot.generation.finish_reasons == ["length"]
     assert mot.thinking == "step one, step two, and then I"
     assert mot.value == ""
+
+
+async def test_post_processing_prompt_opened_think_without_length_stop_stays_value() -> (
+    None
+):
+    """Prompt opened a think block but generation ended on EOS without `</think>`:
+    the model answered directly, so the answer must stay in mot.value."""
+    backend = _make_backend(thinking_template_var="think")
+    object.__setattr__(
+        backend._tokenizer, "decode", lambda ids, **_kw: "assistant\n<think>\n"
+    )
+    object.__setattr__(backend._tokenizer, "eos_token_id", 9)
+    mot = ModelOutputThunk(value="The answer is 408.")
+    mot.raw.response = _hf_output(prompt_len=3, gen_ids=(7, 8, 9))
+    mot._call.action = CBlock("test")
+    mot._call.model_options = {ModelOption.MAX_NEW_TOKENS: 100}
+
+    await backend.post_processing(
+        mot,
+        conversation=[],
+        _format=None,
+        tool_calls=False,
+        tools={},
+        seed=None,
+        input_ids=torch.tensor([[1, 2, 3]]),
+    )
+
+    assert mot.generation.finish_reasons == ["stop"]
+    assert mot.thinking is None
+    assert mot.value == "The answer is 408."
+
+
+async def test_post_processing_structured_output_stays_in_value() -> None:
+    """Structured output (`_format` set) must never be split into thinking, even if
+    the prompt opened a think block and the generation looks length-truncated."""
+    from pydantic import BaseModel
+
+    class _Answer(BaseModel):
+        answer: int
+
+    backend = _make_backend(thinking_template_var="think")
+    object.__setattr__(
+        backend._tokenizer, "decode", lambda ids, **_kw: "assistant\n<think>\n"
+    )
+    object.__setattr__(backend._tokenizer, "eos_token_id", 2)
+    mot = ModelOutputThunk(value='{"answer": 408}')
+    mot.raw.response = _hf_output(prompt_len=3, gen_ids=(7, 8, 9))
+    mot._call.action = CBlock("test")
+    mot._call.model_options = {ModelOption.MAX_NEW_TOKENS: 3}
+
+    await backend.post_processing(
+        mot,
+        conversation=[],
+        _format=_Answer,
+        tool_calls=False,
+        tools={},
+        seed=None,
+        input_ids=torch.tensor([[1, 2, 3]]),
+    )
+
+    assert mot.thinking is None
+    assert mot.value == '{"answer": 408}'
 
 
 async def test_post_processing_plain_answer_not_misfiled_when_prompt_closed() -> None:
