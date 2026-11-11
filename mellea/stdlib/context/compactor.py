@@ -108,25 +108,6 @@ def pin_system_and_initial_user(components: list[Span]) -> int:
     return i
 
 
-def _last_usage_thunk(ctx: Context) -> ModelOutputThunk | None:
-    """Return the most recent `ModelOutputThunk` that has token usage.
-
-    Walks `ctx` newest to oldest and returns the first thunk whose
-    `generation.usage` is populated.
-
-    Args:
-        ctx (Context): The context to search.
-
-    Returns:
-        ModelOutputThunk | None: The latest thunk with usage, or `None`
-        if no thunk in the context has usage yet.
-    """
-    for c in reversed(ctx.as_list()):
-        if isinstance(c, ModelOutputThunk) and c.generation.usage is not None:
-            return c
-    return None
-
-
 def _usage_total(usage: dict[str, Any]) -> int | None:
     """Return the total token count from a usage dictionary.
 
@@ -163,10 +144,10 @@ def _last_usage_tokens(ctx: Context) -> int | None:
     is missing. Returns `None` if no usable token count can be recovered
     (typical before the first model call completes).
     """
-    thunk = _last_usage_thunk(ctx)
-    if thunk is None or thunk.generation.usage is None:
-        return None
-    return _usage_total(thunk.generation.usage)
+    for c in reversed(ctx.as_list()):
+        if isinstance(c, ModelOutputThunk) and c.generation.usage is not None:
+            return _usage_total(c.generation.usage)
+    return None
 
 
 class Compactor(Protocol):
