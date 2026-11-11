@@ -348,7 +348,8 @@ generate from the model's parametric knowledge. Passing documents through
 ## What to try next
 
 - Replace the in-memory list with a database-backed corpus and see
-  `docs/examples/rag/mellea_pdf.py` for a PDF-based variant.
+  [`docs/examples/rag/mellea_pdf.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/rag/mellea_pdf.py)
+  for a PDF-based variant.
 - Tune `k` in `query_index` and observe how the filter step affects final
   answer quality.
 - Add `requirements` to the final `m.instruct()` call to enforce length,
