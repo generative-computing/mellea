@@ -822,6 +822,25 @@ def _discover_embedded_adapters(
     return results, skip_reasons
 
 
+# Supported adapter_index.json `technology` values. A probe is a classifier head
+# that answers with one label token; it activates and generates like a LoRA, so
+# it is registered as one.
+_EMBEDDED_TECHNOLOGIES = frozenset({"lora", "alora", "probe"})
+
+
+def _is_supported_embedded_technology(technology: object) -> bool:
+    """Return whether an `adapter_index.json` entry names a supported technology.
+
+    Args:
+        technology (object): Raw `technology` value from an index entry.
+
+    Returns:
+        bool: `True` for a supported technology string, `False` for an
+        unsupported technology or a non-string value.
+    """
+    return isinstance(technology, str) and technology in _EMBEDDED_TECHNOLOGIES
+
+
 def get_adapter_for_intrinsic(
     intrinsic_name: str,
     intrinsic_adapter_types: list[AdapterType] | tuple[AdapterType, ...],
@@ -1836,15 +1855,18 @@ class EmbeddedIntrinsicAdapter(_AdapterCore):
     Args:
         intrinsic_name (str): Name of the adapter function (e.g. `"answerability"`).
         config (dict): Parsed I/O transformation configuration (from `io.yaml`).
-        technology (str): Adapter technology in the switch model; `"lora"` or
-            `"alora"`.  Determines where the control token is placed in the
-            chat template (beginning of sequence for LoRA, before generation
-            prompt for aLoRA).
+        technology (str): Adapter technology in the switch model: `"lora"`,
+            `"alora"`, or `"probe"` (a classifier head that answers with one
+            label token, registered as LoRA). The chat template places the
+            control token. A probe slot must carry its own adapter function
+            name (conventionally `<name>_probe`): the output contract is keyed
+            by name, so reusing a generative capability's name would apply that
+            capability's schema to the one-token readout.
 
     Attributes:
         intrinsic_name (str): Name of the adapter function this adapter implements.
         config (dict): Parsed I/O transformation configuration.
-        technology (str): `"lora"` or `"alora"`.
+        technology (str): `"lora"`, `"alora"`, or `"probe"`.
 
     Note:
         `identity`, `io_contract`, and `weights` are internal scaffolding
@@ -1869,9 +1891,10 @@ class EmbeddedIntrinsicAdapter(_AdapterCore):
 
     def __init__(self, intrinsic_name: str, config: dict, technology: str = "lora"):
         """Initialize an embedded adapter function with its I/O config."""
-        if technology not in ("lora", "alora"):
+        if technology not in _EMBEDDED_TECHNOLOGIES:
             raise ValueError(
-                f"technology must be 'lora' or 'alora', got '{technology}'"
+                "technology must be one of "
+                f"{sorted(_EMBEDDED_TECHNOLOGIES)}, got '{technology}'"
             )
         warnings.warn(
             "EmbeddedIntrinsicAdapter is deprecated; use Adapter directly (Epic #929, issue #1144).",
@@ -1899,7 +1922,7 @@ class EmbeddedIntrinsicAdapter(_AdapterCore):
         # technology is validated above; cast to the Literal type mypy expects.
         identity = Identity(
             name=intrinsic_name,
-            adapter_type=cast(Literal["lora", "alora"], technology),
+            adapter_type=cast(Literal["lora", "alora"], adapter_type.value),
             capability=capability,
         )
 
@@ -1955,6 +1978,17 @@ class EmbeddedIntrinsicAdapter(_AdapterCore):
             io_config_rel = entry.get("io_config")
             if io_config_rel is None:
                 continue
+            technology = entry.get("technology", "lora")
+            if not _is_supported_embedded_technology(technology):
+                # Skip unsupported slots (e.g. "sr") so the rest still load.
+                MelleaLogger.get_logger().warning(
+                    "Skipping embedded adapter function %r: technology %r is not "
+                    "supported (supported: %s).",
+                    entry_name,
+                    technology,
+                    sorted(_EMBEDDED_TECHNOLOGIES),
+                )
+                continue
 
             io_config_path = model_path / io_config_rel
             try:
@@ -1975,9 +2009,7 @@ class EmbeddedIntrinsicAdapter(_AdapterCore):
 
             adapters.append(
                 EmbeddedIntrinsicAdapter(
-                    intrinsic_name=entry_name,
-                    config=config_dict,
-                    technology=entry.get("technology", "lora"),
+                    intrinsic_name=entry_name, config=config_dict, technology=technology
                 )
             )
 
@@ -2101,6 +2133,12 @@ class EmbeddedIntrinsicAdapter(_AdapterCore):
                     for entry in index.get("adapters", []):
                         io_config_rel = entry.get("io_config")
                         if io_config_rel is None:
+                            continue
+                        if not _is_supported_embedded_technology(
+                            entry.get("technology", "lora")
+                        ):
+                            # `from_model_directory` skips these too, and may do
+                            # so before an io.yaml that isn't there would be read.
                             continue
                         io_config_path = (snapshot_root / io_config_rel).resolve(
                             strict=True

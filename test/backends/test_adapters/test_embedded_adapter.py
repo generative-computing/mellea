@@ -119,8 +119,19 @@ class TestEmbeddedIntrinsicAdapterInit:
         assert adapter.technology == "lora"
         assert adapter.adapter_type == AdapterType.LORA
 
+    def test_probe_technology_registers_as_lora(self):
+        adapter = EmbeddedIntrinsicAdapter(
+            intrinsic_name="answerability_probe",
+            config=_PROBE_CONFIG,
+            technology="probe",
+        )
+        assert adapter.technology == "probe"
+        assert adapter.adapter_type == AdapterType.LORA
+        assert adapter.identity.adapter_type == "lora"
+        assert adapter.qualified_name == "answerability_probe_lora"
+
     def test_invalid_technology_raises(self):
-        with pytest.raises(ValueError, match="must be 'lora' or 'alora'"):
+        with pytest.raises(ValueError, match="technology must be one of"):
             EmbeddedIntrinsicAdapter(
                 intrinsic_name="test", config={"model": None}, technology="qlora"
             )
@@ -134,6 +145,60 @@ class TestEmbeddedIntrinsicAdapterInit:
 
 
 # ---- EmbeddedIntrinsicAdapter.from_model_directory ----
+
+
+_PROBE_CONFIG = {
+    "model": None,
+    "response_format": None,
+    "transformations": [{"type": "first_token", "labels": ["no", "yes"]}],
+    "instruction": None,
+    "parameters": {"temperature": 0.0, "max_completion_tokens": 1},
+    "sentence_boundaries": None,
+}
+
+
+def _write_mixed_model_dir(root: pathlib.Path) -> pathlib.Path:
+    """A Switch dir with a LoRA slot, a probe slot and an unsupported slot type."""
+    entries = [
+        ("answerability", "lora"),
+        ("answerability_probe", "probe"),
+        ("future_slot", "sr"),
+    ]
+    index = {
+        "model_info": {"num_adapters": len(entries), "base_model": "test-model"},
+        "adapters": [
+            {
+                "adapter_index": i + 1,
+                "adapter_name": name,
+                "technology": tech,
+                "control_token": {"token": f"<|{name}|>", "id": 1000 + i},
+                "io_config": f"io_configs/{name}/io.yaml",
+            }
+            for i, (name, tech) in enumerate(entries)
+        ],
+    }
+    (root / "adapter_index.json").write_text(json.dumps(index))
+    for name, _ in entries[:2]:
+        d = root / "io_configs" / name
+        d.mkdir(parents=True)
+        cfg = _PROBE_CONFIG if name.endswith("_probe") else _ANSWERABILITY_CONFIG
+        (d / "io.yaml").write_text(yaml.safe_dump(cfg))
+    # No io.yaml for future_slot: it must be skipped before the read.
+    return root
+
+
+class TestProbeSlots:
+    def test_probe_and_lora_load_and_unknown_technology_is_skipped(
+        self, tmp_path, caplog
+    ):
+        model_dir = _write_mixed_model_dir(tmp_path)
+        adapters = EmbeddedIntrinsicAdapter.from_model_directory(model_dir)
+        assert {(a.intrinsic_name, a.technology) for a in adapters} == {
+            ("answerability", "lora"),
+            ("answerability_probe", "probe"),
+        }
+        assert "future_slot" in caplog.text
+        assert "'sr' is not supported" in caplog.text
 
 
 class TestFromModelDirectory:
@@ -498,6 +563,27 @@ class TestFromHub:
             (cache_dir / "mellea" / "embedded-adapter-configs").iterdir()
         )
         assert len(materialized_dirs) == 2
+
+    def test_from_hub_skips_unsupported_technology_without_io_config(
+        self, tmp_path, caplog
+    ):
+        """A Hub index skips an unsupported slot before its io.yaml is resolved.
+
+        Materialisation must apply the same technology filter as
+        `from_model_directory`, which skips the slot before reading a file the
+        slot need not publish.
+        """
+        snapshot_dir = _write_mixed_model_dir(tmp_path)
+        with patch("huggingface_hub.snapshot_download", return_value=str(snapshot_dir)):
+            adapters = EmbeddedIntrinsicAdapter.from_hub(
+                "ibm-granite/granite-switch-mixed", cache_dir=str(tmp_path / "cache")
+            )
+
+        assert {(a.intrinsic_name, a.technology) for a in adapters} == {
+            ("answerability", "lora"),
+            ("answerability_probe", "probe"),
+        }
+        assert "future_slot" in caplog.text
 
     def test_missing_huggingface_hub_raises(self):
         with patch.dict("sys.modules", {"huggingface_hub": None}):
