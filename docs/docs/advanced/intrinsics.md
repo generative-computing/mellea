@@ -31,7 +31,7 @@ capability stays available — see [Prompt fallback](#prompt-fallback).
 >   embedded in the model are available — check the model's
 >   `adapter_index.json` for the list. See
 >   [Granite Switch on llama-server](#granite-switch-on-llama-server) and the
->   [Granite Switch examples](../../examples/granite-switch/README.md).
+>   [Granite Switch examples](https://github.com/generative-computing/mellea/tree/main/docs/examples/granite-switch).
 > - **OllamaModelBackend** — uses an Ollama model that bundles the adapter.
 >   Ollama bundles one adapter per model, so pass
 >   `adapter_models={"uncertainty": "<tag>", ...}` to route each adapter function
