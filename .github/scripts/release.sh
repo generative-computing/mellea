@@ -18,7 +18,7 @@
 #
 # Prereleases (rc, .dev): when PUBLISH_PRERELEASES=true, push a git tag,
 # create a prerelease GitHub Release with notes diffed against the previous
-# tag (incremental), and dispatch pypi.yml. Otherwise no tag, no Release,
+# tag (incremental), which triggers pypi.yml. Otherwise no tag, no Release,
 # no PyPI upload — the version-bump commit on the branch is the only
 # artifact.
 #
@@ -89,7 +89,7 @@ fi
 git config --global user.name 'github-actions[bot]'
 git config --global user.email 'github-actions[bot]@users.noreply.github.com'
 
-git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+gh auth setup-git
 
 if [ "${IS_PRERELEASE}" = "1" ]; then
     if [ "${PUBLISH_PRERELEASES}" = "true" ]; then
@@ -111,7 +111,6 @@ if [ "${IS_PRERELEASE}" = "1" ]; then
                     --generate-notes
             fi
         fi
-        gh workflow run pypi.yml --ref "${TARGET_TAG_NAME}"
         echo "Published prerelease ${TARGET_TAG_NAME} (tag + Release + PyPI)"
     else
         echo "Prerelease ${TARGET_TAG_NAME}: PUBLISH_PRERELEASES=false, skipping tag and PyPI upload"
@@ -131,14 +130,6 @@ if ! gh release view "${TARGET_TAG_NAME}" >/dev/null 2>&1; then
             --generate-notes
     fi
 fi
-
-# Dispatch follow-on workflows directly (GITHUB_TOKEN-authored release/tag
-# events don't auto-trigger).
-# Note: docs-publish.yml is NOT dispatched here for finals — the snapshot-docs
-# job in publish-release.yml commits versioned docs to main and then explicitly
-# dispatches docs-publish.yml via workflow_dispatch (a GITHUB_TOKEN push cannot
-# trigger a new workflow run, so the dispatch is manual).
-gh workflow run pypi.yml --ref "${TARGET_TAG_NAME}"
 
 if [ "${RELEASE_BRANCH}" = "main" ]; then
     echo "Published ${TARGET_TAG_NAME} from main — skipping changelog sync PR"
@@ -193,8 +184,3 @@ if [ -z "${EXISTING_PR}" ]; then
 
 This PR brings the release-branch CHANGELOG entry back to main so the project root CHANGELOG remains the canonical history across all branches."
 fi
-
-# GITHUB_TOKEN-authored pull_request events don't trigger workflows, so
-# required status checks on main would block the sync PR forever. Dispatch
-# CI explicitly against the sync branch.
-gh workflow run ci.yml --ref "${SYNC_BRANCH}"
