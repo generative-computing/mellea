@@ -378,6 +378,91 @@ class TestModelFriendlyFeedbackFormatter:
         assert "Try:" in formatted
         assert "Custom requirement" in formatted or "Details:" in formatted
 
+    @staticmethod
+    def _generic_requirement() -> Requirement:
+        class CustomRequirement(Requirement):
+            def __init__(self):
+                super().__init__(
+                    description="Custom requirement",
+                    validation_fn=lambda ctx: ValidationResult(True),
+                )
+
+        return CustomRequirement()
+
+    def test_generic_reason_only_shows_details(self):
+        """A normal failure with a reason keeps its exact previous output."""
+        formatted = ModelFriendlyFeedbackFormatter.format_requirement_reason(
+            self._generic_requirement(),
+            ValidationResult(result=False, reason="Some error occurred"),
+        )
+        assert formatted == (
+            "Custom requirement (failed). Try: Review your code and "
+            "ensure it meets this requirement. Details: Some error occurred"
+        )
+
+    def test_generic_error_only_omits_details(self):
+        """An errored result with no reason shows the description, never `None`."""
+        formatted = ModelFriendlyFeedbackFormatter.format_requirement_reason(
+            self._generic_requirement(),
+            ValidationResult(
+                result=False, reason=None, error=RuntimeError("adapter boom")
+            ),
+        )
+        assert "Custom requirement" in formatted
+        assert "Details" not in formatted
+        assert "None" not in formatted
+        assert "adapter boom" not in formatted
+
+    def test_generic_reason_and_error_shows_reason(self):
+        """When both are present the reason is shown."""
+        formatted = ModelFriendlyFeedbackFormatter.format_requirement_reason(
+            self._generic_requirement(),
+            ValidationResult(
+                result=False, reason="The reason", error=RuntimeError("adapter boom")
+            ),
+        )
+        assert "Details: The reason" in formatted
+        assert "adapter boom" not in formatted
+
+    def test_generic_neither_reason_nor_error_omits_details(self):
+        """With neither reason nor error the description is shown without details."""
+        formatted = ModelFriendlyFeedbackFormatter.format_requirement_reason(
+            self._generic_requirement(), ValidationResult(result=False)
+        )
+        assert "Custom requirement" in formatted
+        assert "Details" not in formatted
+
+    def test_alora_requirement_failure_with_reason_is_unchanged(self):
+        """ALoraRequirement reaches the generic branch and keeps its output."""
+        from mellea.stdlib.requirements import ALoraRequirement
+
+        req = ALoraRequirement("Be polite")
+        formatted = ModelFriendlyFeedbackFormatter.format_requirement_reason(
+            req, ValidationResult(result=False, reason="Too rude")
+        )
+        assert formatted == (
+            "Be polite (failed). Try: Review your code and "
+            "ensure it meets this requirement. Details: Too rude"
+        )
+
+    @pytest.mark.parametrize(
+        "formatter",
+        [
+            ModelFriendlyFeedbackFormatter.format_python_syntax_error,
+            ModelFriendlyFeedbackFormatter.format_import_error,
+            ModelFriendlyFeedbackFormatter.format_execution_error,
+            ModelFriendlyFeedbackFormatter.format_output_size_error,
+            ModelFriendlyFeedbackFormatter.format_matplotlib_error,
+            ModelFriendlyFeedbackFormatter.format_extraction_error,
+        ],
+    )
+    def test_specialised_formatters_never_print_details_none(self, formatter):
+        """With `reason=None` and an error set, no formatter prints `Details: None`."""
+        result = ValidationResult(
+            result=False, reason=None, error=RuntimeError("adapter boom")
+        )
+        assert "Details: None" not in formatter(result)
+
 
 class TestModelFriendlyRepairStrategy:
     """Test ModelFriendlyRepairStrategy."""
