@@ -73,7 +73,7 @@ from ..core import (
     get_images_from_component,
 )
 from ..core.base import AbstractMelleaTool
-from ..formatters import ChatFormatter, TemplateFormatter, granite as granite_formatters
+from ..formatters import ChatFormatter, default_formatter, granite as granite_formatters
 from ..formatters.granite import intrinsics as intrinsics
 from ..formatters.granite.base.util import (
     _LLGUIDANCE_GRAMMAR_DEFAULTS,
@@ -619,6 +619,54 @@ def _check_alora_activation(
     )
 
 
+def _grammar_logits_processor(
+    action: Any, _format: type[BaseModelSubclass] | None, ll_tokenizer: Any
+) -> LogitsProcessorList | None:
+    """Build the llguidance logits processor for a generation, or `None`.
+
+    Two grammar sources, in precedence order:
+
+    1. A raw grammar supplied by the action via a duck-typed `output_grammar()`
+       returning `(grammar_text, syntax)` — e.g. `LLMONInstruction` with
+       `constrain_output=True` (GBNF). The grammar is compiled for its syntax with
+       `llguidance.grammar_from(syntax, ...)`, since `LLMatcher` otherwise assumes
+       Lark and rejects GBNF. This is how LLMON hard mode is enforced.
+    2. The legacy `format=` (Pydantic) path: the schema is compiled with
+       `grammar_from_json_schema` under the bounded whitespace defaults.
+
+    The two never collide in practice — LLMON forces `_format=None`, so at most one
+    source is live — but a raw grammar is preferred defensively. When neither is
+    present, returns `None` and generation is unconstrained (byte-for-byte the prior
+    behavior).
+
+    Args:
+        action: The component being generated. Inspected for `output_grammar()`.
+        _format: Optional Pydantic schema class for the legacy json-schema path.
+        ll_tokenizer: The backend's llguidance tokenizer.
+
+    Returns:
+        A `LogitsProcessorList` enforcing the grammar, or `None` if unconstrained.
+    """
+    output_grammar = getattr(action, "output_grammar", None)
+    if callable(output_grammar):
+        grammar_spec = output_grammar()
+        if grammar_spec is not None:
+            grammar_text, syntax = grammar_spec
+            grammar = llguidance.grammar_from(syntax, grammar_text)
+            processor = _GuidanceLogitsProcessor(grammar, ll_tokenizer)
+            return LogitsProcessorList([processor])
+
+    if _format:
+        schema = _format.model_json_schema()
+        grammar = llguidance.LLMatcher.grammar_from_json_schema(
+            schema, overrides=_LLGUIDANCE_GRAMMAR_DEFAULTS
+        )
+        processor = _GuidanceLogitsProcessor(grammar, ll_tokenizer)
+        return LogitsProcessorList([processor])
+
+    return None
+
+
 class LocalHFBackend(FormatterBackend, AdapterMixin):
     """The LocalHFBackend uses Hugging Face's transformers library for inference, and uses a Formatter to convert `Component`s into prompts. This backend also supports [aLoRA adapters](https://arxiv.org/pdf/2504.12397).
 
@@ -630,7 +678,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         model_id (str | ModelIdentifier): Used to load the model and tokenizer via
             Hugging Face `Auto*` classes.
         formatter (ChatFormatter | None): Formatter for rendering components into
-            prompts. Defaults to `TemplateFormatter`.
+            prompts. Defaults to `default_formatter(model_id)`: an `LLMONFormatter`
+            for a registered LLMON model, otherwise a `TemplateFormatter`.
         use_caches (bool): If `False`, KV caching is disabled even if a `Cache`
             is provided.
         cache (Cache | None): Caching strategy; defaults to
@@ -671,6 +720,9 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
     _cached_blocks: dict[str, DynamicCache] = dict()
     _supports_composed_adapters = True
+    # The one backend that hands the chat template each message as it is, with the
+    # fields an LLMON template reads a turn's parts from.
+    _supports_llmon = True
 
     def __init__(
         self,
@@ -687,9 +739,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         model_options: dict | None = None,
     ):
         """Load model weights from the given model ID, or from a custom config if provided."""
-        formatter = (
-            formatter if formatter is not None else TemplateFormatter(model_id=model_id)
-        )
+        formatter = formatter if formatter is not None else default_formatter(model_id)
 
         super().__init__(model_id, formatter, model_options=model_options)
 
