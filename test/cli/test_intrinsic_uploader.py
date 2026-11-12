@@ -10,8 +10,6 @@ import types
 from types import SimpleNamespace
 from unittest.mock import Mock
 
-import pytest
-
 
 def _load_uploader_with_mock_hub(monkeypatch):
     """Import `cli.alora.intrinsic_uploader` without requiring Hub 0.x/1.x parity."""
@@ -118,7 +116,6 @@ def test_upload_intrinsic_preserves_local_adapter_directory(tmp_path, monkeypatc
     )
     upload_file.assert_not_called()
 
-
 def test_upload_intrinsic_overrides_io_yaml_in_staging_only(tmp_path, monkeypatch):
     uploader = _load_uploader_with_mock_hub(monkeypatch)
 
@@ -153,3 +150,53 @@ def test_upload_intrinsic_overrides_io_yaml_in_staging_only(tmp_path, monkeypatc
     assert staged_files["io.yaml"] == "fresh: true\n"
     upload_file.assert_called_once()
     assert upload_file.call_args.kwargs["path_in_repo"] == "README.md"
+
+
+def test_upload_intrinsic_without_readme(tmp_path, monkeypatch):
+    uploader = _load_uploader_with_mock_hub(monkeypatch)
+
+    weight_dir = tmp_path / "weights"
+    weight_dir.mkdir()
+    (weight_dir / "adapter_config.json").write_text(
+        '{"base_model_name_or_path": "ibm-granite/granite-3.3-2b-instruct"}',
+        encoding="utf-8",
+    )
+    (weight_dir / "adapter_model.safetensors").write_text(
+        "weights-bytes", encoding="utf-8"
+    )
+
+    io_yaml = tmp_path / "io.yaml"
+    io_yaml.write_text("x: 1\n", encoding="utf-8")
+
+    staged_files: dict[str, str] = {}
+    upload_kwargs: dict[str, str] = {}
+    monkeypatch.setattr(
+        uploader,
+        "upload_folder",
+        _make_capture_upload_folder(staged_files, upload_kwargs),
+    )
+    upload_file = Mock()
+    monkeypatch.setattr(uploader, "upload_file", upload_file)
+
+    uploader.upload_intrinsic(
+        weight_path=str(weight_dir),
+        model_name="org/carbchecker",
+        base_model="ibm-granite/granite-3.3-2b-instruct",
+        type="alora",
+        io_yaml=str(io_yaml),
+    )
+
+    assert sorted(os.listdir(weight_dir)) == [
+        "adapter_config.json",
+        "adapter_model.safetensors",
+    ]
+    assert "README.md" not in staged_files
+    assert staged_files == {
+        "adapter_config.json": '{"base_model_name_or_path": "ibm-granite/granite-3.3-2b-instruct"}',
+        "adapter_model.safetensors": "weights-bytes",
+        "io.yaml": "x: 1\n",
+    }
+    assert upload_kwargs["path_in_repo"] == os.path.join(
+        "carbchecker", "granite-3.3-2b-instruct", "alora"
+    )
+    upload_file.assert_not_called()
