@@ -116,6 +116,7 @@ def test_upload_intrinsic_preserves_local_adapter_directory(tmp_path, monkeypatc
     )
     upload_file.assert_not_called()
 
+
 def test_upload_intrinsic_overrides_io_yaml_in_staging_only(tmp_path, monkeypatch):
     uploader = _load_uploader_with_mock_hub(monkeypatch)
 
