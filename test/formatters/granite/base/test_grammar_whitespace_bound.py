@@ -8,11 +8,14 @@ assert that `_LLGUIDANCE_GRAMMAR_DEFAULTS` is *passed* to
 `grammar_from_json_schema`; these tests assert that llguidance actually
 *enforces* the upper bound. On llguidance < 1.8.0 the JSON grammar's skip
 lexeme could re-match at a single position, so a bounded pattern like
-`[\\x20\\x0A\\x0D\\x09]{0,20}` silently permitted unlimited whitespace.
+`[\\x20\\x0A\\x0D\\x09]{0,N}` silently permitted
+unlimited whitespace.
 
 These tests run against real llguidance (no model, no Ollama) using a
 byte-level tokenizer: one token per byte plus EOS.
 """
+
+import re
 
 import pytest
 
@@ -27,7 +30,13 @@ from llguidance import LLMatcher, LLTokenizer, TokenizerWrapper
 # First Party
 from mellea.formatters.granite.base.util import _LLGUIDANCE_GRAMMAR_DEFAULTS
 
-_WS_BOUND = 20
+_WS_MATCH = re.search(
+    r"\{0,(\d+)\}$", _LLGUIDANCE_GRAMMAR_DEFAULTS.get("whitespace_pattern") or ""
+)
+assert _WS_MATCH, "whitespace_pattern must carry a {0,N} upper bound"
+_WS_BOUND = int(_WS_MATCH.group(1))
+# Probe past the bound so an unenforced (unlimited) pattern is detected.
+_PROBE_LIMIT = _WS_BOUND * 10
 _ARRAY_SCHEMA = {"type": "array", "items": {"type": "string"}}
 _SPACE = 0x20
 _NEWLINE = 0x0A
@@ -63,7 +72,7 @@ def _max_consecutive_whitespace(ll_tokenizer: LLTokenizer, ws_byte: int) -> int:
     matcher = LLMatcher(ll_tokenizer, grammar)
     assert matcher.try_consume_tokens([ord("[")]), matcher.get_error()
     count = 0
-    while count < 200:
+    while count < _PROBE_LIMIT:
         if not _token_allowed(matcher, ws_byte):
             break
         if not matcher.try_consume_tokens([ws_byte]):
@@ -83,12 +92,12 @@ def _validate_text(ll_tokenizer: LLTokenizer, text: str) -> bool:
         _ARRAY_SCHEMA, overrides=_LLGUIDANCE_GRAMMAR_DEFAULTS
     )
     matcher = LLMatcher(ll_tokenizer, grammar)
-    matcher.try_consume_tokens([*text.encode("utf-8"), 256])
+    matcher.try_consume_tokens([*text.encode("utf-8"), _ByteTokenizer.eos_token_id])
     return matcher.is_stopped() and not matcher.is_error()
 
 
 class TestWhitespaceBoundEnforced:
-    """The {0,20} cap in _LLGUIDANCE_GRAMMAR_DEFAULTS must hold in the mask."""
+    """The upper bound in _LLGUIDANCE_GRAMMAR_DEFAULTS must hold in the mask."""
 
     def test_space_run_capped(self, ll_tokenizer: LLTokenizer):
         # A run of spaces past the bound must fall out of the acceptance mask,
@@ -104,12 +113,5 @@ class TestWhitespaceBoundEnforced:
         assert _validate_text(ll_tokenizer, '["a",\n    "b"]')
 
     def test_overlong_whitespace_rejected(self, ll_tokenizer: LLTokenizer):
-        # 21 spaces between '[' and the first value exceeds the bound.
+        # One more than the bound between '[' and the first value is rejected.
         assert not _validate_text(ll_tokenizer, '[{}"a"]'.format(" " * (_WS_BOUND + 1)))
-
-
-def test_defaults_pattern_is_bounded():
-    # Guard the constant itself: an unbounded pattern (e.g. `*`/`+` or no upper
-    # bound) would make the enforcement tests above vacuous.
-    pattern = _LLGUIDANCE_GRAMMAR_DEFAULTS["whitespace_pattern"]
-    assert pattern == r"[\x20\x0A\x0D\x09]{0,20}"

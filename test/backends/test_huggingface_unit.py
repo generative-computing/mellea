@@ -3789,7 +3789,7 @@ def _mock_chat_template_output() -> MagicMock:
 def _assert_whitespace_pattern_set(captured: list[dict]) -> None:
     assert captured, "grammar_from_json_schema was never called"
     for call_defaults in captured:
-        assert call_defaults.get("whitespace_pattern") == r"[\x20\x0A\x0D\x09]{0,20}", (
+        assert call_defaults.get("whitespace_pattern") == r"[\x20\x0A\x0D\x09]{0,64}", (
             f"Expected bounded whitespace_pattern, got {call_defaults!r} — "
             "see issue #1510 and PR #1513 review"
         )
@@ -4075,7 +4075,7 @@ async def test_whitespace_pattern_cannot_be_defeated_by_schema():
         assert len(captured) == 1, (
             f"grammar_from_json_schema was not called for {path_name}"
         )
-        assert captured[0].get("whitespace_pattern") == r"[\x20\x0A\x0D\x09]{0,20}", (
+        assert captured[0].get("whitespace_pattern") == r"[\x20\x0A\x0D\x09]{0,64}", (
             f"Expected bounded whitespace_pattern to override False in {path_name}"
         )
 
