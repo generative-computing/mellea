@@ -854,8 +854,24 @@ async def test_user_structured_outputs_drives_response_format():
     assert call_kwargs["response_format"]["json_schema"]["schema"] == caller_schema
 
 
-async def test_user_response_format_not_overwritten():
-    """A caller-supplied `response_format` wins over the io.yaml schema."""
+@pytest.mark.parametrize(
+    "caller_format",
+    [
+        {"type": "json_object"},
+        {"type": "text"},
+        {
+            "type": "json_schema",
+            "json_schema": {"name": "caller", "schema": {"type": "string"}},
+        },
+    ],
+    ids=["json_object", "text", "json_schema"],
+)
+async def test_user_response_format_not_overwritten(caller_format):
+    """A caller's `response_format` wins and the io.yaml constraint is dropped.
+
+    vLLM layers `response_format` over `structured_outputs`, so leaving the
+    io.yaml `json` in place would reject `json_object` and ignore `text`.
+    """
     backend = _make_backend_with_adapter(
         {**_SIMPLE_CONFIG, "response_format": _ANSWERABILITY_SCHEMA}
     )
@@ -864,7 +880,6 @@ async def test_user_response_format_not_overwritten():
     mock_client = MagicMock()
     mock_client.chat.completions.create = mock_create
 
-    caller_format = {"type": "json_object"}
     with patch.object(
         OpenAIBackend,
         "_async_client",
@@ -880,7 +895,44 @@ async def test_user_response_format_not_overwritten():
         )
         await mot.avalue()
 
-    assert mock_create.call_args.kwargs["response_format"] == caller_format
+    call_kwargs = mock_create.call_args.kwargs
+    assert call_kwargs["response_format"] == caller_format
+    assert "structured_outputs" not in call_kwargs["extra_body"]
+
+
+async def test_user_response_format_keeps_user_structured_outputs():
+    """A caller who sets both fields gets both, unchanged."""
+    backend = _make_backend_with_adapter(
+        {**_SIMPLE_CONFIG, "response_format": _ANSWERABILITY_SCHEMA}
+    )
+    mock_create = AsyncMock(return_value=_simple_chat_completion('"yes"'))
+
+    mock_client = MagicMock()
+    mock_client.chat.completions.create = mock_create
+
+    caller_format = {"type": "text"}
+    caller_structured = {"regex": "yes|no"}
+    with patch.object(
+        OpenAIBackend,
+        "_async_client",
+        new_callable=PropertyMock,
+        return_value=mock_client,
+    ):
+        mot, _ = await mfuncs.aact(
+            Intrinsic("answerability"),
+            _make_context(),
+            backend,
+            strategy=None,
+            model_options={
+                "response_format": caller_format,
+                "extra_body": {"structured_outputs": caller_structured},
+            },
+        )
+        await mot.avalue()
+
+    call_kwargs = mock_create.call_args.kwargs
+    assert call_kwargs["response_format"] == caller_format
+    assert call_kwargs["extra_body"]["structured_outputs"] == caller_structured
 
 
 async def test_user_extra_body_cannot_override_embedded_adapter():

@@ -1091,7 +1091,8 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         `documents` into `chat_template_kwargs` so servers without a
         first-class documents field still render them, sends the io.yaml
         schema as `response_format` as well as vLLM's `structured_outputs`
-        so every server constrains decoding, and post-processes the model
+        so every server constrains decoding (a caller's `response_format`
+        replaces both), and post-processes the model
         output through the intrinsic's result processor.
 
         Intrinsics default to options provided by `io.yaml`. Model options
@@ -1306,8 +1307,18 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         # arrives as vLLM's own `structured_outputs` field, which llama-server
         # ignores, so adapters would decode unconstrained there. Also send it
         # as the OpenAI-standard `response_format`, which both servers honour;
-        # vLLM folds it back into the same `structured_outputs.json`. A
-        # caller's own `response_format` wins.
+        # vLLM folds it back into the same `structured_outputs.json`.
+        #
+        # A caller's own `response_format` wins on both servers. vLLM applies
+        # `response_format` on top of `structured_outputs` rather than
+        # replacing it, so a caller's `json_object` would collide with the
+        # io.yaml `json` constraint and a caller's `text` would leave it in
+        # force. Drop the io.yaml constraint unless the caller set
+        # `structured_outputs` themselves.
+        if "response_format" in user_api_params and not (
+            user_extra_body and "structured_outputs" in user_extra_body
+        ):
+            extra_body.pop("structured_outputs", None)
         structured_outputs = extra_body.get("structured_outputs")
         schema = (
             structured_outputs.get("json")
