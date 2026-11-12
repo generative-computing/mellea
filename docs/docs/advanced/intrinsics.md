@@ -170,8 +170,10 @@ decoding work as they do under vLLM.
 
 Both commands below serve on `http://127.0.0.1:8081` (the base-Granite server
 keeps 8080), so run one at a time or move the second: change `--port` on the
-`llama-server` command, or set `LLAMACPP_SWITCH_PORT` for the script. Both need `llama-server` on `PATH` (`brew install llama.cpp` on
-macOS). Pick the checkpoint by the adapter functions you need (see
+`llama-server` command, or set `LLAMACPP_SWITCH_PORT` for the script. Set
+`LLAMACPP_SWITCH_BASE_URL` to match so the examples find the moved server. Both
+need `llama-server` on `PATH` (`brew install llama.cpp` on macOS). Pick the
+checkpoint by the adapter functions you need (see
 [Choosing a model](#choosing-a-model)):
 
 ```bash
@@ -193,8 +195,13 @@ Then point the backend at the server; llama-server ignores the API key, but the
 OpenAI client needs one:
 
 ```python
+from mellea.backends.openai import OpenAIBackend
+from mellea.formatters import TemplateFormatter
+
+MODEL = "ibm-granite/granite-switch-4.1-8b"  # the server's --alias
+
 backend = OpenAIBackend(
-    model_id=MODEL,  # the checkpoint the server serves (its --alias)
+    model_id=MODEL,
     formatter=TemplateFormatter(model_id=MODEL),
     base_url="http://127.0.0.1:8081/v1",
     api_key="llamacpp",
