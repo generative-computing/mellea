@@ -1,0 +1,465 @@
+---
+title: "OpenAI and OpenAI-Compatible APIs"
+description: "Use Mellea with OpenAI's API and any OpenAI-compatible endpoint — LM Studio, vLLM, Anthropic, and more."
+# diataxis: how-to
+---
+
+`OpenAIBackend` connects Mellea to the OpenAI API and to any server that implements
+the OpenAI HTTP API — including LM Studio, Ollama's OpenAI endpoint, vLLM, and
+OpenAI-compatible providers.
+
+**Prerequisites:** `pip install mellea`, a valid API key for the OpenAI API or a
+local OpenAI-compatible server running.
+
+## OpenAI API
+
+Set your API key as an environment variable (recommended):
+
+```bash
+export OPENAI_API_KEY=sk-...
+```
+
+Then create a session:
+
+```python
+# Requires: mellea
+# Returns: ModelOutputThunk
+from mellea import MelleaSession
+from mellea.backends.openai import OpenAIBackend
+from mellea.stdlib.context import ChatContext
+
+m = MelleaSession(
+    OpenAIBackend(model_id="gpt-4o"),
+    ctx=ChatContext(),
+)
+reply = m.chat("What is the capital of France?")
+print(str(reply))
+# Output will vary — LLM responses depend on model and temperature.
+```
+
+Pass the key directly if you prefer not to use an environment variable:
+
+```python
+# Requires: mellea
+# Returns: MelleaSession
+from mellea import MelleaSession
+from mellea.backends.openai import OpenAIBackend
+
+m = MelleaSession(
+    OpenAIBackend(model_id="gpt-4o", api_key="sk-..."),
+)
+```
+
+> **Note:** Never commit API keys to source control. Use environment variables or
+> a secrets manager in production.
+
+## OpenAI-compatible local servers
+
+`OpenAIBackend` works with any server that implements the OpenAI HTTP API. No real
+API key is needed for local servers — pass any non-empty string:
+
+### LM Studio
+
+```python
+# Requires: mellea
+# Returns: MelleaSession
+from mellea import MelleaSession
+from mellea.backends.openai import OpenAIBackend
+
+m = MelleaSession(
+    OpenAIBackend(
+        model_id="qwen/qwen2.5-vl-7b",
+        base_url="http://127.0.0.1:1234/v1",
+    )
+)
+```
+
+### Ollama's OpenAI endpoint
+
+```python
+# Requires: mellea
+# Returns: MelleaSession
+from mellea import MelleaSession
+from mellea.backends.openai import OpenAIBackend
+from mellea.stdlib.context import ChatContext
+
+m = MelleaSession(
+    OpenAIBackend(
+        model_id="qwen2.5vl:7b",
+        base_url="http://localhost:11434/v1",
+        api_key="ollama",              # Ollama ignores the key; any value works
+    ),
+    ctx=ChatContext(),
+)
+```
+
+### vLLM
+
+```python
+# Requires: mellea
+# Returns: MelleaSession
+from mellea import MelleaSession
+from mellea.backends.openai import OpenAIBackend
+
+m = MelleaSession(
+    OpenAIBackend(
+        model_id="ibm-granite/granite-3.3-8b-instruct",
+        base_url="http://localhost:8000/v1",
+        api_key="your-vllm-key",
+    )
+)
+```
+
+## Using `base_url` from the environment
+
+Set `OPENAI_BASE_URL` to avoid repeating the base URL in your code:
+
+```bash
+export OPENAI_BASE_URL=http://localhost:11434/v1
+export OPENAI_API_KEY=ollama
+```
+
+```python
+# Requires: mellea
+# Returns: MelleaSession
+from mellea import MelleaSession
+from mellea.backends.openai import OpenAIBackend
+
+# Reads OPENAI_BASE_URL and OPENAI_API_KEY from environment
+m = MelleaSession(OpenAIBackend(model_id="qwen2.5vl:7b"))
+```
+
+`base_url` and `api_key` constructor parameters take precedence over environment
+variables if both are set.
+
+## Vision and multimodal input
+
+`OpenAIBackend` supports image inputs for vision-capable models. Pass a PIL image
+or a Mellea `ImageBlock`:
+
+```python
+# Requires: mellea
+# Returns: ModelOutputThunk
+from PIL import Image
+from mellea import MelleaSession
+from mellea.backends.openai import OpenAIBackend
+from mellea.core import ImageBlock
+from mellea.stdlib.context import ChatContext
+
+m = MelleaSession(
+    OpenAIBackend(
+        model_id="gpt-4o",
+        api_key="sk-...",
+    ),
+    ctx=ChatContext(),
+)
+
+pil_image = Image.open("screenshot.png")
+img_block = ImageBlock.from_pil_image(pil_image)
+
+response = m.instruct(
+    "Describe the content of this image and identify any text visible.",
+    images=[img_block],
+)
+print(str(response))
+# Output will vary — LLM responses depend on model and temperature.
+```
+
+You can also pass PIL `Image` objects directly without wrapping them:
+
+```python
+# Requires: mellea, pillow
+# Returns: ModelOutputThunk
+chat_response = m.chat(
+    "How many people are in this image?",
+    images=[pil_image],
+)
+```
+
+> **Backend note:** Vision requires a model that supports image inputs (e.g., `gpt-4o`,
+> `qwen2.5vl:7b`). Text-only models will raise an error if images are passed.
+
+## Structured output with `format`
+
+Use the `format` parameter to constrain generation to a Pydantic schema:
+
+```python
+# Requires: mellea, pydantic
+# Returns: str
+from pydantic import BaseModel
+from mellea import MelleaSession
+from mellea.backends.openai import OpenAIBackend
+
+class Summary(BaseModel):
+    title: str
+    key_points: list[str]
+    word_count: int
+
+m = MelleaSession(OpenAIBackend(model_id="gpt-4o", api_key="sk-..."))
+result = m.instruct(
+    "Summarise this article: {{text}}",
+    format=Summary,
+    user_variables={"text": "...your article text..."},
+)
+parsed = Summary.model_validate_json(str(result))
+print(parsed.title)
+```
+
+## Model options
+
+Set generation parameters with `ModelOption`:
+
+```python
+# Requires: mellea
+# Returns: MelleaSession
+from mellea import MelleaSession
+from mellea.backends import ModelOption
+from mellea.backends.openai import OpenAIBackend
+
+m = MelleaSession(
+    OpenAIBackend(
+        model_id="gpt-4o",
+        api_key="sk-...",
+        model_options={
+            ModelOption.TEMPERATURE: 0.3,
+            ModelOption.MAX_NEW_TOKENS: 500,
+            ModelOption.SYSTEM_PROMPT: "You are a concise technical writer.",
+        },
+    )
+)
+```
+
+Options set at construction time apply to all calls. Options passed to `instruct()`
+or `chat()` apply to that call only and take precedence.
+
+## NVIDIA NIM via OpenAI-compatible endpoint
+
+NVIDIA hosts the Nemotron models at `https://integrate.api.nvidia.com/v1`, which is
+OpenAI-compatible. The `NVIDIA_*` constants in `model_ids` carry their NVIDIA-hosted
+names in `openai_name`, so you can pass the `ModelIdentifier` directly — but you must
+also set `base_url`, since these models are not served by OpenAI:
+
+```python
+# Requires: mellea
+# Returns: MelleaSession
+from mellea import MelleaSession
+from mellea.backends import model_ids
+from mellea.backends.openai import OpenAIBackend
+
+m = MelleaSession(
+    OpenAIBackend(
+        model_id=model_ids.NVIDIA_NEMOTRON_3_NANO_4B,
+        api_key="your-nvidia-api-key",
+        base_url="https://integrate.api.nvidia.com/v1",
+    )
+)
+```
+
+Not every constant has a hosted endpoint: `NVIDIA_NEMOTRON_3_NANO_4B` and
+`NVIDIA_NEMOTRON_NANO_12B_V2` ship for local inference only, so their `openai_name` is
+`None` and passing them to `OpenAIBackend` raises an `AssertionError`. To self-host any
+of these with vLLM instead, pass `hf_model_name` as a string — vLLM serves a model under
+the name it was launched with, not under the NVIDIA-hosted name:
+
+```python
+# Requires: mellea
+# Returns: MelleaSession
+from mellea import MelleaSession
+from mellea.backends import model_ids
+from mellea.backends.openai import OpenAIBackend
+
+m = MelleaSession(
+    OpenAIBackend(
+        model_id=model_ids.NVIDIA_NEMOTRON_3_NANO_30B_A3B.hf_model_name,
+        api_key="EMPTY",
+        base_url="http://localhost:8000/v1",
+    )
+)
+```
+
+## Anthropic via OpenAI-compatible endpoint
+
+Anthropic's API is not OpenAI-compatible natively, but if you access it through a
+proxy that exposes an OpenAI-compatible interface, you can use `OpenAIBackend`:
+
+```python
+# Requires: mellea
+# Returns: MelleaSession
+from mellea import MelleaSession
+from mellea.backends.openai import OpenAIBackend
+
+# Example: accessing Claude via a proxy with OpenAI-compatible interface
+m = MelleaSession(
+    OpenAIBackend(
+        model_id="claude-3-haiku-20240307",
+        api_key="your-anthropic-key",
+        base_url="https://api.anthropic.com/v1/",
+    )
+)
+```
+
+> **Note (review needed):** Direct Anthropic API compatibility via this path has not
+> been verified against the current Mellea version. If you are using Anthropic,
+> LiteLLM provides a verified integration — see
+> [Backends and Configuration](../how-to/backends-and-configuration.md).
+
+## Adapter functions with Granite Switch
+
+Granite Switch models embed LoRA/aLoRA adapters directly in the model weights.
+When served via vLLM, these adapters enable adapter functions (RAG quality
+checks, safety evaluation, requirement validation) through the OpenAI-compatible
+API without loading adapter weights at runtime.
+
+Start a vLLM server with the Granite Switch model:
+
+```bash
+python -m vllm.entrypoints.openai.api_server \
+    --model <granite-switch-model-id> \
+    --dtype bfloat16 \
+    --enable-prefix-caching
+```
+
+Then create a backend with `load_embedded_adapters=True`:
+
+```python
+from mellea.backends.openai import OpenAIBackend
+from mellea.backends.model_ids import IBM_GRANITE_SWITCH_4_1_3B_PREVIEW
+from mellea.formatters import TemplateFormatter
+
+backend = OpenAIBackend(
+    model_id=IBM_GRANITE_SWITCH_4_1_3B_PREVIEW.hf_model_name,
+    formatter=TemplateFormatter(model_id=IBM_GRANITE_SWITCH_4_1_3B_PREVIEW.hf_model_name),
+    base_url="http://localhost:8000/v1",
+    api_key="EMPTY",
+    load_embedded_adapters=True,
+)
+```
+
+The high-level adapter function wrappers (`rag.check_answerability`,
+`core.check_certainty`, etc.) work identically with this backend. See
+[Adapter functions](../advanced/intrinsics.md) for the full list of available adapter functions.
+
+> **Note:** `load_embedded_adapters=True` downloads adapter I/O configurations
+> from the model's Hugging Face repository on first use. No adapter weights are
+> transferred — the adapters are already part of the model. Only adapter functions
+> embedded in the model are available — check the model's `adapter_index.json`
+> for the list.
+
+For more control, load adapters manually with `load_embedded_adapters=False`:
+
+```python
+from mellea.backends.openai import OpenAIBackend
+from mellea.backends.model_ids import IBM_GRANITE_SWITCH_4_1_3B_PREVIEW
+from mellea.formatters import TemplateFormatter
+
+backend = OpenAIBackend(
+    model_id=IBM_GRANITE_SWITCH_4_1_3B_PREVIEW.hf_model_name,
+    formatter=TemplateFormatter(model_id=IBM_GRANITE_SWITCH_4_1_3B_PREVIEW.hf_model_name),
+    base_url="http://localhost:8000/v1",
+    api_key="EMPTY",
+    load_embedded_adapters=False,
+)
+
+# Discover and register a single adapter from the model's Hugging Face repo —
+# this composes an Adapter (Identity + IOContract + EmbeddedBinding) rather
+# than returning the deprecated EmbeddedIntrinsicAdapter shim.
+backend.register_embedded_adapter_model(
+    IBM_GRANITE_SWITCH_4_1_3B_PREVIEW.hf_model_name,
+    intrinsic_name="answerability",
+)
+```
+
+## Troubleshooting
+
+### `OPENAI_API_KEY` not set error
+
+Either export the environment variable or pass `api_key` directly to `OpenAIBackend`.
+For local servers, pass any non-empty string (e.g., `api_key="local"`).
+
+### Connection refused at custom `base_url`
+
+Confirm the local server is running and listening on the expected port. For Ollama,
+run `ollama serve`; for LM Studio, start the local server from the LM Studio UI.
+
+### Model not found
+
+The model string must exactly match the name your server recognises. For OpenAI,
+refer to the [OpenAI models page](https://platform.openai.com/docs/models). For
+local servers, list available models from the server's API or UI.
+
+### Empty `value` from a thinking-mode model
+
+A response with `result.value == ""` despite non-zero `completion_tokens` is the
+signature of a thinking-mode model that emitted only reasoning tokens and no
+final answer. The OpenAI backend reports the response faithfully — the model
+genuinely returned `content=None` — but the reasoning content is preserved
+separately on the underlying `ModelOutputThunk`.
+
+> **Preferred entry point:** for backends that honour it (this one included),
+> `ModelOption.THINKING` is the portable way to enable/disable/level thinking —
+> see [Reasoning and thinking mode](../how-to/configure-model-options.md#reasoning-and-thinking-mode).
+> The `extra_body`/`enable_thinking` pattern below remains useful as a fallback
+> for runtime-specific params `ModelOption.THINKING` doesn't cover, and for the
+> `default_extra_body` merge semantics described below.
+
+Diagnose with:
+
+```python
+result = m.instruct("What is 2 + 2?")
+print(repr(result.value))                    # ''
+print(result.generation.usage)               # {'completion_tokens': 9, ...}
+print(result.thinking)                       # populated reasoning content, if any
+```
+
+This affects models that default to thinking mode, most commonly Qwen3 served
+via vLLM with `--reasoning-parser qwen3`. To disable thinking and get a normal
+text response, pass the runtime-specific switch through `extra_body`.
+
+To set it once for every call the session makes (recommended — see below for
+why), pass `default_extra_body` when constructing the backend. For vLLM:
+
+```python
+from mellea import MelleaSession
+from mellea.backends.openai import OpenAIBackend
+
+m = MelleaSession(
+    OpenAIBackend(
+        model_id="Qwen/Qwen3-Coder-Next-FP8",
+        base_url="http://localhost:8000/v1",
+        api_key="unused",
+        default_extra_body={"chat_template_kwargs": {"enable_thinking": False}},
+    )
+)
+```
+
+`default_extra_body` fields are merged into every request this backend makes;
+a per-call override (passed via `model_options={"extra_body": ...}` on a
+single `instruct()`/`act()` call) takes precedence for that one call, and
+`chat_template_kwargs` is deep-merged across both, so a construction-time
+thinking setting is not silently dropped when a call also activates an
+intrinsic adapter (which writes its own `chat_template_kwargs.adapter_name`).
+
+Toggling thinking per call is also possible via `model_options={"extra_body":
+...}` on the call itself. The older pattern of setting a persistent default
+via `model_options={"extra_body": ...}` at **construction** time also works —
+`chat_template_kwargs` in a construction-time `model_options["extra_body"]` is
+deep-merged with any per-call `extra_body`, so a call that passes its own,
+unrelated per-call `extra_body` does not drop it. Prefer `default_extra_body`
+regardless — it is the dedicated mechanism for values you want to persist
+across every call.
+
+Note also that switching `enable_thinking` mid-session changes the rendered
+chat-template prefix on servers like vLLM, which can invalidate that
+server's prefix/KV cache for the conversation from that point on — another
+reason to fix it once via `default_extra_body` rather than toggling it call
+by call.
+
+Other inference servers expose the same control under different names — check
+your runtime's documentation. If you intend to use thinking mode, read the
+reasoning trace from `result.thinking` rather than `result.value`.
+
+---
+
+**See also:** [Backends and Configuration](../how-to/backends-and-configuration.md) |
+[Enforce Structured Output](../how-to/enforce-structured-output.md) |
+[Official Granite Switch Documentation](https://github.com/generative-computing/granite-switch)
