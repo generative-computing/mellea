@@ -8,13 +8,14 @@ from a JSONL training dataset — including a high-level description, the inferr
 Python argument list, and Jinja2-renderable sample rows. Validates the generated
 output with deterministic requirements (correct naming conventions, syntactically
 valid argument lists) before rendering the final `INTRINSIC_README.md` via a
-Jinja2 template.
+Jinja2 template. The rendered integration code matches the target repository's
+adapter layout: intrinsic (Mellea adapter-function usage) or flat (plain PEFT).
 """
 
 import ast
 import json
 import os
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel
 
@@ -140,6 +141,7 @@ def make_readme_jinja_dict(
     prompt_file: str,
     name: str,
     hints: str | None,
+    layout: Literal["intrinsic", "flat"] = "intrinsic",
 ) -> dict[str, Any]:
     """Generate all template variables for the intrinsic README using an LLM.
 
@@ -155,6 +157,8 @@ def make_readme_jinja_dict(
         name: Destination model name on Hugging Face Hub
             (e.g. `"acme/carbchecker-alora"`).
         hints: Optional string of additional domain hints to include in the prompt.
+        layout: Adapter layout of the target repository; selects the integration
+            code the rendered README documents.
 
     Returns:
         Dict of Jinja2 template variables for rendering the `INTRINSIC_README.md`.
@@ -283,6 +287,7 @@ Generate appropriate values for each field:
     vars_dict["example_call_kwargs"] = ", ".join(parts)
 
     vars_dict["base_model"] = base_model
+    vars_dict["intrinsic_layout"] = layout == "intrinsic"
 
     return vars_dict
 
@@ -294,6 +299,7 @@ def generate_readme(
     output_path: str,
     name: str,
     hints: str | None,
+    layout: Literal["intrinsic", "flat"] = "intrinsic",
 ) -> str:
     """Generate an INTRINSIC_README.md file from the dataset and template.
 
@@ -307,6 +313,8 @@ def generate_readme(
         output_path: Destination path for the generated README file.
         name: Destination model name on Hugging Face Hub.
         hints: Optional string of additional domain hints for the LLM.
+        layout: Adapter layout of the target repository. `"intrinsic"` documents
+            Mellea adapter-function usage; `"flat"` documents plain PEFT usage.
 
     Returns:
         The path to the written output file (same as `output_path`).
@@ -317,7 +325,7 @@ def generate_readme(
 
     try:
         template_vars = make_readme_jinja_dict(
-            m, dataset_path, base_model, prompt_file or "", name, hints
+            m, dataset_path, base_model, prompt_file or "", name, hints, layout
         )
 
         template_dir = os.path.dirname(os.path.abspath(__file__))

@@ -164,6 +164,8 @@ def test_add_readme_token_lookup(monkeypatch, token):
         name="example/adapter",
         hints=None,
         io_yaml=None,
+        # Explicit layout: this test exercises token lookup, not layout detection.
+        layout="intrinsic",
     )
     if token is None:
         with pytest.raises(OSError) as exc_info:

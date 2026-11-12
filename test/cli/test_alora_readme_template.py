@@ -32,16 +32,19 @@ _TEMPLATE_VARS = {
     "arglist_without_type_annotations": "description",
     "arglist_as_kwargs": "description=description",
     "example_call_kwargs": "description='a cracked stembolt'",
+    "intrinsic_layout": True,
 }
 
+_FLAT_TEMPLATE_VARS = {**_TEMPLATE_VARS, "intrinsic_layout": False}
 
-def _render_template() -> str:
+
+def _render_template(vars_dict: dict | None = None) -> str:
     from jinja2 import Environment, FileSystemLoader
 
     template_dir = os.path.join(os.path.dirname(__file__), "..", "..", "cli", "alora")
     env = Environment(loader=FileSystemLoader(template_dir))
     template = env.get_template("README_TEMPLATE.jinja")
-    return template.render(**_TEMPLATE_VARS)
+    return template.render(**(vars_dict or _TEMPLATE_VARS))
 
 
 def _extract_python_sample(readme_content: str) -> str:
@@ -57,8 +60,29 @@ def _extract_python_sample(readme_content: str) -> str:
 @pytest.mark.unit
 def test_readme_template_renders_and_python_sample_compiles():
     """The generated README's fenced Python sample must be syntactically valid."""
-    code = _extract_python_sample(_render_template())
+    content = _render_template()
+    code = _extract_python_sample(content)
     compile(code, "<generated-readme>", "exec")
+    assert "LocalFileBinding" in content
+
+
+@pytest.mark.unit
+def test_readme_template_flat_layout_documents_peft_not_intrinsic_loading():
+    """A flat upload must get a PEFT sample, not intrinsic code that cannot find it.
+
+    Regression guard: `add-readme` used to always render the intrinsic sample,
+    which fails against a repository uploaded with plain `m alora upload`
+    (weights at the root, not under `<name>/<base-model>/<lora|alora>/`).
+    """
+    content = _render_template(_FLAT_TEMPLATE_VARS)
+    code = _extract_python_sample(content)
+    compile(code, "<generated-readme-flat>", "exec")
+
+    assert "AutoPeftModelForCausalLM" in code
+    assert "acme/stembolts" in code
+    # The prose may mention LocalFileBinding; the sample must not use it.
+    assert "LocalFileBinding(" not in content
+    assert "Intrinsic" not in code
 
 
 @pytest.mark.unit
