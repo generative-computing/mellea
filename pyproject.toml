@@ -108,6 +108,12 @@ switch = [
     "huggingface-hub>=0.33.4",
 ]
 
+# LLMON (LLM Object Notation, arXiv:2603.22519) prompt rendering and reply parsing,
+# used by `LLMONFormatter` (see mellea/formatters/llmon_formatter.py).
+llmon = [
+    "llmon-core",
+]
+
 backends = ["mellea[watsonx,hf,litellm]"]
 
 hooks = [
@@ -116,7 +122,7 @@ hooks = [
     "grpcio>=1.78.0",
 ]
 
-all = ["mellea[backends,docling,tools,telemetry,server,sandbox,switch,granite_retriever,hooks,cli]"]
+all = ["mellea[backends,docling,tools,telemetry,server,sandbox,switch,granite_retriever,hooks,cli,llmon]"]
 
 [dependency-groups]
 # Development groups: uv sync --all-groups
@@ -346,13 +352,19 @@ disable_error_code = [
 module = "cpex.*"
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+# The `llmon` library (the `llmon` extra), an optional dependency absent from
+# environments that install mellea without it.
+module = "llmon.*"
+ignore_missing_imports = true
+
 
 # -----------------------------
 # Codespell - Spell Checking
 # -----------------------------
 
 [tool.codespell]
-ignore-words-list = 'mellea,hashi,noo,Asai,asai,nd,mot,rouge,Rouge,Strat,strat,Wight,Aer,aer,preemptable,ans'
+ignore-words-list = 'mellea,hashi,noo,Asai,asai,nd,mot,rouge,Rouge,Strat,strat,Wight,Aer,aer,preemptable,ans,openend'
 check-filenames = true
 check-hidden = false
 regex = "(?<![a-z])[a-z'`]+|[A-Z][a-z'`]*|[a-z]+'[a-z]*|[a-z]+(?=[_-])|[a-z]+(?=[A-Z])|\\d+"

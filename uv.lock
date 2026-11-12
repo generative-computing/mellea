@@ -2914,6 +2914,15 @@ docker = [
 ]
 
 [[package]]
+name = "llmon-core"
+version = "0.0.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/97/d9/619c28070a3bc874dd131877211a19ad7f428d55ba321fa4db929a057039/llmon_core-0.0.2.tar.gz", hash = "sha256:52236f7a37047bfbb80b170b563e7dd31cc317611c11d0c50293a552c52c338a", size = 340622, upload-time = "2026-10-19T22:00:02.434Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/4b/61/fe764aa09c8f3aafb652b89f23f9ad1f2fc34e3b349234a80d82061ee86d/llmon_core-0.0.2-py3-none-any.whl", hash = "sha256:d5e735ada5fb12e63098953ab0f660fd3baf4f86a08267b387b810f5d03a7a51", size = 443397, upload-time = "2026-10-19T22:00:00.146Z" },
+]
+
+[[package]]
 name = "lomond"
 version = "0.3.3"
 source = { registry = "https://pypi.org/simple" }
@@ -3255,6 +3264,7 @@ all = [
     { name = "litellm" },
     { name = "llguidance" },
     { name = "llm-sandbox", extra = ["docker"] },
+    { name = "llmon-core" },
     { name = "mcp" },
     { name = "omegaconf" },
     { name = "opencv-python-headless" },
@@ -3317,6 +3327,9 @@ hooks = [
 litellm = [
     { name = "boto3" },
     { name = "litellm" },
+]
+llmon = [
+    { name = "llmon-core" },
 ]
 sandbox = [
     { name = "llm-sandbox", extra = ["docker"] },
@@ -3436,9 +3449,10 @@ requires-dist = [
     { name = "litellm", marker = "extra == 'litellm'", specifier = ">=1.95.0" },
     { name = "llguidance", marker = "extra == 'hf'" },
     { name = "llm-sandbox", extras = ["docker"], marker = "extra == 'sandbox'", specifier = ">=0.3.23" },
+    { name = "llmon-core", marker = "extra == 'llmon'" },
     { name = "math-verify" },
     { name = "mcp", marker = "extra == 'tools'", specifier = ">=1.27.0" },
-    { name = "mellea", extras = ["backends", "docling", "tools", "telemetry", "server", "sandbox", "switch", "granite-retriever", "hooks", "cli"], marker = "extra == 'all'", editable = "." },
+    { name = "mellea", extras = ["backends", "docling", "tools", "telemetry", "server", "sandbox", "switch", "granite-retriever", "hooks", "cli", "llmon"], marker = "extra == 'all'", editable = "." },
     { name = "mellea", extras = ["cli"], marker = "extra == 'server'", editable = "." },
     { name = "mellea", extras = ["hooks"], marker = "extra == 'telemetry'", editable = "." },
     { name = "mellea", extras = ["watsonx", "hf", "litellm"], marker = "extra == 'backends'", editable = "." },
@@ -3468,7 +3482,7 @@ requires-dist = [
     { name = "typer", marker = "extra == 'cli'" },
     { name = "uvicorn", marker = "extra == 'server'" },
 ]
-provides-extras = ["hf", "litellm", "watsonx", "tools", "telemetry", "docling", "granite-retriever", "cli", "server", "sandbox", "switch", "backends", "hooks", "all"]
+provides-extras = ["hf", "litellm", "watsonx", "tools", "telemetry", "docling", "granite-retriever", "cli", "server", "sandbox", "switch", "llmon", "backends", "hooks", "all"]
 
 [package.metadata.requires-dev]
 build = [{ name = "pdm", specifier = ">=2.24.0" }]

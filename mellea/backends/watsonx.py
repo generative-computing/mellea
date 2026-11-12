@@ -96,7 +96,9 @@ class WatsonxAIBackend(FormatterBackend):
         model_id (str | ModelIdentifier): WatsonX model identifier. Defaults to
             `model_ids.IBM_GRANITE_4_HYBRID_SMALL`.
         formatter (ChatFormatter | None): Formatter for rendering components.
-            Defaults to `TemplateFormatter`.
+            Defaults to a `TemplateFormatter`. Only `LocalHFBackend` supports
+            LLMON, so an `LLMONFormatter` or a registered LLMON model raises
+            `ValueError`.
         base_url (str | None): URL for the WatsonX ML deployment endpoint;
             defaults to the `WATSONX_URL` environment variable.
         model_options (dict | None): Default model options for generation requests.
