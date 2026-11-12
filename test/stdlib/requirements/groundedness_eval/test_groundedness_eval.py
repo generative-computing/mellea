@@ -183,11 +183,34 @@ def _outcomes(arm, wrong_ids=(), errored_ids=(), lenient=False, repeats=1):
             expected = harness.gold_verdict(item, lenient)
             if item.id in errored_ids:
                 out.append(
-                    Outcome(item.id, arm, lenient, "fake", r, None, True, "boom")
+                    Outcome(
+                        item.id,
+                        arm,
+                        lenient,
+                        "fake",
+                        r,
+                        None,
+                        True,
+                        "boom",
+                        adapters=[] if arm == "adapter" else None,
+                        repeats=repeats,
+                    )
                 )
                 continue
             passed = (not expected) if item.id in wrong_ids else expected
-            out.append(Outcome(item.id, arm, lenient, "fake", r, passed, False))
+            out.append(
+                Outcome(
+                    item.id,
+                    arm,
+                    lenient,
+                    "fake",
+                    r,
+                    passed,
+                    False,
+                    adapters=[] if arm == "adapter" else None,
+                    repeats=repeats,
+                )
+            )
     return out
 
 
@@ -598,3 +621,77 @@ def test_margin_allows_one_more_miss_of_34(extra_misses, go):
     )
     assert report["comparison"]["miss"]["n"] == 34
     assert report["go"] is go
+
+
+def test_errored_invented_claim_counts_as_a_miss():
+    invented = [i.id for i in ITEMS if i.has_invented_claim]
+    m = arm_metrics(ITEMS, _outcomes("adapter", errored_ids=invented[:2]))
+    assert m.misses == 2
+
+
+def test_errors_cannot_hide_misses():
+    invented = [i.id for i in ITEMS if i.has_invented_claim]
+    second = _outcomes(
+        "adapter", wrong_ids=invented[2:3], errored_ids=invented[:2], repeats=3
+    )
+    report = _compare(_outcomes("prompts", repeats=3), second)
+    assert report["comparison"]["miss"]["arm2_rate"] == pytest.approx(3 / 34)
+    assert report["go"] is False
+
+
+def test_errored_row_is_wrong_in_its_category():
+    grounded = [i.id for i in ITEMS if i.category == "grounded"]
+    invented = [i.id for i in ITEMS if i.category == "invented"]
+    m = arm_metrics(
+        ITEMS, _outcomes("adapter", errored_ids=grounded[:1] + invented[:1])
+    )
+    assert m.by_category["grounded"][0] == 1
+    assert m.by_category["invented"][0] == 1
+
+
+def test_compare_rejects_a_run_stopped_after_a_whole_repeat():
+    stopped = [replace(o, repeats=3) for o in _outcomes("adapter")]
+    with pytest.raises(ValueError, match="asked for 3 repeats"):
+        _compare(_outcomes("prompts", repeats=3), stopped)
+
+
+def test_compare_rejects_files_with_different_repeats():
+    with pytest.raises(ValueError, match="same --repeats"):
+        _compare(_outcomes("prompts", repeats=3), _outcomes("adapter"))
+
+
+def test_compare_rejects_rows_without_repeats():
+    old = [replace(o, repeats=None) for o in _outcomes("adapter")]
+    with pytest.raises(ValueError, match="do not record --repeats"):
+        _compare(_outcomes("prompts"), old)
+
+
+def test_compare_rejects_adapter_file_without_provenance():
+    no_hooks = [replace(o, adapters=None) for o in _outcomes("adapter")]
+    with pytest.raises(ValueError, match="no adapter provenance"):
+        _compare(_outcomes("prompts"), no_hooks)
+
+
+def test_hard_failures_are_broken_down_by_type():
+    out = _outcomes("adapter", errored_ids=[ITEMS[0].id, ITEMS[1].id])
+    out = [
+        replace(o, error_type="ValueError")
+        if o.item_id == ITEMS[0].id
+        else replace(o, error_type="malformed_records")
+        if o.item_id == ITEMS[1].id
+        else o
+        for o in out
+    ]
+    m = arm_metrics(ITEMS, out)
+    assert m.hard_failures_by_type == {"ValueError": 1, "malformed_records": 1}
+
+
+def test_token_means_skip_errored_rows():
+    out = _outcomes("adapter", errored_ids=[ITEMS[0].id])
+    out = [
+        replace(o, prompt_tokens=10 if o.errored else 100, completion_tokens=1)
+        for o in out
+    ]
+    m = arm_metrics(ITEMS, out)
+    assert m.tokens["prompt_mean"] == 100
+    assert m.tokens["validations_with_totals"] == len(ITEMS) - 1

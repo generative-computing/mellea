@@ -14,13 +14,13 @@ Arms:
 
 Usage (needs a GPU and the adapters; see README.md)::
 
-    python -m test.stdlib.requirements.groundedness_eval.harness run \\
+    uv run python -m test.stdlib.requirements.groundedness_eval.harness run \\
         --arm prompts --model ibm-granite/granite-4.0-micro --repeats 3 \\
         --out results/prompts_strict.jsonl
-    python -m test.stdlib.requirements.groundedness_eval.harness run \\
+    uv run python -m test.stdlib.requirements.groundedness_eval.harness run \\
         --arm adapter --model ibm-granite/granite-4.0-micro --repeats 3 \\
         --out results/adapter_strict.jsonl
-    python -m test.stdlib.requirements.groundedness_eval.harness compare \\
+    uv run python -m test.stdlib.requirements.groundedness_eval.harness compare \\
         results/prompts_strict.jsonl results/adapter_strict.jsonl \\
         --margin 0.05 --max-hard-failure 0.02 --rule margin
 
@@ -224,6 +224,8 @@ class Outcome:
         model: The `--model` value the run was started with.
         adapters: `{"name", "revision", "binding_type"}` for each adapter that
             ran, `None` without the `hooks` extra.
+        repeats: The `--repeats` the run was started with, so `compare` can tell a
+            finished run from one that stopped between repeats.
     """
 
     item_id: str
@@ -245,6 +247,7 @@ class Outcome:
     generation_calls_with_usage: int | None = None
     model: str | None = None
     adapters: list[dict] | None = None
+    repeats: int | None = None
 
 
 class _CallRecorder:
@@ -462,6 +465,7 @@ async def run_arm(
                 repeat=repeat,
                 latency_s=round(elapsed, 4),
                 model=model,
+                repeats=repeats,
                 **recorder.fields(),
                 **raw,
             )
@@ -508,17 +512,19 @@ class ArmMetrics:
         n: Items scored.
         false_fails: Gold-pass items that did not pass (errored counts as a fail).
         n_gold_pass: Gold-pass items.
-        misses: Items with an invented claim that passed.
+        misses: Items with an invented claim that did not fail (errored counts
+            as a miss: an errored validation detected nothing).
         n_invented: Items with an invented claim.
         partial_misses: Strict mode only: items whose only problem is a
             `partial` sentence that passed anyway.
         n_partial_only: Strict mode only: such items.
         hard_failures: Errored validations, over all repeats.
+        hard_failures_by_type: `error_type` -> count, over all repeats.
         n_validations: All validations, over all repeats.
         unstable_items: Items whose verdict differs between repeats.
         latency_s: Median and p90 seconds per validation.
-        tokens: Mean prompt and completion tokens over the validations with a
-            complete total, and how many validations that was.
+        tokens: Mean prompt and completion tokens over the validations that did
+            not error and have a complete total, and how many validations that was.
         adapters: Each distinct adapter name, revision and binding type that ran.
         label_use: Arm 2 only: gold label -> predicted label counts per sentence.
         by_category: Category -> (errors, n) for the primary repeat.
@@ -537,6 +543,7 @@ class ArmMetrics:
     latency_s: dict
     tokens: dict
     adapters: list[dict] = field(default_factory=list)
+    hard_failures_by_type: dict = field(default_factory=dict)
     label_use: dict = field(default_factory=dict)
     by_category: dict = field(default_factory=dict)
 
@@ -609,7 +616,7 @@ def arm_metrics(items: Sequence[Item], outcomes: Sequence[Outcome]) -> ArmMetric
         item = by_id[item_id]
         expected = gold_verdict(item, lenient)
         passed = o.passed is True
-        wrong = passed != expected
+        wrong = o.errored or passed != expected
         cat = by_cat.setdefault(item.category, [0, 0])
         cat[0] += int(wrong)
         cat[1] += 1
@@ -618,10 +625,10 @@ def arm_metrics(items: Sequence[Item], outcomes: Sequence[Outcome]) -> ArmMetric
             ff += int(not passed)
         if item.has_invented_claim:
             n_inv += 1
-            miss += int(passed)
+            miss += int(o.passed is not False)
         elif not expected:  # strict mode, only partial sentences are wrong
             n_ponly += 1
-            pmiss += int(passed)
+            pmiss += int(o.passed is not False)
         if o.labels is not None:
             for gold_s, pred in zip(item.sentences, o.labels):
                 label_use.setdefault(gold_s["label"], Counter())[str(pred)] += 1
@@ -630,8 +637,9 @@ def arm_metrics(items: Sequence[Item], outcomes: Sequence[Outcome]) -> ArmMetric
     for o in outcomes:
         verdicts.setdefault(o.item_id, set()).add(o.passed)
     lat = [o.latency_s for o in outcomes]
-    pt = [o.prompt_tokens for o in outcomes if o.prompt_tokens is not None]
-    ct = [o.completion_tokens for o in outcomes if o.completion_tokens is not None]
+    ok = [o for o in outcomes if not o.errored]
+    pt = [o.prompt_tokens for o in ok if o.prompt_tokens is not None]
+    ct = [o.completion_tokens for o in ok if o.completion_tokens is not None]
     return ArmMetrics(
         n=len(primary),
         false_fails=ff,
@@ -641,6 +649,9 @@ def arm_metrics(items: Sequence[Item], outcomes: Sequence[Outcome]) -> ArmMetric
         partial_misses=pmiss,
         n_partial_only=n_ponly,
         hard_failures=sum(o.errored for o in outcomes),
+        hard_failures_by_type=dict(
+            sorted(Counter(str(o.error_type) for o in outcomes if o.errored).items())
+        ),
         n_validations=len(outcomes),
         unstable_items=sum(len(v) > 1 for v in verdicts.values()),
         latency_s={
@@ -720,8 +731,10 @@ def _check_inputs(
     Raises:
         ValueError: If either file is empty, mixes arms, bindings, modes or
             models, holds the wrong arm, has duplicate rows, has unknown items,
-            lacks an item at repeat 0, or stops partway through a repeat; if the
-            files differ in mode or model; or if an adapter ran at two revisions.
+            lacks an item at repeat 0, stops partway through or between repeats,
+            or does not record `--repeats`; if the adapter file has no adapter
+            provenance (run without the `hooks` extra); if the files differ in
+            mode, model or `--repeats`; or if an adapter ran at two revisions.
     """
     known = {i.id for i in items}
     for expected_arm, outcomes in (("prompts", first), ("adapter", second)):
@@ -768,6 +781,23 @@ def _check_inputs(
             raise ValueError(
                 f"{expected_arm}: items have different repeats; finish the run first"
             )
+        requested = {o.repeats for o in outcomes}
+        if None in requested:
+            raise ValueError(f"{expected_arm}: rows do not record --repeats; rerun")
+        wanted = max(r for r in requested if r is not None)
+        have = next(iter(repeats.values()))
+        if set(have) != set(range(wanted)):
+            raise ValueError(
+                f"{expected_arm}: run asked for {wanted} repeats but has "
+                f"{len(have)}; finish the run first"
+            )
+    if any(o.adapters is None for o in second):
+        raise ValueError(
+            "adapter: rows have no adapter provenance (run without the `hooks` "
+            "extra); rerun with pip install 'mellea[hooks]'"
+        )
+    if max(o.repeats or 0 for o in first) != max(o.repeats or 0 for o in second):
+        raise ValueError("compare runs made with the same --repeats")
     if first[0].allow_partial_support != second[0].allow_partial_support:
         raise ValueError("compare outcomes from the same allow_partial_support mode")
     if first[0].model != second[0].model:
@@ -833,7 +863,7 @@ def compare(
             pool = [i for i in shared if gold_verdict(i, lenient)]
             return [prim[i.id].passed is not True for i in pool]
         pool = [i for i in shared if i.has_invented_claim]
-        return [prim[i.id].passed is True for i in pool]
+        return [prim[i.id].passed is not False for i in pool]
 
     comparison = {}
     for kind in ("false_fail", "miss"):

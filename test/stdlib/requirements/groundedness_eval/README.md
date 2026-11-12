@@ -50,8 +50,9 @@ invented claim (30 `invented` + 4 `long`).
   - `NA` is ignored;
   - a sentence with no record, an unknown label, or offsets outside the response is
     errored. A `ValueError` or `AdapterSchemaMismatchError` from either adapter call (bad
-    JSON, truncated output, a contract error) is also errored. Errored counts as a fail
-    and as a hard failure.
+    JSON, truncated output, a contract error) is also errored. An errored validation
+    detected nothing, so it is scored as wrong in both pools: a false fail on a gold-pass
+    item and a miss on an invented-claim item. It also counts as a hard failure.
 
 Run each arm in both modes. Arm 2 runs on both binding shapes (`--binding` labels the
 results; `--backend-factory module:function` supplies a non-default backend such as
@@ -64,23 +65,29 @@ hard-failure gate.
 ## What is measured (per arm, mode and binding)
 
 - False fails: gold-pass items that did not pass. This decides the swap.
-- Misses: items with an invented claim that passed.
+- Misses: items with an invented claim that did not fail (errored counts as a miss).
 - Strict mode only: partial-only items that passed.
 - Label use (arm 2): gold sentence label against adapter label, so it shows whether
   `partial` and `NA` are used where they apply.
-- Hard failures over all repeats.
+- Hard failures over all repeats, in total and by `error_type`. `ValueError` covers bad
+  JSON and schema errors, but also input checks in the intrinsics, so the breakdown is
+  there to audit the 2% figure.
 - Stability: items whose verdict changes across repeats (`--repeats 3`, temperature 0).
-- Latency (median, p90) and tokens per validation. Tokens are summed from
+- Latency (median, p90) and tokens per validation (errored validations are left out of
+  the token means, since they stop partway). Tokens are summed from
   `generation.usage` through a scoped plugin. A row's totals stay empty unless every
   generation call in that validation reported usage, and the row keeps both counts. This
   depends on the call path, not only the backend: on `LocalHFBackend` adapter calls report
   no usage, so arm 2 has no totals there and neither does arm 1, whose `find_citations`
   call is an adapter call. Token costs on that binding need another source.
-- Provenance, on every row: `--model`, and the name, revision and binding type of each
-  adapter that ran.
+- Provenance, on every row: `--model`, `--repeats`, and the name, revision and binding
+  type of each adapter that ran. Revision pinning covers the `local-file` binding only:
+  the embedded (Granite Switch) path reports `revision: null`, so on that binding the
+  mixed-revision check checks nothing and `--model` is the only provenance. Set `--model`
+  to the served model id or Switch checkpoint when using `--backend-factory`.
 
 Tokens and adapter provenance need the `hooks` extra. Without it the run warns and leaves
-those fields empty.
+those fields empty, and `compare` refuses an adapter file without adapter provenance.
 
 The first repeat is the primary verdict for every comparison. The other repeats only
 feed the stability count.
@@ -96,8 +103,9 @@ uv run python -m test.stdlib.requirements.groundedness_eval.harness compare resu
 ```
 
 Use one `--out` file per arm, mode, binding and model. `compare` refuses a file that mixes
-them, has items missing, has an unfinished repeat, or holds the wrong arm, and it refuses
-two files with different models or adapter revisions. Run it once per binding.
+them, has items missing, stopped partway through or between repeats, or holds the wrong
+arm, and it refuses two files with different models, `--repeats` or adapter revisions.
+Run it once per binding. Resuming with a higher `--repeats` extends a run.
 
 Runs append to `--out` and skip finished rows, so an interrupted run resumes. A run that
 stopped on an exception wrote no row for that item, so resuming retries it. Recorded hard
