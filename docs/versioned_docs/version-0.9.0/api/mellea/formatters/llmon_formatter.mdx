@@ -1,0 +1,192 @@
+---
+title: "mellea.formatters.llmon_formatter"
+sidebar_label: "mellea.formatters.llmon_formatter"
+description: "`LLMONFormatter`: sends components to models trained on LLMON."
+---
+
+`LLMONFormatter`: sends components to models trained on LLMON.
+
+
+
+
+
+LLMON (LLM Object Notation, arXiv:2603.22519) marks a prompt up with special-token
+blocks, so an LLMON-trained model can tell what it should do (`instr`) from what it
+should only read (`data`, `doc`) and what its answer must satisfy (`req`). The
+granite LLMON models' chat template writes that markup itself from the fields
+of each chat message: a user message's `content` and `instruction` items become
+`instr` blocks, its `data` items `data` blocks, its `requirement` items `req` blocks,
+and its `documents` `doc` blocks, each wired into the `exec` block the template adds.
+`LLMONFormatter` maps an [`Instruction`](../stdlib/components/instruction#class-instruction)'s `format_for_llm()` args onto those fields,
+sends a requirement's LLM-as-a-judge check as an instruction with what it judges as
+data, and sends every other turn as its plain text, so it writes no LLMON itself.
+Content is sanitized by the `llmon` library first, since the template inserts it as
+it is.
+
+Only `LocalHFBackend` supports LLMON, since only it hands the chat template each
+message with the fields the template reads; every other backend raises `ValueError`
+when given an LLMON model or this formatter. `LocalHFBackend` uses this formatter by
+default for the LLMON models registered here (see `default_formatter`); pass one to it
+explicitly to use it with any other model. It needs the `llmon` extra:
+`pip install "mellea[llmon]"`.
+
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `is_llmon_model` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.9.0/mellea/formatters/llmon_formatter.py#L84" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#is_llmon_model}
+
+```python
+is_llmon_model(model_id: str | ModelIdentifier | None) -> bool
+```
+
+
+Return whether a model is a registered LLMON model.
+
+**Args:**
+- `model_id`: A model id, or a [`ModelIdentifier`](../backends/model_ids#class-modelidentifier), which matches when any of its
+provider names is registered.
+
+**Returns:**
+- `True` for a registered LLMON model, otherwise `False`.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `default_formatter` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.9.0/mellea/formatters/llmon_formatter.py#L101" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#default_formatter}
+
+```python
+default_formatter(model_id: str | ModelIdentifier) -> ChatFormatter
+```
+
+
+Return the formatter `LocalHFBackend` uses when it is not given one.
+
+**Args:**
+- `model_id`: The model id the backend was constructed with.
+
+**Returns:**
+- An `LLMONFormatter` for a registered LLMON model, otherwise a
+- [`TemplateFormatter`](template_formatter#class-templateformatter).
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `LLMONFormatter` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.9.0/mellea/formatters/llmon_formatter.py#L135" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#class-llmonformatter}
+
+
+Formatter that sends components to LLMON-trained models through their chat template.
+
+The granite LLMON models' chat template writes the LLMON markup from each
+message's fields, so this formatter fills those fields rather than writing LLMON.
+An [`Instruction`](../stdlib/components/instruction#class-instruction) becomes a user message from its `format_for_llm()` args: its
+prefix and description, joined, are the message's content, which the template
+takes as its instruction; a repair (the feedback `RepairTemplateStrategy` adds
+after a failed check) is a further `instruction` item; each requirement is a
+`requirement` item; each in-context
+example and each grounding-context value is a `data` item, a [`Document`](../stdlib/components/docs/document#class-document) as its
+text alone. Every item is wired into the turn's
+`exec` block. A user [`Message`](../stdlib/components/chat#class-message) is its content, with its documents as `documents`
+items, and a [`CBlock`](../core/base#class-cblock) is its text, as the instruction. A [`Requirement`](../core/requirement#class-requirement) being
+validated (its LLM-as-a-judge check) is an instruction to judge the output, with
+the output and the requirement as labeled `data` items: in a `requirement` item,
+the requirement would constrain the judge's own reply. Any other component raises.
+
+System, assistant, and tool turns are sent as their text alone (a message's
+content, or a model output's reply), with their tool calls and tool-call id as
+message fields, because the template wraps each in its own LLMON block and writes
+an assistant's `tool_calls` out itself. When a reply holds tool calls the model
+wrote out (as the HuggingFace backend leaves them) and the backend parsed every
+one, they are moved from the text into `tool_calls`, so the template also wires
+that assistant turn into the next `exec` as an input.
+
+All text is sanitized with the `llmon` library's `LLMONConverters.sanitize`, which
+replaces each LLMON special token with a look-alike that is not one, because the
+template inserts content as it is.
+
+The template's fields reach it only through `LocalHFBackend`, which hands it each
+message as it is, so they are declared in the message's `provider_fields` for that
+backend alone, and it is the only backend that takes this formatter: every other
+backend raises `ValueError` when given it or a registered LLMON model. `print`
+raises for a turn with fields, since a single string cannot carry them. A reply
+needs no extracting: `LocalHFBackend` decodes the generation without special
+tokens, LLMON's among them, so the output's value is the model's text.
+
+**Args:**
+- `model_id`: The model the prompts are for.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `print` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.9.0/mellea/formatters/llmon_formatter.py#L205" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#print}
+
+```python
+print(self, c: Span) -> str
+```
+
+Render the text a turn is sent as.
+
+That is an instruction's prefix and description, a message's content, a
+content block's text, or a model output's reply. A message that
+`to_chat_messages` already rendered is returned as it is. Any other value,
+such as a tool's output that `call_tools` prints for its tool message, is not
+a turn and is returned as plain text. All text is sanitized.
+
+**Args:**
+- `c`: The content block, model output, instruction, or message to
+render.
+
+**Returns:**
+- The text of the turn.
+
+**Raises:**
+- `TypeError`: If `c` is a component other than an [`Instruction`](../stdlib/components/instruction#class-instruction), a
+[`Message`](../stdlib/components/chat#class-message), or a [`Requirement`](../core/requirement#class-requirement) being validated, or an instruction holds
+one in its args.
+- `ValueError`: If `c` has parts that reach the model only as chat template
+fields (an instruction's requirements, examples, grounding context,
+or repair, a user message's documents, or what a requirement judges),
+or is an instruction with an output prefix.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `to_chat_messages` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.9.0/mellea/formatters/llmon_formatter.py#L243" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#to_chat_messages}
+
+```python
+to_chat_messages(self, cs: list[Span]) -> list[Message]
+```
+
+Convert a linearized chat history into messages for the LLMON chat template.
+
+Each item becomes one message, as described for the class: roles and
+attachments are resolved as in `ChatFormatter.to_chat_messages`, the turn's
+text is the content, and the parts the template takes as fields are declared
+in the message's `provider_fields` for the HuggingFace backend. `print`
+returns the content of the resulting messages unchanged.
+
+**Args:**
+- `cs`: The linearized sequence of context components, content
+blocks, and model outputs to convert.
+
+**Returns:**
+- list\[Message]: One message per item in `cs`, in order.
+
+**Raises:**
+- `TypeError`: If an item is a component other than an [`Instruction`](../stdlib/components/instruction#class-instruction), a
+[`Message`](../stdlib/components/chat#class-message), or a [`Requirement`](../core/requirement#class-requirement) being validated, or an instruction holds
+one in its args.
+- `ValueError`: If an item is an instruction with an output prefix.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
