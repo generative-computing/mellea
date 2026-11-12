@@ -343,10 +343,13 @@ class ModelFriendlyFeedbackFormatter:
         if "Execution" in type_name:
             return cls.format_execution_error(validation_result)
 
-        return (
+        feedback = (
             f"{requirement.description} (failed). Try: Review your code and "
-            f"ensure it meets this requirement. Details: {validation_result.reason}"
+            f"ensure it meets this requirement."
         )
+        if validation_result.reason:
+            feedback += f" Details: {validation_result.reason}"
+        return feedback
 
 
 class ModelFriendlyRepairStrategy(RepairTemplateStrategy):

@@ -8,6 +8,7 @@ import re
 from collections.abc import Iterable
 
 from ...backends.adapters import AdapterMixin
+from ...backends.model_options import ModelOption
 from ...core import (
     Backend,
     CBlock,
@@ -52,21 +53,60 @@ def _normalise_label(raw: object) -> str:
     return raw.strip() if isinstance(raw, str) else ""
 
 
-def _normalise_needs_citation(raw: object) -> bool:
-    """Normalise a model-returned citation-necessity label."""
+def _normalise_needs_citation(raw: object) -> bool | None:
+    """Normalise a model-returned citation-necessity label.
+
+    Returns:
+        `True` or `False` for a recognised value, `None` when the value is
+        unreadable. Only the integers 0 and 1 are recognised.
+    """
+    # bool is a subclass of int, so it must be checked first.
     if isinstance(raw, bool):
         return raw
     if isinstance(raw, int):
-        return bool(raw)
+        if raw == 1:
+            return True
+        if raw == 0:
+            return False
+        return None
     if not isinstance(raw, str):
-        return True
+        return None
 
     label = raw.strip().lower()
     if label in ("yes", "true", "1"):
         return True
     if label in ("no", "false", "0"):
         return False
-    return True
+    return None
+
+
+def _merge_necessity(a: bool | None, b: bool | None) -> bool | None:
+    """Merge two necessity judgments for one span: `True` beats `None` beats `False`."""
+    if a is True or b is True:
+        return True
+    if a is None or b is None:
+        return None
+    return False
+
+
+def _reduce_support_levels(levels: Iterable[str | None]) -> str | None:
+    """Reduce several support judgments for one span to one level.
+
+    Any `NOT_SUPPORTED` wins; otherwise any unreadable (`None`) judgment makes
+    the result `None`; otherwise the most pessimistic recognised level wins.
+    An empty collection gives `None`.
+    """
+    collected = list(levels)
+    if not collected:
+        return None
+    if "NOT_SUPPORTED" in collected:
+        return "NOT_SUPPORTED"
+    if any(level is None for level in collected):
+        return None
+    return max(
+        (level for level in collected if level is not None),
+        key=_SUPPORT_LEVEL_RANK.__getitem__,
+    )
 
 
 class GroundednessRequirement(Requirement):
@@ -84,8 +124,16 @@ class GroundednessRequirement(Requirement):
     4. **Groundedness Output**: Declare response grounded iff all spans needing
        citations are fully supported.
 
-    **Important**: This requirement requires a Hugging Face backend (LocalHFBackend)
-    as it uses both the find_citations adapter function and LLM-as-Judge for assessment.
+    **Important**: The backend must implement `AdapterMixin` and must actually
+    provide the citation adapter used by the find_citations adapter function (the
+    `AdapterMixin` check alone does not guarantee that; if the adapter is missing,
+    `validate()` returns an errored result rather than a verdict). The backend must
+    also support the two LLM-as-Judge calls (`generate_from_context` with a chat
+    context and `ModelOption.MAX_NEW_TOKENS`).
+
+    If validation cannot run (setup problem, adapter or backend failure, or
+    unreadable judgment output), the returned `ValidationResult` has `error` set
+    and `reason` set to `None`, instead of reporting an ordinary failure.
 
     Args:
         documents: Optional documents to validate against. Can be Document
@@ -165,32 +213,45 @@ class GroundednessRequirement(Requirement):
 
         Args:
             backend: Backend to use for citation detection and LLM judgment.
-                Must be LocalHFBackend as this uses find_citations adapter function.
+                Must implement `AdapterMixin` and provide the citation adapter
+                used by the find_citations adapter function. The backend must
+                also support the two LLM-as-Judge calls (`generate_from_context`
+                with a chat context and `ModelOption.MAX_NEW_TOKENS`).
             ctx: Context containing the conversation history
             format: Unused for this requirement
             model_options: Unused for this requirement
 
         Returns:
-            ValidationResult with pass/fail status and detailed reason
+            ValidationResult with pass/fail status and detailed reason. When
+            validation could not run or could not reach a verdict, an errored
+            result (`reason=None`, `error` set) is returned instead.
         """
         # Extract last message (should be assistant response)
         messages = ctx.as_list()
         if not messages:
             return ValidationResult(
-                False, reason="Context is empty, cannot validate groundedness"
+                False,
+                reason=None,
+                error=ValueError("Context is empty, cannot validate groundedness"),
             )
 
         last_message = messages[-1]
         if not isinstance(last_message, Message):
             return ValidationResult(
                 False,
-                reason="Last context item is not a Message, cannot validate groundedness",
+                reason=None,
+                error=ValueError(
+                    "Last context item is not a Message, cannot validate groundedness"
+                ),
             )
 
         if last_message.role != "assistant":
             return ValidationResult(
                 False,
-                reason=f"Last message must be assistant response, got role: {last_message.role}",
+                reason=None,
+                error=ValueError(
+                    f"Last message must be assistant response, got role: {last_message.role}"
+                ),
             )
 
         response = last_message.content
@@ -204,16 +265,22 @@ class GroundednessRequirement(Requirement):
         if not documents:
             return ValidationResult(
                 False,
-                reason="No documents provided for grounding validation. "
-                "Either pass documents to GroundednessRequirement constructor "
-                "or attach them to the assistant message.",
+                reason=None,
+                error=ValueError(
+                    "No documents provided for grounding validation. "
+                    "Either pass documents to GroundednessRequirement constructor "
+                    "or attach them to the assistant message."
+                ),
             )
 
         # Check backend compatibility
         if not isinstance(backend, AdapterMixin):
             return ValidationResult(
                 False,
-                reason=f"Backend {backend.__class__.__name__} does not support adapters required for grounding validation",
+                reason=None,
+                error=ValueError(
+                    f"Backend {backend.__class__.__name__} does not support adapters required for grounding validation"
+                ),
             )
 
         # Handle empty response
@@ -252,9 +319,8 @@ class GroundednessRequirement(Requirement):
                     f"  Citation {i}: response_begin={cit.get('response_begin')}, response_end={cit.get('response_end')}, text={cit.get('citation_text', '')[:50]}"
                 )
         except Exception as e:
-            return ValidationResult(
-                False, reason=f"Citation generation adapter function failed: {e!s}"
-            )
+            logger.exception("Citation generation adapter function failed")
+            return ValidationResult(False, reason=None, error=e)
 
         # Step 2: Citation Necessity
         try:
@@ -270,9 +336,8 @@ class GroundednessRequirement(Requirement):
                     f"  Span [{begin}:{end}] needs_citation={needs_cit}: '{response[begin:end][:50]}'"
                 )
         except Exception as e:
-            return ValidationResult(
-                False, reason=f"Citation necessity assessment failed: {e!s}"
-            )
+            logger.exception("Citation necessity assessment failed")
+            return ValidationResult(False, reason=None, error=e)
 
         # Step 3: Citation Support
         try:
@@ -291,16 +356,17 @@ class GroundednessRequirement(Requirement):
                 begin, end = span_key
                 logger.debug(f"  Span [{begin}:{end}] support={support}")
         except Exception as e:
-            return ValidationResult(
-                False, reason=f"Citation support assessment failed: {e!s}"
-            )
+            logger.exception("Citation support assessment failed")
+            return ValidationResult(False, reason=None, error=e)
 
         # Step 4: Groundedness Output
-        passed, reason = self._build_groundedness_result(
-            response, citations, span_necessity, span_support
-        )
-
-        return ValidationResult(passed, reason=reason)
+        try:
+            return self._build_groundedness_result(
+                response, citations, span_necessity, span_support
+            )
+        except Exception as e:
+            logger.exception("Groundedness result construction failed")
+            return ValidationResult(False, reason=None, error=e)
 
     async def _identify_citation_necessity(
         self,
@@ -308,7 +374,7 @@ class GroundednessRequirement(Requirement):
         citations: list[dict],
         backend: Backend,
         context: ChatContext,
-    ) -> dict[tuple[int, int], bool]:
+    ) -> dict[tuple[int, int], bool | None]:
         """Identify which response spans need citations.
 
         Args:
@@ -318,7 +384,8 @@ class GroundednessRequirement(Requirement):
             context: Chat context
 
         Returns:
-            Dictionary mapping span (begin, end) to boolean (needs_citation)
+            Dictionary mapping span (begin, end) to `True` or `False`
+            (needs_citation), or `None` when the judgment was unreadable
         """
         # Extract response spans: both cited and uncited portions
         spans = self._extract_response_spans(response, citations)
@@ -338,7 +405,7 @@ class GroundednessRequirement(Requirement):
                 context,
                 model_options={
                     "temperature": 0.0,
-                    "max_new_tokens": self.max_new_tokens,
+                    ModelOption.MAX_NEW_TOKENS: self.max_new_tokens,
                 },
             )
             await result.avalue()
@@ -358,36 +425,41 @@ class GroundednessRequirement(Requirement):
         self,
         response: str,
         citations: list[dict],
-        span_necessity: dict[tuple[int, int], bool],
+        span_necessity: dict[tuple[int, int], bool | None],
         backend: Backend,
         context: ChatContext,
         documents: list[Document],
-    ) -> dict[tuple[int, int], str]:
+    ) -> dict[tuple[int, int], str | None]:
         """Assess level of support for spans that need citations.
 
         Uses a single batch LLM call to assess all spans requiring support assessment,
         rather than making individual calls per span. This significantly improves latency.
+        Spans whose necessity could not be read (`None`) are assessed like spans that
+        need citations; only spans known not to need citations (`False`) are skipped.
 
         Args:
             response: The assistant response text
             citations: Citation records from find_citations
             span_necessity: Mapping of span (begin, end) to needs_citation flag
+                (`None` = unreadable)
             backend: Backend for LLM judgment
             context: Chat context
             documents: List of source documents for context in LLM assessment
 
         Returns:
             Dictionary mapping span (begin, end) to support level
-            ("FULLY_SUPPORTED", "PARTIALLY_SUPPORTED", or "NOT_SUPPORTED")
+            ("FULLY_SUPPORTED", "PARTIALLY_SUPPORTED", or "NOT_SUPPORTED"), or
+            `None` when the judgment was unreadable. Spans with necessity `False`
+            have no entry.
         """
-        span_support: dict[tuple[int, int], str] = {}
+        span_support: dict[tuple[int, int], str | None] = {}
         spans_to_assess: list[dict] = []  # Spans that need LLM assessment
         span_key_to_assess_idx: dict[tuple[int, int], int] = {}
 
         # First pass: identify spans needing LLM assessment vs those without citations
         for span_key, needs_citation in span_necessity.items():
-            if not needs_citation:
-                # Skip spans that don't need citations
+            if needs_citation is False:
+                # Skip spans that are known not to need citations
                 continue
 
             begin, end = span_key
@@ -438,7 +510,7 @@ class GroundednessRequirement(Requirement):
                 context,
                 model_options={
                     "temperature": 0.0,
-                    "max_new_tokens": self.max_new_tokens,
+                    ModelOption.MAX_NEW_TOKENS: self.max_new_tokens,
                 },
             )
             await result.avalue()
@@ -456,7 +528,7 @@ class GroundednessRequirement(Requirement):
 
         # Map results back to span_keys
         for span_key, idx in span_key_to_assess_idx.items():
-            support_level = batch_results.get(idx, "NOT_SUPPORTED")
+            support_level = batch_results.get(idx)
             span_support[span_key] = support_level
 
         logger.debug(
@@ -705,7 +777,7 @@ class GroundednessRequirement(Requirement):
 
     def _parse_batch_support_output(
         self, output_text: str, expected_count: int
-    ) -> dict[int, str]:
+    ) -> dict[int, str | None]:
         """Parse LLM output for batch support level assessments.
 
         Args:
@@ -713,111 +785,95 @@ class GroundednessRequirement(Requirement):
             expected_count: Expected number of span assessments
 
         Returns:
-            Dictionary mapping span assessment index to support level
-            ("FULLY_SUPPORTED", "PARTIALLY_SUPPORTED", or "NOT_SUPPORTED")
+            Dictionary with exactly the keys `range(expected_count)`, mapping each
+            span assessment index to its support level ("FULLY_SUPPORTED",
+            "PARTIALLY_SUPPORTED", or "NOT_SUPPORTED"), or `None` when that
+            span's judgment was unreadable, missing or unrecognised. Multiple
+            judgments for one span reduce via `_reduce_support_levels`.
         """
-        result: dict[int, str] = {}
-
         logger.debug(f"Parsing batch support output (expected {expected_count} spans)")
 
         try:
             judgments = self._extract_and_repair_json_array(output_text)
-            logger.debug(f"Parsed {len(judgments)} judgments from batch output")
+        except (json.JSONDecodeError, ValueError) as e:
+            logger.debug(
+                f"Parse error in batch support output: {e}, treating all spans as unknown"
+            )
+            return dict.fromkeys(range(expected_count))
 
-            # Normalize each nested citation through the same substring
-            # logic the flat path uses below, so near-miss labels like
-            # "FULLY SUPPORTED" (space) aren't silently downgraded.
-            def _norm(raw: object) -> str:
-                # Split camelCase boundaries and collapse separators to spaces
-                # so \b sees word edges around "NOT"/"UNSUPPORTED" regardless
-                # of delimiter style (underscore, hyphen, or camelCase).
-                label = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", _normalise_label(raw))
-                raw = re.sub(r"[^A-Za-z0-9]+", " ", label).upper().strip()
-                if re.search(r"\b(?:NOT|UNSUPPORTED)\b", raw):
-                    return "NOT_SUPPORTED"
-                if "FULLY" in raw and "SUPPORTED" in raw:
-                    return "FULLY_SUPPORTED"
-                if "PARTIALLY" in raw and "SUPPORTED" in raw:
-                    return "PARTIALLY_SUPPORTED"
-                return "NOT_SUPPORTED" if raw else ""
+        logger.debug(f"Parsed {len(judgments)} judgments from batch output")
 
-            # Process judgments
-            for judgment in judgments:
-                if not isinstance(judgment, dict):
-                    logger.debug(f"Skipping non-dict judgment: {judgment}")
-                    continue
+        # Normalize each nested citation through the same substring
+        # logic the flat path uses below, so near-miss labels like
+        # "FULLY SUPPORTED" (space) aren't silently downgraded.
+        def _norm(raw: object) -> str | None:
+            # Split camelCase boundaries and collapse separators to spaces
+            # so \b sees word edges around "NOT"/"UNSUPPORTED" regardless
+            # of delimiter style (underscore, hyphen, or camelCase).
+            label = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", _normalise_label(raw))
+            raw = re.sub(r"[^A-Za-z0-9]+", " ", label).upper().strip()
+            if re.search(r"\b(?:NOT|UNSUPPORTED)\b", raw):
+                return "NOT_SUPPORTED"
+            if "FULLY" in raw and "SUPPORTED" in raw:
+                return "FULLY_SUPPORTED"
+            if "PARTIALLY" in raw and "SUPPORTED" in raw:
+                return "PARTIALLY_SUPPORTED"
+            return None
 
-                span_id = _normalise_span_id(judgment.get("span_id"), expected_count)
-                nested_levels: set[str] = set()
-                # Case is preserved here (not upper-cased) so _norm can still
-                # see camelCase word boundaries like "notFullySupported".
+        per_span: dict[int, list[str | None]] = {}
+        for judgment in judgments:
+            if not isinstance(judgment, dict):
+                logger.debug(f"Skipping non-dict judgment: {judgment}")
+                continue
+
+            span_id = _normalise_span_id(judgment.get("span_id"), expected_count)
+            # Case is preserved here (not upper-cased) so _norm can still
+            # see camelCase word boundaries like "notFullySupported".
+            level: str | None
+            if "support_level" in judgment:
                 support_level_raw = _normalise_label(judgment.get("support_level"))
+                level = _norm(support_level_raw) if support_level_raw else None
+            else:
                 # Handle nested format: {"span_id": 0, "evidence": [{"support_level": "..."}]}
                 # Checks both "evidence" and "citations" (prior key, kept defensively).
-                if not support_level_raw:
-                    nested_source: list[object] = []
-                    for nested_key in ("evidence", "citations"):
+                nested_source: list[object] = []
+                malformed_nested = False
+                for nested_key in ("evidence", "citations"):
+                    if nested_key in judgment:
                         nested_value = judgment.get(nested_key)
                         if isinstance(nested_value, list):
                             nested_source.extend(nested_value)
-                    nested_levels = {
-                        _norm(cit.get("support_level"))
-                        for cit in nested_source
-                        if isinstance(cit, dict)
-                    }
-                    nested_levels.discard("")
-                    # Pessimistic ordering: NOT_SUPPORTED beats PARTIALLY beats
-                    # FULLY, so the result is deterministic regardless of order.
-                    for pessimistic in (
-                        "NOT_SUPPORTED",
-                        "PARTIALLY_SUPPORTED",
-                        "FULLY_SUPPORTED",
-                    ):
-                        if pessimistic in nested_levels:
-                            support_level_raw = pessimistic
-                            break
+                        else:
+                            malformed_nested = True
+                nested_levels: list[str | None] = [
+                    _norm(cit.get("support_level")) if isinstance(cit, dict) else None
+                    for cit in nested_source
+                ]
+                if malformed_nested:
+                    nested_levels.append(None)
+                level = _reduce_support_levels(nested_levels)
 
-                logger.debug(
-                    f"  Judgment: span_id={span_id}, support_level={support_level_raw}"
-                )
+            logger.debug(f"  Judgment: span_id={span_id}, support_level={level}")
 
-                if span_id is None:
-                    logger.debug("Skipping judgment with no span_id")
-                    continue
+            if span_id is None:
+                logger.debug("Skipping judgment with no span_id")
+                continue
 
-                support_level = _norm(support_level_raw) or "NOT_SUPPORTED"
+            per_span.setdefault(span_id, []).append(level)
 
-                existing_support = result.get(span_id)
-                # Duplicate judgments must remain conservative regardless of
-                # whether the model used flat or nested output.
-                if (
-                    existing_support is None
-                    or _SUPPORT_LEVEL_RANK[support_level]
-                    > _SUPPORT_LEVEL_RANK[existing_support]
-                ):
-                    result[span_id] = support_level
-
-            # Ensure all expected spans have results (default to NOT_SUPPORTED if missing)
-            for i in range(expected_count):
-                if i not in result:
-                    logger.debug(
-                        f"Span {i} not in batch output, defaulting to NOT_SUPPORTED"
-                    )
-                    result[i] = "NOT_SUPPORTED"
-
-        except (json.JSONDecodeError, ValueError) as e:
-            logger.debug(
-                f"Parse error in batch support output: {e}, assuming all NOT_SUPPORTED"
-            )
-            # On parse error, conservatively assume all spans are not supported
-            for i in range(expected_count):
-                result[i] = "NOT_SUPPORTED"
+        result: dict[int, str | None] = {}
+        for i in range(expected_count):
+            if i not in per_span:
+                logger.debug(f"Span {i} not in batch output, treating as unknown")
+            # Duplicate judgments follow the same reduction as nested labels,
+            # regardless of whether the model used flat or nested output.
+            result[i] = _reduce_support_levels(per_span.get(i, []))
 
         return result
 
     def _parse_necessity_output(
         self, output_text: str, spans: list[dict]
-    ) -> dict[tuple[int, int], bool]:
+    ) -> dict[tuple[int, int], bool | None]:
         """Parse LLM output for citation necessity judgments.
 
         Args:
@@ -825,56 +881,57 @@ class GroundednessRequirement(Requirement):
             spans: Original span list
 
         Returns:
-            Dictionary mapping span (begin, end) to needs_citation boolean
+            Dictionary mapping every span (begin, end) to `True` (needs a
+            citation), `False` (does not), or `None` (the judgment was
+            unreadable or missing). Duplicate judgments merge as
+            `True` over `None` over `False`.
         """
-        span_necessity: dict[tuple[int, int], bool] = {}
-
         logger.debug(f"Parsing necessity output: {output_text[:300]}")
+
+        span_necessity: dict[tuple[int, int], bool | None] = {
+            (span["begin"], span["end"]): None for span in spans
+        }
 
         try:
             judgments = self._extract_and_repair_json_array(output_text)
-            logger.debug(f"Parsed JSON judgments: {len(judgments)} judgments")
-
-            # Map judgments to spans
-            for judgment in judgments:
-                if not isinstance(judgment, dict):
-                    continue
-
-                needs_citation_raw = judgment.get("needs_citation")
-                span_id = _normalise_span_id(judgment.get("span_id"), len(spans))
-                needs_citation = _normalise_needs_citation(
-                    judgment.get("needs_citation")
-                )
-
-                logger.debug(
-                    f"  Judgment: span_id={span_id}, needs_citation_raw={needs_citation_raw!r}, "
-                    f"needs_citation={needs_citation}"
-                )
-
-                if span_id is not None:
-                    span = spans[span_id]
-                    span_key = (span["begin"], span["end"])
-                    span_necessity[span_key] = (
-                        span_necessity.get(span_key, False) or needs_citation
-                    )
-
-            # Ensure all spans are in the result
-            for span in spans:
-                span_key = (span["begin"], span["end"])
-                if span_key not in span_necessity:
-                    # Default: assume needs citation if not specified
-                    logger.debug(
-                        f"  Span {span_key} not in judgments, defaulting to True"
-                    )
-                    span_necessity[span_key] = True
-
         except (json.JSONDecodeError, ValueError) as e:
             logger.debug(
-                f"Parse error in necessity output: {e}, assuming all spans need citations"
+                f"Parse error in necessity output: {e}, treating all spans as unknown"
             )
-            # On parse error, conservatively assume all spans need citations
-            for span in spans:
-                span_necessity[(span["begin"], span["end"])] = True
+            return span_necessity
+
+        logger.debug(f"Parsed JSON judgments: {len(judgments)} judgments")
+
+        judged: set[tuple[int, int]] = set()
+        for judgment in judgments:
+            if not isinstance(judgment, dict):
+                continue
+
+            needs_citation_raw = judgment.get("needs_citation")
+            span_id = _normalise_span_id(judgment.get("span_id"), len(spans))
+            needs_citation = _normalise_needs_citation(needs_citation_raw)
+
+            logger.debug(
+                f"  Judgment: span_id={span_id}, needs_citation_raw={needs_citation_raw!r}, "
+                f"needs_citation={needs_citation}"
+            )
+
+            if span_id is None:
+                continue
+
+            span = spans[span_id]
+            span_key = (span["begin"], span["end"])
+            if span_key not in judged:
+                judged.add(span_key)
+                span_necessity[span_key] = needs_citation
+            else:
+                span_necessity[span_key] = _merge_necessity(
+                    span_necessity[span_key], needs_citation
+                )
+
+        for span_key, value in span_necessity.items():
+            if value is None:
+                logger.debug(f"  Span {span_key} necessity unreadable or missing")
 
         return span_necessity
 
@@ -882,62 +939,116 @@ class GroundednessRequirement(Requirement):
         self,
         response: str,
         citations: list[dict],
-        span_necessity: dict[tuple[int, int], bool],
-        span_support: dict[tuple[int, int], str],
-    ) -> tuple[bool, str]:
+        span_necessity: dict[tuple[int, int], bool | None],
+        span_support: dict[tuple[int, int], str | None],
+    ) -> ValidationResult:
         """Build final groundedness result.
+
+        A span whose necessity is `True` fails when it is not supported (or only
+        partially supported when partial support is not allowed), and is unknown
+        when its support could not be read. A span whose necessity could not be
+        read is ok when its support meets the acceptance policy (fully supported,
+        or partially supported if partial support is allowed); otherwise it is unknown.
+        Spans with necessity `False` are ignored. Any failing span returns an
+        ordinary failure naming only the failing spans; otherwise any unknown
+        span returns an errored result; otherwise the result passes.
 
         Args:
             response: The assistant response
             citations: Citation records
-            span_necessity: Mapping of span to needs_citation flag
-            span_support: Mapping of span to support level
+            span_necessity: Mapping of span to needs_citation flag (`None` = unread)
+            span_support: Mapping of span to support level (`None` = unread)
 
         Returns:
-            Tuple of (passed: bool, reason: str)
+            A passing result, an ordinary failure naming the failing spans, or an
+            errored result (`reason=None`, `error` set) when a span could not be
+            assessed.
+
+        Raises:
+            ValueError: If `span_support` has a key that is not in
+                `span_necessity`, if a span with necessity `True` or `None` has no
+                `span_support` entry, or if a `span_support` value for such a span
+                is neither `None` nor a known support level.
         """
-        # Find problematic spans (those that need citations but aren't fully supported)
-        problematic_spans: list[tuple[int, int]] = []
 
+        def _describe(span_key: tuple[int, int]) -> str:
+            begin, end = span_key
+            return f"{span_key} {response[begin:end][:50]!r}"
+
+        # Invariants: inconsistent inputs point at a bug, never at a default.
+        for span_key in span_support:
+            if span_key not in span_necessity:
+                raise ValueError(
+                    f"Support recorded for span {span_key} which has no necessity entry"
+                )
         for span_key, needs_citation in span_necessity.items():
-            if not needs_citation:
+            if needs_citation is False:
                 continue
+            if span_key not in span_support:
+                raise ValueError(
+                    f"Missing support entry for span {_describe(span_key)}"
+                )
+            value = span_support[span_key]
+            if value is not None and value not in _SUPPORT_LEVEL_RANK:
+                raise ValueError(
+                    f"Unrecognised support value {value!r} for span {_describe(span_key)}"
+                )
 
-            support = span_support.get(span_key, "NOT_SUPPORTED")
+        failing: list[tuple[int, int]] = []
+        unknown: list[tuple[int, int]] = []
+        for span_key, needs_citation in span_necessity.items():
+            if needs_citation is False:
+                continue
+            support = span_support[span_key]
+            if needs_citation is True:
+                if support is None:
+                    unknown.append(span_key)
+                elif support == "NOT_SUPPORTED" or (
+                    support == "PARTIALLY_SUPPORTED" and not self.allow_partial_support
+                ):
+                    failing.append(span_key)
+            elif support == "FULLY_SUPPORTED" or (
+                support == "PARTIALLY_SUPPORTED" and self.allow_partial_support
+            ):
+                pass
+            else:
+                unknown.append(span_key)
 
-            # Check if support is acceptable
-            if support == "NOT_SUPPORTED":
-                problematic_spans.append(span_key)
-            elif support == "PARTIALLY_SUPPORTED" and not self.allow_partial_support:
-                problematic_spans.append(span_key)
+        if not failing and unknown:
+            shown = "; ".join(_describe(k) for k in unknown[:5])
+            more = f" (and {len(unknown) - 5} more)" if len(unknown) > 5 else ""
+            return ValidationResult(
+                False,
+                reason=None,
+                error=ValueError(
+                    f"Could not determine groundedness for {len(unknown)} span(s): "
+                    f"{shown}{more}"
+                ),
+            )
 
-        # Determine pass/fail
-        passed = len(problematic_spans) == 0
-
-        # Build reason string
-        if passed:
-            reason = "Response is grounded in citations."
-        else:
-            reason = "Response is not grounded - the following spans are not properly supported:\n\n"
-
-            for begin, end in problematic_spans:
-                span_text = response[begin:end]
-                support = span_support.get((begin, end), "NOT_SUPPORTED")
-                reason += f'- "{span_text}" [{support}]\n'
-
-        # Add summary statistics
+        # Summary counts fully-supported spans, not spans that passed the
+        # configured policy: a partially supported span passes when
+        # allow_partial_support=True but is not in the numerator.
         total_spans_needing_citations = sum(
-            1 for needs in span_necessity.values() if needs
+            1 for needs in span_necessity.values() if needs is True
         )
         fully_supported = sum(
             1
             for span_key, needs in span_necessity.items()
-            if needs and span_support.get(span_key) == "FULLY_SUPPORTED"
+            if needs is True and span_support.get(span_key) == "FULLY_SUPPORTED"
         )
-
-        reason += (
+        summary = (
             f"\nSummary: {fully_supported}/{total_spans_needing_citations} "
             f"spans needing citations are fully supported."
         )
 
-        return passed, reason
+        if failing:
+            reason = "Response is not grounded - the following spans are not properly supported:\n\n"
+            for begin, end in failing:
+                span_text = response[begin:end]
+                reason += f'- "{span_text}" [{span_support[(begin, end)]}]\n'
+            return ValidationResult(False, reason=reason + summary)
+
+        return ValidationResult(
+            True, reason="Response is grounded in citations." + summary
+        )
