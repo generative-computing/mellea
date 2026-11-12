@@ -162,8 +162,8 @@ executable example.
 ## Granite Switch on llama-server
 
 `OpenAIBackend` also serves Granite Switch checkpoints from
-[llama-server](https://github.com/ggml-org/llama.cpp) (v0.1.0 or newer, which
-carries the granite-switch architecture; tested on v0.6.0 and v0.9.0), so the
+[llama-server](https://github.com/ggml-org/llama.cpp) (v0.6.0 or newer; tested
+on v0.6.0 and v0.9.0), so the
 adapter functions run on a Mac or any machine without a GPU. Adapter
 activation, document-based adapter functions and each adapter's constrained
 decoding work as they do under vLLM.

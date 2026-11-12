@@ -5,8 +5,8 @@
 llama-server speaks the OpenAI chat-completions API, so Mellea reaches it
 through the `openai` backend with a `base_url`, the same path as the vLLM
 example in this directory, including per-request adapter activation through
-`chat_template_kwargs.adapter_name` (llama.cpp v0.1.0 or newer carries the
-granite-switch architecture; this example is tested against v0.6.0).
+`chat_template_kwargs.adapter_name` (llama.cpp v0.6.0 or newer; this example
+is tested against v0.6.0 and v0.9.0).
 
 Marked `qualitative` alongside `e2e` because it asserts on the model's
 answerability labels rather than only on structure, per the marker rules in

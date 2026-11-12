@@ -9,7 +9,7 @@ without a deprecation period.
 Decisions answer a fixed-answer question about some state with a typed
 answer (probability, choice, or score) read from the model's first
 generated token. This example runs the decision adapter functions against
-a Granite Switch checkpoint served by llama-server (llama.cpp v0.1.0 or
+a Granite Switch checkpoint served by llama-server (llama.cpp v0.6.0 or
 newer). If you have a GPU, the vLLM path (`decisions.py`) is simpler.
 
 The `decision` adapter is embedded in the released `granite-switch-4.1-8b`
