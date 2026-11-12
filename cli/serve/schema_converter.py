@@ -68,7 +68,6 @@ def json_schema_to_pydantic(
     ref_cache: dict[str, Any] = {}
     model_cache: dict[str, type[BaseModel]] = {}
     in_flight_refs: set[str] = set()
-    ref_name_by_schema_id: dict[int, str] = {}
 
     def _sanitize_model_name(name: str) -> str:
         sanitized = "".join(ch if ch.isalnum() else "_" for ch in name).strip("_")
@@ -100,7 +99,6 @@ def json_schema_to_pydantic(
                 if not isinstance(target, dict):
                     raise ValueError(f"Ref target must be an object: {ref}")
                 ref_cache[ref] = target
-                ref_name_by_schema_id[id(target)] = key
                 return key, target
 
         raise ValueError(
@@ -147,7 +145,7 @@ def json_schema_to_pydantic(
         merged_additional_properties: bool | dict[str, Any] = True
 
         for index, branch in enumerate(schemas):
-            resolved_branch = _normalize_schema(branch, f"{path}.allOf[{index}]")
+            _, resolved_branch = _normalize_schema(branch, f"{path}.allOf[{index}]")
             branch_type = resolved_branch.get("type", "object")
             if branch_type != "object":
                 raise ValueError(
@@ -219,24 +217,29 @@ def json_schema_to_pydantic(
             annotation = annotation | branch_annotation
         return annotation
 
-    def _normalize_schema(field_schema: dict[str, Any], path: str) -> dict[str, Any]:
+    def _normalize_schema(
+        field_schema: dict[str, Any], path: str
+    ) -> tuple[str | None, dict[str, Any]]:
         """Resolve refs and simple combinators into a normalized schema object."""
         if not isinstance(field_schema, dict):
             raise ValueError(f"{_format_path(path)} schema must be an object")
 
         normalized = dict(field_schema)
+        # Name of a pure local $ref, used for recursive cycle detection.
+        ref_name = None
 
         if "$ref" in normalized:
             ref = normalized["$ref"]
             if not isinstance(ref, str):
                 raise ValueError(f"{_format_path(path)} $ref must be a string")
-            _, resolved = _resolve_ref(ref)
+            key, resolved = _resolve_ref(ref)
             sibling_keywords = {k: v for k, v in normalized.items() if k != "$ref"}
             if sibling_keywords:
                 merged = dict(resolved)
                 merged.update(sibling_keywords)
                 normalized = merged
             else:
+                ref_name = key
                 normalized = dict(resolved)
 
         if "allOf" in normalized:
@@ -247,13 +250,13 @@ def json_schema_to_pydantic(
             merged.update(normalized)
             normalized = merged
 
-        return normalized
+        return ref_name, normalized
 
     def _schema_to_type(
         field_schema: dict[str, Any], path: str, in_union: bool = False
     ) -> Any:
         """Convert a JSON Schema node into a Python typing annotation."""
-        normalized_schema = _normalize_schema(field_schema, path)
+        ref_name, normalized_schema = _normalize_schema(field_schema, path)
 
         for keyword in ("anyOf", "oneOf"):
             if keyword in normalized_schema:
@@ -326,7 +329,9 @@ def json_schema_to_pydantic(
                 return _merge_nullable(dict_type, is_nullable)
 
             nested_name = _sanitize_model_name(f"{model_name}_{path.replace('.', '_')}")
-            nested_model = _object_schema_to_model(normalized_schema, nested_name, path)
+            nested_model = _object_schema_to_model(
+                normalized_schema, nested_name, path, ref_name
+            )
             return _merge_nullable(nested_model, is_nullable)
 
         if field_type == "array":
@@ -351,16 +356,18 @@ def json_schema_to_pydantic(
         )
 
     def _object_schema_to_model(
-        object_schema: dict[str, Any], current_model_name: str, path: str
+        object_schema: dict[str, Any],
+        current_model_name: str,
+        path: str,
+        current_ref_name: str | None = None,
     ) -> type[BaseModel]:
-        current_ref_name = ref_name_by_schema_id.get(id(object_schema))
         if current_ref_name is not None:
             if current_ref_name in in_flight_refs:
                 raise ValueError("recursive $ref is not supported")
             in_flight_refs.add(current_ref_name)
 
         try:
-            normalized_schema = _normalize_schema(object_schema, path)
+            _, normalized_schema = _normalize_schema(object_schema, path)
             if normalized_schema.get("type") != "object":
                 raise ValueError(f"{_format_path(path)} must be an object schema")
 
