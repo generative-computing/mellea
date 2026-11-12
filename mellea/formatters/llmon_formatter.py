@@ -31,7 +31,11 @@ import re
 from collections.abc import Callable, Iterable
 from typing import Any, cast
 
-from ..backends.model_ids import ModelIdentifier
+from ..backends.model_ids import (
+    IBM_GRANITE_4_1_3B_LLMON_PREVIEW,
+    IBM_GRANITE_4_1_8B_LLMON_PREVIEW,
+    ModelIdentifier,
+)
 from ..core import (
     CBlock,
     Component,
@@ -47,12 +51,16 @@ from .chat_formatter import ChatFormatter
 from .template_formatter import TemplateFormatter
 
 # Models that speak LLMON, matched exactly against a model id. Only `LocalHFBackend`
-# runs them; other backends raise for them.
+# runs them; other backends raise for them. The catalog constants in
+# `mellea.backends.model_ids` are the single source of truth; every provider name they
+# carry counts as an LLMON model id.
+_LLMON_MODEL_IDS = (IBM_GRANITE_4_1_3B_LLMON_PREVIEW, IBM_GRANITE_4_1_8B_LLMON_PREVIEW)
 _LLMON_MODELS = frozenset(
-    {
-        "ibm-granite/granite-4.1-3b-llmon-preview",
-        "ibm-granite/granite-4.1-8b-llmon-preview",
-    }
+    getattr(model_id, f.name)
+    for model_id in _LLMON_MODEL_IDS
+    for f in dataclasses.fields(model_id)
+    if getattr(model_id, f.name) is not None
+    and isinstance(getattr(model_id, f.name), str)
 )
 
 # Only the HuggingFace backend hands each message to the chat template as it is.

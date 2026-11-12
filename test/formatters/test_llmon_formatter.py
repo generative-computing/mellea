@@ -447,7 +447,9 @@ class TestDefaultFormatter:
         ):
             assert isinstance(default_formatter(model_id), LLMONFormatter)
         assert isinstance(
-            default_formatter(ModelIdentifier(ollama_name="ibm-granite/granite-4.1-3b-llmon-preview")),
+            default_formatter(
+                ModelIdentifier(ollama_name="ibm-granite/granite-4.1-3b-llmon-preview")
+            ),
             LLMONFormatter,
         )
         assert isinstance(default_formatter("granite4:micro"), TemplateFormatter)

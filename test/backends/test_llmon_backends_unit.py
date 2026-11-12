@@ -144,7 +144,9 @@ def test_tool_call_written_in_the_reply_round_trips_as_tool_calls():
 
     mot = ModelOutputThunk(call, tool_calls=calls)
     mot.parsed_repr = Message("assistant", call)
-    (sent,) = LLMONFormatter("ibm-granite/granite-4.1-3b-llmon-preview").to_chat_messages([mot])
+    (sent,) = LLMONFormatter(
+        "ibm-granite/granite-4.1-3b-llmon-preview"
+    ).to_chat_messages([mot])
     assert sent.content == ""
     assert sent.tool_calls is not None
     assert sent.tool_calls[0]["function"]["name"] == "calculator"

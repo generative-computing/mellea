@@ -594,6 +594,7 @@ def _check_alora_activation(
         invocation_tokens=invocation_tokens,
     )
 
+
 def _grammar_logits_processor(
     action: Any, _format: type[BaseModelSubclass] | None, ll_tokenizer: Any
 ) -> LogitsProcessorList | None:
