@@ -26,10 +26,12 @@ capability stays available — see [Prompt fallback](#prompt-fallback).
 >   `load_embedded_adapters=True`; install `mellea[hf]` first. Only
 >   adapter functions embedded in the checkpoint are then available. Requires a
 >   GPU or Apple Silicon Mac.
-> - **OpenAIBackend** — uses a Granite Switch model served via vLLM with
->   `load_embedded_adapters=True`. Only adapter functions embedded in the model are
->   available — check the model's `adapter_index.json` for the list.
->   See `docs/docs/examples/granite-switch/README.md`
+> - **OpenAIBackend** — uses a Granite Switch model served via vLLM or
+>   llama-server with `load_embedded_adapters=True`. Only adapter functions
+>   embedded in the model are available — check the model's
+>   `adapter_index.json` for the list. See
+>   [Granite Switch on llama-server](#granite-switch-on-llama-server) and the
+>   [Granite Switch examples](https://github.com/generative-computing/mellea/tree/main/docs/examples/granite-switch).
 > - **OllamaModelBackend** — uses an Ollama model that bundles the adapter.
 >   Ollama bundles one adapter per model, so pass
 >   `adapter_models={"uncertainty": "<tag>", ...}` to route each adapter function
@@ -157,6 +159,62 @@ single-model serving is important.
 See `docs/examples/intrinsics/uncertainty_ollama.py` for the complete
 executable example.
 
+## Granite Switch on llama-server
+
+`OpenAIBackend` also serves Granite Switch checkpoints from
+[llama-server](https://github.com/ggml-org/llama.cpp) (v0.6.0 or newer; tested
+on v0.6.0 and v0.9.0), so the
+adapter functions run on a Mac or any machine without a GPU. Adapter
+activation, document-based adapter functions and each adapter's constrained
+decoding work as they do under vLLM.
+
+Both commands below serve on `http://127.0.0.1:8081` (the base-Granite server
+keeps 8080), so run one at a time or move the second: change `--port` on the
+`llama-server` command, or set `LLAMACPP_SWITCH_PORT` for the script. Set
+`LLAMACPP_SWITCH_BASE_URL` to match so the examples find the moved server. Both
+need `llama-server` on `PATH` (`brew install llama.cpp` on macOS). Pick the
+checkpoint by the adapter functions you need (see
+[Choosing a model](#choosing-a-model)):
+
+```bash
+# Decisions and guardian-core: IBM's published 8b GGUF (Q4_K_M, ~6.4 GB).
+# --alias makes the server report the name Mellea's examples look for.
+llama-server -hf ibm-granite/granite-switch-4.1-8b-GGUF:Q4_K_M \
+  --alias ibm-granite/granite-switch-4.1-8b --port 8081 --jinja
+
+# RAG, core and guardian adapter functions: the 3b preview, which has no
+# published GGUF, so this script converts it (~7 GB download, ~9 GB GGUF)
+./scripts/start_llamacpp_switch.sh
+```
+
+The script also needs `git`, `curl` and `uv`; its converter runs from its own
+pinned llama.cpp checkout, whatever llama-server version you have. IBM also
+publishes `granite-switch-4.1-30b-GGUF` in the same quantizations.
+
+Then point the backend at the server; llama-server ignores the API key, but the
+OpenAI client needs one:
+
+```python
+from mellea.backends.openai import OpenAIBackend
+from mellea.formatters import TemplateFormatter
+
+MODEL = "ibm-granite/granite-switch-4.1-8b"  # the server's --alias
+
+backend = OpenAIBackend(
+    model_id=MODEL,
+    formatter=TemplateFormatter(model_id=MODEL),
+    base_url="http://127.0.0.1:8081/v1",
+    api_key="llamacpp",
+    load_embedded_adapters=True,
+)
+```
+
+Runnable examples, which skip with the start command when the right server is
+not up:
+[`answerability_llamacpp.py`](../../examples/granite-switch/answerability_llamacpp.py)
+(3b preview) and
+[`decisions_llamacpp.py`](../../examples/intrinsics/decisions_llamacpp.py) (8b).
+
 ## Use a local Granite Switch checkpoint
 
 Granite Switch checkpoints contain their adapter functions already. Pass the
@@ -248,7 +306,7 @@ from mellea.formatters import TemplateFormatter
 
 MODEL = "ibm-granite/granite-switch-4.1-8b"
 
-# Served via vLLM or llama-server:
+# Served via vLLM (or llama-server, on http://127.0.0.1:8081/v1):
 backend = OpenAIBackend(
     model_id=MODEL,
     formatter=TemplateFormatter(model_id=MODEL),
@@ -262,7 +320,8 @@ backend = LocalHFBackend(model_id=MODEL, load_embedded_adapters=True)
 ```
 
 Decisions also work against [llama.cpp](https://github.com/ggml-org/llama.cpp)'s
-`llama-server` and the HuggingFace backend (`LocalHFBackend` with
+`llama-server` (see [Granite Switch on llama-server](#granite-switch-on-llama-server))
+and the HuggingFace backend (`LocalHFBackend` with
 `granite-switch[hf]>=0.1.1`). Runnable examples:
 [`decisions.py`](../../examples/intrinsics/decisions.py) (vLLM) and
 [`decisions_llamacpp.py`](../../examples/intrinsics/decisions_llamacpp.py).
