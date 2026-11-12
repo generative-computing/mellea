@@ -71,7 +71,9 @@ LLAMACPP_BIN="${LLAMACPP_BIN:-$(command -v llama-server 2>/dev/null || true)}"
 LLAMA_CPP_REVISION="${LLAMA_CPP_REVISION:-2851b3bcbf8d993a2243ae751c0a7dfa8e944a40}"
 
 BUILD_CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/mellea/llamacpp-switch-build"
-GGUF="$BUILD_CACHE/$(basename "$LLAMACPP_SWITCH_MODEL")-$LLAMACPP_SWITCH_QUANT.gguf"
+# The converter revision is part of the name, so bumping the pin converts
+# afresh instead of reusing a GGUF an older converter wrote.
+GGUF="$BUILD_CACHE/$(basename "$LLAMACPP_SWITCH_MODEL")-$LLAMACPP_SWITCH_QUANT-${LLAMA_CPP_REVISION:0:8}.gguf"
 BASE_URL="http://${LLAMACPP_SWITCH_HOST}:${LLAMACPP_SWITCH_PORT}/v1"
 SERVER_PID=""
 INTERRUPTED=""
