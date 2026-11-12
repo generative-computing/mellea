@@ -1,3 +1,49 @@
+## [v0.9.0](https://github.com/generative-computing/mellea/releases/tag/v0.9.0) - 2026-11-12
+
+<!-- Release notes generated using configuration in .github/release.yml at release/v0.9 -->
+
+## What's Changed
+### New Features
+* feat: add llama.cpp launcher script and gated example by @psschwei in https://github.com/generative-computing/mellea/pull/1656
+* refactor: consolidate extra_body merge logic into ModelOption.merge_extra_body by @cptnm3 in https://github.com/generative-computing/mellea/pull/1695
+* feat(telemetry): emit llm.prompt_template.* on backend spans by @ajbozarth in https://github.com/generative-computing/mellea/pull/1672
+* feat: llmon formatter by @AngeloDanducci in https://github.com/generative-computing/mellea/pull/1816
+### Bug Fixes
+* fix: harden nightly Ollama and vision example coverage by @planetf1 in https://github.com/generative-computing/mellea/pull/1671
+* fix(sampling): sampling span missing for strategies that override sam… by @cptnm3 in https://github.com/generative-computing/mellea/pull/1584
+* fix: disable thinking in generate_with_context example by @simoncraf in https://github.com/generative-computing/mellea/pull/1686
+* fix: add OpenAI adapter deregistration by @BrUn3y in https://github.com/generative-computing/mellea/pull/1676
+* fix: pin create-github-app-token and scope app token permissions by @simoncraf in https://github.com/generative-computing/mellea/pull/1668
+* fix: anchor coverage ellipsis exclude pattern to stub bodies by @planetf1 in https://github.com/generative-computing/mellea/pull/1682
+* fix(ollama): case-fold model name comparison in is_model_available by @planetf1 in https://github.com/generative-computing/mellea/pull/1691
+* fix(backends): activate aLoRA adapters on the LocalHFBackend generate path by @planetf1 in https://github.com/generative-computing/mellea/pull/1685
+* fix(adapters): raise or fall back when an aLoRA cannot activate by @planetf1 in https://github.com/generative-computing/mellea/pull/1684
+* fix: event loop handler teardown bug by @jakelorocco in https://github.com/generative-computing/mellea/pull/1704
+* fix(backends): parse Granite XML tool calls on the local HF path by @planetf1 in https://github.com/generative-computing/mellea/pull/1692
+* fix(ci): route template expressions through env in dispatch-to-contribs by @simoncraf in https://github.com/generative-computing/mellea/pull/1717
+* fix(tools): carry element types and constraints into tool schemas by @planetf1 in https://github.com/generative-computing/mellea/pull/1694
+* fix(backends): reject empty user content before sending chat request by @simonyang08 in https://github.com/generative-computing/mellea/pull/1632
+* fix(backends): raise the documented ValueError when intrinsic output is not JSON by @planetf1 in https://github.com/generative-computing/mellea/pull/1725
+* fix(backends): omit reasoning_effort=none for real OpenAI, not just the bool-False case by @planetf1 in https://github.com/generative-computing/mellea/pull/1709
+* fix(core): await async validation functions in Requirement.validate so judge validation actually runs by @planetf1 in https://github.com/generative-computing/mellea/pull/1729
+* fix(ci): bump gh-action-pypi-publish to v1.14.3 for GHSA-5xjx-3w67-w9x9 (backport #1779) by @ajbozarth in https://github.com/generative-computing/mellea/pull/1806
+* fix: tool call result iteration (backport #1796) by @ajbozarth in https://github.com/generative-computing/mellea/pull/1803
+* fix(ci): snapshot release docs from release tag (backport #1802) by @ajbozarth in https://github.com/generative-computing/mellea/pull/1808
+### Documentation
+* docs: sync changelog for v0.8.0 by @mellea-auto-release[bot] in https://github.com/generative-computing/mellea/pull/1657
+* docs(examples): link the example files in README by @spzala in https://github.com/generative-computing/mellea/pull/1711
+### Other Changes
+* chore(adapters): bump granitelib-core pin for fixed requirement-check io.yaml by @planetf1 in https://github.com/generative-computing/mellea/pull/1706
+* ci: pin action comments to exact releases by @planetf1 in https://github.com/generative-computing/mellea/pull/1713
+* test(backends): raise lock-test timeout to tolerate shared GPU nodes by @planetf1 in https://github.com/generative-computing/mellea/pull/1726
+
+## New Contributors
+* @simoncraf made their first contribution in https://github.com/generative-computing/mellea/pull/1686
+* @BrUn3y made their first contribution in https://github.com/generative-computing/mellea/pull/1676
+* @simonyang08 made their first contribution in https://github.com/generative-computing/mellea/pull/1632
+
+**Full Changelog**: https://github.com/generative-computing/mellea/compare/v0.8.0...v0.9.0
+
 ## [v0.8.0](https://github.com/generative-computing/mellea/releases/tag/v0.8.0) - 2026-09-23
 
 <!-- Release notes generated using configuration in .github/release.yml at release/v0.8 -->
