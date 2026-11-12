@@ -1092,7 +1092,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         first-class documents field still render them, sends the io.yaml
         schema as `response_format` as well as vLLM's `structured_outputs`
         so every server constrains decoding (a caller's `response_format`
-        replaces both), and post-processes the model
+        replaces the io.yaml schema in both fields), and post-processes the model
         output through the intrinsic's result processor.
 
         Intrinsics default to options provided by `io.yaml`. Model options
@@ -1315,7 +1315,8 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         # io.yaml `json` constraint and a caller's `text` would leave it in
         # force. Drop the io.yaml constraint unless the caller set
         # `structured_outputs` themselves.
-        if "response_format" in user_api_params and not (
+        # A `None` value counts as unset, so it cannot switch constraining off.
+        if user_api_params.get("response_format") is not None and not (
             user_extra_body and "structured_outputs" in user_extra_body
         ):
             extra_body.pop("structured_outputs", None)
@@ -1325,7 +1326,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             if isinstance(structured_outputs, dict)
             else None
         )
-        if isinstance(schema, dict) and "response_format" not in api_params:
+        if isinstance(schema, dict) and api_params.get("response_format") is None:
             api_params["response_format"] = {
                 "type": "json_schema",
                 "json_schema": {"name": action.intrinsic_name, "schema": schema},

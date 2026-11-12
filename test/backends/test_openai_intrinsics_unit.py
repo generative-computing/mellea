@@ -900,6 +900,40 @@ async def test_user_response_format_not_overwritten(caller_format):
     assert "structured_outputs" not in call_kwargs["extra_body"]
 
 
+async def test_user_response_format_none_keeps_io_yaml_constraint():
+    """`response_format=None` counts as unset, so the io.yaml schema still goes out."""
+    backend = _make_backend_with_adapter(
+        {**_SIMPLE_CONFIG, "response_format": _ANSWERABILITY_SCHEMA}
+    )
+    mock_create = AsyncMock(return_value=_simple_chat_completion('"answerable"'))
+
+    mock_client = MagicMock()
+    mock_client.chat.completions.create = mock_create
+
+    with patch.object(
+        OpenAIBackend,
+        "_async_client",
+        new_callable=PropertyMock,
+        return_value=mock_client,
+    ):
+        mot, _ = await mfuncs.aact(
+            Intrinsic("answerability"),
+            _make_context(),
+            backend,
+            strategy=None,
+            model_options={"response_format": None},
+        )
+        await mot.avalue()
+
+    call_kwargs = mock_create.call_args.kwargs
+    assert call_kwargs["extra_body"]["structured_outputs"] == {
+        "json": _ANSWERABILITY_SCHEMA
+    }
+    assert call_kwargs["response_format"]["json_schema"]["schema"] == (
+        _ANSWERABILITY_SCHEMA
+    )
+
+
 async def test_user_response_format_keeps_user_structured_outputs():
     """A caller who sets both fields gets both, unchanged."""
     backend = _make_backend_with_adapter(
