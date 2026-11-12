@@ -5,7 +5,7 @@ tags:
   - mellea
 ---
 
-# {{ adapter_name }} Intrinsic Adapter
+# {{ adapter_name }} {% if intrinsic_layout %}Intrinsic Adapter{% else %}Adapter{% endif %}
 
 {{ high_level_description }}
 
@@ -27,6 +27,7 @@ tags:
 
 ## How to Use
 
+{% if intrinsic_layout %}
 To use this intrinsic adapter in your application, you need to compose an adapter
 (a factory function returning it, rather than a dedicated shim class) and an intrinsic
 component. The adapter connects to the HuggingFace model repository
@@ -121,3 +122,24 @@ if __name__ == "__main__":
     result, ctx = {{ intrinsic_name }}({{ example_call_kwargs }}, ctx=ChatContext(), backend=backend)
     print(result.value)
 ```
+{% else %}
+This repository uses the **flat** adapter layout: the trained weights are stored
+at the repository root.
+
+> **Mellea adapter functions:** Mellea's `LocalFileBinding` and adapter-function
+> loading expect weights at `<adapter-name>/<base-model>/<lora|alora>/`, so they
+> cannot load this repository as an intrinsic. To use this adapter as a Mellea
+> adapter function, re-upload it with
+> `m alora upload ... --intrinsic --io-yaml ./io.yaml`, then regenerate this
+> README with `m alora add-readme`.
+
+Load the adapter directly with PEFT:
+
+```python
+from peft import AutoPeftModelForCausalLM
+from transformers import AutoTokenizer
+
+model = AutoPeftModelForCausalLM.from_pretrained("{{ userid }}/{{ intrinsic_name }}")
+tokenizer = AutoTokenizer.from_pretrained("{{ base_model }}")
+```
+{% endif %}

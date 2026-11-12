@@ -104,7 +104,7 @@ m alora add-readme \
     stembolt_failure_dataset.jsonl
 ```
 
-The generator will display the README and ask for confirmation before uploading it to your Hugging Face repo. You can also call the generator programmatically from Python — see `example_readme_generator.py` for an example.
+The generator will display the README and ask for confirmation before uploading it to your Hugging Face repo. It detects whether the repository uses the intrinsic layout (`--intrinsic`) or a flat upload, and documents matching usage code; if the repository does not exist yet, it asks which layout you intend to upload. Pass `--layout intrinsic` or `--layout flat` to skip detection. You can also call the generator programmatically from Python — see `example_readme_generator.py` for an example.
 
 ## Using Adapter Functions
 

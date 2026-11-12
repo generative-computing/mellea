@@ -7,14 +7,18 @@ Provides three commands: `train` (fine-tune a base causal language model on a JS
 dataset to produce a LoRA or aLoRA adapter), `upload` (push adapter weights to
 Hugging Face Hub, optionally packaging the adapter as an intrinsic with an
 `io.yaml` configuration), and `add-readme` (use an LLM to auto-generate and
-upload an `INTRINSIC_README.md` for the trained adapter).
+upload an `INTRINSIC_README.md` for the trained adapter, with usage code matched
+to the repository's detected adapter layout).
 """
 
 import json
 import os
 import tempfile
+from typing import Literal
 
 import typer
+
+from cli.alora.layout import RepoLayout, detect_repo_layout
 
 alora_app = typer.Typer(
     name="alora", help="Train or upload aLoRAs for requirement validation."
@@ -110,7 +114,10 @@ def alora_upload(
 
     Output:
         Creates or updates a Hugging Face Hub repository at the name specified
-        by `--name` and uploads the adapter weight files.
+        by `--name` and uploads the adapter weight files. Without `--intrinsic`
+        the weights go to the repository root (flat layout), which PEFT can load
+        but Mellea's intrinsic loading cannot; `--intrinsic` writes
+        `<name>/<base-model>/<lora|alora>/` instead.
 
     Examples:
         m alora upload ./adapter --name acme/my-alora
@@ -155,8 +162,81 @@ def alora_upload(
         )
     else:
         upload_model(weight_path=weight_path, model_name=name)
+        print(
+            "⚠️  Uploaded with the flat layout: weights are at the repository root. "
+            "Mellea's intrinsic loading expects "
+            "`<name>/<base-model>/<lora|alora>/`, so this repository cannot be loaded "
+            "as an adapter function. Re-run with --intrinsic --io-yaml ./io.yaml "
+            "if that is what you intended."
+        )
 
     print("✅ Upload complete!")
+
+
+def _ask_adapter_layout(model_name: str) -> Literal["intrinsic", "flat"]:
+    """Ask which upload layout the target repository uses.
+
+    Args:
+        model_name: Target Hugging Face repository name.
+
+    Returns:
+        `"intrinsic"` if the user will upload with `--intrinsic --io-yaml`,
+        otherwise `"flat"`.
+    """
+    answer: str | None = None
+    while answer not in ("yes", "no"):
+        answer = (
+            input(
+                f"Will {model_name} be uploaded with "
+                "`m alora upload ... --intrinsic --io-yaml ./io.yaml`? (yes/no) "
+            )
+            .strip()
+            .lower()
+        )
+        if answer not in ("yes", "no"):
+            print("Please answer with only 'yes' or 'no'.")
+    return "intrinsic" if answer == "yes" else "flat"
+
+
+def _detect_repo_layout(model_name: str, token: str) -> RepoLayout:
+    """Inspect a Hub repository and classify its adapter layout.
+
+    Verification is best-effort: a repository that does not exist yet (the
+    README may be generated before the weights are uploaded) and any other Hub
+    error both return `"unknown"`, so the caller can ask the user instead of
+    failing.
+
+    Args:
+        model_name: Target Hugging Face repository name.
+        token: Hugging Face authentication token.
+
+    Returns:
+        The detected layout, or `"unknown"` if it cannot be determined.
+    """
+    try:
+        from huggingface_hub import HfApi
+        from huggingface_hub.errors import RepositoryNotFoundError
+    except ImportError as e:
+        raise ImportError(
+            "The 'm alora' command requires extra dependencies. "
+            'Please install them with: pip install "mellea[hf]"'
+        ) from e
+
+    try:
+        repo_files = HfApi().list_repo_files(repo_id=model_name, token=token)
+    except RepositoryNotFoundError:
+        print(f"{model_name} does not exist yet; its adapter layout is unknown.")
+        return "unknown"
+    except Exception as e:
+        print(f"Warning: could not inspect the layout of {model_name}: {e}")
+        return "unknown"
+
+    detected = detect_repo_layout(repo_files, model_name.split("/")[-1])
+    if detected == "unknown":
+        print(f"{model_name} has no recognizable adapter layout.")
+    else:
+        print(f"Detected the {detected} adapter layout in {model_name}.")
+    return detected
 
 
 def alora_add_readme(
@@ -174,12 +254,25 @@ def alora_add_readme(
         help="Location of the io.yaml file that configures input and output "
         "processing if the model is invoked as an intrinsic.",
     ),
+    layout: str = typer.Option(
+        "auto",
+        help="Adapter layout of the target repository: 'auto' detects it and "
+        "asks when it cannot be verified, 'intrinsic' is "
+        "<name>/<base-model>/<lora|alora>/, and 'flat' is the repository root.",
+    ),
 ):
     """Generate and upload an INTRINSIC_README.md for a trained adapter.
 
     Uses an LLM to auto-generate documentation for a trained adapter based on
     the training data and model configuration, then uploads it to the Hugging
     Face Hub repository.
+
+    The generated usage code depends on how the adapter was published. The
+    command detects the repository's layout by default (weights nested under
+    `<name>/<base-model>/<lora|alora>/` versus flat at the root) and renders
+    matching code; if the layout cannot be verified — for example the README is
+    generated before the weights are uploaded — it asks which layout to use.
+    Pass `--layout` to skip detection and state it explicitly.
 
     Prerequisites:
         Hugging Face token available (set `HF_TOKEN` or run `hf auth login`).
@@ -202,9 +295,12 @@ def alora_add_readme(
         name: Destination model name on Hugging Face Hub.
         hints: Path to a file containing additional domain hints, or `None`.
         io_yaml: Path to the `io.yaml` intrinsic configuration file, or `None`.
+        layout: Adapter layout of the target repository — `"auto"`, `"intrinsic"`,
+            or `"flat"`.
 
     Raises:
         OSError: If no Hugging Face authentication token is found.
+        typer.BadParameter: If `layout` is not `"auto"`, `"intrinsic"`, or `"flat"`.
         SystemExit: If the user declines to upload the generated README.
     """
     try:
@@ -217,6 +313,34 @@ def alora_add_readme(
 
     from cli.alora.readme_generator import generate_readme
 
+    if layout not in ("auto", "intrinsic", "flat"):
+        raise typer.BadParameter(
+            f"Unsupported layout '{layout}'. Choose from: auto, intrinsic, flat."
+        )
+
+    # A token is only required to upload; keep local, unauthenticated generation
+    # working as before.
+    token = get_token()
+
+    resolved_layout: Literal["intrinsic", "flat"]
+    if layout == "auto":
+        if token is None:
+            print(
+                "Warning: no Hugging Face token found, so the repository layout "
+                "cannot be inspected."
+            )
+            detected: RepoLayout = "unknown"
+        else:
+            detected = _detect_repo_layout(name, token)
+        if detected == "unknown":
+            resolved_layout = _ask_adapter_layout(name)
+        else:
+            resolved_layout = detected
+    elif layout == "intrinsic":
+        resolved_layout = "intrinsic"
+    else:
+        resolved_layout = "flat"
+
     with tempfile.TemporaryDirectory() as tmp_dir:
         readme_path = os.path.join(tmp_dir, "README.md")
         generate_readme(
@@ -226,6 +350,7 @@ def alora_add_readme(
             output_path=readme_path,
             name=name,
             hints=open(hints).read() if hints is not None else None,
+            layout=resolved_layout,
         )
 
         print(open(readme_path).read())
@@ -245,7 +370,6 @@ def alora_add_readme(
         else:
             assert continue_answer == "yes"
 
-        token = get_token()
         if token is None:
             raise OSError(
                 "Hugging Face token not found. Set `HF_TOKEN` or run `hf auth login` first."
