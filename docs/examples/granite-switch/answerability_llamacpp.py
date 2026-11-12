@@ -107,8 +107,7 @@ backend = OpenAIBackend(
 context = ChatContext().add(Message("assistant", "Hello there, how can I help you?"))
 question = "What is the square root of 4?"
 
-# Both calls must reach the documents: before issue #1735's fix, llama-server
-# dropped them and every question came back "unanswerable".
+# Both calls depend on the server actually rendering the documents.
 result_answerable = rag.check_answerability(
     question, [Document("The square root of 4 is 2.")], context, backend
 )

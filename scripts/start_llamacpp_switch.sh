@@ -15,7 +15,8 @@
 # which llama-server can serve directly with -hf). llama.cpp's
 # converter handles GraniteSwitchForCausalLM directly (ggml-org/llama.cpp#25107;
 # see LLAMA_CPP_REVISION below for the revision current checkpoints need), so
-# this script converts from the HF checkpoint. The server is tested on v0.6.0.
+# this script converts from the HF checkpoint. The server is tested on v0.6.0
+# and v0.9.0.
 #
 # Usage:
 #   ./scripts/start_llamacpp_switch.sh                      # 3b preview, port 8081
@@ -25,8 +26,8 @@
 #   LLAMACPP_SWITCH_QUANT=q8_0 ./scripts/start_llamacpp_switch.sh   # untested
 #
 # Requires `llama-server` on PATH (v0.1.0 or newer, for the granite-switch
-# architecture; tested on v0.6.0), `git`, `curl`, and `uv` for the converter
-# dependencies:
+# architecture; tested on v0.6.0 and v0.9.0), `git`, `curl`, and `uv` for the
+# converter dependencies:
 #   macOS:  brew install llama.cpp
 #   Linux:  https://github.com/ggml-org/llama.cpp/releases (or build from source)
 #

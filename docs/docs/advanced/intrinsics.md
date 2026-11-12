@@ -169,7 +169,8 @@ activation, document-based adapter functions and each adapter's constrained
 decoding work as they do under vLLM.
 
 Both commands below serve on `http://127.0.0.1:8081` (the base-Granite server
-keeps 8080) and need `llama-server` on `PATH` (`brew install llama.cpp` on
+keeps 8080), so run one at a time or move the second: change `--port` on the
+`llama-server` command, or set `LLAMACPP_SWITCH_PORT` for the script. Both need `llama-server` on `PATH` (`brew install llama.cpp` on
 macOS). Pick the checkpoint by the adapter functions you need (see
 [Choosing a model](#choosing-a-model)):
 
@@ -188,8 +189,7 @@ The script also needs `git`, `curl` and `uv`; its converter runs from its own
 pinned llama.cpp checkout, whatever llama-server version you have. IBM also
 publishes `granite-switch-4.1-30b-GGUF` in the same quantizations.
 
-Both use port 8081, so run one at a time or set `LLAMACPP_SWITCH_PORT` on the
-second. Then point the backend at it; llama-server ignores the API key, but the
+Then point the backend at the server; llama-server ignores the API key, but the
 OpenAI client needs one:
 
 ```python
