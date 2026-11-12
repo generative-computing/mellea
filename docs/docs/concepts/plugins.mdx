@@ -15,7 +15,7 @@ When an event fires during Mellea's execution (e.g., "about to call the LLM" or 
 2. **Runs plugins in priority order**, grouped by execution mode
 3. **Returns a result** — continue unchanged, continue with a modified payload, or block execution entirely
 
-Plugins are organized into eight hook categories:
+Plugins are organized into different hook categories:
 
 - **Session Lifecycle** — session init, reset, and cleanup (`session_pre_init`, `session_post_init`, `session_reset`, `session_cleanup`)
 - **[Component](../reference/glossary.md#component) Lifecycle** — before and after component execution (`component_pre_execute`, `component_post_success`, `component_post_error`)

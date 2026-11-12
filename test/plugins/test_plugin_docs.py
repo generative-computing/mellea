@@ -10,7 +10,9 @@ import pytest
 
 from mellea.plugins.types import HookType
 
-PLUGINS_DOC = Path(__file__).parents[2] / "docs" / "docs" / "concepts" / "plugins.mdx"
+PLUGINS_DOC = (
+    Path(__file__).resolve().parents[2] / "docs" / "docs" / "concepts" / "plugins.mdx"
+)
 
 
 @pytest.fixture(scope="module")
