@@ -1116,6 +1116,21 @@ def test_mot_cancelled_carried_by_copy_methods() -> None:
     assert target.cancelled is True
 
 
+@pytest.mark.parametrize("parsed", [True, False])
+def test_mot_parsed_flag_carried_by_copy_methods(parsed: bool) -> None:
+    """`is_parsed()` survives `copy`, `deepcopy`, and `_copy_from`, including parsed-to-`None`."""
+    mot = ModelOutputThunk(value="x")
+    if parsed:
+        mot.parsed_repr = None
+
+    assert copy.copy(mot).is_parsed() is parsed
+    assert copy.deepcopy(mot).is_parsed() is parsed
+
+    target = ModelOutputThunk(value=None)
+    target._copy_from(mot)
+    assert target.is_parsed() is parsed
+
+
 def test_mot_thinking_public_field_round_trip():
     mot = ModelOutputThunk(value="x")
     mot.thinking = "reasoning trace"

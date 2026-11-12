@@ -46,7 +46,8 @@ class ChatFormatter(Formatter):
         returned from its `format_for_llm`, and a component with `role="tool"`
         may additionally declare `tool_call_id`/`tool_name`, which are carried
         onto the resulting `Message`. Image attachments and parsed structured
-        outputs are handled transparently.
+        outputs are handled transparently. A `ModelOutputThunk` that parsed to
+        `None` (or was never parsed) renders as its raw model output string.
 
         Args:
             cs (list[Span]): The linearized sequence of context
@@ -75,7 +76,7 @@ class ChatFormatter(Formatter):
                     c.value is not None
                 )  # This is already entailed by c.is_computed(); the line is included here to satisfy the type-checker.
 
-                if c.parsed_repr is not None:
+                if c.is_parsed() and c.parsed_repr is not None:
                     if isinstance(c.parsed_repr, Component):
                         # Only use the parsed_repr if it's something that we know how to print.
                         c = c.parsed_repr  # This might be a message.
