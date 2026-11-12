@@ -653,6 +653,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
     """
 
     _cached_blocks: dict[str, DynamicCache] = dict()
+    _supports_composed_adapters = True
 
     def __init__(
         self,

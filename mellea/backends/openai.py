@@ -149,6 +149,8 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             `OPENAI_API_KEY` is set, or if `model_id` is a `ModelIdentifier` with no `openai_name` set.
     """
 
+    _supports_composed_adapters = True
+
     def __init__(
         self,
         model_id: str | ModelIdentifier = model_ids.OPENAI_GPT_5_1,
