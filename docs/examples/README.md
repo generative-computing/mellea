@@ -54,6 +54,11 @@ Specialized model capabilities through adapters.
 - Hallucination detection
 - Citation validation
 
+**[safety/](safety/)**
+Guardian safety checks inside requirement repair loops.
+- `guardian_check()` as a `Requirement` with `validation_fn`
+- Repair feedback naming the criteria and threshold
+
 **[sofai/](sofai/)**
 Two-tier sampling with fast and slow models.
 - Cost optimization
@@ -269,6 +274,7 @@ Utility functions used across examples.
 - [sampling/](sampling/) - Sampling presets
 - [sofai/](sofai/) - Cost optimization
 - [intrinsics/](intrinsics/) - Specialized tasks
+- [safety/](safety/) - Guardian repair loops
 
 ## 📖 Documentation
 

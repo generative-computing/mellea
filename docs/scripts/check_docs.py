@@ -389,7 +389,6 @@ MELLEA_NAMES = {
     "ChatFormatter",
     "TemplateFormatter",
     "ModelOptions",
-    "GuardianCheck",
     "MObject",
 }
 

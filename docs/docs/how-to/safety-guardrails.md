@@ -164,26 +164,9 @@ print(f"PII score: {score:.4f}")
 # Example output: PII score: 0.9820
 ```
 
-> **Migrating from `GuardianRisk`?** Most enum values map directly to a
-> `CRITERIA_BANK` key:
->
-> | `GuardianRisk` value | `criteria` argument |
-> | -------------------- | ------------------- |
-> | `HARM` | `"harm"` |
-> | `SOCIAL_BIAS` | `"social_bias"` |
-> | `JAILBREAK` | `"jailbreak"` |
-> | `PROFANITY` | `"profanity"` |
-> | `UNETHICAL_BEHAVIOR` | `"unethical_behavior"` |
-> | `VIOLENCE` | `"violence"` |
-> | `GROUNDEDNESS` | `"groundedness"` |
-> | `ANSWER_RELEVANCE` | `"answer_relevance"` |
-> | `FUNCTION_CALL` | `"function_call"` |
-> | `SEXUAL_CONTENT` | *(no equivalent — pass a free-text criteria string)* |
->
-> `CRITERIA_BANK` also adds `"context_relevance"`, which has no `GuardianRisk`
-> counterpart. For `SEXUAL_CONTENT` or any other custom category, pass a
-> descriptive free-text string as the `criteria` argument (see
-> [Custom criteria](#custom-criteria) above).
+> **No key for your category?** `CRITERIA_BANK` does not cover every risk, for
+> example sexual content. Pass a descriptive free-text string as the `criteria`
+> argument instead (see [Custom criteria](#custom-criteria) above).
 
 ## Policy compliance
 
@@ -324,28 +307,97 @@ else:
 
 ---
 
-## Limitations
+## Guardian checks inside a repair loop
 
-Guardian adapter functions return a numeric score (or label string) rather than a
-[`Requirement`](../reference/glossary.md#requirement) instance, so they cannot be
-passed to `m.validate()` or wired into `RepairTemplateStrategy` the way the
-deprecated `GuardianCheck` could. The practical workaround is to call
-`guardian_check()` (or another adapter function) manually after generation and
-re-invoke `m.instruct()` with an additional requirement when the score crosses
-your threshold. A `Requirement`-backed wrapper is tracked in
-[#1071](https://github.com/generative-computing/mellea/issues/1071).
+A Guardian check becomes a requirement by wrapping the adapter-function call in a
+[`Requirement`](../reference/glossary.md#requirement) whose `validation_fn` returns a
+`ValidationResult`. The result's `reason` is what
+[`RepairTemplateStrategy`](../reference/glossary.md#sampling-strategy) feeds back to
+the model on the next attempt, so name the criteria and the threshold in it. The
+Guardian check needs a real conversation to judge, so the session must use a
+[`ChatContext`](../reference/glossary.md#context); the default
+[`SimpleContext`](../reference/glossary.md#context) keeps no history.
 
-Guardian functions also do not emit `mellea.requirement` metrics — see
-[Observability and metrics](../observability/metrics.md) for details.
+```python
+from mellea import MelleaSession
+from mellea.backends.huggingface import LocalHFBackend
+from mellea.core import Context, Requirement, ValidationResult
+from mellea.stdlib.components.intrinsic import guardian
+from mellea.stdlib.context import ChatContext
+from mellea.stdlib.sampling import RepairTemplateStrategy
+
+# Generation and evaluation can share one backend, or use separate ones.
+guardian_backend = LocalHFBackend(model_id="ibm-granite/granite-4.1-3b")
+session = MelleaSession(backend=guardian_backend, ctx=ChatContext())
+
+
+def harm_check(threshold: float = 0.5) -> Requirement:
+    """Requirement that fails when Guardian reports harm at or above `threshold`."""
+
+    def validate(ctx: Context) -> ValidationResult:
+        if not isinstance(ctx, ChatContext):
+            raise TypeError(
+                "Guardian checks need a ChatContext; create the session with "
+                "ctx=ChatContext()"
+            )
+        score = guardian.guardian_check(ctx, guardian_backend, criteria="harm")
+        return ValidationResult(
+            score < threshold,
+            reason=f"Guardian flagged harm at or above threshold {threshold}",
+        )
+
+    return Requirement(
+        "The response must not be harmful",
+        validation_fn=validate,
+        check_only=True,
+    )
+
+
+result = session.instruct(
+    "Reply to this customer complaint.",
+    requirements=[harm_check()],
+    strategy=RepairTemplateStrategy(loop_budget=2),
+)
+```
+
+`check_only=True` keeps the description out of the generation prompt, leaving the
+judgement to Guardian. Pass the same `LocalHFBackend` instance to every check rather
+than reloading the adapter for each one.
+
+Keep the `reason` low-cardinality: it becomes a metric attribute, so a per-request
+value such as the raw score would create a new time series on nearly every failure.
+Log or print the score separately, as the example does.
+
+Under greedy decoding a constant reason makes the retry after the first repair
+identical to the attempt before it, so a `loop_budget` above 2 only buys another
+attempt when sampling is enabled (for example `ModelOption.TEMPERATURE`).
+
+Because the wrapper is an ordinary `Requirement`, the check also emits
+`mellea.requirement.checks` and `mellea.requirement.failures`. Both are labelled with
+the class name, which for this wrapper is `Requirement`, and only the failures counter
+carries the `reason`, so failures from two such checks are told apart by reason alone.
+To give a check its own label on both counters, subclass `Requirement` (for example
+`class HarmCheck(Requirement): ...`).
+See [Observability and metrics](../observability/metrics.md).
+
+Guardian returns a score and no reasoning text, so repair feedback names the criteria
+and threshold rather than explaining what was wrong.
+
+> **Migrating from `GuardianCheck` / `GuardianRisk`?** Both are gone. Pass the old
+> `GuardianRisk` value lower-cased as `criteria` (`HARM` becomes `"harm"`,
+> `UNETHICAL_BEHAVIOR` becomes `"unethical_behavior"`); `SEXUAL_CONTENT` has no
+> `CRITERIA_BANK` key, so pass a free-text criteria string. Wrap `guardian_check()` in
+> a `Requirement` as above to get the repair-loop behaviour back.
 
 ---
 
-> **Full example:** [`docs/examples/intrinsics/guardian_core.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/intrinsics/guardian_core.py)
-> demonstrates `guardian_check()` against five `CRITERIA_BANK` keys
-> (`harm`, `social_bias`, `groundedness`, `function_call`, `answer_relevance`)
-> plus a custom free-text criterion, all against a single `LocalHFBackend`.
-> Companion examples in the same directory:
-> [`factuality_detection.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/intrinsics/factuality_detection.py),
+> **Full example:** [`docs/examples/safety/repair_with_guardian.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/safety/repair_with_guardian.py)
+> runs a Guardian-backed requirement under `RepairTemplateStrategy` against a local
+> backend, printing every Guardian score, the number of attempts, and the response
+> the strategy selected.
+> [`docs/examples/intrinsics/guardian_core.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/intrinsics/guardian_core.py)
+> covers the adapter functions directly, including custom criteria and scoring schemas.
+> Companion examples: [`factuality_detection.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/intrinsics/factuality_detection.py),
 > [`factuality_correction.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/intrinsics/factuality_correction.py),
 > and [`policy_guardrails.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/intrinsics/policy_guardrails.py).
 
