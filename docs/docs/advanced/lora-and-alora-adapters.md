@@ -265,11 +265,22 @@ whether it was resolved automatically by an adapter-function call or registered 
 with `add_adapter()`. It does not apply to a LoRA (which has no invocation sequence to be
 absent), nor to server-mediated or embedded deployments, which activate outside Mellea.
 
-When the check catches a non-activating aLoRA, a plain `Requirement` (auto-rerouted) falls
-back to LLM-as-a-judge and logs a warning, while an explicit `ALoraRequirement` raises
-`ValueError` (chained from the `AloraActivationError`): a yes/no LLM-as-a-judge answer
-cannot be parsed by the adapter's JSON `output_to_bool`, so the explicit case has no safe
-fallback.
+- **A composed `Adapter` you registered yourself** with an aLoRA `LocalFileBinding`
+  (`add_adapter()` directly, bypassing `resolve_adapter()`'s default).
+- **Automatic `Requirement` routing** once such an aLoRA is registered under the
+  matching name -- routing itself does not register one. For a plain `Requirement`
+  (auto-rerouted as an optimisation), the check being caught falls back to
+  LLM-as-a-judge, logging a warning. For an explicit `ALoraRequirement`, it raises
+  `ValueError` (chained from the `AloraActivationError`) instead -- consistent with
+  how a missing adapter is handled, and for the same reason: a yes/no LLMaJ answer
+  cannot be parsed by the adapter's JSON `output_to_bool`.
+
+A direct adapter-function call reaching this check has no fallback layer below it and
+lets `AloraActivationError` propagate, so the caller sees a clear error instead of a
+silently wrong score -- but today that only happens on one of the two paths above,
+not on an unmodified default installation calling `core.check_certainty(...)` or
+similar. Server-mediated and embedded adapter deployments activate outside Mellea and
+are not covered by this check at all.
 
 ## Disable adapter validation
 
