@@ -106,7 +106,7 @@ def alora_upload(
     as an intrinsic with an `io.yaml` configuration file.
 
     Prerequisites:
-        Hugging Face CLI authenticated (`huggingface-cli login`).
+        Hugging Face token available (set `HF_TOKEN` or run `hf auth login`).
 
     Output:
         Creates or updates a Hugging Face Hub repository at the name specified
@@ -182,7 +182,7 @@ def alora_add_readme(
     Face Hub repository.
 
     Prerequisites:
-        Hugging Face CLI authenticated (`huggingface-cli login`).
+        Hugging Face token available (set `HF_TOKEN` or run `hf auth login`).
         An LLM backend available for README generation.
 
     Output:

@@ -10,7 +10,7 @@ From the root of the repository:
 
 ```bash
 pip install "mellea[cli]"
-huggingface-cli login  # Optional: only needed for uploads
+hf auth login  # Optional: only needed for uploads (or set HF_TOKEN)
 ```
 
 ---
@@ -81,7 +81,7 @@ m alora upload ./checkpoints/alora_adapter \
 This will:
 - Create the Hugging Face model repo (if it doesn't exist)
 - Upload the contents of the `outfile` directory
-- Requires a valid `HF_TOKEN` via `huggingface-cli login`
+- Requires a valid `HF_TOKEN` (set it directly, or run `hf auth login`)
 
 ---
 
