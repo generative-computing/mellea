@@ -125,7 +125,8 @@ the function definition.
 - Add `requirements` to the `@generative` call to enforce constraints on the
   extracted values — see the
   [requirements system concept](../concepts/requirements-system.md).
-- Look at `docs/examples/information_extraction/advanced_with_m_instruct.py`
+- Look at
+  [`docs/examples/information_extraction/advanced_with_m_instruct.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/information_extraction/advanced_with_m_instruct.py)
   for a version that uses `m.instruct()` directly with structured outputs.
 
 ---
