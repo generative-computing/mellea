@@ -57,6 +57,7 @@ from mellea.backends.adapters.catalog import IntrinsicsCatalogEntry
 from mellea.backends.adapters.io_contracts import get_io_contract
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.core import ModelOutputThunk
+from mellea.formatters import LLMONFormatter, TemplateFormatter
 from mellea.formatters.granite.base.util import (
     chat_completion_request_to_transformers_inputs,
 )
@@ -108,7 +109,10 @@ _MULTIMODAL_CASES = [
 ]
 
 
-def _make_backend(eos_token_id: int | list[int] = 0) -> LocalHFBackend:
+def _make_backend(
+    eos_token_id: int | list[int] = 0,
+    model_id: str = "ibm-granite/granite-3.3-8b-instruct",
+) -> LocalHFBackend:
     mock_tok = MagicMock(eos_token_id=eos_token_id, vocab_size=32000)
     mock_tok._tokenizer = MagicMock()
     mock_tok._tokenizer.get_vocab_size.return_value = 32000
@@ -120,9 +124,22 @@ def _make_backend(eos_token_id: int | list[int] = 0) -> LocalHFBackend:
     ):
         mock_llg.hf.from_tokenizer.return_value = MagicMock(vocab_size=32000)
         return LocalHFBackend(
-            model_id="ibm-granite/granite-3.3-8b-instruct",
-            custom_config=(mock_tok, mock_model, torch.device("cpu")),
+            model_id=model_id, custom_config=(mock_tok, mock_model, torch.device("cpu"))
         )
+
+
+def test_llmon_model_defaults_to_the_llmon_formatter():
+    pytest.importorskip(
+        "llmon.lang.json.llmon_converters", reason='install "mellea[llmon]"'
+    )
+    backend = _make_backend(model_id="ibm-granite/granite-4.1-3b-llmon-preview")
+    assert isinstance(backend.formatter, LLMONFormatter)
+
+
+def test_other_models_default_to_the_template_formatter():
+    backend = _make_backend()
+    assert isinstance(backend.formatter, TemplateFormatter)
+    assert not isinstance(backend.formatter, LLMONFormatter)
 
 
 @pytest.mark.parametrize(

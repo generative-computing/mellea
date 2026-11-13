@@ -195,7 +195,9 @@ class OllamaModelBackend(FormatterBackend, AdapterMixin):
             `ModelIdentifier` is passed, its `ollama_name` attribute must
             be set.
         formatter (ChatFormatter | None): Formatter for rendering components.
-            Defaults to `TemplateFormatter`.
+            Defaults to a `TemplateFormatter`. Only `LocalHFBackend` supports
+            LLMON, so an `LLMONFormatter` or a registered LLMON model raises
+            `ValueError`.
         base_url (str | None): Ollama server endpoint; defaults to
             `env(OLLAMA_HOST)` or `http://localhost:11434`.
         model_options (dict | None): Default model options for generation requests.
