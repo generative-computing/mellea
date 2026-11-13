@@ -287,13 +287,82 @@ _THINK_OPEN_TAG: str = "<think>"
 _THINK_CLOSE_TAG: str = "</think>"
 
 
-def _split_think_tags(text: str) -> tuple[str | None, str]:
+def _prompt_opens_think(tokenizer: Any, input_ids: Any) -> bool:
+    """Return True if the prompt ends inside an unclosed `<think>` block.
+
+    Some chat templates (e.g. granite-4.2) open the thinking block in the prompt,
+    so the model's output never contains `<think>`. Used to detect truncated
+    reasoning when `</think>` is missing.
+    """
+    if input_ids is None:
+        return False
+    ids = input_ids if isinstance(input_ids, torch.Tensor) else input_ids["input_ids"]
+    try:
+        # Decode the whole prompt (not a trailing window) to avoid guessing how
+        # many tokens the role header + `<think>` + optional newline occupy.
+        prompt = tokenizer.decode(ids[0], skip_special_tokens=False)
+    except Exception:
+        return False
+    return isinstance(prompt, str) and prompt.rstrip().endswith(_THINK_OPEN_TAG)
+
+
+def _native_parse_thinking(
+    tokenizer: Any, hf_output: Any, input_ids: Any
+) -> tuple[str, str] | None:
+    """Split thinking/answer using the tokenizer's `response_template` if present.
+
+    Returns (thinking, answer) on success, or None to fall back to string splitting
+    (no template, parse error, tool calls, or no thinking found).
+
+    Intentionally dormant for the models Mellea ships against today: no Granite
+    tokenizer currently declares a `response_template`, so this returns None and
+    `_split_think_tags` does the work. It exists so that any future model exposing
+    the upstream schema-driven parser is handled natively without a code change.
+    Because no live model exercises it yet, its coverage is unit tests over fake
+    tokenizers only; add a real-model integration test once such a model exists.
+    """
+    if getattr(tokenizer, "response_template", None) is None:
+        return None
+    if input_ids is None or not isinstance(hf_output, GenerateDecoderOnlyOutput):
+        return None
+    prompt_ids = (
+        input_ids if isinstance(input_ids, torch.Tensor) else input_ids["input_ids"]
+    )
+    try:
+        parsed = tokenizer.parse_response(
+            hf_output.sequences[0, prompt_ids.shape[1] :], prefix=prompt_ids[0]
+        )
+    except Exception as e:
+        MelleaLogger.get_logger().warning(
+            "Native response parsing failed (%s: %s); using string splitting.",
+            type(e).__name__,
+            e,
+        )
+        return None
+    if not isinstance(parsed, dict) or parsed.get("tool_calls"):
+        return None
+    thinking = parsed.get("thinking") or parsed.get("reasoning_content")
+    if not thinking:
+        return None
+    return str(thinking), str(parsed.get("content") or "")
+
+
+def _split_think_tags(
+    text: str, *, prompt_opens_think: bool = False, truncated: bool = False
+) -> tuple[str | None, str]:
     r"""Split raw HF output into (thinking, answer) on the closing </think> tag.
 
-    A string-level fallback for `transformers.PreTrainedTokenizerBase.parse_response()`
-    (schema-driven, token-decode-then-parse), used because no tokenizer available to
-    this backend today declares a `response_schema`. Even that upstream mechanism is
-    text-level, not token-level.
+    Fallback for `_native_parse_thinking` when no `response_template` exists.
+    When no `</think>` is found, the output is treated as truncated reasoning
+    (the whole text becomes `thinking` and the answer is `""`) only if two
+    independent signals both hold: the model was inside an open `<think>` block
+    (`prompt_opens_think` is set, or the output itself opens with `<think>`) AND
+    generation was genuinely cut off before EOS (`truncated`). `prompt_opens_think`
+    alone is not enough — it only says the prompt was set up for thinking, and the
+    model may still have answered directly without reasoning. `truncated` is the
+    evidence that something was cut off. A truncated generation can therefore
+    yield an empty `mot.value`, which callers must tolerate — an empty answer is
+    the correct reading of reasoning that never reached its close tag.
 
     A token-position check against the raw generated sequence (scanning for
     Granite's `</think>` token id rather than re-scanning decoded text) would be
@@ -305,13 +374,13 @@ def _split_think_tags(text: str) -> tuple[str | None, str]:
     identically. Not adopted here because HF's streaming path
     (`TextIteratorStreamer`) only exposes decoded text, not token ids, so a
     token check could not apply uniformly to both the streaming and
-    non-streaming paths — see #1604 for a scoped follow-up.
+    non-streaming paths — streaming thinking-tag parsing is tracked in #1799.
 
     Splits on </think> alone (not a <think>...</think> pair) because some chat
     templates (e.g. granite-4.2 with enable_thinking) bake the opening tag into
     the prompt, so it never appears in the model's own output. A fixed pattern
-    match for Granite's convention, not a general reasoning-parser; other
-    delimiters pass through unchanged. See #1604 for generalizing this.
+    match for Granite's `</think>` convention; models with a `response_template`
+    use `_native_parse_thinking` instead — this fallback handles those without.
 
     Deliberately strips leading/trailing whitespace from both `thinking` and
     `answer`: the whitespace immediately around the tags is delimiter framing,
@@ -323,6 +392,10 @@ def _split_think_tags(text: str) -> tuple[str | None, str]:
     generated text, never a replayed history turn.
     """
     if _THINK_CLOSE_TAG not in text:
+        if truncated and (
+            prompt_opens_think or text.lstrip().startswith(_THINK_OPEN_TAG)
+        ):
+            return text.strip().removeprefix(_THINK_OPEN_TAG).strip(), ""
         return None, text
     reasoning, _, answer = text.partition(_THINK_CLOSE_TAG)
     return (reasoning.strip().removeprefix(_THINK_OPEN_TAG).strip(), answer.strip())
@@ -2437,65 +2510,6 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         # repoint this at `mot.value` after the split runs.
         raw_value = mot.value
 
-        # Gate on the template exposing a thinking var (some models think by default, so
-        # declaring the var isn't itself proof thinking is on) AND the resolved per-call
-        # value not being explicitly False (an answer that merely mentions "</think>" on a
-        # template with thinking off must not be split). `None`/unset must still allow the
-        # split: Granite and Qwen3 both default `enable_thinking` to True in their own
-        # template source, so treating "unset" as "off" would under-split for the common case.
-        # Read from `mot._call.model_options` directly (not a value already filtered for the
-        # template) — it's the same dict `_filter_for_chat_template` resolves
-        # `ModelOption.THINKING` from when building the generation-time template kwargs, so
-        # this mirrors what the model was actually asked to do on this call.
-        # Skip for streaming: astream() assumes mot.value only grows, and shrinking it here
-        # would corrupt the final delta (see #1604 for proper incremental splitting later).
-        #
-        # Known limitation, deliberately not addressed here: this gate can under-split
-        # for a model that ignores an explicit ModelOption.THINKING=False, or that always
-        # emits <think> blocks without declaring any of _CHAT_TEMPLATE_THINKING_VARS in its
-        # template. The resulting raw tags leak into mot.value and get replayed as ordinary
-        # `content` on the next turn — visible in the answer, and still read by requirement
-        # checks/judges, but not silently dropped anywhere. The alternative — splitting
-        # unconditionally — trades this for a worse failure: an over-split misfiles real
-        # answer text into mot.thinking, which gets attached as `reasoning_content` at
-        # replay time and is silently dropped from every subsequent prompt once a newer
-        # user turn exists, per Granite's own recency-based truncation (see the NOTE in
-        # mellea/backends/utils.py). Under-split stays diagnosable; over-split is invisible
-        # once replayed. Kept on the more conservative side deliberately; see #1604 for
-        # detecting always-thinking models without a declared var.
-        thinking_allowlist: frozenset[str] = getattr(
-            self, "_chat_template_allowlist", frozenset()
-        )
-        resolved_thinking = (
-            mot._call.model_options.get(ModelOption.THINKING)
-            if mot._call.model_options
-            else None
-        )
-        if (
-            not mot.generation.streaming
-            and resolved_thinking is not False
-            and thinking_allowlist.intersection(_CHAT_TEMPLATE_THINKING_VARS)
-        ):
-            thinking, answer = _split_think_tags(raw_value)
-            if thinking is not None:
-                mot.thinking = thinking
-                mot.value = answer
-                MelleaLogger.get_logger().debug(
-                    "Split %d chars of thinking out of HF completion for %s.",
-                    len(thinking),
-                    self._model_id,
-                )
-
-        if cache_info is not None:
-            # Keyed after the split above has settled on the final `mot.value` object, so a
-            # later lookup by the same key against the same (now-split) thunk can find it.
-            cache_key = id(mot.value)
-            self.cache_put(cache_key, cache_info)
-
-        # Only scan for tools if we are not doing structured output and tool calls were provided to the model.
-        if _format is None and tool_calls:
-            mot.tool_calls = to_tool_calls(tools, mot.value)
-
         assert mot._call.action is not None, (
             "ModelOutputThunks should have their action assigned during generation"
         )
@@ -2504,7 +2518,6 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         )
 
         # Derive token counts from the output sequences (HF models have no usage object).
-        hf_output = mot.raw.response
         n_prompt, n_completion = None, None
         if isinstance(hf_output, GenerateDecoderOnlyOutput):
             try:
@@ -2557,6 +2570,81 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 MelleaLogger.get_logger().debug(
                     f"Could not derive finish_reasons from HF output: {e}"
                 )
+
+        # Gate on the template exposing a thinking var (some models think by default, so
+        # declaring the var isn't itself proof thinking is on) AND the resolved per-call
+        # value not being explicitly False (an answer that merely mentions "</think>" on a
+        # template with thinking off must not be split). `None`/unset must still allow the
+        # split: Granite and Qwen3 both default `enable_thinking` to True in their own
+        # template source, so treating "unset" as "off" would under-split for the common case.
+        # Read from `mot._call.model_options` directly (not a value already filtered for the
+        # template) — it's the same dict `_filter_for_chat_template` resolves
+        # `ModelOption.THINKING` from when building the generation-time template kwargs, so
+        # this mirrors what the model was actually asked to do on this call.
+        # Skip for streaming: astream() assumes mot.value only grows, and shrinking it here
+        # would corrupt the final delta — incremental splitting for streaming is tracked in #1799.
+        # Also skip when structured output is active: llguidance constrains generation to
+        # valid JSON, so no <think> tags can appear and the split is both unnecessary and
+        # dangerous.
+        #
+        # Known limitation, deliberately not addressed here: this gate can under-split
+        # for a model that ignores an explicit ModelOption.THINKING=False, or that always
+        # emits <think> blocks without declaring any of _CHAT_TEMPLATE_THINKING_VARS in its
+        # template. The resulting raw tags leak into mot.value and get replayed as ordinary
+        # `content` on the next turn — visible in the answer, and still read by requirement
+        # checks/judges, but not silently dropped anywhere. The alternative — splitting
+        # unconditionally — trades this for a worse failure: an over-split misfiles real
+        # answer text into mot.thinking, which gets attached as `reasoning_content` at
+        # replay time and is silently dropped from every subsequent prompt once a newer
+        # user turn exists, per Granite's own recency-based truncation (see the NOTE in
+        # mellea/backends/utils.py). Under-split stays diagnosable; over-split is invisible
+        # once replayed. Kept on the more conservative side deliberately; detecting
+        # always-thinking models without a declared var is tracked in #1800.
+        thinking_allowlist: frozenset[str] = getattr(
+            self, "_chat_template_allowlist", frozenset()
+        )
+        resolved_thinking = (
+            mot._call.model_options.get(ModelOption.THINKING)
+            if mot._call.model_options
+            else None
+        )
+        if (
+            _format is None
+            and not mot.generation.streaming
+            and resolved_thinking is not False
+            and thinking_allowlist.intersection(_CHAT_TEMPLATE_THINKING_VARS)
+        ):
+            tokenizer = getattr(self, "_tokenizer", None)
+            native = _native_parse_thinking(tokenizer, hf_output, input_ids)
+            # Only a genuine length-stop can mean an in-flight reasoning block was cut off.
+            truncated = mot.generation.finish_reasons == ["length"]
+            thinking, answer = (
+                native
+                if native is not None
+                else _split_think_tags(
+                    raw_value,
+                    prompt_opens_think=_prompt_opens_think(tokenizer, input_ids),
+                    truncated=truncated,
+                )
+            )
+            if thinking is not None:
+                mot.thinking = thinking
+                mot.value = answer
+                MelleaLogger.get_logger().debug(
+                    "Split %d chars of thinking out of HF completion for %s.",
+                    len(thinking),
+                    self._model_id,
+                )
+
+        if cache_info is not None:
+            # Keyed after the split above has settled on the final `mot.value` object, so a
+            # later lookup by the same key against the same (now-split) thunk can find it.
+            cache_key = id(mot.value)
+            self.cache_put(cache_key, cache_info)
+
+        # Only scan for tools if we are not doing structured output and tool calls were provided to the model.
+        if _format is None and tool_calls:
+            mot.tool_calls = to_tool_calls(tools, mot.value)
 
         # Populate model and provider metadata
         mot.generation.model = self._model_id
