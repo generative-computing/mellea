@@ -755,6 +755,35 @@ def test_as_generic_chat_history_with_unparsed_mot():
     assert "raw output" in history[1].content
 
 
+def test_as_generic_chat_history_with_parsed_to_none_mot():
+    """A thunk that parsed to `None` renders as its raw value, like an unparsed one."""
+    ctx = ChatContext()
+    ctx = ctx.add(Message("user", "hello"))
+    mot = ModelOutputThunk(value="raw output")
+    mot.parsed_repr = None
+    ctx = ctx.add(mot)
+    history = as_generic_chat_history(ctx)
+    assert len(history) == 2
+    assert history[1].role == "assistant"
+    assert history[1].content == "raw output"
+
+
+def test_chat_formatter_renders_parsed_to_none_mot_with_value():
+    """A thunk that parsed to `None` renders as its raw value in `to_chat_messages`."""
+
+    # ChatFormatter is abstract (print()); to_chat_messages is what this test
+    # exercises, so use a minimal concrete subclass that stubs print().
+    class _ChatFormatter(ChatFormatter):
+        def print(self, c):
+            return ""
+
+    mot = ModelOutputThunk(value="raw output")
+    mot.parsed_repr = None
+    messages = _ChatFormatter().to_chat_messages([mot])
+    assert messages[0].role == "assistant"
+    assert messages[0].content == "raw output"
+
+
 def test_as_generic_chat_history_with_string_parsed_repr():
     """ModelOutputThunk with string parsed_repr (e.g., from CBlock action)."""
     ctx = ChatContext()

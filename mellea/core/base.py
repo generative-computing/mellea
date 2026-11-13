@@ -1157,7 +1157,7 @@ class ModelOutputThunk(Generic[S]):
     Args:
         value (str | None): The raw model output string, or `None` if not yet computed.
         meta (dict[str, Any] | None): Optional metadata from the inference engine (e.g., completion object).
-        parsed_repr (S | None): An already-parsed representation to attach; set when re-wrapping existing output.
+        parsed_repr (S | None): An already-parsed representation to attach; set when re-wrapping existing output. `None` leaves the thunk unparsed.
         tool_calls (list[ModelToolCall] | None): Tool calls returned by the model alongside the text output (order preserved).
 
     """
@@ -1180,8 +1180,8 @@ class ModelOutputThunk(Generic[S]):
             meta = {}
         self._meta = meta
 
-        self.parsed_repr: S | None = parsed_repr
-        """Will be non-`None` once computed."""
+        self._parsed_repr: S | None = parsed_repr
+        self._parsed: bool = parsed_repr is not None
 
         # Set computed to True if a value is passed in.
         self._computed: bool = True if value is not None else False
@@ -1208,6 +1208,24 @@ class ModelOutputThunk(Generic[S]):
         # Soft-failure cause recorded by backends that return a placeholder
         # MOT instead of raising. Sibling to `_cancelled`.
         self._error: Exception | None = None
+
+    @property
+    def parsed_repr(self) -> S | None:
+        """The parsed output, or `None` if not yet parsed or parsed to `None`. Use `is_parsed()` to tell them apart."""
+        return self._parsed_repr
+
+    @parsed_repr.setter
+    def parsed_repr(self, value: S | None) -> None:
+        self._parsed_repr = value
+        self._parsed = True
+
+    def is_parsed(self) -> bool:
+        """Returns whether `parsed_repr` has been set, even if it was set to `None`.
+
+        Returns:
+            `True` if the thunk has been parsed, `False` otherwise.
+        """
+        return self._parsed
 
     def _elapsed_ms(self) -> float:
         """Milliseconds since generation start, or -1 if start was never set."""
@@ -1381,6 +1399,7 @@ class ModelOutputThunk(Generic[S]):
         self._underlying_value = other._underlying_value
         self._meta = other._meta
         self.parsed_repr = other.parsed_repr
+        self._parsed = other._parsed
         self.tool_calls = other.tool_calls
         self.thinking = other.thinking
         self.generation = other.generation
@@ -1567,18 +1586,7 @@ class ModelOutputThunk(Generic[S]):
             await self._gen.post_process(self)
 
             self._set_parsed_repr()
-            if self.parsed_repr is None:
-                # A `@generative` stub whose return type admits `None` (e.g.
-                # `-> str | None`) legitimately parses `{"result": null}` to `None`.
-                # Every other action is still held to a non-`None` parsed repr, so a
-                # component whose `_parse` returns `None` by mistake still fails here.
-                # Deferred import: `genstub` imports `mellea.core`, so a top-level
-                # import here would be circular.
-                from ..stdlib.components.genstub import GenerativeStub
-
-                assert isinstance(self._call.action, GenerativeStub), (
-                    "enforce constraint that a computed ModelOutputThunk has a non-None parsed_repr"
-                )
+            assert self._parsed, "computed thunk skipped _set_parsed_repr()"
 
             # --- generation_post_call hook ---
             if has_plugins(HookType.GENERATION_POST_CALL):
@@ -1740,6 +1748,7 @@ class ModelOutputThunk(Generic[S]):
         copied = ModelOutputThunk(
             self._underlying_value, self._meta, self.parsed_repr, self.tool_calls
         )
+        copied._parsed = self._parsed
 
         # Check if the parsed_repr needs to be changed. A ModelOutputThunk's parsed_repr can point to
         # itself if the parsing didn't result in a new representation. It makes sense to update the
@@ -1788,6 +1797,7 @@ class ModelOutputThunk(Generic[S]):
         else:
             deepcopied.parsed_repr = deepcopy(self.parsed_repr)
 
+        deepcopied._parsed = self._parsed
         deepcopied._meta = deepcopy(self._meta)
         deepcopied.tool_calls = deepcopy(self.tool_calls)
         deepcopied._computed = self._computed
@@ -1838,8 +1848,9 @@ class ComputedModelOutputThunk(ModelOutputThunk[S]):
     # Fields guarded by the computed invariant. Each maps to a predicate a *new* value
     # must satisfy; a rejected write raises AttributeError. The rule is "never made
     # uncomputed or given an invalid value" — not "read-only": replacing the value with
-    # another valid computed string is allowed (react.py does this). `parsed_repr` is
-    # unguarded (a derived field finalized post-wrap). The guard is purely value-based,
+    # another valid computed string is allowed (react.py does this). `parsed_repr` and
+    # `_parsed` are unguarded (derived fields finalized post-wrap; a computed thunk
+    # may still be unparsed at wrap time). The guard is purely value-based,
     # so it needs no "is-sealed" flag: at wrap time the base thunk is already computed
     # with a str value, and the wrap itself writes no guarded field.
     _INVARIANT_GUARDS: dict[str, Callable[[Any], bool]] = {

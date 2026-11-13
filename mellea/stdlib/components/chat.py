@@ -430,6 +430,9 @@ def as_generic_chat_history(
     - `CBlock` subclasses (subclasses only; plain `CBlock` is stringified)
     - Other unknown component types
 
+    A `ModelOutputThunk` that parsed to `None` (or was never parsed) renders as
+    its raw model output string.
+
     Existing `Message` objects are preserved as-is; their content is not formatted.
     This design preserves Message fidelity while providing an escape hatch for unknown types.
 
@@ -458,11 +461,11 @@ def as_generic_chat_history(
                     return c.parsed_repr
                 if isinstance(c.parsed_repr, str):
                     return Message(role="assistant", content=c.parsed_repr)
-                # Use value if parsed_repr is None
-                if c.parsed_repr is None:
+                if not c.is_parsed() or c.parsed_repr is None:
                     if c.value is None:
                         raise ValueError(
-                            "ModelOutputThunk has no value and no parsed_repr — was it evaluated?"
+                            "ModelOutputThunk has no value and no parsed_repr — "
+                            f"is_computed()={c.is_computed()}, is_parsed()={c.is_parsed()}"
                         )
                     content = str(c.value)
                 else:

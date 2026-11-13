@@ -734,21 +734,36 @@ class _FixedJSONBackend(Backend):
         raise NotImplementedError
 
 
-def test_non_stub_component_parsing_to_none_still_fails():
-    """Only generative stubs may parse to `None`; any other component still trips the invariant.
-
-    The relaxation for `-> X | None` stubs is scoped to `GenerativeStub`, so a component
-    whose `_parse` returns `None` by mistake keeps failing loudly.
-    """
+def test_non_stub_component_parsing_to_none_succeeds():
+    """A component whose `_parse` returns `None` computes with `parsed_repr=None`."""
     from mellea.stdlib.components import Instruction
 
     class _ParsesToNone(Instruction):
         def _parse(self, computed: ModelOutputThunk) -> Any:
             return None
 
+    backend = _FixedJSONBackend('{"result": "anything"}')
+    mot, _ = mfuncs.act(_ParsesToNone("describe"), SimpleContext(), backend)
+    assert mot.is_computed()
+    assert mot.is_parsed()
+    assert mot.parsed_repr is None
+    assert mot.value == '{"result": "anything"}'
+
+
+def test_component_without_parse_fails_loudly():
+    """A component with no `_parse` override raises."""
+    from mellea.core import Component
+
+    class _NoParse(Component[str]):
+        def parts(self):
+            return []
+
+        def format_for_llm(self) -> str:
+            return "describe"
+
     backend = _FixedJSONBackend("anything")
-    with pytest.raises(AssertionError, match="non-None parsed_repr"):
-        mfuncs.act(_ParsesToNone("describe"), SimpleContext(), backend)
+    with pytest.raises(NotImplementedError, match="parse isn't implemented"):
+        mfuncs.act(_NoParse(), SimpleContext(), backend)
 
 
 def test_sync_stub_returns_none_result():
