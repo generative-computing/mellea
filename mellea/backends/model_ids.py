@@ -138,6 +138,16 @@ IBM_GRANITE_GUARDIAN_4_1_8B = ModelIdentifier(
     hf_model_name="ibm-granite/granite-guardian-4.1-8b", context_length=131072
 )
 
+# Granite 4.1 LLMON Preview Models. Only `LocalHFBackend` runs them; other
+# backends raise. See `mellea.formatters.llmon_formatter`.
+IBM_GRANITE_4_1_3B_LLMON_PREVIEW = ModelIdentifier(
+    hf_model_name="ibm-granite/granite-4.1-3b-llmon-preview", context_length=131072
+)
+
+IBM_GRANITE_4_1_8B_LLMON_PREVIEW = ModelIdentifier(
+    hf_model_name="ibm-granite/granite-4.1-8b-llmon-preview", context_length=131072
+)
+
 
 # Deprecated Granite 3 models - kept for backward compatibility
 # These maintain their original model references (not upgraded to Granite 4)

@@ -75,6 +75,7 @@ to run.
 | `library_interop/` | LangChain message conversion, OpenAI format compatibility, cross-library workflows |
 | `mcp/` | MCP tool creation, Claude Desktop integration, Langflow integration |
 | `bedrock/` | Amazon Bedrock backend configuration and usage |
+| `llmon/` | Instructing an LLMON-trained model on `LocalHFBackend` through [`LLMONFormatter`](../concepts/llmon.md): grounding context in as data, a plain-text reply out |
 
 ### Performance and advanced sampling
 

@@ -183,6 +183,7 @@ class Instruction(Component[str]):
         return TemplateRepresentation(
             obj=self,
             args={
+                "prefix": self._prefix if self._prefix is not None else None,
                 "description": str(self._description),
                 "requirements": [
                     r.description
@@ -193,7 +194,6 @@ class Instruction(Component[str]):
                 ],
                 "icl_examples": [str(e) for e in self._icl_examples],
                 "grounding_context": self._grounding_context,
-                "prefix": self._prefix if self._prefix is not None else None,
                 "output_prefix": (
                     self._output_prefix if self._output_prefix is not None else None
                 ),
