@@ -199,7 +199,7 @@ def json_schema_to_pydantic(
                         )
 
             finally:
-                if entered_ref:
+                if entered_ref and ref_name is not None:
                     in_flight_refs.remove(ref_name)
 
         merged["required"] = sorted(merged_required)
@@ -256,9 +256,7 @@ def json_schema_to_pydantic(
                 if not isinstance(ref, str):
                     raise ValueError(f"{_format_path(path)} $ref must be a string")
                 key, resolved = _resolve_ref(ref)
-                sibling_keywords = {
-                    k: v for k, v in normalized.items() if k != "$ref"
-                }
+                sibling_keywords = {k: v for k, v in normalized.items() if k != "$ref"}
                 if sibling_keywords:
                     merged = dict(resolved)
                     merged.update(sibling_keywords)
@@ -278,7 +276,7 @@ def json_schema_to_pydantic(
 
             return ref_name, normalized, entered_ref
         except BaseException:
-            if entered_ref:
+            if entered_ref and ref_name is not None:
                 in_flight_refs.remove(ref_name)
             raise
 
@@ -286,15 +284,13 @@ def json_schema_to_pydantic(
         field_schema: dict[str, Any], path: str, in_union: bool = False
     ) -> Any:
         """Convert a JSON Schema node into a Python typing annotation."""
-        ref_name, normalized_schema, entered_ref = _normalize_schema(
-            field_schema, path
-        )
+        ref_name, normalized_schema, entered_ref = _normalize_schema(field_schema, path)
         try:
             return _annotation_from_normalized(
                 normalized_schema, path, in_union=in_union
             )
         finally:
-            if entered_ref:
+            if entered_ref and ref_name is not None:
                 in_flight_refs.remove(ref_name)
 
     def _annotation_from_normalized(
@@ -371,9 +367,7 @@ def json_schema_to_pydantic(
                 return _merge_nullable(dict_type, is_nullable)
 
             nested_name = _sanitize_model_name(f"{model_name}_{path.replace('.', '_')}")
-            nested_model = _object_schema_to_model(
-                normalized_schema, nested_name, path
-            )
+            nested_model = _object_schema_to_model(normalized_schema, nested_name, path)
             return _merge_nullable(nested_model, is_nullable)
 
         if field_type == "array":
@@ -398,9 +392,7 @@ def json_schema_to_pydantic(
         )
 
     def _object_schema_to_model(
-        object_schema: dict[str, Any],
-        current_model_name: str,
-        path: str,
+        object_schema: dict[str, Any], current_model_name: str, path: str
     ) -> type[BaseModel]:
         ref_name, normalized_schema, entered_ref = _normalize_schema(
             object_schema, path
@@ -459,7 +451,7 @@ def json_schema_to_pydantic(
             model_cache[cache_key] = dynamic_model
             return dynamic_model
         finally:
-            if entered_ref:
+            if entered_ref and ref_name is not None:
                 in_flight_refs.remove(ref_name)
 
     if not isinstance(schema, dict):
