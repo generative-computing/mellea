@@ -70,18 +70,92 @@ def test_repair_uses_req_description_when_no_reason():
     assert "must be brief" in action._repair_string
 
 
-def test_repair_non_instruction_returns_same_action():
+def test_repair_non_instruction_returns_same_action(caplog):
+    import logging
+
     msg = Message("user", "hello")
+    old_ctx = ChatContext()
+
+    with caplog.at_level(logging.WARNING, logger="mellea"):
+        action, ctx = RepairTemplateStrategy.repair(
+            old_ctx=old_ctx,
+            new_ctx=ChatContext(),
+            past_actions=[msg],
+            past_results=[ComputedModelOutputThunk(thunk=ModelOutputThunk(value="x"))],
+            past_val=[[]],
+        )
+    assert action is msg
+    assert ctx is old_ctx
+    assert any(
+        "RepairTemplateStrategy" in rec.message and "Message" in rec.message
+        for rec in caplog.records
+    )
+
+
+def test_repair_generative_stub_builds_repair_string():
+    from mellea import generative
+
+    @generative
+    def classify(text: str) -> str:
+        """Classify sentiment."""
+
+    req = Requirement(description="must be lowercase")
     old_ctx = ChatContext()
 
     action, ctx = RepairTemplateStrategy.repair(
         old_ctx=old_ctx,
         new_ctx=ChatContext(),
-        past_actions=[msg],
-        past_results=[ComputedModelOutputThunk(thunk=ModelOutputThunk(value="x"))],
-        past_val=[[]],
+        past_actions=[classify],
+        past_results=[
+            ComputedModelOutputThunk(thunk=ModelOutputThunk(value='{"result": "POS"}'))
+        ],
+        past_val=[[(req, _val(False, reason="Output contained uppercase characters"))]],
     )
-    assert action is msg
+    assert action is not classify
+    assert classify._repair_string is None
+    assert action._repair_string is not None
+    assert "Output contained uppercase characters" in action._repair_string
+    assert ctx is old_ctx
+
+
+def test_repair_custom_repairable_component_builds_repair_string():
+    from copy import deepcopy
+
+    from mellea.core import Component
+
+    class _CustomRepairable(Component[str]):
+        def __init__(self) -> None:
+            self.repaired_with: str | None = None
+
+        def parts(self):
+            return []
+
+        def format_for_llm(self) -> str:
+            return self.repaired_with or "initial"
+
+        def _parse(self, computed: ModelOutputThunk) -> str:
+            return computed.value or ""
+
+        def copy_and_repair(self, repair_string: str) -> "_CustomRepairable":
+            clone = deepcopy(self)
+            clone.repaired_with = repair_string
+            return clone
+
+    comp = _CustomRepairable()
+    req = Requirement(description="be valid")
+    old_ctx = ChatContext()
+
+    action, ctx = RepairTemplateStrategy.repair(
+        old_ctx=old_ctx,
+        new_ctx=ChatContext(),
+        past_actions=[comp],
+        past_results=[ComputedModelOutputThunk(thunk=ModelOutputThunk(value="bad"))],
+        past_val=[[(req, _val(False, reason="custom failure"))]],
+    )
+    assert isinstance(action, _CustomRepairable)
+    assert comp.repaired_with is None
+    assert action.repaired_with is not None
+    assert "custom failure" in action.repaired_with
     assert ctx is old_ctx
 
 
@@ -174,18 +248,71 @@ def test_stream_repair_template_uses_req_description_when_no_reason():
     assert "must be brief" in action._repair_string
 
 
-def test_stream_repair_template_non_instruction_returns_same_action():
+def test_stream_repair_template_non_instruction_returns_same_action(caplog):
+    import logging
+
     msg = Message("user", "hello")
+    old_ctx = ChatContext()
+
+    with caplog.at_level(logging.WARNING, logger="mellea"):
+        action, ctx = RepairTemplateStrategy.stream_repair(
+            old_ctx=old_ctx,
+            new_ctx=ChatContext(),
+            past_actions=[msg],
+            past_results=[None],
+            past_stream_val=[[]],
+        )
+    assert action is msg
+    assert ctx is old_ctx
+    assert any(
+        "RepairTemplateStrategy" in rec.message and "Message" in rec.message
+        for rec in caplog.records
+    )
+
+
+def test_stream_repair_template_cblock_logs_warning_and_returns_same_action(caplog):
+    import logging
+
+    block = CBlock("raw prompt")
+    old_ctx = ChatContext()
+
+    with caplog.at_level(logging.WARNING, logger="mellea"):
+        action, ctx = RepairTemplateStrategy.stream_repair(
+            old_ctx=old_ctx,
+            new_ctx=ChatContext(),
+            past_actions=[block],
+            past_results=[None],
+            past_stream_val=[[]],
+        )
+    assert action is block
+    assert ctx is old_ctx
+    assert any(
+        "RepairTemplateStrategy" in rec.message and "CBlock" in rec.message
+        for rec in caplog.records
+    )
+
+
+def test_stream_repair_template_generative_stub_builds_repair_string():
+    from mellea import generative
+
+    @generative
+    def classify(text: str) -> str:
+        """Classify sentiment."""
+
+    req = Requirement(description="must be lowercase")
     old_ctx = ChatContext()
 
     action, ctx = RepairTemplateStrategy.stream_repair(
         old_ctx=old_ctx,
         new_ctx=ChatContext(),
-        past_actions=[msg],
+        past_actions=[classify],
         past_results=[None],
-        past_stream_val=[[]],
+        past_stream_val=[[(req, _pvr("Stream chunk contained uppercase characters"))]],
     )
-    assert action is msg
+    assert action is not classify
+    assert classify._repair_string is None
+    assert action._repair_string is not None
+    assert "Stream chunk contained uppercase characters" in action._repair_string
     assert ctx is old_ctx
 
 
