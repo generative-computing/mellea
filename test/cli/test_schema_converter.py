@@ -358,3 +358,148 @@ def test_json_schema_supports_time_period_enum():
 
     with pytest.raises(Exception):
         model.model_validate({"period": "am"})
+
+
+def test_json_schema_rejects_direct_recursive_ref():
+    """Test that a recursive object $ref raises ValueError."""
+    with pytest.raises(ValueError, match="recursive"):
+        json_schema_to_pydantic(
+            {
+                "type": "object",
+                "properties": {"a": {"$ref": "#/$defs/A"}},
+                "$defs": {
+                    "A": {
+                        "type": "object",
+                        "properties": {"a": {"$ref": "#/$defs/A"}},
+                        "required": ["a"],
+                    }
+                },
+            },
+            "DirectRecursiveRefExample",
+        )
+
+
+def test_json_schema_rejects_recursive_ref_via_array_items():
+    """Test that recursion through array items raises ValueError."""
+    with pytest.raises(ValueError, match="recursive"):
+        json_schema_to_pydantic(
+            {
+                "type": "object",
+                "properties": {"a": {"$ref": "#/$defs/A"}},
+                "$defs": {"A": {"type": "array", "items": {"$ref": "#/$defs/A"}}},
+            },
+            "ArrayRecursiveRefExample",
+        )
+
+
+def test_json_schema_rejects_recursive_ref_via_additional_properties():
+    """Test that recursion through additionalProperties raises ValueError."""
+    with pytest.raises(ValueError, match="recursive"):
+        json_schema_to_pydantic(
+            {
+                "type": "object",
+                "properties": {"a": {"$ref": "#/$defs/A"}},
+                "$defs": {
+                    "A": {
+                        "type": "object",
+                        "additionalProperties": {"$ref": "#/$defs/A"},
+                    }
+                },
+            },
+            "AdditionalPropertiesRecursiveRefExample",
+        )
+
+
+def test_json_schema_rejects_recursive_ref_via_anyof():
+    """Test that recursion through anyOf branches raises ValueError."""
+    with pytest.raises(ValueError, match="recursive"):
+        json_schema_to_pydantic(
+            {
+                "type": "object",
+                "properties": {"a": {"$ref": "#/$defs/A"}},
+                "$defs": {
+                    "A": {"anyOf": [{"$ref": "#/$defs/A"}, {"type": "string"}]}
+                },
+            },
+            "AnyOfRecursiveRefExample",
+        )
+
+
+def test_json_schema_rejects_recursive_ref_via_oneof():
+    """Test that recursion through oneOf branches raises ValueError."""
+    with pytest.raises(ValueError, match="recursive"):
+        json_schema_to_pydantic(
+            {
+                "type": "object",
+                "properties": {"a": {"$ref": "#/$defs/A"}},
+                "$defs": {
+                    "A": {"oneOf": [{"$ref": "#/$defs/A"}, {"type": "string"}]}
+                },
+            },
+            "OneOfRecursiveRefExample",
+        )
+
+
+def test_json_schema_rejects_recursive_ref_via_allof():
+    """Test that recursion through allOf branches raises ValueError."""
+    with pytest.raises(ValueError, match="recursive"):
+        json_schema_to_pydantic(
+            {
+                "type": "object",
+                "properties": {"a": {"$ref": "#/$defs/A"}},
+                "$defs": {"A": {"allOf": [{"$ref": "#/$defs/A"}]}},
+            },
+            "AllOfRecursiveRefExample",
+        )
+
+
+def test_json_schema_rejects_recursive_ref_with_sibling_keywords():
+    """Test that a recursive $ref with sibling keywords raises ValueError."""
+    with pytest.raises(ValueError, match="recursive"):
+        json_schema_to_pydantic(
+            {
+                "type": "object",
+                "properties": {
+                    "a": {"$ref": "#/$defs/A", "description": "node"}
+                },
+                "$defs": {
+                    "A": {
+                        "type": "object",
+                        "properties": {
+                            "a": {"$ref": "#/$defs/A", "description": "node"}
+                        },
+                        "required": ["a"],
+                    }
+                },
+            },
+            "SiblingKeywordRecursiveRefExample",
+        )
+
+
+def test_json_schema_supports_non_recursive_reused_refs():
+    """Test that the same non-recursive $ref can be reused in two fields."""
+    model = json_schema_to_pydantic(
+        {
+            "type": "object",
+            "$defs": {
+                "User": {
+                    "type": "object",
+                    "properties": {"name": {"type": "string"}},
+                    "required": ["name"],
+                }
+            },
+            "properties": {
+                "owner": {"$ref": "#/$defs/User"},
+                "assignee": {"$ref": "#/$defs/User"},
+            },
+            "required": ["owner", "assignee"],
+        },
+        "ReusedRefExample",
+    )
+
+    parsed = model.model_validate(
+        {"owner": {"name": "Alice"}, "assignee": {"name": "Bob"}}
+    )
+    dumped = parsed.model_dump()
+    assert dumped["owner"]["name"] == "Alice"
+    assert dumped["assignee"]["name"] == "Bob"
