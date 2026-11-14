@@ -824,6 +824,10 @@ def compare(
 ) -> dict:
     """Apply the #1721 decision rule to arm 1 (`first`) and arm 2 (`second`).
 
+    The gated errors are false fails and misses, plus, in strict mode only,
+    partial-only items that passed (`partial_miss`). In lenient mode those items
+    are gold-pass, so false fails already cover them.
+
     Both readings of "no worse" are computed and reported; `rule` picks the
     one that decides `go`:
 
@@ -862,11 +866,21 @@ def compare(
         if kind == "false_fail":
             pool = [i for i in shared if gold_verdict(i, lenient)]
             return [prim[i.id].passed is not True for i in pool]
-        pool = [i for i in shared if i.has_invented_claim]
+        if kind == "miss":
+            pool = [i for i in shared if i.has_invented_claim]
+        else:  # partial_miss: strict mode, only partial sentences are wrong
+            pool = [
+                i
+                for i in shared
+                if not i.has_invented_claim and not gold_verdict(i, lenient)
+            ]
         return [prim[i.id].passed is not False for i in pool]
 
+    kinds = (
+        ("false_fail", "miss") if lenient else ("false_fail", "miss", "partial_miss")
+    )
     comparison = {}
-    for kind in ("false_fail", "miss"):
+    for kind in kinds:
         e1, e2 = errors(kind, p1), errors(kind, p2)
         b = sum(x and not y for x, y in zip(e1, e2))
         c = sum(y and not x for x, y in zip(e1, e2))
@@ -887,11 +901,7 @@ def compare(
             "no_worse": by_ci if rule == "ci" else by_margin,
         }
     hard_ok = (m2.hard_failure_rate or 0.0) <= max_hard_failure
-    go = (
-        comparison["false_fail"]["no_worse"]
-        and comparison["miss"]["no_worse"]
-        and hard_ok
-    )
+    go = all(c["no_worse"] for c in comparison.values()) and hard_ok
     return {
         "allow_partial_support": lenient,
         "model": first[0].model,

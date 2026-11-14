@@ -158,8 +158,8 @@ def test_paired_difference_ci():
 
 @pytest.mark.parametrize(
     ("n", "extra_errors"),
-    [(34, 1), (74, 3), (94, 4)],
-    ids=["miss", "strict", "lenient"],
+    [(34, 1), (74, 3), (94, 4), (20, 1)],
+    ids=["miss", "strict", "lenient", "partial"],
 )
 def test_mcnemar_cannot_fire_inside_the_margin(n, extra_errors):
     """On this set, the rule is the 5-point margin and nothing more."""
@@ -695,3 +695,59 @@ def test_token_means_skip_errored_rows():
     m = arm_metrics(ITEMS, out)
     assert m.tokens["prompt_mean"] == 100
     assert m.tokens["validations_with_totals"] == len(ITEMS) - 1
+
+
+# ------------------------------------------------- strict mode: partial-only items
+
+
+def _partial_only():
+    return [
+        i.id
+        for i in ITEMS
+        if not i.has_invented_claim and not harness.gold_verdict(i, False)
+    ]
+
+
+def test_strict_mode_gates_partial_only_items():
+    """An arm 2 that passes every partial response in strict mode is a no-go."""
+    partial = _partial_only()
+    assert len(partial) == 20
+    report = _compare(_outcomes("prompts"), _outcomes("adapter", wrong_ids=partial))
+    c = report["comparison"]
+    assert c["false_fail"]["no_worse"] is True and c["miss"]["no_worse"] is True
+    assert c["partial_miss"]["n"] == 20 and c["partial_miss"]["arm2_rate"] == 1.0
+    assert report["go"] is False
+
+
+@pytest.mark.parametrize(
+    ("extra", "go"), [(1, True), (2, False)], ids=["one_more", "two_more"]
+)
+def test_margin_allows_one_more_partial_miss_of_20(extra, go):
+    partial = _partial_only()
+    report = _compare(
+        _outcomes("prompts"), _outcomes("adapter", wrong_ids=partial[:extra])
+    )
+    assert report["comparison"]["partial_miss"]["no_worse"] is go
+    assert report["go"] is go
+
+
+def test_errored_partial_only_item_counts_against_arm2():
+    partial = _partial_only()
+    report = compare(
+        ITEMS,
+        _outcomes("prompts"),
+        _outcomes("adapter", wrong_ids=partial[:1], errored_ids=partial[1:2]),
+        margin=0.05,
+        max_hard_failure=0.5,  # isolate the partial gate from the 2% ceiling
+    )
+    assert report["comparison"]["partial_miss"]["arm2_rate"] == pytest.approx(2 / 20)
+    assert report["go"] is False
+
+
+def test_lenient_mode_has_no_partial_gate():
+    """Partial items are gold-pass in lenient mode, so false fails cover them."""
+    report = _compare(
+        _outcomes("prompts", lenient=True), _outcomes("adapter", lenient=True)
+    )
+    assert set(report["comparison"]) == {"false_fail", "miss"}
+    assert report["go"] is True

@@ -66,7 +66,9 @@ hard-failure gate.
 
 - False fails: gold-pass items that did not pass. This decides the swap.
 - Misses: items with an invented claim that did not fail (errored counts as a miss).
-- Strict mode only: partial-only items that passed.
+- Strict mode only: partial-only items that passed (errored counts as passed). This is
+  gated too: the 20 partial items are gold-fail in strict mode, so neither of the other
+  two errors covers them.
 - Label use (arm 2): gold sentence label against adapter label, so it shows whether
   `partial` and `NA` are used where they apply.
 - Hard failures over all repeats, in total and by `error_type`. `ValueError` covers bad
@@ -117,14 +119,27 @@ failures from the 2% gate. After changing the adapter, write to a new file.
 | | Proposed |
 |---|---|
 | Set | the 128 items above |
-| Primary verdict | repeat 0 of 3 |
-| Margin | 5 percentage points, for false fails and for misses, in each mode |
+| Gated errors | false fails and misses; in strict mode also partial-only items that passed |
+| Margin | 5 percentage points, for each gated error |
 | "No worse" | rule `margin`: arm 2's rate is at most arm 1's + 5 points |
-| Hard failures | arm 2 under 2% of validations, on each binding |
+| Mode that decides | strict (the `allow_partial_support` default); lenient is reported, not gated |
+| Binding that decides | `local-file`, both arms on the same base model; Granite Switch is reported |
+| Primary verdict | repeat 0 of 3; repeats 1 and 2 give the stability count, reported, not gated |
+| Hard failures | arm 2 under 2% of validations on each binding, Switch included: at most 2 items |
+
+**What a verdict means.** A pass means no evidence of a large regression, not proof that
+the arms are equal. Arms that are truly equal at a 10% error rate still fail a single check
+about 1 time in 4 at the low end, and an arm 2 that is 10 points worse passes it up to a
+quarter of the time; a 20-point regression passes under 5% of the time. A fail within one
+item of the line is inconclusive, not proof that arm 2 is worse.
+
+**Hard failures in items.** The 2% is over all validations, 3 repeats of 128 items, so it
+allows 7. At temperature 0 an item that errors usually errors in every repeat, so two
+failing items pass the gate and three fail it.
 
 **This is a margin rule, with no significance test behind it.** It allows arm 2 one more
-miss of the 34 invented-claim items, three more false fails of 74 in strict mode, and four
-more of 94 in lenient mode. Exact McNemar cannot add anything here: whenever the margin
+miss of the 34 invented-claim items, three more false fails of 74 in strict mode, four
+more of 94 in lenient mode, and one more passed partial-only item of 20 in strict mode. Exact McNemar cannot add anything here: whenever the margin
 passes on this set, p is above 0.05, one-sided or two-sided
 (`test_mcnemar_cannot_fire_inside_the_margin`). The test could only fire with about 120
 invented-claim items. The p-value is still reported, for information.
