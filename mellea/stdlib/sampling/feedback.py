@@ -31,7 +31,6 @@ from ...core import (
     SampleActionType,
     ValidationResult,
 )
-from ..components import Instruction
 from ..requirements.python_tools import (
     ImportRestrictions,
     OutputSizeLimit,
@@ -388,24 +387,19 @@ class ModelFriendlyRepairStrategy(RepairTemplateStrategy):
         Returns:
             Tuple of (repaired action component, original context).
         """
-        pa = past_actions[-1]
-        if isinstance(pa, Instruction):
+
+        def _build_repair_lines() -> list[str]:
             failed_items = [
                 (req, val) for req, val in past_val[-1] if not val.as_bool()
             ]
+            return [
+                f"* {ModelFriendlyFeedbackFormatter.format_requirement_reason(req, validation)}"
+                for req, validation in failed_items
+            ]
 
-            repair_lines = []
-            for req, validation in failed_items:
-                formatted_reason = (
-                    ModelFriendlyFeedbackFormatter.format_requirement_reason(
-                        req, validation
-                    )
-                )
-                repair_lines.append(f"* {formatted_reason}")
-
-            repair_string = "The following requirements failed before:\n" + "\n".join(
-                repair_lines
-            )
-
-            return pa.copy_and_repair(repair_string=repair_string), old_ctx
-        return pa, old_ctx
+        return RepairTemplateStrategy._apply_template_repair(
+            past_actions[-1],
+            old_ctx,
+            _build_repair_lines,
+            "ModelFriendlyRepairStrategy",
+        )

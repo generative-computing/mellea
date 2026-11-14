@@ -22,7 +22,7 @@ import asyncio
 from collections.abc import AsyncGenerator, Callable, Sequence
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Any, Generic
+from typing import Any, Generic, Protocol, runtime_checkable
 
 import tqdm
 
@@ -46,7 +46,7 @@ from ...core import (
 )
 from ...stdlib import functional as mfuncs
 from ...telemetry.context import with_context
-from ..components import Instruction, Message
+from ..components import Message
 from ..context import ChatContext
 
 
@@ -639,8 +639,37 @@ class RejectionSamplingStrategy(BaseSamplingStrategy):
         return past_actions[-1], old_ctx
 
 
+@runtime_checkable
+class _RepairableAction(Protocol):
+    """Protocol for `Component` subtypes that support single-turn template repair."""
+
+    def copy_and_repair(self, repair_string: str) -> Component: ...
+
+
 class RepairTemplateStrategy(BaseSamplingStrategy):
-    """A sampling strategy that adds a repair string to the instruction object."""
+    """A sampling strategy that adds a repair string to components supporting template repair."""
+
+    @staticmethod
+    def _apply_template_repair(
+        action: SampleActionType,
+        old_ctx: Context,
+        build_repair_lines: Callable[[], list[str]],
+        strategy_name: str,
+    ) -> tuple[SampleActionType, Context]:
+        """Attach repair feedback via `copy_and_repair`, or log a warning and fall back."""
+        if isinstance(action, Component) and isinstance(action, _RepairableAction):
+            repair_string = "The following requirements failed before:\n" + "\n".join(
+                build_repair_lines()
+            )
+            return action.copy_and_repair(repair_string=repair_string), old_ctx
+
+        MelleaLogger.get_logger().warning(
+            "%s cannot attach repair feedback to action of type %s because it does "
+            "not implement copy_and_repair(); retrying with the unmodified action.",
+            strategy_name,
+            type(action).__name__,
+        )
+        return action, old_ctx
 
     @staticmethod
     def select_from_failure(
@@ -668,7 +697,7 @@ class RepairTemplateStrategy(BaseSamplingStrategy):
         past_results: Sequence[ComputedModelOutputThunk | None],
         past_val: list[list[tuple[Requirement, ValidationResult]]],
     ) -> tuple[SampleActionType, Context]:
-        """Adds a description of the requirements that failed to a copy of the original instruction.
+        """Adds a description of the requirements that failed to a copy of the action.
 
         Args:
             old_ctx: The context WITHOUT the last action + output.
@@ -680,28 +709,21 @@ class RepairTemplateStrategy(BaseSamplingStrategy):
         Returns:
             The next action component and context to be used for the next generation attempt.
         """
-        pa = past_actions[-1]
-        if isinstance(pa, Instruction):
-            # Get failed requirements and their detailed validation reasons
+
+        def _build_repair_lines() -> list[str]:
             failed_items = [
                 (req, val) for req, val in past_val[-1] if not val.as_bool()
             ]
+            return [
+                f"* {validation.reason}"
+                if validation.reason
+                else f"* {req.description}"
+                for req, validation in failed_items
+            ]
 
-            # Build repair feedback using ValidationResult.reason when available
-            repair_lines = []
-            for req, validation in failed_items:
-                if validation.reason:
-                    repair_lines.append(f"* {validation.reason}")
-                else:
-                    # Fallback to requirement description if no reason
-                    repair_lines.append(f"* {req.description}")
-
-            repair_string = "The following requirements failed before:\n" + "\n".join(
-                repair_lines
-            )
-
-            return pa.copy_and_repair(repair_string=repair_string), old_ctx
-        return pa, old_ctx
+        return RepairTemplateStrategy._apply_template_repair(
+            past_actions[-1], old_ctx, _build_repair_lines, "RepairTemplateStrategy"
+        )
 
     @staticmethod
     def stream_repair(
@@ -711,7 +733,7 @@ class RepairTemplateStrategy(BaseSamplingStrategy):
         past_results: Sequence[ComputedModelOutputThunk | None],
         past_stream_val: list[list[tuple[Requirement, PartialValidationResult]]],
     ) -> tuple[SampleActionType, Context]:
-        """Adds the mid-stream failure reasons to a copy of the original instruction.
+        """Adds the mid-stream failure reasons to a copy of the action.
 
         Streaming counterpart of `repair`, sourcing reasons from the failing
         chunk's `PartialValidationResult`s.
@@ -726,17 +748,16 @@ class RepairTemplateStrategy(BaseSamplingStrategy):
         Returns:
             The next action and context for the next generation attempt.
         """
-        pa = past_actions[-1]
-        if isinstance(pa, Instruction):
-            repair_lines = [
+
+        def _build_repair_lines() -> list[str]:
+            return [
                 f"* {pvr.reason}" if pvr.reason else f"* {req.description}"
                 for req, pvr in past_stream_val[-1]
             ]
-            repair_string = "The following requirements failed before:\n" + "\n".join(
-                repair_lines
-            )
-            return pa.copy_and_repair(repair_string=repair_string), old_ctx
-        return pa, old_ctx
+
+        return RepairTemplateStrategy._apply_template_repair(
+            past_actions[-1], old_ctx, _build_repair_lines, "RepairTemplateStrategy"
+        )
 
 
 class MultiTurnStrategy(BaseSamplingStrategy):

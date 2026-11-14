@@ -15,6 +15,10 @@ Requirements:
 - {{ req }}
 {%- endfor %}
 {%- endif %}
+{%- if repair %}
+
+{{ repair }}
+{%- endif %}
 
 Reply in JSON formatted as {"result": <value of type {{ function.return_type }}>}, matching this shape:
 {"result": {{ result_shape }}}

@@ -18,6 +18,7 @@ from typing import (
     Generic,
     Literal,
     ParamSpec,
+    Self,
     TypedDict,
     TypeVar,
     Union,
@@ -580,6 +581,7 @@ class GenerativeStub(Component[R], Generic[P, R]):
         # Set when calling the decorated func.
         self.precondition_requirements: list[Requirement] = []
         self.requirements: list[Requirement] = []
+        self._repair_string: str | None = None
 
     @abc.abstractmethod
     def __call__(self, *args, **kwargs) -> tuple[R, Context] | R:
@@ -705,7 +707,8 @@ class GenerativeStub(Component[R], Generic[P, R]):
 
         Builds a `TemplateRepresentation` containing the function metadata
         (name, signature, docstring, return type), the bound arguments, any
-        requirement descriptions, and the JSON shape the result must take.
+        requirement descriptions, optional repair feedback, and the JSON shape
+        the result must take.
 
         Returns:
             TemplateRepresentation: The formatted representation ready for the
@@ -724,10 +727,26 @@ class GenerativeStub(Component[R], Generic[P, R]):
                     and not r.check_only
                 ],  # Same conditions on requirements as in instruction.
                 "result_shape": self._result_shape,
+                "repair": self._repair_string,
             },
             tools=None,
             template_order=["*", "GenerativeStub"],
         )
+
+    def copy_and_repair(self, repair_string: str) -> Self:
+        """Create a deep copy of this generative stub with the repair string set.
+
+        Args:
+            repair_string (str): The repair feedback string to attach, typically
+                describing which requirements failed and why.
+
+        Returns:
+            Self: A new generative stub identical to this one but with
+            `_repair_string` set to `repair_string`.
+        """
+        res = deepcopy(self)
+        res._repair_string = repair_string
+        return res
 
     def _parse(self, computed: ModelOutputThunk) -> R:
         """Parse the model output. Returns the original function's return type."""

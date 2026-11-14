@@ -806,5 +806,257 @@ async def test_async_stub_returns_none_result():
     assert result is None
 
 
+# --- RepairTemplateStrategy / copy_and_repair (issue #1827) ---
+
+
+class _PromptRecordingJSONBackend(Backend):
+    """Test double that renders each action with TemplateFormatter and returns queued JSON."""
+
+    _model_id = "test-model"
+    _provider = "test"
+
+    def __init__(self, responses: list[str]):
+        from mellea.formatters import TemplateFormatter
+
+        self._responses = list(responses)
+        self._formatter = TemplateFormatter(model_id="default")
+        self.prompts: list[str] = []
+
+    async def _generate_from_context(
+        self, action, ctx, *, format=None, model_options=None, tool_calls=False
+    ):
+        self.prompts.append(self._formatter.print(action))
+        body = self._responses.pop(0)
+        mot = ModelOutputThunk(value=None)
+        mot._call.action = action
+        mot._gen.generate_type = GenerateType.ASYNC
+
+        async def _process(m: ModelOutputThunk, chunk) -> None:
+            if chunk is not None:
+                m._underlying_value = (m._underlying_value or "") + chunk
+
+        async def _post_process(m: ModelOutputThunk) -> None:
+            m._generate_log = GenerateLog()
+
+        mot._gen.process = _process
+        mot._gen.post_process = _post_process
+        mot._gen.chunk_size = 0
+        mot._gen.queue.put_nowait(body)
+        mot._gen.queue.put_nowait(None)
+        return mot, ctx.add(action).add(mot)
+
+    async def _generate_from_raw(self, *args, **kwargs):
+        raise NotImplementedError
+
+
+def test_generative_stub_format_for_llm_repair_is_none_by_default():
+    @generative
+    def summarise(text: str) -> str:
+        """Summarise the given text."""
+
+    assert summarise.format_for_llm().args["repair"] is None
+
+
+def test_generative_stub_copy_and_repair_sets_repair_string_without_mutating_original():
+    @generative
+    def sync_fn(x: int) -> int: ...
+
+    @generative
+    async def async_fn(x: int) -> int: ...
+
+    repaired_sync = sync_fn.copy_and_repair("must be positive")
+    repaired_async = async_fn.copy_and_repair("must be even")
+
+    assert isinstance(repaired_sync, SyncGenerativeStub)
+    assert isinstance(repaired_async, AsyncGenerativeStub)
+    assert repaired_sync._repair_string == "must be positive"
+    assert repaired_async._repair_string == "must be even"
+    assert sync_fn._repair_string is None
+    assert async_fn._repair_string is None
+
+
+def test_generative_stub_copy_and_repair_deep_copies_state():
+    @generative
+    def fn(x: int) -> int: ...
+
+    repaired = fn.copy_and_repair("failed")
+    repaired.requirements.append(reqify("extra requirement"))
+    assert fn.requirements == []
+    assert repaired.format_for_llm().args["repair"] == "failed"
+
+
+def test_generative_stub_prompt_without_repair_logs_no_unused_key_warning(caplog):
+    import logging
+
+    @generative
+    def write_headline(article: str) -> str:
+        """Write a headline for the article."""
+
+    with caplog.at_level(logging.WARNING, logger="mellea"):
+        prompt = _render(write_headline, article="news")
+
+    assert not any(
+        "provides keys not referenced by template" in rec.message
+        for rec in caplog.records
+    )
+    assert "The following requirements failed before:" not in prompt
+    assert "\n\n\n" not in prompt
+
+
+def test_generative_stub_prompt_renders_repair_feedback():
+    from copy import deepcopy
+
+    from mellea.formatters import TemplateFormatter
+
+    @generative
+    def pick_number(seed: int) -> int:
+        """Pick an integer."""
+
+    stub = deepcopy(pick_number)
+    stub.requirements = [reqify("Must exceed 100.")]
+    stub._arguments = Arguments([get_argument(stub._function._func, "seed", 7)])
+    repaired = stub.copy_and_repair(
+        "The following requirements failed before:\n* Output must exceed 100"
+    )
+
+    prompt = TemplateFormatter(model_id="default").print(repaired)
+    assert (
+        "Requirements:\n- Must exceed 100.\n\n"
+        "The following requirements failed before:\n* Output must exceed 100\n\n"
+        "Reply in JSON formatted as"
+    ) in prompt
+
+
+def test_sync_stub_with_repair_template_strategy_includes_failure_reason_on_retry():
+    from mellea.stdlib.sampling import RepairTemplateStrategy
+
+    @generative
+    def pick_number(seed: int) -> int:
+        """Pick a large positive integer."""
+
+    def check_large(ctx) -> ValidationResult:
+        out = ctx.last_output()
+        if out is not None and out.parsed_repr is not None and out.parsed_repr > 100:
+            return ValidationResult(result=True)
+        return ValidationResult(result=False, reason="REASON_MARKER: value was <= 100")
+
+    backend = _PromptRecordingJSONBackend(['{"result": 5}', '{"result": 12345}'])
+    result, _ = pick_number(
+        context=SimpleContext(),
+        backend=backend,
+        seed=7,
+        requirements=[Requirement("Must be > 100", validation_fn=check_large)],
+        strategy=RepairTemplateStrategy(loop_budget=2),
+    )
+
+    assert result == 12345
+    assert len(backend.prompts) == 2
+    assert "The following requirements failed before:" not in backend.prompts[0]
+    assert "The following requirements failed before:" in backend.prompts[1]
+    assert "REASON_MARKER: value was <= 100" in backend.prompts[1]
+
+
+async def test_async_stub_with_repair_template_strategy_includes_failure_reason_on_retry():
+    from mellea.stdlib.sampling import RepairTemplateStrategy
+
+    @generative
+    async def pick_number(seed: int) -> int:
+        """Pick a large positive integer."""
+
+    def check_large(ctx) -> ValidationResult:
+        out = ctx.last_output()
+        if out is not None and out.parsed_repr is not None and out.parsed_repr > 100:
+            return ValidationResult(result=True)
+        return ValidationResult(result=False, reason="REASON_MARKER: value was <= 100")
+
+    backend = _PromptRecordingJSONBackend(['{"result": 5}', '{"result": 12345}'])
+    result, _ = await pick_number(
+        context=SimpleContext(),
+        backend=backend,
+        seed=7,
+        requirements=[Requirement("Must be > 100", validation_fn=check_large)],
+        strategy=RepairTemplateStrategy(loop_budget=2),
+    )
+
+    assert result == 12345
+    assert len(backend.prompts) == 2
+    assert "The following requirements failed before:" not in backend.prompts[0]
+    assert "The following requirements failed before:" in backend.prompts[1]
+    assert "REASON_MARKER: value was <= 100" in backend.prompts[1]
+
+
+def test_sync_stub_with_model_friendly_repair_strategy_includes_feedback_on_retry():
+    from mellea.stdlib.sampling import ModelFriendlyRepairStrategy
+
+    @generative
+    def pick_number(seed: int) -> int:
+        """Pick a large positive integer."""
+
+    def check_large(ctx) -> ValidationResult:
+        out = ctx.last_output()
+        if out is not None and out.parsed_repr is not None and out.parsed_repr > 100:
+            return ValidationResult(result=True)
+        return ValidationResult(result=False, reason="REASON_MARKER: value was <= 100")
+
+    backend = _PromptRecordingJSONBackend(['{"result": 5}', '{"result": 12345}'])
+    result, _ = pick_number(
+        context=SimpleContext(),
+        backend=backend,
+        seed=7,
+        requirements=[Requirement("Must be > 100", validation_fn=check_large)],
+        strategy=ModelFriendlyRepairStrategy(loop_budget=2),
+    )
+
+    assert result == 12345
+    assert len(backend.prompts) == 2
+    assert "The following requirements failed before:" not in backend.prompts[0]
+    assert "The following requirements failed before:" in backend.prompts[1]
+    assert "Try:" in backend.prompts[1]
+    assert "REASON_MARKER: value was <= 100" in backend.prompts[1]
+
+
+def test_sync_stub_with_check_only_requirement_and_multi_step_repair():
+    from mellea.stdlib.sampling import RepairTemplateStrategy
+
+    @generative
+    def pick_even_large(seed: int) -> int:
+        """Pick an integer."""
+
+    def check_even_and_large(ctx) -> ValidationResult:
+        out = ctx.last_output()
+        assert out is not None and out.parsed_repr is not None
+        val = out.parsed_repr
+        if val <= 100:
+            return ValidationResult(result=False, reason="TOO_SMALL")
+        if val % 2 != 0:
+            return ValidationResult(result=False, reason="NOT_EVEN")
+        return ValidationResult(result=True)
+
+    backend = _PromptRecordingJSONBackend(
+        ['{"result": 5}', '{"result": 101}', '{"result": 102}']
+    )
+    result, _ = pick_even_large(
+        context=SimpleContext(),
+        backend=backend,
+        seed=1,
+        requirements=[
+            Requirement(
+                "Hidden check", validation_fn=check_even_and_large, check_only=True
+            )
+        ],
+        strategy=RepairTemplateStrategy(loop_budget=3),
+    )
+
+    assert result == 102
+    assert len(backend.prompts) == 3
+    assert "Requirements:" not in backend.prompts[0]
+    assert "The following requirements failed before:" not in backend.prompts[0]
+    assert "TOO_SMALL" in backend.prompts[1]
+    assert "\n\n\n" not in backend.prompts[1]
+    assert "NOT_EVEN" in backend.prompts[2]
+    assert "TOO_SMALL" not in backend.prompts[2]
+    assert "\n\n\n" not in backend.prompts[2]
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

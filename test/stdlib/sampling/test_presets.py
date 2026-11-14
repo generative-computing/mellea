@@ -408,6 +408,74 @@ class TestModelFriendlyRepairStrategy:
         with pytest.raises(ValueError):
             ModelFriendlyRepairStrategy(loop_budget=0)
 
+    def test_repair_generative_stub_builds_model_friendly_repair_string(self):
+        """Verify ModelFriendlyRepairStrategy.repair supports @generative stubs."""
+        from mellea import generative
+        from mellea.core import ComputedModelOutputThunk, ModelOutputThunk
+        from mellea.stdlib.context import ChatContext
+
+        @generative
+        def generate_code(prompt: str) -> str:
+            """Return Python source code."""
+
+        req = PythonSyntaxValid()
+        old_ctx = ChatContext()
+
+        action, ctx = ModelFriendlyRepairStrategy.repair(
+            old_ctx=old_ctx,
+            new_ctx=ChatContext(),
+            past_actions=[generate_code],
+            past_results=[
+                ComputedModelOutputThunk(
+                    thunk=ModelOutputThunk(value='{"result": "def f("}')
+                )
+            ],
+            past_val=[
+                [
+                    (
+                        req,
+                        ValidationResult(
+                            result=False, reason="Syntax error at line 1: Expected ')'"
+                        ),
+                    )
+                ]
+            ],
+        )
+        assert action is not generate_code
+        assert generate_code._repair_string is None
+        assert action._repair_string is not None
+        assert "The following requirements failed before:" in action._repair_string
+        assert "Try:" in action._repair_string
+        assert ctx is old_ctx
+
+    def test_repair_non_repairable_action_logs_warning(self, caplog):
+        """Verify ModelFriendlyRepairStrategy.repair warns when action cannot be repaired."""
+        import logging
+
+        from mellea.core import ComputedModelOutputThunk, ModelOutputThunk
+        from mellea.stdlib.components import Message
+        from mellea.stdlib.context import ChatContext
+
+        msg = Message("user", "hello")
+        old_ctx = ChatContext()
+
+        with caplog.at_level(logging.WARNING, logger="mellea"):
+            action, ctx = ModelFriendlyRepairStrategy.repair(
+                old_ctx=old_ctx,
+                new_ctx=ChatContext(),
+                past_actions=[msg],
+                past_results=[
+                    ComputedModelOutputThunk(thunk=ModelOutputThunk(value="x"))
+                ],
+                past_val=[[]],
+            )
+        assert action is msg
+        assert ctx is old_ctx
+        assert any(
+            "ModelFriendlyRepairStrategy" in rec.message and "Message" in rec.message
+            for rec in caplog.records
+        )
+
 
 class TestModelFriendlyFeedbackFormatterIntegration:
     """Integration tests for feedback formatting."""
