@@ -74,7 +74,8 @@ def test_json_schema_supports_array_items_schema():
         model.model_validate({"tags": ["a", 1]})
 
 
-def test_json_schema_supports_top_level_ref():
+@pytest.mark.parametrize("field_names", [("user",), ("owner", "assignee")])
+def test_json_schema_supports_top_level_ref(field_names):
     """Test that local refs are resolved from $defs."""
     model = json_schema_to_pydantic(
         {
@@ -86,17 +87,17 @@ def test_json_schema_supports_top_level_ref():
                     "required": ["name"],
                 }
             },
-            "properties": {"user": {"$ref": "#/$defs/User"}},
-            "required": ["user"],
+            "properties": {name: {"$ref": "#/$defs/User"} for name in field_names},
+            "required": list(field_names),
         },
         "RefExample",
     )
 
-    parsed = model.model_validate({"user": {"name": "Alice"}})
-    assert parsed.model_dump()["user"]["name"] == "Alice"
+    payload = {name: {"name": name.title()} for name in field_names}
+    assert model.model_validate(payload).model_dump() == payload
 
     with pytest.raises(Exception):
-        model.model_validate({"user": {}})
+        model.model_validate({name: {} for name in field_names})
 
 
 def test_json_schema_supports_anyof_field():
@@ -358,3 +359,42 @@ def test_json_schema_supports_time_period_enum():
 
     with pytest.raises(Exception):
         model.model_validate({"period": "am"})
+
+
+@pytest.mark.parametrize(
+    "definition",
+    [
+        pytest.param(
+            {"type": "object", "properties": {"a": {"$ref": "#/$defs/A"}}}, id="object"
+        ),
+        pytest.param({"type": "array", "items": {"$ref": "#/$defs/A"}}, id="array"),
+        pytest.param(
+            {"type": "object", "additionalProperties": {"$ref": "#/$defs/A"}},
+            id="additional-properties",
+        ),
+        pytest.param(
+            {"anyOf": [{"$ref": "#/$defs/A"}, {"type": "string"}]}, id="any-of"
+        ),
+        pytest.param(
+            {"oneOf": [{"$ref": "#/$defs/A"}, {"type": "string"}]}, id="one-of"
+        ),
+        pytest.param({"allOf": [{"$ref": "#/$defs/A"}]}, id="all-of"),
+        pytest.param(
+            {
+                "type": "object",
+                "properties": {"a": {"$ref": "#/$defs/A", "description": "node"}},
+            },
+            id="ref-with-sibling",
+        ),
+    ],
+)
+@pytest.mark.parametrize("siblings", [{}, {"description": "node"}])
+def test_json_schema_rejects_recursive_refs(definition, siblings):
+    """Reject cycles through each supported schema position with ValueError."""
+    schema = {
+        "type": "object",
+        "properties": {"a": {"$ref": "#/$defs/A", **siblings}},
+        "$defs": {"A": definition},
+    }
+    with pytest.raises(ValueError, match="recursive"):
+        json_schema_to_pydantic(schema, "RecursiveRefExample")

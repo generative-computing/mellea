@@ -68,7 +68,6 @@ def json_schema_to_pydantic(
     ref_cache: dict[str, Any] = {}
     model_cache: dict[str, type[BaseModel]] = {}
     in_flight_refs: set[str] = set()
-    ref_name_by_schema_id: dict[int, str] = {}
 
     def _sanitize_model_name(name: str) -> str:
         sanitized = "".join(ch if ch.isalnum() else "_" for ch in name).strip("_")
@@ -100,7 +99,6 @@ def json_schema_to_pydantic(
                 if not isinstance(target, dict):
                     raise ValueError(f"Ref target must be an object: {ref}")
                 ref_cache[ref] = target
-                ref_name_by_schema_id[id(target)] = key
                 return key, target
 
         raise ValueError(
@@ -147,55 +145,62 @@ def json_schema_to_pydantic(
         merged_additional_properties: bool | dict[str, Any] = True
 
         for index, branch in enumerate(schemas):
-            resolved_branch = _normalize_schema(branch, f"{path}.allOf[{index}]")
-            branch_type = resolved_branch.get("type", "object")
-            if branch_type != "object":
-                raise ValueError(
-                    f"{_format_path(path)} allOf only supports object branches"
-                )
-
-            branch_properties = resolved_branch.get("properties", {})
-            if not isinstance(branch_properties, dict):
-                raise ValueError(
-                    f"{_format_path(path)} allOf branch properties must be an object"
-                )
-
-            for property_name, property_schema in branch_properties.items():
-                if property_name in merged["properties"]:
-                    raise ValueError(
-                        f"{_format_path(path)} allOf has conflicting property "
-                        f"definitions for '{property_name}'"
-                    )
-                cast(dict[str, Any], merged["properties"])[property_name] = (
-                    property_schema
-                )
-
-            branch_required = resolved_branch.get("required", [])
-            if not isinstance(branch_required, list):
-                raise ValueError(
-                    f"{_format_path(path)} allOf branch 'required' must be an array"
-                )
-            merged_required.update(
-                field_name
-                for field_name in branch_required
-                if isinstance(field_name, str)
+            ref_name, resolved_branch, entered_ref = _normalize_schema(
+                branch, f"{path}.allOf[{index}]"
             )
-
-            branch_additional_properties = resolved_branch.get(
-                "additionalProperties", True
-            )
-            if branch_additional_properties is False:
-                merged_additional_properties = False
-            elif isinstance(branch_additional_properties, dict):
-                if merged_additional_properties is True:
-                    merged_additional_properties = branch_additional_properties
-                elif merged_additional_properties is False:
-                    continue
-                elif merged_additional_properties != branch_additional_properties:
+            try:
+                branch_type = resolved_branch.get("type", "object")
+                if branch_type != "object":
                     raise ValueError(
-                        f"{_format_path(path)} allOf has conflicting "
-                        "additionalProperties schemas"
+                        f"{_format_path(path)} allOf only supports object branches"
                     )
+
+                branch_properties = resolved_branch.get("properties", {})
+                if not isinstance(branch_properties, dict):
+                    raise ValueError(
+                        f"{_format_path(path)} allOf branch properties must be an object"
+                    )
+
+                for property_name, property_schema in branch_properties.items():
+                    if property_name in merged["properties"]:
+                        raise ValueError(
+                            f"{_format_path(path)} allOf has conflicting property "
+                            f"definitions for '{property_name}'"
+                        )
+                    cast(dict[str, Any], merged["properties"])[property_name] = (
+                        property_schema
+                    )
+
+                branch_required = resolved_branch.get("required", [])
+                if not isinstance(branch_required, list):
+                    raise ValueError(
+                        f"{_format_path(path)} allOf branch 'required' must be an array"
+                    )
+                merged_required.update(
+                    field_name
+                    for field_name in branch_required
+                    if isinstance(field_name, str)
+                )
+
+                branch_additional_properties = resolved_branch.get(
+                    "additionalProperties", True
+                )
+                if branch_additional_properties is False:
+                    merged_additional_properties = False
+                elif isinstance(branch_additional_properties, dict):
+                    if merged_additional_properties is True:
+                        merged_additional_properties = branch_additional_properties
+                    elif merged_additional_properties is False:
+                        continue
+                    elif merged_additional_properties != branch_additional_properties:
+                        raise ValueError(
+                            f"{_format_path(path)} allOf has conflicting "
+                            "additionalProperties schemas"
+                        )
+
+            finally:
+                if entered_ref and ref_name is not None:
+                    in_flight_refs.remove(ref_name)
 
         merged["required"] = sorted(merged_required)
         merged["additionalProperties"] = merged_additional_properties
@@ -219,42 +224,78 @@ def json_schema_to_pydantic(
             annotation = annotation | branch_annotation
         return annotation
 
-    def _normalize_schema(field_schema: dict[str, Any], path: str) -> dict[str, Any]:
-        """Resolve refs and simple combinators into a normalized schema object."""
+    def _track_ref(name: str | None) -> bool:
+        """Record an in-flight $ref. Return True if this call added it."""
+        if name is None:
+            return False
+        if name in in_flight_refs:
+            raise ValueError("recursive $ref is not supported")
+        in_flight_refs.add(name)
+        return True
+
+    def _normalize_schema(
+        field_schema: dict[str, Any], path: str
+    ) -> tuple[str | None, dict[str, Any], bool]:
+        """Resolve refs and simple combinators into a normalized schema object.
+
+        The third item is True when this call added the ref name to
+        in_flight_refs. The caller must remove it after the subtree is done.
+        """
         if not isinstance(field_schema, dict):
             raise ValueError(f"{_format_path(path)} schema must be an object")
 
         normalized = dict(field_schema)
+        # Name of a local $ref, including refs that have sibling keywords.
+        # Used for recursive cycle detection across the whole subtree.
+        ref_name = None
+        entered_ref = False
 
-        if "$ref" in normalized:
-            ref = normalized["$ref"]
-            if not isinstance(ref, str):
-                raise ValueError(f"{_format_path(path)} $ref must be a string")
-            _, resolved = _resolve_ref(ref)
-            sibling_keywords = {k: v for k, v in normalized.items() if k != "$ref"}
-            if sibling_keywords:
-                merged = dict(resolved)
-                merged.update(sibling_keywords)
+        try:
+            if "$ref" in normalized:
+                ref = normalized["$ref"]
+                if not isinstance(ref, str):
+                    raise ValueError(f"{_format_path(path)} $ref must be a string")
+                key, resolved = _resolve_ref(ref)
+                sibling_keywords = {k: v for k, v in normalized.items() if k != "$ref"}
+                if sibling_keywords:
+                    merged = dict(resolved)
+                    merged.update(sibling_keywords)
+                    normalized = merged
+                else:
+                    normalized = dict(resolved)
+                ref_name = key
+                entered_ref = _track_ref(ref_name)
+
+            if "allOf" in normalized:
+                all_of = normalized.pop("allOf")
+                if not isinstance(all_of, list):
+                    raise ValueError(f"{_format_path(path)} allOf must be an array")
+                merged = _merge_object_schemas(all_of, path)
+                merged.update(normalized)
                 normalized = merged
-            else:
-                normalized = dict(resolved)
 
-        if "allOf" in normalized:
-            all_of = normalized.pop("allOf")
-            if not isinstance(all_of, list):
-                raise ValueError(f"{_format_path(path)} allOf must be an array")
-            merged = _merge_object_schemas(all_of, path)
-            merged.update(normalized)
-            normalized = merged
-
-        return normalized
+            return ref_name, normalized, entered_ref
+        except BaseException:
+            if entered_ref and ref_name is not None:
+                in_flight_refs.remove(ref_name)
+            raise
 
     def _schema_to_type(
         field_schema: dict[str, Any], path: str, in_union: bool = False
     ) -> Any:
         """Convert a JSON Schema node into a Python typing annotation."""
-        normalized_schema = _normalize_schema(field_schema, path)
+        ref_name, normalized_schema, entered_ref = _normalize_schema(field_schema, path)
+        try:
+            return _annotation_from_normalized(
+                normalized_schema, path, in_union=in_union
+            )
+        finally:
+            if entered_ref and ref_name is not None:
+                in_flight_refs.remove(ref_name)
 
+    def _annotation_from_normalized(
+        normalized_schema: dict[str, Any], path: str, in_union: bool = False
+    ) -> Any:
         for keyword in ("anyOf", "oneOf"):
             if keyword in normalized_schema:
                 union_schemas = normalized_schema[keyword]
@@ -353,14 +394,10 @@ def json_schema_to_pydantic(
     def _object_schema_to_model(
         object_schema: dict[str, Any], current_model_name: str, path: str
     ) -> type[BaseModel]:
-        current_ref_name = ref_name_by_schema_id.get(id(object_schema))
-        if current_ref_name is not None:
-            if current_ref_name in in_flight_refs:
-                raise ValueError("recursive $ref is not supported")
-            in_flight_refs.add(current_ref_name)
-
+        ref_name, normalized_schema, entered_ref = _normalize_schema(
+            object_schema, path
+        )
         try:
-            normalized_schema = _normalize_schema(object_schema, path)
             if normalized_schema.get("type") != "object":
                 raise ValueError(f"{_format_path(path)} must be an object schema")
 
@@ -414,8 +451,8 @@ def json_schema_to_pydantic(
             model_cache[cache_key] = dynamic_model
             return dynamic_model
         finally:
-            if current_ref_name is not None:
-                in_flight_refs.remove(current_ref_name)
+            if entered_ref and ref_name is not None:
+                in_flight_refs.remove(ref_name)
 
     if not isinstance(schema, dict):
         raise ValueError("Schema must be a dictionary")
