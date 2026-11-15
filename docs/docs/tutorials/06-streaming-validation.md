@@ -25,7 +25,7 @@ By the end you will have covered:
 
 **Prerequisites:** [Tutorial 02](./02-streaming-and-async.md) (async and streaming),
 [Tutorial 04](./04-making-agents-reliable.md) (requirements and validation),
-`pip install mellea`, Ollama running locally with `granite4.1:3b` downloaded.
+`pip install mellea`, Ollama running locally with `granite4.2:3b` downloaded.
 
 ---
 
