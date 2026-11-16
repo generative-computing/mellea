@@ -1180,6 +1180,8 @@ class ModelOutputThunk(Generic[S]):
             meta = {}
         self._meta = meta
 
+        # `_parsed` is True once `parsed_repr` is assigned, even to `None`. Passing
+        # `parsed_repr=None` here therefore means "unparsed".
         self._parsed_repr: S | None = parsed_repr
         self._parsed: bool = parsed_repr is not None
 
@@ -1211,21 +1213,13 @@ class ModelOutputThunk(Generic[S]):
 
     @property
     def parsed_repr(self) -> S | None:
-        """The parsed output, or `None` if not yet parsed or parsed to `None`. Use `is_parsed()` to tell them apart."""
+        """The parsed output, or `None` if not yet parsed or parsed to `None`."""
         return self._parsed_repr
 
     @parsed_repr.setter
     def parsed_repr(self, value: S | None) -> None:
         self._parsed_repr = value
         self._parsed = True
-
-    def is_parsed(self) -> bool:
-        """Returns whether `parsed_repr` has been set, even if it was set to `None`.
-
-        Returns:
-            `True` if the thunk has been parsed, `False` otherwise.
-        """
-        return self._parsed
 
     def _elapsed_ms(self) -> float:
         """Milliseconds since generation start, or -1 if start was never set."""
@@ -1398,7 +1392,7 @@ class ModelOutputThunk(Generic[S]):
         """
         self._underlying_value = other._underlying_value
         self._meta = other._meta
-        self.parsed_repr = other.parsed_repr
+        self._parsed_repr = other._parsed_repr
         self._parsed = other._parsed
         self.tool_calls = other.tool_calls
         self.thinking = other.thinking
@@ -1748,6 +1742,7 @@ class ModelOutputThunk(Generic[S]):
         copied = ModelOutputThunk(
             self._underlying_value, self._meta, self.parsed_repr, self.tool_calls
         )
+        # The constructor treats `parsed_repr=None` as unparsed, so copy the flag explicitly.
         copied._parsed = self._parsed
 
         # Check if the parsed_repr needs to be changed. A ModelOutputThunk's parsed_repr can point to
@@ -1848,14 +1843,15 @@ class ComputedModelOutputThunk(ModelOutputThunk[S]):
     # Fields guarded by the computed invariant. Each maps to a predicate a *new* value
     # must satisfy; a rejected write raises AttributeError. The rule is "never made
     # uncomputed or given an invalid value" — not "read-only": replacing the value with
-    # another valid computed string is allowed (react.py does this). `parsed_repr` and
-    # `_parsed` are unguarded (derived fields finalized post-wrap; a computed thunk
-    # may still be unparsed at wrap time). The guard is purely value-based,
-    # so it needs no "is-sealed" flag: at wrap time the base thunk is already computed
-    # with a str value, and the wrap itself writes no guarded field.
+    # another valid computed string is allowed (react.py does this). `parsed_repr` is
+    # unguarded (a derived field finalized post-wrap; a computed thunk may still be
+    # unparsed at wrap time), but `_parsed` may only move to `True`. The guard is
+    # purely value-based, so it needs no "is-sealed" flag: at wrap time the base thunk
+    # is already computed with a str value, and the wrap itself writes no guarded field.
     _INVARIANT_GUARDS: dict[str, Callable[[Any], bool]] = {
         "_computed": lambda v: v is True,
         "_underlying_value": lambda v: isinstance(v, str),
+        "_parsed": lambda v: v is True,
     }
 
     def __new__(
@@ -1935,8 +1931,8 @@ class ComputedModelOutputThunk(ModelOutputThunk[S]):
         if guard is not None and not guard(value):
             raise AttributeError(
                 "cannot assign to this ComputedModelOutputThunk: the assignment "
-                "would violate the computed invariant (it must stay computed with a "
-                f"non-None str value; got {value!r})."
+                f"to {name!r} would violate the computed invariant "
+                f"(got {value!r})."
             )
         super().__setattr__(name, value)
 

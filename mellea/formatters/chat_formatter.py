@@ -76,7 +76,7 @@ class ChatFormatter(Formatter):
                     c.value is not None
                 )  # This is already entailed by c.is_computed(); the line is included here to satisfy the type-checker.
 
-                if c.is_parsed() and c.parsed_repr is not None:
+                if c.parsed_repr is not None:
                     if isinstance(c.parsed_repr, Component):
                         # Only use the parsed_repr if it's something that we know how to print.
                         c = c.parsed_repr  # This might be a message.

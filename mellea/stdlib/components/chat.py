@@ -461,11 +461,11 @@ def as_generic_chat_history(
                     return c.parsed_repr
                 if isinstance(c.parsed_repr, str):
                     return Message(role="assistant", content=c.parsed_repr)
-                if not c.is_parsed() or c.parsed_repr is None:
+                if c.parsed_repr is None:
                     if c.value is None:
                         raise ValueError(
                             "ModelOutputThunk has no value and no parsed_repr — "
-                            f"is_computed()={c.is_computed()}, is_parsed()={c.is_parsed()}"
+                            f"was it evaluated? is_computed()={c.is_computed()}"
                         )
                     content = str(c.value)
                 else:

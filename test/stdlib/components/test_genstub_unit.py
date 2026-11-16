@@ -745,9 +745,18 @@ def test_non_stub_component_parsing_to_none_succeeds():
     backend = _FixedJSONBackend('{"result": "anything"}')
     mot, _ = mfuncs.act(_ParsesToNone("describe"), SimpleContext(), backend)
     assert mot.is_computed()
-    assert mot.is_parsed()
+    assert mot._parsed
     assert mot.parsed_repr is None
     assert mot.value == '{"result": "anything"}'
+
+
+def test_computed_thunk_without_parse_trips_invariant(monkeypatch):
+    """A thunk that computes without running `_set_parsed_repr` fails loudly."""
+    from mellea.stdlib.components import Instruction
+
+    monkeypatch.setattr(ModelOutputThunk, "_set_parsed_repr", lambda self: None)
+    with pytest.raises(AssertionError, match="skipped _set_parsed_repr"):
+        mfuncs.act(Instruction("describe"), SimpleContext(), _FixedJSONBackend("x"))
 
 
 def test_component_without_parse_fails_loudly():
