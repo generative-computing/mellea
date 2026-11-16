@@ -304,8 +304,8 @@ All sampling metrics include:
 ## Adapter function metrics
 
 Mellea records metrics for adapter function calls (`core.requirement_check()`,
-`rag.check_answerability()`, `Intrinsic`/`ALoraRequirement`, and the
-deprecated shim classes alike) — no code changes are required beyond enabling
+`rag.check_answerability()`, and `Intrinsic`/`ALoraRequirement`) — no code
+changes are required beyond enabling
 metrics as above. They are recorded by `AdapterFunctionMetricsPlugin`
 (`mellea/telemetry/metrics_plugins.py`), which subscribes to the
 `adapter_function_invocation_complete` and `adapter_function_phase_complete`

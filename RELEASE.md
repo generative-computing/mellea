@@ -16,6 +16,7 @@ Releases target a roughly 4-week cadence; patch releases happen as needed.
 2. [Stabilize on the release branch](#2-stabilize-on-the-release-branch)
 3. [Publish the final](#3-publish-the-final)
 4. [Sync the changelog back to main](#4-sync-the-changelog-back-to-main)
+5. [Merge the docs snapshot](#5-merge-the-docs-snapshot)
 
 ### 1. Cut the release branch
 
@@ -34,6 +35,10 @@ Land fixes via PRs targeting `release/vX.Y` (normal review + CI; protection
 mirrors `main`). If the same change also belongs on `main`, open a
 follow-up PR to `main` once the release-branch PR is merged.
 
+This includes docs: the release's docs snapshot is built from the release
+branch, so a docs fix only appears in the `vX.Y.0` docs if it lands on
+`release/vX.Y` before publishing.
+
 > RC iteration during stabilization (`bump_type: rc`) is currently a no-op:
 > the rc counter advances in `pyproject.toml` but nothing is published.
 > See [rc cycling](#rc-cycling) in the appendix for what changes when
@@ -46,24 +51,31 @@ against `release/vX.Y`.
 
 - `bump_type`: `final`
 
-After this runs: `vX.Y.0` is tagged, the GitHub Release exists, the PyPI
-upload is done, and docs versioning is updated automatically. The
-`snapshot-docs` job commits `versioned_docs/version-X.Y.0/` to `main` and
-sets that version as the default. This commit triggers `docs-publish.yml`,
-which redeploys production. Visitors land on `vX.Y.0` docs by default;
-the version dropdown lets them switch to `main` (unreleased) or any prior
-snapshot. No manual docs step is required.
+After this runs: `vX.Y.0` is tagged, the GitHub Release exists, and the
+PyPI upload is done. The `snapshot-docs` job builds the `vX.Y.0` docs
+snapshot from the release tag and opens a sync PR to `main` with it (see
+[step 5](#5-merge-the-docs-snapshot)).
 
 ### 4. Sync the changelog back to main
 
 The publish workflow opens a PR titled `docs: sync changelog for vX.Y.0`
 from `chore/changelog-sync-X.Y.0` to `main`. Review and merge it.
 
+### 5. Merge the docs snapshot
+
+The publish workflow opens a PR titled `docs: snapshot X.Y.0` from
+`chore/docs-snapshot-X.Y.0` to `main`. It adds `versioned_docs/version-X.Y.0/`
+and its sidebar, and makes `X.Y.0` the default docs version. Review and merge
+it; merging deploys the docs site. Visitors then land on the `vX.Y.0` docs by
+default, and the version dropdown lets them switch to `main` (unreleased) or
+any prior snapshot.
+
 ## Making a patch release
 
 1. [Land fixes on the release branch](#1-land-fixes-on-the-release-branch)
 2. [Publish the patch](#2-publish-the-patch)
 3. [Sync the changelog back to main](#3-sync-the-changelog-back-to-main)
+4. [Merge the docs snapshot](#4-merge-the-docs-snapshot)
 
 ### 1. Land fixes on the release branch
 
@@ -77,8 +89,8 @@ against `release/vX.Y`.
 
 - `bump_type`: `patch-final`
 
-As with a minor final, `snapshot-docs` runs automatically and docs are
-redeployed with the patch as the new default version.
+As with a minor final, `snapshot-docs` builds the patch's docs snapshot
+from the release tag and opens a sync PR to `main`.
 
 > Patch rc iteration (`bump_type: patch-rc`) is currently a no-op for the
 > same reason as minor rc iteration; see [rc cycling](#rc-cycling).
@@ -88,6 +100,13 @@ redeployed with the patch as the new default version.
 Same as the minor flow: review and merge the auto-opened
 `chore/changelog-sync-X.Y.Z` PR.
 
+### 4. Merge the docs snapshot
+
+Same as the minor flow: review and merge the auto-opened
+`chore/docs-snapshot-X.Y.Z` PR. The patch becomes the default docs version
+only if it is the newest final release; a patch on an older minor is added to the
+version dropdown without changing the default.
+
 ## Troubleshooting
 
 ### Retry a failed publish
@@ -95,7 +114,8 @@ Same as the minor flow: review and merge the auto-opened
 `bump_type: none` re-runs `publish-release` against whatever version is
 already in `pyproject.toml`, skipping the version-bump step. Useful when a
 previous run failed after the bump committed but before the publish
-completed.
+completed. It doesn't re-run workflows triggered by the Release (PyPI,
+contribs dispatch); re-run those from the Actions UI.
 
 The retry is a "skip what's done, finish what isn't" path — it does not
 validate existing artifacts. If a prior run produced a tag at the wrong
@@ -181,9 +201,7 @@ configured as a bypass actor on the `main` and `release/**` rulesets so
 workflows can push directly:
 
 - `main`: `cut-release-branch` pushes the `X.(Y+1).0.dev0` bump;
-  `publish-dev-from-main` pushes the `.dev(N+1)` advance commit;
-  `publish-release` (snapshot-docs) pushes the versioned docs snapshot for
-  finals.
+  `publish-dev-from-main` pushes the `.dev(N+1)` advance commit.
 - `release/**`: `publish-release` pushes the version-bump commit and (for
   finals) the changelog update.
 
@@ -200,21 +218,22 @@ and break `git checkout v0.4.2` semantics. Old `release/v0.3`,
 ## Docs behavior by release type
 
 For finals and patch-finals, the `snapshot-docs` job in `publish-release.yml`
-commits a versioned snapshot of `main`'s docs to `main` immediately after the
-GitHub Release is created, then explicitly dispatches `docs-publish.yml` via
-`workflow_dispatch`. This deploys production with the new version as
-the default. Visitors see the released docs by default; a version dropdown in the
-navbar lets them switch to `main` (unreleased) or any prior snapshot.
+checks out the release tag, builds the docs snapshot there (prose docs,
+sidebar, and generated API/CLI reference), and opens a
+`chore/docs-snapshot-X.Y.Z` sync PR to `main` that adds
+`versioned_docs/version-X.Y.Z/` and registers the version. Merging the PR
+deploys production via `docs-publish.yml`.
 
-`docs-publish.yml` only deploys to production when the triggering release is the
-latest final by semver, so older-branch patches don't overwrite production docs.
+The version becomes the site's default (`lastVersion`) only if it is the
+newest final release by semver, so a patch on an older minor is added to the
+version dropdown without displacing the current default.
 
 | Release type | docs/production default version | Dropdown includes |
 |--------------|----------------------------------|-------------------|
 | RC (`v0.6.0rc0`) | unchanged | unchanged |
 | Final X.Y release (`v0.6.0`) | `v0.6.0` | `v0.6.0`, prior snapshots, `main` |
 | Patch on latest X.Y (`v0.6.1` after `v0.6.0`) | `v0.6.1` | all snapshots, `main` |
-| Patch on older X.Y (`v0.5.1` after `v0.6.0`) | unchanged | unchanged |
+| Patch on older X.Y (`v0.5.1` after `v0.6.0`) | unchanged | all snapshots, `main` |
 
 ## RC cycling
 

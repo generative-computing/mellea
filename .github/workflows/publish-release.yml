@@ -69,6 +69,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       TARGET_TAG_V: ${{ steps.version_check.outputs.TRGT_VERSION }}
+      IS_FINAL: ${{ steps.version_check.outputs.IS_FINAL }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -93,11 +94,15 @@ jobs:
           fi
           echo "TRGT_VERSION=${TRGT_VERSION}" >> "$GITHUB_OUTPUT"
           echo "Target version: ${TRGT_VERSION}"
+          if [[ "${TRGT_VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "IS_FINAL=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "IS_FINAL=false" >> "$GITHUB_OUTPUT"
+          fi
   release:
     permissions:
       contents: write        # push tags, branches, commits
       pull-requests: write   # release.sh opens changelog sync PR for finals
-      actions: write         # release.sh dispatches pypi.yml and docs-publish.yml
     needs: [guard, code-checks, pre-release-check]
     # Run only if a target version was computed AND (previous jobs succeeded
     # OR the operator set force_release).
@@ -115,7 +120,6 @@ jobs:
           private-key: ${{ secrets.CI_PRIVATE_KEY }}
           permission-contents: write
           permission-pull-requests: write
-          permission-actions: write
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ github.ref_name }}
@@ -156,12 +160,11 @@ jobs:
   snapshot-docs:
     name: Snapshot docs for release
     needs: [release, pre-release-check]
-    if: ${{ inputs.bump_type == 'final' || inputs.bump_type == 'patch-final' }}
+    if: ${{ needs.pre-release-check.outputs.IS_FINAL == 'true' }}
     environment: auto-release
     runs-on: ubuntu-latest
     permissions:
-      contents: write
-      actions: write
+      contents: read
     steps:
       - uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1.12.0
         id: app-token
@@ -169,12 +172,12 @@ jobs:
           app-id: ${{ vars.CI_APP_ID }}
           private-key: ${{ secrets.CI_PRIVATE_KEY }}
           permission-contents: write
-          permission-actions: write
+          permission-pull-requests: write
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: main
-          token: ${{ steps.app-token.outputs.token }}
+          ref: v${{ needs.pre-release-check.outputs.TARGET_TAG_V }}
           fetch-depth: 0
+          persist-credentials: false
       - name: Set up uv
         uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
         with:
@@ -185,39 +188,10 @@ jobs:
           node-version: '22'
           cache: 'npm'
           cache-dependency-path: docs/package-lock.json
-      - name: Install docs deps
-        working-directory: docs
-        run: npm ci
-      - name: Install Python dependencies
-        run: uv sync --frozen --all-extras --group dev
-      # The API reference (docs/docs/api/**) and CLI reference
-      # (docs/docs/reference/cli.md) are gitignored, generated artifacts. They
-      # must exist before docs:version so the snapshot captures the files the
-      # versioned sidebar references. --version pins source links to the tag.
-      - name: Generate API and CLI reference docs
+      - name: Snapshot docs and open sync PR
         env:
           VERSION: ${{ needs.pre-release-check.outputs.TARGET_TAG_V }}
-        run: uv run python tooling/docs-autogen/build.py --version "$VERSION"
-      - name: Snapshot docs as version
-        working-directory: docs
-        env:
-          VERSION: ${{ needs.pre-release-check.outputs.TARGET_TAG_V }}
-        run: npm run docusaurus -- docs:version "$VERSION"
-      - name: Update lastVersion
-        env:
-          VERSION: ${{ needs.pre-release-check.outputs.TARGET_TAG_V }}
-        run: node .github/scripts/set-last-version.mjs "$VERSION"
-      - name: Commit and push snapshot
-        env:
-          VERSION: ${{ needs.pre-release-check.outputs.TARGET_TAG_V }}
-        run: |
-          git config user.name 'github-actions[bot]'
-          git config user.email 'github-actions[bot]@users.noreply.github.com'
-          git add docs/versioned_docs docs/versioned_sidebars docs/versions.json docs/docusaurus.config.ts
-          git commit -m "docs: snapshot ${VERSION}"
-          git push origin main
-      - name: Trigger docs deploy from snapshot
-        env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          VERSION: ${{ needs.pre-release-check.outputs.TARGET_TAG_V }}
-        run: gh workflow run docs-publish.yml --ref main --field release_tag="v${VERSION}"
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: ./.github/scripts/snapshot_docs.sh
+        shell: bash

@@ -73,7 +73,7 @@ A decorator that converts a typed Python function into an AI-powered function.
 `@generative` uses the function's name, docstring, parameters, and return type
 annotation to instruct the LLM. The output is constrained to match the return type.
 Write the function in idiomatic Python — the more natural the signature and
-docstring, the better the model understands and imitates it.
+docstring, the better the model understands and performs it.
 
 ```python
 from mellea import generative, start_session
@@ -572,10 +572,10 @@ runtime or uses adapter functions embedded in a local [Granite Switch](#granite-
 checkpoint with `load_embedded_adapters=True`. `OpenAIBackend` also supports
 embedded adapter functions when backed by a Granite Switch deployment.
 
-> **Note:** The Python symbol `Intrinsic` (and related classes such as `IntrinsicAdapter`)
-> will be renamed to `AdapterFunction` / `Adapter` in a future phase of Epic #929
-> (#1136). Prefer the term **adapter function** in prose and documentation; use `Intrinsic`
-> only when referencing the current Python API directly.
+> **Note:** The Python symbol `Intrinsic` will be renamed to `AdapterFunction`
+> in a future phase of Epic #929 (#1136). Prefer the term **adapter function**
+> in prose and documentation; use `Intrinsic` only when referencing the current
+> Python API directly.
 
 See: [Adapter Functions](../advanced/intrinsics.md)
 

@@ -1,12 +1,13 @@
 name: "Build and publish package"
 
-# Fires on v* tag push, or via explicit dispatch (release.sh uses this when
-# GITHUB_TOKEN-authored pushes can't auto-trigger). Prereleases are gated on
-# the PUBLISH_PRERELEASES repo variable; finals always publish.
+# Fires when a GitHub Release is published, or via manual dispatch to retry a
+# publish.
+# Prereleases are gated on the PUBLISH_PRERELEASES repo variable; finals
+# always publish.
 
 on:
-  push:
-    tags: ['v*']
+  release:
+    types: [published]
   workflow_dispatch:
 
 env:

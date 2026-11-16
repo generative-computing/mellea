@@ -1,0 +1,31 @@
+---
+title: "mellea.stdlib"
+sidebar_label: "mellea.stdlib"
+description: "The mellea standard library of components, sessions, and sampling strategies."
+---
+
+The mellea standard library of components, sessions, and sampling strategies.
+
+
+
+
+
+This package provides the high-level building blocks for writing generative programs
+with mellea. It contains ready-to-use [`Component`](core/base#class-component) types ([`Instruction`](stdlib/components/instruction#class-instruction),
+[`Message`](stdlib/components/chat#class-message), [`Document`](stdlib/components/docs/document#class-document), `Intrinsic`, `SimpleComponent`, and more), context
+implementations (`ChatContext`, [`SimpleContext`](stdlib/context/simple#class-simplecontext)), sampling strategies (rejection
+sampling, budget forcing), session management via `MelleaSession`, and the
+`@mify` decorator for turning ordinary Python objects into components. Import from
+the sub-packages — `mellea.stdlib.components`, `mellea.stdlib.sampling`, and
+`mellea.stdlib.session` — for day-to-day use.
+
+The core streaming primitive `stream()` and its async-iterable handle [`Streamer`](stdlib/streaming#class-streamer) are
+re-exported here, alongside the full [`StreamEvent`](stdlib/streaming#class-streamevent) vocabulary for typed event
+observation.  Passing `as_events=True` to `stream()` yields an [`EventStreamer`](stdlib/streaming#class-eventstreamer) that
+iterates those events in place of chunks.
+
+Low-level primitives for tool execution are available in `mellea.stdlib.functional`:
+`call_tools` and `acall_tools` for executing model-requested tool calls with full
+hook and telemetry support. Higher-level APIs like `act()`, `instruct()`, or
+`chat()` generate tool calls but do not execute them—use `call_tools()` to run
+the generated tools. These primitives are rarely needed outside custom agentic loops.

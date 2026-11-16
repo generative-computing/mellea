@@ -1,20 +1,20 @@
-Your task is to imitate the output of the following function for the given arguments.
-Reply Nothing else but the output of the function.
+Task: {{ function.name }}
+{%- if function.docstring %}
 
-Function:
-def {{ function.name }}{{ function.signature }}:
-    """{{ function.docstring | default("No documentation provided.") -}}
-    {% if requirements|length > 0 %}
-
-    Postconditions:
-    {%- for req in requirements %}
-        - {{ req -}}
-    {% endfor %}
-    {% endif -%}
-    """
-
+{{ function.docstring }}
+{%- endif %}
 {%- if arguments is not none %}
 
-Arguments:
+Inputs:
 {{ arguments }}
-{%- endif -%}
+{%- endif %}
+{%- if requirements|length > 0 %}
+
+Requirements:
+{%- for req in requirements %}
+- {{ req }}
+{%- endfor %}
+{%- endif %}
+
+Reply in JSON formatted as {"result": <value of type {{ function.return_type }}>}, matching this shape:
+{"result": {{ result_shape }}}

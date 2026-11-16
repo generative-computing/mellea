@@ -5,17 +5,32 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Self, cast
+import json
+from typing import TYPE_CHECKING, Any, Self, cast
 
 from mellea.backends.context_lengths import get_context_length
 from mellea.backends.model_ids import ModelIdentifier
-from mellea.core import Context, Span
+from mellea.core import Context, ModelOutputThunk, Span
 from mellea.core.utils import MelleaLogger
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from mellea.formatters import TemplateFormatter
     from mellea.stdlib.context.compactor import InlineCompactor
 
 logger = MelleaLogger.get_logger()
+
+# A measured reply is used to correct the `len // 4` estimates only when the
+# items it covers are estimated at this many tokens or more. Below that, fixed
+# overhead in the measurement (system prompt, chat template) dominates and the
+# ratio is unreliable, as on a first turn with a short question and reply.
+_MIN_MEASURED_ESTIMATE = 100
+
+# The correction is clamped to this range, so one unusual measurement cannot
+# shrink or inflate every item's cost by more than a factor of two.
+_MIN_USAGE_SCALE = 0.5
+_MAX_USAGE_SCALE = 2.0
 
 
 class ChatContext(Context):
@@ -245,20 +260,100 @@ class ChatContext(Context):
 
         return self.as_list()
 
+    def _usage_scale(self, items: list[Span], estimate: Callable[[int], int]) -> float:
+        """Return how far off the `len // 4` estimates were for this context.
+
+        Compares the token usage measured on the most recent reply in `items`
+        with the estimated cost of the items that reply was generated from:
+        the items recorded as sent, the action, and the reply itself. Every
+        estimate is multiplied by the result, so `2.0` means the estimates
+        were half the real count.
+
+        The measured count also includes overhead that is not part of any
+        item (system prompt, chat template, tool schemas), so the result folds
+        a share of that overhead into every item's cost. This overlaps with the
+        0.75 headroom in `_as_list_token_budget`, which reserves room for the
+        same overhead. Requiring at least `_MIN_MEASURED_ESTIMATE` estimated
+        tokens and clamping the result to `_MIN_USAGE_SCALE` to
+        `_MAX_USAGE_SCALE` keeps the effect small.
+
+        Returns `1.0`, meaning no correction, when no reply has usage, the
+        reply's model is not the context's model, the items before the reply
+        are not the ones it was generated from, or the measured items are too
+        small to give a reliable ratio.
+
+        Args:
+            items (list[Span]): The context's items, oldest first.
+            estimate (Callable[[int], int]): Returns the `len // 4` estimate
+                for the item at a given position in `items`.
+
+        Returns:
+            float: Measured tokens divided by estimated tokens, clamped to
+            `_MIN_USAGE_SCALE` to `_MAX_USAGE_SCALE`, or `1.0` if that cannot
+            be worked out.
+        """
+        from mellea.stdlib.context.compactor import _usage_total
+
+        found: tuple[int, ModelOutputThunk, dict[str, Any]] | None = None
+        for i in reversed(range(len(items))):
+            item = items[i]
+            if isinstance(item, ModelOutputThunk) and item.generation.usage is not None:
+                found = (i, item, item.generation.usage)
+                break
+        if found is None:
+            return 1.0
+        idx, thunk, usage = found
+
+        if not _model_matches(self._model_id, thunk.generation.model):
+            return 1.0
+
+        receipt = thunk._call.context
+        if receipt is None:
+            return 1.0
+
+        action_idx = idx - 1
+        start = action_idx - len(receipt)
+        if start < 0:
+            return 1.0
+        if items[action_idx] is not thunk._call.action:
+            return 1.0
+        if any(a is not b for a, b in zip(items[start:action_idx], receipt)):
+            return 1.0
+
+        measured = _usage_total(usage)
+        estimated = sum(estimate(i) for i in range(start, idx + 1))
+        if measured is None or estimated < _MIN_MEASURED_ESTIMATE:
+            return 1.0
+        return min(max(measured / estimated, _MIN_USAGE_SCALE), _MAX_USAGE_SCALE)
+
     def _as_list_token_budget(self, token_budget: int) -> list[Span]:
         """Return history items that fit within *token_budget*, dropping oldest first.
 
-        Walks the linked list from newest to oldest, accumulating items until
+        Walks the history from newest to oldest, accumulating items until
         adding the next item would exceed the budget. The returned list is in
         chronological order (oldest-first), matching `as_list` behaviour.
 
-        Per-item token count is estimated as `len(rendered) // 4` (1 token ≈
-        4 characters) where `rendered` is the string produced by
-        `TemplateFormatter` for the bound model — the same renderer used at
-        generation time. A 0.75 headroom factor (retaining 75 % of the rated
-        context length) reserves capacity for the system prompt, injected tool
-        schemas, the current action, and the model's response. Use
-        `window_size` / a compactor for precise item-count control.
+        Each item's token count starts as an estimate of about 4 characters
+        per token (see `_estimate_tokens`), using the string produced by
+        `TemplateFormatter` for the bound model, the same renderer used at
+        generation time. When the most recent reply carries measured token
+        usage from the bound model, every estimate is multiplied by the ratio
+        of measured to estimated tokens for the items that reply was generated
+        from (see `_usage_scale`), which corrects for the model's tokenizer and
+        chat template. Otherwise the estimates are used as they are.
+
+        A 0.75 headroom factor (retaining 75% of the rated context length)
+        reserves capacity for the system prompt, injected tool schemas, the
+        current action, and the model's response. When the measured
+        correction applies, it already includes a share of that overhead, so
+        the two overlap (see `_usage_scale`). Use `window_size` / a compactor
+        for precise item-count control.
+
+        Args:
+            token_budget (int): The model's context length in tokens.
+
+        Returns:
+            list[Span]: The newest items that fit, oldest first.
         """
         from mellea.formatters import TemplateFormatter  # deferred: circular import
 
@@ -266,41 +361,36 @@ class ChatContext(Context):
             TemplateFormatter(self._model_id) if self._model_id is not None else None
         )
         effective_budget = int(token_budget * 0.75)
+        items = self.as_list()
+        # Items are rendered only when their estimate is needed, so a long
+        # history is not rendered beyond what the budget can hold.
+        estimates: dict[int, int] = {}
+
+        def estimate(i: int) -> int:
+            if i not in estimates:
+                estimates[i] = _estimate_tokens(items[i], formatter)
+            return estimates[i]
+
+        scale = self._usage_scale(items, estimate)
         collected: list[Span] = []
         spent = 0
-        chain_length = 0
-        node: Context = self
-        while not node.is_root_node:
-            chain_length += 1
-            node = node.previous_node  # type: ignore[assignment]
-        current: Context = self
-        while not current.is_root_node:
-            item = current.node_data
-            if item is None:  # pragma: no cover
-                raise RuntimeError(
-                    "Malformed context chain: node_data is None at a non-root node"
-                )
-            rendered = formatter.print(item) if formatter is not None else str(item)
-            cost = max(1, len(rendered) // 4)
+        for i in reversed(range(len(items))):
+            cost = max(1, round(estimate(i) * scale))
             if spent + cost > effective_budget:
                 break
-            collected.append(item)
+            collected.append(items[i])
             spent += cost
-            prev = current.previous_node
-            if prev is None:  # pragma: no cover
-                raise RuntimeError(
-                    "Malformed context chain: previous_node is None at a non-root node"
-                )
-            current = prev
-        dropped = chain_length - len(collected)
+        dropped = len(items) - len(collected)
         if dropped:
             logger.debug(
                 "Context truncated: dropped %d item(s) to stay within %d-token budget "
-                "(effective budget after 0.75 headroom: %d tokens, used: %d tokens).",
+                "(effective budget after 0.75 headroom: %d tokens, used: %d tokens, "
+                "estimate scale from measured usage: %.2f).",
                 dropped,
                 token_budget,
                 effective_budget,
                 spent,
+                scale,
             )
         collected.reverse()
         return collected
@@ -395,3 +485,60 @@ def _rebuild_chat_context(
         _configure(new)
         ctx = new
     return ctx
+
+
+def _estimate_tokens(item: Span, formatter: TemplateFormatter | None) -> int:
+    """Return the estimated token count of one history item.
+
+    Uses about 4 characters per token over the item as rendered by
+    `formatter` (or `str(item)` without one). A `ModelOutputThunk` also
+    counts its tool calls and reasoning text, which are not part of its
+    rendered value: a reply that only calls tools renders as an empty
+    string. Reasoning is counted whether or not the backend sends it back,
+    which errs toward trimming more rather than overflowing the context.
+
+    Args:
+        item (Span): The history item to estimate.
+        formatter (TemplateFormatter | None): The renderer for the bound model,
+            or `None` if the context has no model.
+
+    Returns:
+        int: The estimated token count, at least 1.
+    """
+    length = len(formatter.print(item) if formatter is not None else str(item))
+    if isinstance(item, ModelOutputThunk):
+        for call in item.tool_calls or []:
+            length += len(call.name) + len(json.dumps(dict(call.args), default=str))
+        if item.thinking:
+            length += len(item.thinking)
+    return max(1, length // 4)
+
+
+def _model_matches(model_id: str | ModelIdentifier | None, name: str | None) -> bool:
+    """Return whether a reply's model name matches the context's model.
+
+    A `ModelIdentifier` carries a different name per platform, so `name`
+    matches if it equals any of them. If either side is unknown the
+    match cannot be confirmed, and the result is `False`.
+
+    Args:
+        model_id (str | ModelIdentifier | None): The context's bound model.
+        name (str | None): The model name recorded on the reply, from
+            `generation.model`.
+
+    Returns:
+        bool: `True` if `name` is the context's model, otherwise `False`.
+    """
+    if model_id is None or name is None:
+        return False
+    if isinstance(model_id, str):
+        return name == model_id
+    return name in {
+        model_id.hf_model_name,
+        model_id.ollama_name,
+        model_id.watsonx_name,
+        model_id.mlx_name,
+        model_id.openai_name,
+        model_id.bedrock_name,
+        model_id.bedrock_litellm_name,
+    }

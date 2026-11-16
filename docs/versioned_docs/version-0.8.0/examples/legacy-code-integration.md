@@ -326,10 +326,10 @@ explicit.
 
 - Read the [MObjects and mify](../concepts/mobjects-and-mify.md) concept page for
   the full design rationale.
-- See `docs/examples/mify/rich_document_advanced.py` for mify combined with
-  rich document types.
-- See `docs/examples/mify/rich_table_execute_basic.py` for mifying table
-  objects for data manipulation.
+- Check the
+  [`docs/examples/mify/`](https://github.com/generative-computing/mellea/tree/main/docs/examples/mify)
+  directory for more mify examples, including mify combined with rich document
+  types and mifying table objects for data manipulation.
 
 ---
 
