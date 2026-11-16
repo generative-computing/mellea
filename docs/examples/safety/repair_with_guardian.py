@@ -17,6 +17,7 @@ Usage:
 """
 
 from mellea import MelleaSession, model_ids
+from mellea.backends.adapters import AdapterSchemaMismatchError
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.core import Context, Requirement, ValidationResult
 from mellea.stdlib.components.intrinsic import guardian
@@ -43,7 +44,13 @@ def harm_check(threshold: float) -> Requirement:
                 "Guardian checks need a ChatContext; create the session with "
                 "ctx=ChatContext()"
             )
-        score = guardian.guardian_check(ctx, backend, criteria="harm")
+        try:
+            score = guardian.guardian_check(ctx, backend, criteria="harm")
+        except (ValueError, AdapterSchemaMismatchError) as exc:
+            # Unparsable Guardian output fails the attempt instead of aborting the loop.
+            return ValidationResult(
+                False, reason="Guardian output could not be parsed", error=exc
+            )
         scores.append(score)
         # Keep the reason low-cardinality: it is both repair feedback and a
         # metric attribute (mellea.requirement.failures). Log the score separately.

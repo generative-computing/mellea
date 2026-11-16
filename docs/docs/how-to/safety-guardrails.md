@@ -313,13 +313,15 @@ A Guardian check becomes a requirement by wrapping the adapter-function call in 
 [`Requirement`](../reference/glossary.md#requirement) whose `validation_fn` returns a
 `ValidationResult`. The result's `reason` is what
 [`RepairTemplateStrategy`](../reference/glossary.md#sampling-strategy) feeds back to
-the model on the next attempt, so name the criteria and the threshold in it. The
+the model on the next attempt. Guardian returns a score and no reasoning text, so the
+reason can only name the criteria and the threshold, not explain what was wrong. The
 Guardian check needs a real conversation to judge, so the session must use a
 [`ChatContext`](../reference/glossary.md#context); the default
 [`SimpleContext`](../reference/glossary.md#context) keeps no history.
 
 ```python
 from mellea import MelleaSession
+from mellea.backends.adapters import AdapterSchemaMismatchError
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.core import Context, Requirement, ValidationResult
 from mellea.stdlib.components.intrinsic import guardian
@@ -327,11 +329,11 @@ from mellea.stdlib.context import ChatContext
 from mellea.stdlib.sampling import RepairTemplateStrategy
 
 # Generation and evaluation can share one backend, or use separate ones.
-guardian_backend = LocalHFBackend(model_id="ibm-granite/granite-4.1-3b")
-session = MelleaSession(backend=guardian_backend, ctx=ChatContext())
+backend = LocalHFBackend(model_id="ibm-granite/granite-4.1-3b")
+session = MelleaSession(backend=backend, ctx=ChatContext())
 
 
-def harm_check(threshold: float = 0.5) -> Requirement:
+def harm_check(threshold: float) -> Requirement:
     """Requirement that fails when Guardian reports harm at or above `threshold`."""
 
     def validate(ctx: Context) -> ValidationResult:
@@ -340,7 +342,13 @@ def harm_check(threshold: float = 0.5) -> Requirement:
                 "Guardian checks need a ChatContext; create the session with "
                 "ctx=ChatContext()"
             )
-        score = guardian.guardian_check(ctx, guardian_backend, criteria="harm")
+        try:
+            score = guardian.guardian_check(ctx, backend, criteria="harm")
+        except (ValueError, AdapterSchemaMismatchError) as exc:
+            # Unparsable Guardian output fails the attempt instead of aborting the loop.
+            return ValidationResult(
+                False, reason="Guardian output could not be parsed", error=exc
+            )
         return ValidationResult(
             score < threshold,
             reason=f"Guardian flagged harm at or above threshold {threshold}",
@@ -355,18 +363,31 @@ def harm_check(threshold: float = 0.5) -> Requirement:
 
 result = session.instruct(
     "Reply to this customer complaint.",
-    requirements=[harm_check()],
+    requirements=[harm_check(threshold=0.5)],
     strategy=RepairTemplateStrategy(loop_budget=2),
+    return_sampling_results=True,
 )
+print(f"Passed: {result.success}")
+print(result.result)
 ```
 
 `check_only=True` keeps the description out of the generation prompt, leaving the
 judgement to Guardian. Pass the same `LocalHFBackend` instance to every check rather
-than reloading the adapter for each one.
+than reloading the adapter for each one. `return_sampling_results=True` returns a
+`SamplingResult`, whose `success` says whether the check passed; without it,
+`instruct` returns the output alone.
+
+`guardian_check()` raises `ValueError` or `AdapterSchemaMismatchError` when the
+adapter's output cannot be parsed, and `Requirement.validate` does not catch
+exceptions from a `validation_fn`. Catching them inside the wrapper keeps the check
+fail-closed, as the removed `GuardianCheck` was: a bad parse counts as a failed attempt
+rather than ending the `instruct` call.
 
 Keep the `reason` low-cardinality: it becomes a metric attribute, so a per-request
 value such as the raw score would create a new time series on nearly every failure.
-Log or print the score separately, as the example does.
+Log or print the score separately, as
+[`repair_with_guardian.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/safety/repair_with_guardian.py)
+does; the snippet above is that example's wrapper without the score logging.
 
 Under greedy decoding a constant reason makes the retry after the first repair
 identical to the attempt before it, so a `loop_budget` above 2 only buys another
@@ -379,9 +400,6 @@ carries the `reason`, so failures from two such checks are told apart by reason 
 To give a check its own label on both counters, subclass `Requirement` (for example
 `class HarmCheck(Requirement): ...`).
 See [Observability and metrics](../observability/metrics.md).
-
-Guardian returns a score and no reasoning text, so repair feedback names the criteria
-and threshold rather than explaining what was wrong.
 
 > **Migrating from `GuardianCheck` / `GuardianRisk`?** Both are gone. Pass the old
 > `GuardianRisk` value lower-cased as `criteria` (`HARM` becomes `"harm"`,
