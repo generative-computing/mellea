@@ -509,7 +509,7 @@ class TestFromHub:
         hf_error = error_cls("denied", response=_FakeResponse())
 
         with patch("huggingface_hub.snapshot_download", side_effect=hf_error):
-            with pytest.raises(PermissionError, match="huggingface-cli login") as exc:
+            with pytest.raises(PermissionError, match="hf auth login") as exc:
                 _embedded_adapters_from_hub("ibm-granite/private-switch")
 
         # Original HF error is chained for debugging.
@@ -532,7 +532,7 @@ class TestFromHub:
                 _embedded_adapters_from_hub("ibm-granite/some-switch")
 
         # Not the raw cache-path error, and auth is offered as a possibility.
-        assert "huggingface-cli login" in str(exc.value)
+        assert "hf auth login" in str(exc.value)
         # The original cryptic error is chained for debugging.
         assert isinstance(exc.value.__cause__, FileNotFoundError)
 

@@ -729,7 +729,7 @@ def _embedded_adapters_from_hub(
         auth_hint = (
             f"Could not access '{repo_id}' on Hugging Face Hub. If this is a "
             "private or gated repository, authenticate first (run "
-            "`huggingface-cli login` or set the HF_TOKEN environment variable) "
+            "`hf auth login` or set the HF_TOKEN environment variable) "
             "and confirm your account has been granted access to the repository. "
             "Otherwise, the repository ID may be misspelled."
         )
@@ -807,7 +807,7 @@ def _embedded_adapters_from_hub(
             f"'{repo_id}'. Verify it is a Granite Switch model and that the "
             f"revision '{revision}' is correct; if the repository is private "
             "or gated, confirm you are authenticated (run "
-            "`huggingface-cli login` or set the HF_TOKEN environment variable)."
+            "`hf auth login` or set the HF_TOKEN environment variable)."
         ) from e
     except ValueError as e:
         if intrinsic_name is not None:

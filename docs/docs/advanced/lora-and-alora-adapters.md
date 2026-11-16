@@ -97,14 +97,14 @@ must contain `{"invocation_prompt": "..."}`.
 ## Upload to Hugging Face
 
 ```bash
-huggingface-cli login  # one-time setup
+hf auth login  # one-time setup (or set HF_TOKEN)
 
 m alora upload ./checkpoints/my_adapter \
   --name your-org/my-adapter
 ```
 
 This creates the Hugging Face repository if it does not exist and uploads the adapter
-weights. Requires `HF_TOKEN` set or a prior `huggingface-cli login`.
+weights. Requires `HF_TOKEN` set or a prior `hf auth login`.
 
 > **Warning:** Before uploading to a public repository, review whether your training
 > data includes proprietary, confidential, or personal information. Language models can
