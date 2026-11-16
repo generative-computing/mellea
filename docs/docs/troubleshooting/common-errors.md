@@ -248,16 +248,6 @@ except ValueError:
 
 See [Safety Guardrails](../how-to/safety-guardrails.md) for the full contract.
 
-### Deprecated `GuardianCheck` warnings
-
-```text
-DeprecationWarning: GuardianCheck is deprecated as of version 0.4.
-Use the Guardian adapter functions instead
-```
-
-Replace `GuardianCheck` / `GuardianRisk` imports with the Guardian adapter functions API.
-See [Safety Guardrails](../how-to/safety-guardrails.md) for migration guidance.
-
 ---
 
 ## Getting more help
