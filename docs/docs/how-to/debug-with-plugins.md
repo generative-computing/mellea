@@ -206,7 +206,7 @@ This reveals the complete flow:
 
 ## Example scripts
 
-Ready-to-run examples are available in `docs/examples/plugins/`:
+Ready-to-run examples are available in [`docs/examples/plugins/`](https://github.com/generative-computing/mellea/tree/main/docs/examples/plugins):
 
 | Script                            | Plugins                    | Purpose                             |
 | --------------------------------- | -------------------------- | ----------------------------------- |

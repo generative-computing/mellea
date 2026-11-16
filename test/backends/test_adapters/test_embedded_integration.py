@@ -11,6 +11,7 @@ Switch model is required — see `test/backends/test_openai_intrinsics.py` for
 the GPU-backed e2e counterpart.
 """
 
+import dataclasses
 from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
 import pytest
@@ -19,7 +20,7 @@ from openai.types.chat.chat_completion import Choice
 from openai.types.completion_usage import CompletionUsage
 
 from mellea.backends.adapters import EmbeddedBinding, ServerMediatedBinding
-from mellea.backends.adapters.adapter import EmbeddedIntrinsicAdapter
+from mellea.backends.adapters.adapter import _embedded_adapter_from_entry
 from mellea.backends.openai import OpenAIBackend
 from mellea.formatters.granite import IntrinsicsResultProcessor
 from mellea.plugins.types import HookType
@@ -63,9 +64,10 @@ def _backend_with_adapter(technology: str) -> OpenAIBackend:
         base_url="http://localhost:9999/v1",
     )
     backend.add_adapter(
-        EmbeddedIntrinsicAdapter(
-            intrinsic_name="answerability", config=_SIMPLE_CONFIG, technology=technology
-        )
+        _embedded_adapter_from_entry(
+            intrinsic_name="answerability", technology=technology
+        ),
+        config=_SIMPLE_CONFIG,
     )
     return backend
 
@@ -299,16 +301,55 @@ async def test_invocation_complete_fires_error_on_empty_choices():
 
 
 async def test_reassigned_weights_fail_loudly():
-    """Reassigning `.weights` off the EmbeddedBinding must fail at generation.
+    """Reassigning `.weights` off the EmbeddedBinding must be impossible.
 
-    The shim permits attribute mutation, so a caller reassigning `.weights`
-    after construction must hit the explicit TypeError rather than silently
-    skipping activation and sending an unactivated request (issue #1142).
+    The composed `Adapter` is a frozen dataclass, so a caller cannot swap
+    `.weights` after construction to send an unactivated request — the
+    assignment itself raises rather than silently skipping activation
+    (issue #1142). This is the composed-Adapter guarantee that replaces the
+    deprecated shim's mutable-attribute-then-fail-at-generation path.
     """
     backend = _backend_with_adapter("alora")
     adapter = backend._added_adapters["answerability_alora"]
-    adapter.weights = ServerMediatedBinding()
 
-    ctx = ChatContext().add(Message("user", "What is the square root of 4?"))
-    with pytest.raises(TypeError, match=r"weights must be an EmbeddedBinding"):
-        await mfuncs.aact(Intrinsic("answerability"), ctx, backend, strategy=None)
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        adapter.weights = ServerMediatedBinding()
+
+    # The registered adapter still activates correctly — nothing was mutated.
+    assert isinstance(adapter.weights, EmbeddedBinding)
+
+
+async def test_mismatched_weights_fail_loudly_at_activation():
+    """A non-`EmbeddedBinding` `.weights` must raise `TypeError` at activation.
+
+    The frozen `Adapter` plus `add_adapter`'s own `EmbeddedBinding` check make
+    this hard to reach in normal use, but the generation-path guard
+    (`openai.py`) is defense-in-depth for a wrongly-constructed adapter whose
+    `.weights` is some other binding: it must raise loudly rather than silently
+    send an unactivated request. Regression guard: the rewrite left only the
+    frozen-dataclass `FrozenInstanceError` test, dropping coverage of this
+    guard (PR #1700). `object.__setattr__` forces the mismatch past the frozen
+    dataclass to stand in for that wrongly-constructed adapter.
+    """
+    backend = _backend_with_adapter("alora")
+    adapter = backend._added_adapters["answerability_alora"]
+    object.__setattr__(adapter, "weights", ServerMediatedBinding())
+
+    mock_create = AsyncMock(return_value=_chat_completion())
+    mock_client = MagicMock()
+    mock_client.chat.completions.create = mock_create
+
+    with patch.object(
+        OpenAIBackend,
+        "_async_client",
+        new_callable=PropertyMock,
+        return_value=mock_client,
+    ):
+        ctx = ChatContext().add(Message("user", "What is the square root of 4?"))
+        # The guard runs while `_generate_from_intrinsic` builds the request,
+        # so it raises during `aact` itself — before any request is dispatched.
+        with pytest.raises(TypeError, match="must be an EmbeddedBinding"):
+            await mfuncs.aact(Intrinsic("answerability"), ctx, backend, strategy=None)
+
+    # The guard fires before any request is sent.
+    mock_create.assert_not_called()

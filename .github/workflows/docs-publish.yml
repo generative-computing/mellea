@@ -14,12 +14,6 @@ on:
       - "tooling/docs-autogen/**"
       - ".github/workflows/docs-publish.yml"
 
-  # Fires for manually-created GitHub Releases only. Automated releases use
-  # GITHUB_TOKEN, which cannot trigger new workflow runs — those are handled
-  # by an explicit workflow_dispatch from the snapshot-docs job instead.
-  release:
-    types: [published]
-
   pull_request:
     types: [opened, synchronize, reopened, labeled]
     paths:
@@ -28,18 +22,6 @@ on:
       - "cli/**"
       - "tooling/docs-autogen/**"
       - ".github/workflows/docs-publish.yml"
-
-  workflow_dispatch:
-    inputs:
-      force_publish:
-        description: "Deploy even from a non-main context (for testing)"
-        type: boolean
-        default: false
-      release_tag:
-        description: >-
-          Set to a release tag (e.g. v0.6.0) to run the deploy-on-release flow.
-        type: string
-        default: ""
 
 permissions: {}
 
@@ -199,11 +181,7 @@ jobs:
       contents: write
     timeout-minutes: 10
 
-    # Deploy on: push to main, release event, force_publish via dispatch
-    if: >-
-      github.event_name == 'push' ||
-      github.event_name == 'release' ||
-      (github.event_name == 'workflow_dispatch' && (inputs.force_publish || inputs.release_tag != ''))
+    if: github.event_name == 'push'
 
     steps:
       - name: Download site artifact
@@ -212,57 +190,7 @@ jobs:
           name: docs-site
           path: docs-site/
 
-      # For release events, confirm the published tag is the latest final by semver.
-      - name: Check release is latest final
-        id: latest_check
-        continue-on-error: true
-        if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CURRENT_TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
-          REPO: ${{ github.repository }}
-        run: |
-          python3 - <<'PY'
-          import json, os, subprocess, sys
-          from packaging.version import Version, InvalidVersion
-
-          current = os.environ["CURRENT_TAG"]
-          repo = os.environ["REPO"]
-          raw = subprocess.check_output(
-              ["gh", "api", f"repos/{repo}/releases", "--paginate",
-               "--jq", ".[] | select(.prerelease==false and .draft==false) | .tag_name"],
-              text=True,
-          )
-          candidates = []
-          for line in raw.splitlines():
-              t = line.strip()
-              if not t:
-                  continue
-              try:
-                  candidates.append((Version(t.lstrip("v")), t))
-              except InvalidVersion:
-                  continue
-
-          try:
-              current_version = Version(current.lstrip("v"))
-          except InvalidVersion:
-              print(f"error: current tag {current} is not a valid version")
-              sys.exit(1)
-
-          candidates.append((current_version, current))
-          latest_version, latest_tag = max(candidates)
-          is_latest = (latest_tag == current or latest_version == current_version)
-          out = os.environ["GITHUB_OUTPUT"]
-          with open(out, "a") as fh:
-              fh.write(f"is_latest_final={'true' if is_latest else 'false'}\n")
-              fh.write(f"latest_tag={latest_tag}\n")
-          print(f"current={current} latest={latest_tag} is_latest={is_latest}")
-          PY
-
       - name: Deploy to GitHub Pages (gh-pages branch)
-        if: >-
-          steps.latest_check.conclusion == 'skipped' ||
-          steps.latest_check.outputs.is_latest_final != 'false'
         uses: peaceiris/actions-gh-pages@4f9cc6602d3f66b9c108549d475ec49e8ef4d45e # v4.0.0
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}

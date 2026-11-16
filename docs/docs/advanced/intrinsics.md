@@ -30,8 +30,8 @@ capability stays available — see [Prompt fallback](#prompt-fallback).
 >   llama-server with `load_embedded_adapters=True`. Only adapter functions
 >   embedded in the model are available — check the model's
 >   `adapter_index.json` for the list. See
->   [Granite Switch on llama-server](#granite-switch-on-llama-server) and the
->   [Granite Switch examples](https://github.com/generative-computing/mellea/tree/main/docs/examples/granite-switch).
+>   [Granite Switch on llama-server](#granite-switch-on-llama-server) and
+>   [`docs/examples/granite-switch/README.md`](https://github.com/generative-computing/mellea/blob/main/docs/examples/granite-switch/README.md)
 > - **OllamaModelBackend** — uses an Ollama model that bundles the adapter.
 >   Ollama bundles one adapter per model, so pass
 >   `adapter_models={"uncertainty": "<tag>", ...}` to route each adapter function
@@ -156,8 +156,9 @@ model packaging exposes one adapter per tag, so calls across those tags do not
 share a KV cache. Use a Granite Switch checkpoint when multi-adapter,
 single-model serving is important.
 
-See `docs/examples/intrinsics/uncertainty_ollama.py` for the complete
-executable example.
+See
+[`docs/examples/intrinsics/uncertainty_ollama.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/intrinsics/uncertainty_ollama.py)
+for the complete executable example.
 
 ## Granite Switch on llama-server
 
@@ -709,11 +710,12 @@ weights binding into a single, inspectable object. Both `LocalHFBackend` and
 `OpenAIBackend` accept a composed `Adapter` directly via `add_adapter` —
 dispatching on the weights binding's reality (`LocalFileBinding` for
 LocalFile/PEFT, `EmbeddedBinding` for Embedded/Granite Switch, `PromptBinding`
-for a weightless prompt fallback) — alongside the deprecated shim classes,
-which remain functional for now (Epic #929, issue #1144). An `EmbeddedBinding`
-adapter additionally requires `add_adapter`'s `config=` argument (the raw
-io.yaml mapping) — `add_adapter` raises `ValueError` without it, since that
-reality's config cannot be cheaply re-derived later; see below.
+for a weightless prompt fallback). The composed `Adapter` is now the only
+registration path — the earlier shim classes have been removed (Epic #929,
+issue #1144). An `EmbeddedBinding` adapter additionally requires
+`add_adapter`'s `config=` argument (the raw io.yaml mapping) — `add_adapter`
+raises `ValueError` without it, since that reality's config cannot be cheaply
+re-derived later; see below.
 
 Each weights binding models how its deployment turns an adapter on.
 `LocalFileBinding` downloads and loads LoRA/aLoRA weights, so it exposes a

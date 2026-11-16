@@ -6,7 +6,7 @@
 Creates the target repository if it does not already exist and pushes the entire
 adapter weights directory (output of `save_pretrained`) to the repository root.
 Requires an authenticated Hugging Face token set via the `HF_TOKEN` environment
-variable or `huggingface-cli login`.
+variable or `hf auth login`.
 """
 
 import os

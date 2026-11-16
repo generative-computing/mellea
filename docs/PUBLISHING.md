@@ -45,9 +45,7 @@ overwritten without warning on the next pipeline run.
 | Trigger | Build | Deploy |
 | ------- | ----- | ------ |
 | Push to `main` (docs/source paths) | ✅ | ✅ |
-| GitHub release published | ✅ | ✅ (latest final only) |
 | Pull request (docs/source paths) | ✅ (validate only) | ❌ |
-| `workflow_dispatch` with `force_publish: true` | ✅ | ✅ |
 
 PRs run the full build and validation pipeline — markdownlint, docstring
 quality gate, Docusaurus build — but do **not** deploy. This surfaces
@@ -88,9 +86,7 @@ The `docs-publish.yml` workflow (`Docs` in GitHub Actions) runs these steps:
    internal links and anchors are hard failures.
 
 5. **Deploy** — `peaceiris/actions-gh-pages` force-pushes the built site
-   to `gh-pages`. For release events, a `latest_check` step first confirms
-   the release is the highest final semver — a backported patch to an old
-   minor cannot overwrite the production site.
+   to `gh-pages`.
 
 ## Docs versioning
 
@@ -99,18 +95,18 @@ Docusaurus versioning is integrated into the release pipeline:
 - **Pre-release / dev builds:** the site shows `Next` as the only version
   — there are no snapshots yet.
 - **On each final release** (`publish-release.yml` with `bump_type: final`
-  or `patch-final`): the `snapshot-docs` job runs
-  `docusaurus docs:version X.Y.Z`, commits `versioned_docs/version-X.Y.Z/`
-  to `main`, and explicitly dispatches `docs-publish.yml` via
-  `workflow_dispatch`. (A `GITHUB_TOKEN` push cannot trigger a new workflow
-  run, so the dispatch is explicit rather than relying on a path filter.)
+  or `patch-final`): the `snapshot-docs` job checks out the release tag and
+  runs `.github/scripts/snapshot_docs.sh`, which generates the API/CLI
+  reference, runs `docusaurus docs:version X.Y.Z` against the release tree,
+  and opens a `chore/docs-snapshot-X.Y.Z` sync PR to `main` with the new
+  `versioned_docs/version-X.Y.Z/`. Merging that PR deploys the site.
 - **Version dropdown** in the navbar lets users switch between released
   versions and `Next`.
 
-No manual bootstrap is needed — the first final release run triggers
-`snapshot-docs` automatically, which creates the initial snapshot and
-updates `lastVersion`. Until the first final release, the site shows only
-`Next` in the version dropdown, which is correct.
+The sync PR adds the version to `docs/versions.json`, and sets it as
+`lastVersion` (the site default) only when it is the newest final release.
+Until the first final release, the site shows only `Next` in the version
+dropdown, which is correct.
 
 ## Local development
 
@@ -154,23 +150,11 @@ PR branches run the full build-and-validate job automatically. The
 Docusaurus build enforces broken-link detection (`onBrokenLinks: 'throw'`),
 so any broken internal link or anchor surfaces in CI before merge.
 
-To preview the deployed site from a non-main branch:
-
-1. Go to **Actions → Docs → Run workflow**.
-2. Select your feature branch.
-3. Check **"Deploy even from a non-main context"** (`force_publish: true`).
-4. Click **Run workflow**.
-
-> **Fork PRs:** the deploy step requires write access to the upstream repo.
-> PRs from forks build and validate successfully, but the deploy will fail
-> with a permission error. Push the branch to the upstream repo and use
-> manual dispatch instead.
-
 ### Previewing from your own fork
 
 To get a live preview site from your fork (useful for reviewing visual changes before submitting a PR):
 
-1. **Push your branch** to your fork. The `docs-publish.yml` workflow runs automatically and deploys to the `gh-pages` branch on your fork, creating it if it doesn't exist.
+1. **Push your branch to your fork's `main`**. The `docs-publish.yml` workflow runs automatically and deploys to the `gh-pages` branch on your fork, creating it if it doesn't exist.
 2. **Enable GitHub Pages** on your fork: Settings → Pages → Source: `gh-pages` branch, root `/`.
 3. Your preview is live at `https://<your-username>.github.io/mellea/`.
 
@@ -180,6 +164,7 @@ To get a live preview site from your fork (useful for reviewing visual changes b
 | --- | --- |
 | `.github/workflows/docs-publish.yml` | CI/CD workflow (build, validate, deploy) |
 | `.github/workflows/publish-release.yml` | Release pipeline — includes `snapshot-docs` job |
+| `.github/scripts/snapshot_docs.sh` | Builds a release's docs snapshot and opens the sync PR to `main` |
 | `.github/scripts/set-last-version.mjs` | Updates `lastVersion` in `docusaurus.config.ts` on release |
 | `tooling/docs-autogen/build.py` | Unified build wrapper |
 | `tooling/docs-autogen/generate-ast.py` | MDX generation + frontmatter update |

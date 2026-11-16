@@ -52,7 +52,7 @@ m alora train \
 ## Upload Models
 
 If model training succeeds, you will need to upload your model as an adapter function.
-Uploading requires a Hugging Face account; run `huggingface-cli login` first.
+Uploading requires a Hugging Face account; set `HF_TOKEN` or run `hf auth login` first.
 
 ```bash
 # WARNING: running this command will upload your model weights to huggingface.co !!!
