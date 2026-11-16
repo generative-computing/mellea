@@ -4,6 +4,9 @@
 """Unit tests for sampling/base.py static repair() logic — no backend required."""
 
 import asyncio
+import subprocess
+import sys
+import textwrap
 from unittest.mock import Mock
 
 import pytest
@@ -18,8 +21,9 @@ from mellea.core import (
     Requirement,
     ValidationResult,
 )
+from mellea.stdlib import functional as mfuncs
 from mellea.stdlib.components import Instruction, Message
-from mellea.stdlib.context import ChatContext
+from mellea.stdlib.context import ChatContext, SimpleContext
 from mellea.stdlib.sampling import MultiTurnStrategy, RejectionSamplingStrategy
 from mellea.stdlib.sampling.base import (
     BaseSamplingStrategy,
@@ -765,6 +769,270 @@ async def test_sampling_over_cblock_action_failing_requirement_does_not_raise(
     assert result.success is False
     # Even on the failure path, parsed_repr falls back to the raw model value.
     assert result.result.parsed_repr == "mocked"
+
+
+# --- MultiTurnStrategy requires ChatContext up front (#1841) ---
+
+
+def _counting_backend() -> Mock:
+    """Backend that counts generate_from_context calls and echoes the context."""
+    backend = Mock()
+    backend.calls = 0
+
+    async def mock_generate(*args, **kwargs):
+        backend.calls += 1
+        action = args[0] if args else kwargs["action"]
+        output = ModelOutputThunk("mocked")
+        output._generate_log = GenerateLog()
+        return output, kwargs["ctx"].add(action).add(output)
+
+    backend.generate_from_context = mock_generate
+    return backend
+
+
+_ALWAYS_FAIL = Requirement(
+    "always_fail",
+    validation_fn=lambda _ctx: ValidationResult(result=False, reason="nope"),
+)
+
+
+async def test_multi_turn_simple_context_raises_before_any_generation():
+    backend = _counting_backend()
+    with pytest.raises(TypeError, match="ChatContext"):
+        await MultiTurnStrategy(loop_budget=3).sample(
+            Instruction(description="x"),
+            context=SimpleContext(),
+            backend=backend,
+            requirements=[_ALWAYS_FAIL],
+        )
+    assert backend.calls == 0
+
+
+async def test_multi_turn_error_message_shows_how_to_configure():
+    with pytest.raises(TypeError) as exc_info:
+        await MultiTurnStrategy(loop_budget=2).sample(
+            Instruction(description="x"),
+            context=SimpleContext(),
+            backend=_counting_backend(),
+            requirements=[_ALWAYS_FAIL],
+        )
+    message = str(exc_info.value)
+    assert "MultiTurnStrategy" in message
+    assert "SimpleContext" in message
+    assert "ChatContext()" in message
+    assert "loop_budget=1" in message
+
+
+async def test_multi_turn_simple_context_raises_through_aact():
+    backend = _counting_backend()
+    with pytest.raises(TypeError, match="ChatContext"):
+        await mfuncs.aact(
+            Instruction(description="x"),
+            SimpleContext(),
+            backend,
+            requirements=[_ALWAYS_FAIL],
+            strategy=MultiTurnStrategy(loop_budget=3),
+            return_sampling_results=True,
+        )
+    assert backend.calls == 0
+
+
+def test_multi_turn_simple_context_raises_through_sync_act():
+    backend = _counting_backend()
+    with pytest.raises(TypeError, match="ChatContext"):
+        mfuncs.act(
+            Instruction(description="x"),
+            SimpleContext(),
+            backend,
+            requirements=[_ALWAYS_FAIL],
+            strategy=MultiTurnStrategy(loop_budget=3),
+            return_sampling_results=True,
+        )
+    assert backend.calls == 0
+
+
+async def test_multi_turn_concurrency_raises_once_and_leaks_no_tasks():
+    backend = _counting_backend()
+    with pytest.raises(TypeError, match="ChatContext"):
+        await MultiTurnStrategy(loop_budget=3, concurrency_budget=3).sample(
+            Instruction(description="x"),
+            context=SimpleContext(),
+            backend=backend,
+            requirements=[_ALWAYS_FAIL],
+        )
+    assert backend.calls == 0
+    await asyncio.sleep(0)
+    # Unrelated tasks (e.g. fire-and-forget plugin hooks) may exist; only the
+    # sampling producer tasks matter here.
+    leaked = [t for t in asyncio.all_tasks() if "_producer" in repr(t.get_coro())]
+    assert leaked == []
+
+
+async def test_multi_turn_loop_budget_one_does_not_need_chat_context():
+    backend = _counting_backend()
+    result = await MultiTurnStrategy(loop_budget=1).sample(
+        Instruction(description="x"),
+        context=SimpleContext(),
+        backend=backend,
+        requirements=[_ALWAYS_FAIL],
+    )
+    assert result.success is False
+    assert len(result.sample_generations) == 1
+    assert backend.calls == 1
+
+
+async def test_multi_turn_chat_context_runs_full_repair_loop():
+    backend = _counting_backend()
+    result = await MultiTurnStrategy(loop_budget=3).sample(
+        Instruction(description="x"),
+        context=ChatContext(),
+        backend=backend,
+        requirements=[_ALWAYS_FAIL],
+    )
+    assert len(result.sample_generations) == 3
+    assert backend.calls == 3
+    repair_action = result.sample_actions[1]
+    assert isinstance(repair_action, Message)
+    assert "nope" in repair_action.content
+
+
+async def test_multi_turn_accepts_chat_context_subclass():
+    class MyChatContext(ChatContext):
+        pass
+
+    backend = _counting_backend()
+    result = await MultiTurnStrategy(loop_budget=2).sample(
+        Instruction(description="x"),
+        context=MyChatContext(),
+        backend=backend,
+        requirements=[_ALWAYS_FAIL],
+    )
+    assert backend.calls == 2
+    assert len(result.sample_generations) == 2
+
+
+@pytest.mark.parametrize(
+    "strategy_cls", [RejectionSamplingStrategy, RepairTemplateStrategy]
+)
+async def test_other_strategies_still_accept_simple_context(strategy_cls):
+    backend = _counting_backend()
+    result = await strategy_cls(loop_budget=3).sample(
+        Instruction(description="x"),
+        context=SimpleContext(),
+        backend=backend,
+        requirements=[_ALWAYS_FAIL],
+    )
+    assert len(result.sample_generations) == 3
+    assert backend.calls == 3
+
+
+async def test_multi_turn_subclass_delegating_to_parent_repair_also_raises():
+    class DelegatingStrategy(MultiTurnStrategy):
+        @staticmethod
+        def repair(old_ctx, new_ctx, past_actions, past_results, past_val):
+            return MultiTurnStrategy.repair(
+                old_ctx, new_ctx, past_actions, past_results, past_val
+            )
+
+    backend = _counting_backend()
+    with pytest.raises(TypeError, match="ChatContext"):
+        await DelegatingStrategy(loop_budget=3).sample(
+            Instruction(description="x"),
+            context=SimpleContext(),
+            backend=backend,
+            requirements=[_ALWAYS_FAIL],
+        )
+    assert backend.calls == 0
+
+
+def test_multi_turn_still_raises_under_python_O():
+    """The check must not be an `assert`, which `python -O` strips."""
+    code = textwrap.dedent(
+        """
+        import asyncio
+        from unittest.mock import Mock
+        from mellea.core import Requirement, ValidationResult
+        from mellea.stdlib.components import Instruction
+        from mellea.stdlib.context import SimpleContext
+        from mellea.stdlib.sampling import MultiTurnStrategy
+
+        backend = Mock()
+        req = Requirement("r", validation_fn=lambda _c: ValidationResult(result=False))
+
+        async def main():
+            try:
+                await MultiTurnStrategy(loop_budget=3).sample(
+                    Instruction(description="x"), context=SimpleContext(),
+                    backend=backend, requirements=[req],
+                )
+            except TypeError as e:
+                print("TYPEERROR", "ChatContext" in str(e), backend.generate_from_context.called)
+
+        asyncio.run(main())
+        """
+    )
+    out = subprocess.run(
+        [sys.executable, "-O", "-c", code], capture_output=True, text=True, check=False
+    )
+    assert "TYPEERROR True False" in out.stdout, out.stdout + out.stderr
+
+
+# The loop-start hook may change the budget, so the check must use the
+# effective budget, not the configured one.
+
+
+@pytest.fixture
+async def _plugin_reset():
+    pytest.importorskip("cpex.framework")
+    from mellea.plugins.manager import shutdown_plugins
+
+    await shutdown_plugins()
+    yield
+    await shutdown_plugins()
+
+
+async def test_multi_turn_check_uses_hook_raised_budget(_plugin_reset):
+    from mellea.plugins import PluginResult, hook, register
+
+    @hook("sampling_loop_start")
+    async def raise_budget(payload, ctx):
+        return PluginResult(
+            continue_processing=True,
+            modified_payload=payload.model_copy(update={"loop_budget": 3}),
+        )
+
+    register(raise_budget)
+    backend = _counting_backend()
+    with pytest.raises(TypeError, match="ChatContext"):
+        await MultiTurnStrategy(loop_budget=1).sample(
+            Instruction(description="x"),
+            context=SimpleContext(),
+            backend=backend,
+            requirements=[_ALWAYS_FAIL],
+        )
+    assert backend.calls == 0
+
+
+async def test_multi_turn_check_uses_hook_lowered_budget(_plugin_reset):
+    from mellea.plugins import PluginResult, hook, register
+
+    @hook("sampling_loop_start")
+    async def lower_budget(payload, ctx):
+        return PluginResult(
+            continue_processing=True,
+            modified_payload=payload.model_copy(update={"loop_budget": 1}),
+        )
+
+    register(lower_budget)
+    backend = _counting_backend()
+    result = await MultiTurnStrategy(loop_budget=3).sample(
+        Instruction(description="x"),
+        context=SimpleContext(),
+        backend=backend,
+        requirements=[_ALWAYS_FAIL],
+    )
+    assert len(result.sample_generations) == 1
+    assert backend.calls == 1
 
 
 if __name__ == "__main__":

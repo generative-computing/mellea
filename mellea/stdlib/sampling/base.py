@@ -12,9 +12,10 @@ Sampling strategies control how Mellea handles validation failures during genera
   feedback. Adds failure reasons to the instruction and retries. Best for simple tasks where
   feedback can be incorporated into the instruction.
 
-- **MultiTurnStrategy**: Multi-turn conversational repair (requires ChatContext). Adds validation
-  failure reasons as new user messages in the conversation, allowing iterative improvement through
-  dialogue. Best for complex tasks and agentic workflows.
+- **MultiTurnStrategy**: Multi-turn conversational repair (requires ChatContext; a `TypeError`
+  is raised before generation if more than one attempt is allowed and the context is not a
+  ChatContext). Adds validation failure reasons as new user messages in the conversation, allowing
+  iterative improvement through dialogue. Best for complex tasks and agentic workflows.
 """
 
 import abc
@@ -741,6 +742,53 @@ class RepairTemplateStrategy(BaseSamplingStrategy):
 
 class MultiTurnStrategy(BaseSamplingStrategy):
     """Rejection sampling strategy with (agentic) multi-turn repair."""
+
+    async def _sample(
+        self,
+        action: Component[S] | CBlock | ModelOutputThunk,
+        context: Context,
+        backend: Backend,
+        requirements: list[Requirement],
+        *,
+        effective_loop_budget: int,
+        **kwargs: Any,
+    ) -> SamplingResult[S]:
+        """Fail fast if a repair turn can happen but `context` is not a `ChatContext`.
+
+        Without this check, the `ChatContext` assertion in `repair` fires after the
+        first attempt, inside a concurrent subsample, where it is logged and the loop
+        silently ends early.
+
+        Args:
+            action: The action object to be sampled.
+            context: The context to be passed to the sampling strategy.
+            backend: The backend used for generating samples.
+            requirements: Merged and deduplicated list of requirements.
+            effective_loop_budget: The loop budget after hook modification (always >= 1).
+            **kwargs: Remaining arguments, forwarded unchanged to the base implementation.
+
+        Returns:
+            The `SamplingResult` produced by `BaseSamplingStrategy._sample`.
+
+        Raises:
+            TypeError: If `effective_loop_budget` is greater than 1 and `context` is
+                not a `ChatContext`.
+        """
+        if effective_loop_budget > 1 and not isinstance(context, ChatContext):
+            raise TypeError(
+                f"{type(self).__name__} needs a ChatContext to repair across turns, "
+                f"but got {type(context).__name__}. Create the session with a chat "
+                "context, e.g. `MelleaSession(backend, ChatContext())` or "
+                "`start_session(ctx=ChatContext())`, or use `loop_budget=1`."
+            )
+        return await super()._sample(
+            action,
+            context,
+            backend,
+            requirements,
+            effective_loop_budget=effective_loop_budget,
+            **kwargs,
+        )
 
     @staticmethod
     def select_from_failure(
