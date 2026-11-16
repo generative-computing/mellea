@@ -20,6 +20,7 @@ import yaml
 
 from mellea.backends.adapters._core import Adapter, EmbeddedBinding
 from mellea.backends.adapters.adapter import (
+    _embedded_adapter_from_entry,
     _embedded_adapters_from_hub,
     _embedded_adapters_from_model_directory,
     _embedded_adapters_from_source,
@@ -148,6 +149,16 @@ def _write_mixed_model_dir(root: pathlib.Path) -> pathlib.Path:
 
 
 class TestProbeSlots:
+    def test_probe_technology_registers_as_lora(self):
+        adapter = _embedded_adapter_from_entry("answerability_probe", "probe")
+        assert adapter.identity.name == "answerability_probe"
+        assert adapter.identity.adapter_type == "lora"
+        assert isinstance(adapter.weights, EmbeddedBinding)
+
+    def test_invalid_technology_raises(self):
+        with pytest.raises(ValueError, match="technology must be one of"):
+            _embedded_adapter_from_entry("test", "qlora")
+
     def test_probe_and_lora_load_and_unknown_technology_is_skipped(
         self, tmp_path, caplog
     ):
