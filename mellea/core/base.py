@@ -1213,7 +1213,12 @@ class ModelOutputThunk(Generic[S]):
 
     @property
     def parsed_repr(self) -> S | None:
-        """The parsed output, or `None` if not yet parsed or parsed to `None`."""
+        """The parsed output, or `None` if not yet parsed or parsed to `None`.
+
+        A thunk constructed with a value is computed from the start but stays
+        unparsed, so this reads `None`, until `parsed_repr` is assigned (even to
+        `None`). A computed thunk is therefore not necessarily parsed.
+        """
         return self._parsed_repr
 
     @parsed_repr.setter

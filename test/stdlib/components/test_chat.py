@@ -756,7 +756,7 @@ def test_as_generic_chat_history_with_unparsed_mot():
 
 
 def test_as_generic_chat_history_with_parsed_to_none_mot():
-    """A thunk that parsed to `None` renders as its raw value, like an unparsed one."""
+    """A thunk that parsed to `None` renders as an empty assistant message, not its raw value."""
     ctx = ChatContext()
     ctx = ctx.add(Message("user", "hello"))
     mot = ModelOutputThunk(value="raw output")
@@ -765,11 +765,20 @@ def test_as_generic_chat_history_with_parsed_to_none_mot():
     history = as_generic_chat_history(ctx)
     assert len(history) == 2
     assert history[1].role == "assistant"
-    assert history[1].content == "raw output"
+    assert history[1].content == ""
 
 
-def test_chat_formatter_renders_parsed_to_none_mot_with_value():
-    """A thunk that parsed to `None` renders as its raw value in `to_chat_messages`."""
+def test_as_generic_chat_history_unparsed_and_parsed_to_none_differ():
+    """Never-parsed renders the raw value; parsed-to-`None` renders empty."""
+    unparsed = ModelOutputThunk(value="raw output")
+    parsed_none = ModelOutputThunk(value="raw output")
+    parsed_none.parsed_repr = None
+    history = as_generic_chat_history(ChatContext().add(unparsed).add(parsed_none))
+    assert [m.content for m in history] == ["raw output", ""]
+
+
+def test_chat_formatter_renders_parsed_to_none_mot_as_empty_message():
+    """A thunk that parsed to `None` renders as an empty message in `to_chat_messages`."""
 
     # ChatFormatter is abstract (print()); to_chat_messages is what this test
     # exercises, so use a minimal concrete subclass that stubs print().
@@ -780,6 +789,18 @@ def test_chat_formatter_renders_parsed_to_none_mot_with_value():
     mot = ModelOutputThunk(value="raw output")
     mot.parsed_repr = None
     messages = _ChatFormatter().to_chat_messages([mot])
+    assert messages[0].role == "assistant"
+    assert messages[0].content == ""
+
+
+def test_chat_formatter_unparsed_mot_still_renders_raw_value():
+    """A never-parsed thunk keeps rendering as its raw value in `to_chat_messages`."""
+
+    class _ChatFormatter(ChatFormatter):
+        def print(self, c):
+            return ""
+
+    messages = _ChatFormatter().to_chat_messages([ModelOutputThunk(value="raw output")])
     assert messages[0].role == "assistant"
     assert messages[0].content == "raw output"
 

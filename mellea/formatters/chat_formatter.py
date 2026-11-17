@@ -46,8 +46,9 @@ class ChatFormatter(Formatter):
         returned from its `format_for_llm`, and a component with `role="tool"`
         may additionally declare `tool_call_id`/`tool_name`, which are carried
         onto the resulting `Message`. Image attachments and parsed structured
-        outputs are handled transparently. A `ModelOutputThunk` that parsed to
-        `None` (or was never parsed) renders as its raw model output string.
+        outputs are handled transparently. A `ModelOutputThunk` that was never
+        parsed renders as its raw model output string; one that parsed to `None`
+        renders as an empty assistant message.
 
         Args:
             cs (list[Span]): The linearized sequence of context
@@ -76,15 +77,18 @@ class ChatFormatter(Formatter):
                     c.value is not None
                 )  # This is already entailed by c.is_computed(); the line is included here to satisfy the type-checker.
 
-                if c.parsed_repr is not None:
-                    if isinstance(c.parsed_repr, Component):
-                        # Only use the parsed_repr if it's something that we know how to print.
-                        c = c.parsed_repr  # This might be a message.
-                    else:
-                        # Otherwise, explicitly stringify it.
-                        c = Message(role=role, content=str(c.parsed_repr))
-                else:
+                if not c._parsed:
+                    # Never parsed: fall back to the raw model output.
                     c = Message(role=role, content=c.value)  # type: ignore
+                elif c.parsed_repr is None:
+                    # Parsed to `None`: there is nothing to render, so emit an empty message.
+                    c = Message(role=role, content="")
+                elif isinstance(c.parsed_repr, Component):
+                    # Only use the parsed_repr if it's something that we know how to print.
+                    c = c.parsed_repr  # This might be a message.
+                else:
+                    # Otherwise, explicitly stringify it.
+                    c = Message(role=role, content=str(c.parsed_repr))
 
             match c:
                 case Message():
