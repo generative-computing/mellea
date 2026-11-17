@@ -4,7 +4,7 @@
 """Measurement harness for #1721: groundedness judgment prompts vs `hallucination_detection`.
 
 Runs one arm over the labelled set (`labelled_set.jsonl`) and writes one JSON
-line per (item, repeat), then compares two result files on the same items.
+line per (item, repeat), then compares the two arms on the same items and gives the verdict.
 
 Arms:
     prompts  `GroundednessRequirement.validate` as it ships (arm 1).
@@ -20,9 +20,10 @@ Usage (needs a GPU and the adapters; see README.md)::
     uv run python -m test.stdlib.requirements.groundedness_eval.harness run \\
         --arm adapter --model ibm-granite/granite-4.0-micro --repeats 3 \\
         --out results/adapter_strict.jsonl
+    # ... and the same two with --allow-partial-support, then per binding:
     uv run python -m test.stdlib.requirements.groundedness_eval.harness compare \\
-        results/prompts_strict.jsonl results/adapter_strict.jsonl \\
-        --margin 0.05 --max-hard-failure 0.02 --rule margin
+        --strict results/prompts_strict.jsonl results/adapter_strict.jsonl \\
+        --lenient results/prompts_lenient.jsonl results/adapter_lenient.jsonl
 
 The metric and comparison functions are pure and covered by unit tests; the
 `run` path is the only part that needs a model.
@@ -512,11 +513,12 @@ class ArmMetrics:
         n: Items scored.
         false_fails: Gold-pass items that did not pass (errored counts as a fail).
         n_gold_pass: Gold-pass items.
-        misses: Items with an invented claim that did not fail (errored counts
-            as a miss: an errored validation detected nothing).
+        misses: Items with an invented claim that did not fail. An errored
+            arm 2 row counts as a miss; an errored arm 1 row counts as a catch,
+            because `GroundednessRequirement` fails closed on an error.
         n_invented: Items with an invented claim.
         partial_misses: Strict mode only: items whose only problem is a
-            `partial` sentence that passed anyway.
+            `partial` sentence that passed anyway (errored rows as for misses).
         n_partial_only: Strict mode only: such items.
         hard_failures: Errored validations, over all repeats.
         hard_failures_by_type: `error_type` -> count, over all repeats.
@@ -592,6 +594,17 @@ def _adapters_used(outcomes: Iterable[Outcome]) -> list[dict]:
     ]
 
 
+def _caught(o: Outcome) -> bool:
+    """Whether a gold-fail item was blocked.
+
+    An errored arm 1 row is a catch: in production `GroundednessRequirement`
+    fails closed on an errored result, so the claim is blocked. An errored arm 2
+    row is not: the adapter verdict is what is being measured, and an error
+    there detected nothing.
+    """
+    return o.passed is False or (o.errored and o.arm == "prompts")
+
+
 def arm_metrics(items: Sequence[Item], outcomes: Sequence[Outcome]) -> ArmMetrics:
     """Compute the per-arm numbers for one arm, mode and binding.
 
@@ -616,7 +629,7 @@ def arm_metrics(items: Sequence[Item], outcomes: Sequence[Outcome]) -> ArmMetric
         item = by_id[item_id]
         expected = gold_verdict(item, lenient)
         passed = o.passed is True
-        wrong = o.errored or passed != expected
+        wrong = (not passed) if expected else not _caught(o)
         cat = by_cat.setdefault(item.category, [0, 0])
         cat[0] += int(wrong)
         cat[1] += 1
@@ -625,10 +638,10 @@ def arm_metrics(items: Sequence[Item], outcomes: Sequence[Outcome]) -> ArmMetric
             ff += int(not passed)
         if item.has_invented_claim:
             n_inv += 1
-            miss += int(o.passed is not False)
+            miss += int(not _caught(o))
         elif not expected:  # strict mode, only partial sentences are wrong
             n_ponly += 1
-            pmiss += int(o.passed is not False)
+            pmiss += int(not _caught(o))
         if o.labels is not None:
             for gold_s, pred in zip(item.sentences, o.labels):
                 label_use.setdefault(gold_s["label"], Counter())[str(pred)] += 1
@@ -813,69 +826,79 @@ def _check_inputs(
         raise ValueError(f"outcomes mix adapter revisions: {mixed}")
 
 
+# Pre-registered on #1721: extra items arm 2 may get wrong, over arm 1, per gated
+# check. Pools: 74 gold-pass items in strict mode, 34 with an invented claim, 20
+# partial-only. Lenient false fails (94 items) are reported, not gated.
+ALLOWANCES: dict[bool, dict[str, int]] = {
+    False: {"false_fail": 3, "miss": 1, "partial_miss": 1},
+    True: {"miss": 1},
+}
+MAX_HARD_FAILURE_ITEMS = 2
+
+
+def _verdict(over: int, hard_ok: bool) -> str:
+    """`go` with nothing over, `inconclusive` one item over, else `no-go`."""
+    if not hard_ok or over >= 2:
+        return "no-go"
+    return "inconclusive" if over == 1 else "go"
+
+
 def compare(
     items: Sequence[Item],
     first: Sequence[Outcome],
     second: Sequence[Outcome],
     *,
-    margin: float,
-    max_hard_failure: float,
-    rule: str = "margin",
+    max_hard_failure_items: int = MAX_HARD_FAILURE_ITEMS,
 ) -> dict:
-    """Apply the #1721 decision rule to arm 1 (`first`) and arm 2 (`second`).
+    """Apply the #1721 decision rule to arm 1 (`first`) and arm 2 (`second`) in one mode.
 
-    The gated errors are false fails and misses, plus, in strict mode only,
-    partial-only items that passed (`partial_miss`). In lenient mode those items
-    are gold-pass, so false fails already cover them.
+    Every check counts items on the primary repeat. A gated check passes when arm
+    2 gets at most `ALLOWANCES[mode][kind]` more items wrong than arm 1; each
+    item beyond that is one item `over`. Strict mode gates false fails, misses
+    and partial-only items that passed; lenient mode gates misses and reports
+    false fails. `decide` combines the two modes into the verdict.
 
-    Both readings of "no worse" are computed and reported; `rule` picks the
-    one that decides `go`:
+    Errored rows: arm 2 is wrong in every pool. Arm 1 is a false fail on a
+    gold-pass item and a catch on a gold-fail one (see `_caught`).
 
-    - `margin`: the observed difference (arm 2 rate - arm 1 rate) is at most
-      `margin`.
-    - `ci`: the upper end of the 95% paired bootstrap CI of that difference is
-      at most `margin` (non-inferiority).
+    The paired 95% bootstrap CI and the exact McNemar p-value are reported for
+    information and decide nothing.
 
-    The exact McNemar p-value is reported for information and decides nothing.
-
-    The hard-failure ceiling applies per binding, so call this once per binding.
+    Hard failures: at most `max_hard_failure_items` items with an errored arm 2
+    validation, over all repeats. Call this once per binding.
 
     Args:
         items: The labelled set.
         first: Arm 1 outcomes (one run: one mode, binding and model).
         second: Arm 2 outcomes (one run, same mode and model).
-        margin: Pre-registered margin, as a rate.
-        max_hard_failure: Pre-registered ceiling on arm 2's hard-failure rate.
-        rule: `margin` or `ci`, as pre-registered.
+        max_hard_failure_items: Pre-registered ceiling, in items.
 
     Returns:
-        A dict with per-arm metrics, per-error comparisons and `go`.
+        A dict with per-arm metrics, per-check comparisons, `over` and `verdict`.
 
     Raises:
-        ValueError: If `rule` is unknown or the outcomes fail `_check_inputs`.
+        ValueError: If the outcomes fail `_check_inputs`.
     """
-    if rule not in ("margin", "ci"):
-        raise ValueError(f"unknown rule {rule!r}")
     _check_inputs(items, first, second)
     lenient = first[0].allow_partial_support
     m1, m2 = arm_metrics(items, first), arm_metrics(items, second)
     p1, p2 = _primary(first), _primary(second)
-    shared = list(items)
 
     def errors(kind: str, prim: dict[str, Outcome]) -> list[bool]:
         if kind == "false_fail":
-            pool = [i for i in shared if gold_verdict(i, lenient)]
+            pool = [i for i in items if gold_verdict(i, lenient)]
             return [prim[i.id].passed is not True for i in pool]
         if kind == "miss":
-            pool = [i for i in shared if i.has_invented_claim]
+            pool = [i for i in items if i.has_invented_claim]
         else:  # partial_miss: strict mode, only partial sentences are wrong
             pool = [
                 i
-                for i in shared
+                for i in items
                 if not i.has_invented_claim and not gold_verdict(i, lenient)
             ]
-        return [prim[i.id].passed is not False for i in pool]
+        return [not _caught(prim[i.id]) for i in pool]
 
+    allowances = ALLOWANCES[lenient]
     kinds = (
         ("false_fail", "miss") if lenient else ("false_fail", "miss", "partial_miss")
     )
@@ -885,45 +908,99 @@ def compare(
         b = sum(x and not y for x, y in zip(e1, e2))
         c = sum(y and not x for x, y in zip(e1, e2))
         diff, lo, hi = paired_difference_ci(e1, e2)
-        by_ci = hi <= margin
-        by_margin = diff <= margin
+        extra = sum(e2) - sum(e1)
+        allowance = allowances.get(kind)
         comparison[kind] = {
             "n": len(e1),
+            "arm1_errors": sum(e1),
+            "arm2_errors": sum(e2),
             "arm1_rate": _rate(sum(e1), len(e1)),
             "arm2_rate": _rate(sum(e2), len(e2)),
+            "extra": extra,
+            "gated": allowance is not None,
+            "allowance": allowance,
+            "over": max(0, extra - allowance) if allowance is not None else 0,
             "only_arm1": b,
             "only_arm2": c,
             "mcnemar_p": mcnemar_exact(b, c),
             "diff": diff,
             "ci95": (lo, hi),
-            "no_worse_ci": by_ci,
-            "no_worse_margin": by_margin,
-            "no_worse": by_ci if rule == "ci" else by_margin,
         }
-    hard_ok = (m2.hard_failure_rate or 0.0) <= max_hard_failure
-    go = all(c["no_worse"] for c in comparison.values()) and hard_ok
+    hard_items = sorted({o.item_id for o in second if o.errored})
+    hard_ok = len(hard_items) <= max_hard_failure_items
+    over = sum(c["over"] for c in comparison.values())
+
+    def metrics(m: ArmMetrics) -> dict:
+        return asdict(m) | {
+            "false_fail_rate": m.false_fail_rate,
+            "miss_rate": m.miss_rate,
+            "hard_failure_rate": m.hard_failure_rate,
+        }
+
     return {
         "allow_partial_support": lenient,
         "model": first[0].model,
         "bindings": {"arm1": first[0].binding, "arm2": second[0].binding},
-        "rule": rule,
-        "margin": margin,
-        "max_hard_failure": max_hard_failure,
-        "arm1": asdict(m1)
-        | {
-            "false_fail_rate": m1.false_fail_rate,
-            "miss_rate": m1.miss_rate,
-            "hard_failure_rate": m1.hard_failure_rate,
-        },
-        "arm2": asdict(m2)
-        | {
-            "false_fail_rate": m2.false_fail_rate,
-            "miss_rate": m2.miss_rate,
-            "hard_failure_rate": m2.hard_failure_rate,
-        },
+        "adapters": _adapters_used(second),
+        "max_hard_failure_items": max_hard_failure_items,
+        "arm1": metrics(m1),
+        "arm2": metrics(m2),
         "comparison": comparison,
+        "arm2_hard_failure_items": hard_items,
         "arm2_hard_failures_ok": hard_ok,
-        "go": go,
+        "over": over,
+        "verdict": _verdict(over, hard_ok),
+    }
+
+
+def decide(
+    strict: dict, lenient: dict, *, max_hard_failure_items: int = MAX_HARD_FAILURE_ITEMS
+) -> dict:
+    """Combine the strict and lenient reports of one binding into the verdict.
+
+    `go`: every gated check within its allowance, so swap. `inconclusive`: one
+    item over in total, so keep the prompts and leave #1669 open for the next
+    adapter bump. `no-go`: two or more items over, or too many hard failures,
+    so keep the prompts and close #1669.
+
+    The hard-failure ceiling counts items with an errored arm 2 validation in
+    either mode.
+
+    Args:
+        strict: `compare` report for strict mode.
+        lenient: `compare` report for lenient mode, same binding and model.
+        max_hard_failure_items: Pre-registered ceiling, in items.
+
+    Returns:
+        The verdict, the items over per mode and the hard-failure items.
+
+    Raises:
+        ValueError: If the reports are not one strict and one lenient report
+            from the same bindings, model and adapter revisions.
+    """
+    if strict["allow_partial_support"] or not lenient["allow_partial_support"]:
+        raise ValueError("pass the strict report first and the lenient report second")
+    for key in ("model", "bindings", "adapters"):
+        if strict[key] != lenient[key]:
+            raise ValueError(
+                f"strict and lenient runs differ in {key}: "
+                f"{strict[key]!r} vs {lenient[key]!r}"
+            )
+    hard_items = sorted(
+        set(strict["arm2_hard_failure_items"]) | set(lenient["arm2_hard_failure_items"])
+    )
+    hard_ok = len(hard_items) <= max_hard_failure_items
+    over = strict["over"] + lenient["over"]
+    return {
+        "model": strict["model"],
+        "bindings": strict["bindings"],
+        "adapters": strict["adapters"],
+        "over": {"strict": strict["over"], "lenient": lenient["over"]},
+        "arm2_hard_failure_items": hard_items,
+        "arm2_hard_failures_ok": hard_ok,
+        "verdict": _verdict(over, hard_ok),
+        "strict": strict,
+        "lenient": lenient,
     }
 
 
@@ -964,12 +1041,18 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--set", type=Path, default=SET_PATH)
     run.add_argument("--out", type=Path, required=True)
 
-    cmp_ = sub.add_parser("compare", help="apply the decision rule to two result files")
-    cmp_.add_argument("arm1", type=Path)
-    cmp_.add_argument("arm2", type=Path)
-    cmp_.add_argument("--margin", type=float, required=True)
-    cmp_.add_argument("--max-hard-failure", type=float, required=True)
-    cmp_.add_argument("--rule", choices=["margin", "ci"], required=True)
+    cmp_ = sub.add_parser(
+        "compare", help="apply the decision rule to one binding's four result files"
+    )
+    cmp_.add_argument(
+        "--strict", nargs=2, type=Path, required=True, metavar=("ARM1", "ARM2")
+    )
+    cmp_.add_argument(
+        "--lenient", nargs=2, type=Path, required=True, metavar=("ARM1", "ARM2")
+    )
+    cmp_.add_argument(
+        "--max-hard-failure-items", type=int, default=MAX_HARD_FAILURE_ITEMS
+    )
     cmp_.add_argument("--set", type=Path, default=SET_PATH)
 
     args = ap.parse_args(argv)
@@ -988,14 +1071,16 @@ def main(argv: list[str] | None = None) -> int:
             )
         )
         return 0
-    report = compare(
-        items,
-        read_outcomes(args.arm1),
-        read_outcomes(args.arm2),
-        margin=args.margin,
-        max_hard_failure=args.max_hard_failure,
-        rule=args.rule,
-    )
+    reports = [
+        compare(
+            items,
+            read_outcomes(a1),
+            read_outcomes(a2),
+            max_hard_failure_items=args.max_hard_failure_items,
+        )
+        for a1, a2 in (args.strict, args.lenient)
+    ]
+    report = decide(*reports, max_hard_failure_items=args.max_hard_failure_items)
     json.dump(report, sys.stdout, indent=2, default=str)
     print()
     return 0

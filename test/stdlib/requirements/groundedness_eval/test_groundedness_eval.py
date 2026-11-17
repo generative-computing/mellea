@@ -11,11 +11,13 @@ import pytest
 
 from test.stdlib.requirements.groundedness_eval import harness
 from test.stdlib.requirements.groundedness_eval.harness import (
+    ALLOWANCES,
     LABELS,
     Outcome,
     adapter_verdict,
     arm_metrics,
     compare,
+    decide,
     load_items,
     mcnemar_exact,
     paired_difference_ci,
@@ -157,20 +159,16 @@ def test_paired_difference_ci():
 
 
 @pytest.mark.parametrize(
-    ("n", "extra_errors"),
-    [(34, 1), (74, 3), (94, 4), (20, 1)],
-    ids=["miss", "strict", "lenient", "partial"],
+    ("n", "allowance"),
+    [(74, 3), (34, 1), (20, 1)],
+    ids=["false_fail", "miss", "partial_miss"],
 )
-def test_mcnemar_cannot_fire_inside_the_margin(n, extra_errors):
-    """On this set, the rule is the 5-point margin and nothing more."""
-    largest = 0
+def test_mcnemar_cannot_fire_inside_the_allowance(n, allowance):
+    """On this set, the rule is the item allowance and nothing more."""
     for b in range(n + 1):
-        for c in range(b + 1, n - b + 1):
-            if (c - b) / n <= 0.05:
-                largest = max(largest, c - b)
-                two_sided = mcnemar_exact(b, c)
-                assert two_sided >= 0.05 and two_sided / 2 >= 0.05
-    assert largest == extra_errors
+        for c in range(b + 1, min(n - b, b + allowance) + 1):
+            two_sided = mcnemar_exact(b, c)
+            assert two_sided >= 0.05 and two_sided / 2 >= 0.05
 
 
 # ------------------------------------------------------------- metrics, decision
@@ -243,13 +241,9 @@ def test_errors_and_instability_are_counted():
 def test_go_when_arm2_is_no_worse():
     worse_arm1 = [i.id for i in ITEMS if i.category == "grounded"][:10]
     report = compare(
-        ITEMS,
-        _outcomes("prompts", wrong_ids=worse_arm1),
-        _outcomes("adapter"),
-        margin=0.05,
-        max_hard_failure=0.02,
+        ITEMS, _outcomes("prompts", wrong_ids=worse_arm1), _outcomes("adapter")
     )
-    assert report["go"] is True
+    assert report["verdict"] == "go"
     assert report["comparison"]["false_fail"]["only_arm1"] == 10
     assert report["comparison"]["false_fail"]["mcnemar_p"] < 0.01
 
@@ -257,37 +251,23 @@ def test_go_when_arm2_is_no_worse():
 def test_no_go_when_arm2_misses_invented_claims():
     invented = [i.id for i in ITEMS if i.has_invented_claim][:12]
     report = compare(
-        ITEMS,
-        _outcomes("prompts"),
-        _outcomes("adapter", wrong_ids=invented),
-        margin=0.05,
-        max_hard_failure=0.02,
+        ITEMS, _outcomes("prompts"), _outcomes("adapter", wrong_ids=invented)
     )
-    assert report["comparison"]["miss"]["no_worse"] is False
-    assert report["go"] is False
+    assert report["comparison"]["miss"]["over"] == 11
+    assert report["verdict"] == "no-go"
 
 
 def test_no_go_on_hard_failures():
     errored = [i.id for i in ITEMS][:5]
     report = compare(
-        ITEMS,
-        _outcomes("prompts"),
-        _outcomes("adapter", errored_ids=errored),
-        margin=0.5,
-        max_hard_failure=0.02,
+        ITEMS, _outcomes("prompts"), _outcomes("adapter", errored_ids=errored)
     )
-    assert report["arm2_hard_failures_ok"] is False and report["go"] is False
+    assert report["arm2_hard_failures_ok"] is False and report["verdict"] == "no-go"
 
 
 def test_compare_rejects_mixed_modes():
     with pytest.raises(ValueError):
-        compare(
-            ITEMS,
-            _outcomes("prompts"),
-            _outcomes("adapter", lenient=True),
-            margin=0.05,
-            max_hard_failure=0.02,
-        )
+        compare(ITEMS, _outcomes("prompts"), _outcomes("adapter", lenient=True))
 
 
 # ------------------------------------------------------------------ run + resume
@@ -523,7 +503,7 @@ async def test_scoped_hooks_fill_in_the_row(monkeypatch):
 
 
 def _compare(first, second, **kwargs):
-    return compare(ITEMS, first, second, margin=0.05, max_hard_failure=0.02, **kwargs)
+    return compare(ITEMS, first, second, **kwargs)
 
 
 def test_compare_rejects_missing_items():
@@ -595,38 +575,91 @@ def test_report_lists_the_adapters_and_model():
     assert report["arm2"]["adapters"] == used and report["model"] == "m"
 
 
-def test_margin_and_ci_readings_differ_when_arms_tie_with_disagreements():
-    """Equal error counts, a few disagreements: the margin passes, the CI does not."""
+def test_tie_with_disagreements_is_go_and_reports_the_ci():
+    """Equal error counts, different items: go, with the wide CI still reported."""
     inv = [i.id for i in ITEMS if i.has_invented_claim]
     report = _compare(
         _outcomes("prompts", wrong_ids=inv[:3]),
         _outcomes("adapter", wrong_ids=inv[3:6]),
-        rule="margin",
     )
     miss = report["comparison"]["miss"]
-    assert miss["diff"] == 0 and miss["mcnemar_p"] == 1.0
-    assert miss["no_worse_margin"] is True and miss["no_worse"] is True
-    assert miss["no_worse_ci"] is False  # 34 items are too few for a 5-point CI
-    with pytest.raises(ValueError):
-        _compare(_outcomes("prompts"), _outcomes("adapter"), rule="vibes")
+    assert miss["extra"] == 0 and miss["mcnemar_p"] == 1.0
+    assert miss["ci95"][1] > 0.05  # 34 items are too few for a tight CI
+    assert report["verdict"] == "go"
 
 
 @pytest.mark.parametrize(
-    ("extra_misses", "go"), [(1, True), (2, False)], ids=["one_more", "two_more"]
+    ("extra_misses", "verdict"),
+    [(1, "go"), (2, "inconclusive"), (3, "no-go")],
+    ids=["one_more", "two_more", "three_more"],
 )
-def test_margin_allows_one_more_miss_of_34(extra_misses, go):
+def test_allowance_is_one_more_miss_of_34(extra_misses, verdict):
     inv = [i.id for i in ITEMS if i.has_invented_claim]
     report = _compare(
         _outcomes("prompts"), _outcomes("adapter", wrong_ids=inv[:extra_misses])
     )
     assert report["comparison"]["miss"]["n"] == 34
-    assert report["go"] is go
+    assert report["verdict"] == verdict
 
 
-def test_errored_invented_claim_counts_as_a_miss():
+@pytest.mark.parametrize(
+    ("extra", "verdict"), [(3, "go"), (4, "inconclusive"), (5, "no-go")]
+)
+def test_allowance_is_three_more_strict_false_fails_of_74(extra, verdict):
+    gold_pass = [i.id for i in ITEMS if i.gold["strict"]]
+    report = _compare(
+        _outcomes("prompts"), _outcomes("adapter", wrong_ids=gold_pass[:extra])
+    )
+    assert report["comparison"]["false_fail"]["n"] == 74
+    assert report["verdict"] == verdict
+
+
+def test_allowances_match_the_pools():
+    strict = _compare(_outcomes("prompts"), _outcomes("adapter"))
+    lenient = _compare(
+        _outcomes("prompts", lenient=True), _outcomes("adapter", lenient=True)
+    )
+    assert {k: c["n"] for k, c in strict["comparison"].items()} == {
+        "false_fail": 74,
+        "miss": 34,
+        "partial_miss": 20,
+    }
+    assert {k: c["n"] for k, c in lenient["comparison"].items()} == {
+        "false_fail": 94,
+        "miss": 34,
+    }
+    assert {k for k, c in strict["comparison"].items() if c["gated"]} == set(
+        ALLOWANCES[False]
+    )
+    assert {k for k, c in lenient["comparison"].items() if c["gated"]} == {"miss"}
+
+
+def test_errored_invented_claim_counts_as_a_miss_for_arm2_only():
     invented = [i.id for i in ITEMS if i.has_invented_claim]
-    m = arm_metrics(ITEMS, _outcomes("adapter", errored_ids=invented[:2]))
-    assert m.misses == 2
+    assert (
+        arm_metrics(ITEMS, _outcomes("adapter", errored_ids=invented[:2])).misses == 2
+    )
+    # Arm 1 fails closed on an errored result, so the claim is blocked.
+    assert (
+        arm_metrics(ITEMS, _outcomes("prompts", errored_ids=invented[:2])).misses == 0
+    )
+
+
+def test_arm1_errors_do_not_make_room_for_arm2_misses():
+    """Arm 1 errors on the long failing items, arm 2 lets four other claims through."""
+    long_fail = [i.id for i in ITEMS if i.category == "long" and i.has_invented_claim]
+    others = [i.id for i in ITEMS if i.has_invented_claim and i.id not in long_fail]
+    first = _outcomes("prompts", errored_ids=long_fail)
+    report = _compare(first, _outcomes("adapter", wrong_ids=others[:4]))
+    miss = report["comparison"]["miss"]
+    assert (miss["arm1_errors"], miss["arm2_errors"]) == (0, 4)
+    assert report["verdict"] == "no-go"
+
+
+def test_errored_arm1_row_on_a_gold_pass_item_is_a_false_fail():
+    grounded = [i.id for i in ITEMS if i.category == "grounded"]
+    m = arm_metrics(ITEMS, _outcomes("prompts", errored_ids=grounded[:2]))
+    assert m.false_fails == 2
 
 
 def test_errors_cannot_hide_misses():
@@ -636,17 +669,19 @@ def test_errors_cannot_hide_misses():
     )
     report = _compare(_outcomes("prompts", repeats=3), second)
     assert report["comparison"]["miss"]["arm2_rate"] == pytest.approx(3 / 34)
-    assert report["go"] is False
+    assert report["verdict"] == "no-go"
 
 
 def test_errored_row_is_wrong_in_its_category():
     grounded = [i.id for i in ITEMS if i.category == "grounded"]
     invented = [i.id for i in ITEMS if i.category == "invented"]
-    m = arm_metrics(
-        ITEMS, _outcomes("adapter", errored_ids=grounded[:1] + invented[:1])
-    )
+    errored = grounded[:1] + invented[:1]
+    m = arm_metrics(ITEMS, _outcomes("adapter", errored_ids=errored))
     assert m.by_category["grounded"][0] == 1
     assert m.by_category["invented"][0] == 1
+    m = arm_metrics(ITEMS, _outcomes("prompts", errored_ids=errored))
+    assert m.by_category["grounded"][0] == 1
+    assert m.by_category["invented"][0] == 0
 
 
 def test_compare_rejects_a_run_stopped_after_a_whole_repeat():
@@ -714,34 +749,32 @@ def test_strict_mode_gates_partial_only_items():
     assert len(partial) == 20
     report = _compare(_outcomes("prompts"), _outcomes("adapter", wrong_ids=partial))
     c = report["comparison"]
-    assert c["false_fail"]["no_worse"] is True and c["miss"]["no_worse"] is True
+    assert c["false_fail"]["over"] == 0 and c["miss"]["over"] == 0
     assert c["partial_miss"]["n"] == 20 and c["partial_miss"]["arm2_rate"] == 1.0
-    assert report["go"] is False
+    assert report["verdict"] == "no-go"
 
 
 @pytest.mark.parametrize(
-    ("extra", "go"), [(1, True), (2, False)], ids=["one_more", "two_more"]
+    ("extra", "verdict"), [(1, "go"), (2, "inconclusive")], ids=["one_more", "two_more"]
 )
-def test_margin_allows_one_more_partial_miss_of_20(extra, go):
+def test_allowance_is_one_more_partial_miss_of_20(extra, verdict):
     partial = _partial_only()
     report = _compare(
         _outcomes("prompts"), _outcomes("adapter", wrong_ids=partial[:extra])
     )
-    assert report["comparison"]["partial_miss"]["no_worse"] is go
-    assert report["go"] is go
+    assert report["comparison"]["partial_miss"]["over"] == extra - 1
+    assert report["verdict"] == verdict
 
 
 def test_errored_partial_only_item_counts_against_arm2():
     partial = _partial_only()
-    report = compare(
-        ITEMS,
+    report = _compare(
         _outcomes("prompts"),
         _outcomes("adapter", wrong_ids=partial[:1], errored_ids=partial[1:2]),
-        margin=0.05,
-        max_hard_failure=0.5,  # isolate the partial gate from the 2% ceiling
     )
     assert report["comparison"]["partial_miss"]["arm2_rate"] == pytest.approx(2 / 20)
-    assert report["go"] is False
+    assert report["arm2_hard_failures_ok"] is True
+    assert report["verdict"] == "inconclusive"
 
 
 def test_lenient_mode_has_no_partial_gate():
@@ -750,4 +783,110 @@ def test_lenient_mode_has_no_partial_gate():
         _outcomes("prompts", lenient=True), _outcomes("adapter", lenient=True)
     )
     assert set(report["comparison"]) == {"false_fail", "miss"}
-    assert report["go"] is True
+    assert report["verdict"] == "go"
+
+
+# ------------------------------------------------------- lenient gate and verdict
+
+
+def _decide(strict2=(), lenient2=(), strict_err=(), lenient_err=(), **kw):
+    strict = _compare(
+        _outcomes("prompts"),
+        _outcomes("adapter", wrong_ids=strict2, errored_ids=strict_err),
+    )
+    lenient = _compare(
+        _outcomes("prompts", lenient=True),
+        _outcomes("adapter", wrong_ids=lenient2, errored_ids=lenient_err, lenient=True),
+    )
+    return decide(strict, lenient, **kw)
+
+
+def test_lenient_gate_catches_unfaithful_labelled_partial():
+    """Perfect in strict mode, but passes invented claims once partial is allowed."""
+    invented = [i.id for i in ITEMS if i.has_invented_claim]
+    result = _decide(lenient2=invented[:6])
+    assert result["over"] == {"strict": 0, "lenient": 5}
+    assert result["verdict"] == "no-go"
+
+
+def test_lenient_false_fails_are_report_only():
+    gold_pass = [i.id for i in ITEMS if i.gold["lenient"]]
+    result = _decide(lenient2=gold_pass[:10])
+    ff = result["lenient"]["comparison"]["false_fail"]
+    assert ff["extra"] == 10 and ff["gated"] is False and ff["over"] == 0
+    assert result["verdict"] == "go"
+
+
+def test_one_item_over_is_inconclusive_two_is_no_go():
+    invented = [i.id for i in ITEMS if i.has_invented_claim]
+    assert _decide(strict2=invented[:2])["verdict"] == "inconclusive"
+    partial = _partial_only()
+    both = _decide(strict2=partial[:2], lenient2=invented[:2])
+    assert both["over"] == {"strict": 1, "lenient": 1}
+    assert both["verdict"] == "no-go"
+
+
+def test_hard_failures_count_items_across_both_modes():
+    grounded = [i.id for i in ITEMS if i.category == "grounded"]
+    ok = _decide(strict_err=grounded[:2], lenient_err=grounded[:1])
+    assert ok["arm2_hard_failure_items"] == sorted(grounded[:2])
+    assert ok["verdict"] == "go"
+    bad = _decide(strict_err=grounded[:2], lenient_err=grounded[2:3])
+    assert len(bad["arm2_hard_failure_items"]) == 3 and bad["verdict"] == "no-go"
+
+
+def test_items_that_error_once_count_toward_the_hard_failure_gate():
+    """Three items with one errored repeat each fail the gate, even at 3 of 384 validations."""
+    rows = _outcomes("adapter", repeats=3)
+    flaky = {i.id for i in ITEMS if i.category == "grounded"}
+    flaky = set(sorted(flaky)[:3])
+    rows = [
+        replace(o, passed=None, errored=True, reason="boom")
+        if o.item_id in flaky and o.repeat == 2
+        else o
+        for o in rows
+    ]
+    report = _compare(_outcomes("prompts", repeats=3), rows)
+    assert report["arm2"]["hard_failures"] == 3
+    assert report["arm2_hard_failures_ok"] is False
+    assert report["verdict"] == "no-go"
+
+
+def test_decide_rejects_mismatched_reports():
+    strict = _compare(_outcomes("prompts"), _outcomes("adapter"))
+    lenient = _compare(
+        _outcomes("prompts", lenient=True), _outcomes("adapter", lenient=True)
+    )
+    with pytest.raises(ValueError, match="strict report first"):
+        decide(lenient, strict)
+    other = _compare(
+        [replace(o, model="m") for o in _outcomes("prompts", lenient=True)],
+        [replace(o, model="m") for o in _outcomes("adapter", lenient=True)],
+    )
+    with pytest.raises(ValueError, match="differ in model"):
+        decide(strict, other)
+
+
+def test_cli_compare_prints_the_verdict(tmp_path, capsys):
+    paths = {}
+    for arm in ("prompts", "adapter"):
+        for lenient in (False, True):
+            path = tmp_path / f"{arm}_{lenient}.jsonl"
+            for o in _outcomes(arm, lenient=lenient):
+                harness._append(path, o)
+            paths[arm, lenient] = str(path)
+    assert (
+        harness.main(
+            [
+                "compare",
+                "--strict",
+                paths["prompts", False],
+                paths["adapter", False],
+                "--lenient",
+                paths["prompts", True],
+                paths["adapter", True],
+            ]
+        )
+        == 0
+    )
+    assert json.loads(capsys.readouterr().out)["verdict"] == "go"

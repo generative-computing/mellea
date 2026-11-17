@@ -4,7 +4,7 @@ A labelled set and a harness for deciding #1669: replace `GroundednessRequiremen
 two judgment prompts with the `hallucination_detection` adapter, or keep the prompts.
 
 - `labelled_set.jsonl`: the items (fixtures; re-run them after any adapter bump).
-- `harness.py`: runs an arm over the set, then compares two arms with the decision rule.
+- `harness.py`: runs an arm over the set, then applies the decision rule to both arms.
 - `test_groundedness_eval.py`: unit tests for the set and the harness. No model needed.
 
 ## The set
@@ -42,7 +42,11 @@ invented claim (30 `invented` + 4 `long`).
 - **`prompts`** (arm 1): `GroundednessRequirement.validate` as it ships. Run it after
   #1718, so an errored result (`result.error` set) counts as a hard failure, not a verdict.
   Before #1718 such failures come back as ordinary "not grounded" verdicts and would
-  inflate arm 1's false fails.
+  inflate arm 1's false fails. In production an errored result fails closed and the claim
+  is blocked, so an errored arm 1 row is scored as a false fail on a gold-pass item and a
+  catch on a gold-fail one. This matters on the long items: arm 1 caps each judgment call
+  at 500 tokens (`max_new_tokens`), which holds only the first 30 or so spans of the
+  necessity JSON, and the wrong sentence in each failing long item comes after that.
 - **`adapter`** (arm 2): `find_citations` for the citation output, then the verdict from
   `flag_hallucinated_content` alone (`adapter_verdict` in `harness.py`):
   - any `unfaithful` sentence fails the response;
@@ -50,9 +54,10 @@ invented claim (30 `invented` + 4 `long`).
   - `NA` is ignored;
   - a sentence with no record, an unknown label, or offsets outside the response is
     errored. A `ValueError` or `AdapterSchemaMismatchError` from either adapter call (bad
-    JSON, truncated output, a contract error) is also errored. An errored validation
-    detected nothing, so it is scored as wrong in both pools: a false fail on a gold-pass
-    item and a miss on an invented-claim item. It also counts as a hard failure.
+    JSON, truncated output, a contract error) is also errored. An errored arm 2 validation
+    is what is being measured and detected nothing, so it is scored as wrong in every
+    pool: a false fail on a gold-pass item and a miss on a gold-fail one. It also counts
+    toward the hard-failure gate.
 
 Run each arm in both modes. Arm 2 runs on both binding shapes (`--binding` labels the
 results; `--backend-factory module:function` supplies a non-default backend such as
@@ -65,15 +70,16 @@ hard-failure gate.
 ## What is measured (per arm, mode and binding)
 
 - False fails: gold-pass items that did not pass. This decides the swap.
-- Misses: items with an invented claim that did not fail (errored counts as a miss).
-- Strict mode only: partial-only items that passed (errored counts as passed). This is
+- Misses: items with an invented claim that did not fail (an errored row is a miss for arm
+  2 and a catch for arm 1).
+- Strict mode only: partial-only items that passed (errored rows as for misses). This is
   gated too: the 20 partial items are gold-fail in strict mode, so neither of the other
   two errors covers them.
 - Label use (arm 2): gold sentence label against adapter label, so it shows whether
   `partial` and `NA` are used where they apply.
 - Hard failures over all repeats, in total and by `error_type`. `ValueError` covers bad
   JSON and schema errors, but also input checks in the intrinsics, so the breakdown is
-  there to audit the 2% figure.
+  there to audit the hard-failure gate. The gate counts items with an errored repeat.
 - Stability: items whose verdict changes across repeats (`--repeats 3`, temperature 0).
 - Latency (median, p90) and tokens per validation (errored validations are left out of
   the token means, since they stop partway). Tokens are summed from
@@ -101,52 +107,60 @@ uv run python -m test.stdlib.requirements.groundedness_eval.harness run --arm pr
 uv run python -m test.stdlib.requirements.groundedness_eval.harness run --arm prompts --allow-partial-support --out results/prompts_lenient.jsonl
 uv run python -m test.stdlib.requirements.groundedness_eval.harness run --arm adapter --out results/adapter_strict.jsonl
 uv run python -m test.stdlib.requirements.groundedness_eval.harness run --arm adapter --allow-partial-support --out results/adapter_lenient.jsonl
-uv run python -m test.stdlib.requirements.groundedness_eval.harness compare results/prompts_strict.jsonl results/adapter_strict.jsonl --margin 0.05 --max-hard-failure 0.02 --rule margin
+uv run python -m test.stdlib.requirements.groundedness_eval.harness compare --strict results/prompts_strict.jsonl results/adapter_strict.jsonl --lenient results/prompts_lenient.jsonl results/adapter_lenient.jsonl
 ```
 
 Use one `--out` file per arm, mode, binding and model. `compare` refuses a file that mixes
 them, has items missing, stopped partway through or between repeats, or holds the wrong
-arm, and it refuses two files with different models, `--repeats` or adapter revisions.
-Run it once per binding. Resuming with a higher `--repeats` extends a run.
+arm, and it refuses two files with different models, `--repeats` or adapter revisions,
+or strict and lenient runs that differ in model, binding or adapter revisions. It takes
+one binding's four files and prints the verdict; run it once per binding. Resuming with a higher `--repeats` extends a run.
 
 Runs append to `--out` and skip finished rows, so an interrupted run resumes. A run that
 stopped on an exception wrote no row for that item, so resuming retries it. Recorded hard
 failures are not retried: retrying until an item succeeds would hide flaky adapter
-failures from the 2% gate. After changing the adapter, write to a new file.
+failures from the hard-failure gate. After changing the adapter, write to a new file.
 
-## Decision rule: proposal, to be agreed on #1721 before any run
+## Decision rule (#1721), fixed before any run
 
-| | Proposed |
+Every check counts items on the primary repeat (repeat 0). A gated check passes when arm 2
+gets at most its allowance more items wrong than arm 1.
+
+| | Rule |
 |---|---|
 | Set | the 128 items above |
-| Gated errors | false fails and misses; in strict mode also partial-only items that passed |
-| Margin | 5 percentage points, for each gated error |
-| "No worse" | rule `margin`: arm 2's rate is at most arm 1's + 5 points |
-| Mode that decides | strict (the `allow_partial_support` default); lenient is reported, not gated |
-| Binding that decides | `local-file`, both arms on the same base model; Granite Switch is reported |
+| Gated, strict | false fails +3 of 74, misses +1 of 34, partial-only passes +1 of 20 |
+| Gated, lenient | misses +1 of 34; lenient false fails (94 items) are reported, not gated |
+| Errored rows | arm 2 wrong everywhere; arm 1 a false fail on gold-pass items, a catch on gold-fail |
+| Binding that decides | `local-file`, both arms on base model `ibm-granite/granite-4.0-micro`; `citations` and `hallucination_detection` LoRAs from `ibm-granite/granitelib-rag-r1.0` at `2f0b2c79` (the catalog pin; both publish `granite-4.0-micro` there). Every row records the revisions and `compare` refuses a mix. Granite Switch is reported |
+| Hard failures | arm 2, at most 2 items with an errored repeat, over both modes, on each binding |
 | Primary verdict | repeat 0 of 3; repeats 1 and 2 give the stability count, reported, not gated |
-| Hard failures | arm 2 under 2% of validations on each binding, Switch included: at most 2 items |
+| Verdict | `go`: every gated check within its allowance, so swap. `inconclusive`: one item over in total, so keep the prompts and leave #1669 open for the next adapter bump. `no-go`: two or more items over, or the hard-failure gate fails, so keep the prompts and close #1669 |
 
-**What a verdict means.** A pass means no evidence of a large regression, not proof that
-the arms are equal. Arms that are truly equal at a 10% error rate still fail a single check
-about 1 time in 4 at the low end, and an arm 2 that is 10 points worse passes it up to a
-quarter of the time; a 20-point regression passes under 5% of the time. A fail within one
-item of the line is inconclusive, not proof that arm 2 is worse.
+**Why lenient misses are gated.** In strict mode `partial` and `unfaithful` both fail, so an
+adapter that labels unfaithful sentences as `partial` scores perfectly there. #1669 swaps
+lenient mode too, and only lenient misses show that mistake
+(`test_lenient_gate_catches_unfaithful_labelled_partial`).
 
-**Hard failures in items.** The 2% is over all validations, 3 repeats of 128 items, so it
-allows 7. At temperature 0 an item that errors usually errors in every repeat, so two
-failing items pass the gate and three fail it.
+**Why errored arm 1 rows are catches.** Scored as misses, arm 1's truncated long items
+would make room for arm 2 to let real invented claims through: four extra arm 2 misses
+would still pass (`test_arm1_errors_do_not_make_room_for_arm2_misses`).
 
-**This is a margin rule, with no significance test behind it.** It allows arm 2 one more
-miss of the 34 invented-claim items, three more false fails of 74 in strict mode, four
-more of 94 in lenient mode, and one more passed partial-only item of 20 in strict mode. Exact McNemar cannot add anything here: whenever the margin
-passes on this set, p is above 0.05, one-sided or two-sided
-(`test_mcnemar_cannot_fire_inside_the_margin`). The test could only fire with about 120
-invented-claim items. The p-value is still reported, for information.
+**Hard failures in items.** `compare` used to count validations, so seven items that each
+error once in 384 validations still passed. The gate now counts items
+(`test_items_that_error_once_count_toward_the_hard_failure_gate`).
 
-**Why `margin`, not `ci`.** The harness also computes a strict non-inferiority reading
-(`--rule ci`: the upper end of the 95% paired bootstrap CI must be within the margin). On
-this set that reading is too demanding. Suppose the two arms each miss 3 of the 34
-invented-claim items, but different ones. Their miss rates are equal, yet the CI is wide
-enough to call arm 2 worse (`test_margin_and_ci_readings_differ_when_arms_tie_with_disagreements`).
-Both readings are always reported, so the choice stays visible.
+**What a verdict means.** `go` means no evidence of a large regression, not proof that the
+arms are equal. Because every check has to pass, equal arms reach `go` only about 45% of the
+time if their errors are independent and about 75% if most are shared (planetf1's
+simulation on #1721, with baseline rates of 10% strict false fails, 8% strict misses, 20%
+lenient misses and 20% partial passes; it ignores domain clustering, so read it as a guide).
+The one-item allowances on 34 and 20 items dominate, and doubling the invented and partial
+pools would only move 45% to about 55%. That is why a result one item over is
+`inconclusive`, not `no-go`.
+
+**This is an allowance rule, with no significance test behind it.** Exact McNemar cannot add
+anything here: within every allowance, p is above 0.05, one-sided or two-sided
+(`test_mcnemar_cannot_fire_inside_the_allowance`). The paired 95% bootstrap CI is reported
+too. It decides nothing: on these pools it would make equal arms reach `go` only 1 to 9% of
+the time.
