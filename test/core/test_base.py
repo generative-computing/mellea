@@ -1116,6 +1116,38 @@ def test_mot_cancelled_carried_by_copy_methods() -> None:
     assert target.cancelled is True
 
 
+def test_mot_parsed_flag_semantics() -> None:
+    """`_parsed` tracks whether `parsed_repr` was assigned, not whether it is non-`None`."""
+    assert ModelOutputThunk(value=None)._parsed is False
+    assert ModelOutputThunk(value="x")._parsed is False
+    assert ModelOutputThunk(value="x", parsed_repr=None)._parsed is False
+    assert ModelOutputThunk(value="x", parsed_repr="p")._parsed is True
+
+    mot = ModelOutputThunk(value="x")
+    mot.parsed_repr = "p"
+    assert mot._parsed is True
+
+    mot = ModelOutputThunk(value="x")
+    mot.parsed_repr = None
+    assert mot._parsed is True
+    assert mot.parsed_repr is None
+
+
+@pytest.mark.parametrize("parsed", [True, False])
+def test_mot_parsed_flag_carried_by_copy_methods(parsed: bool) -> None:
+    """`_parsed` survives `copy`, `deepcopy`, and `_copy_from`, including parsed-to-`None`."""
+    mot = ModelOutputThunk(value="x")
+    if parsed:
+        mot.parsed_repr = None
+
+    assert copy.copy(mot)._parsed is parsed
+    assert copy.deepcopy(mot)._parsed is parsed
+
+    target = ModelOutputThunk(value=None)
+    target._copy_from(mot)
+    assert target._parsed is parsed
+
+
 def test_mot_thinking_public_field_round_trip():
     mot = ModelOutputThunk(value="x")
     mot.thinking = "reasoning trace"

@@ -190,6 +190,7 @@ def test_computed_thunk_non_thunk_arg_rejected():
         ("_underlying_value", 123),
         ("value", None),
         ("value", 123),
+        ("_parsed", False),
     ],
 )
 def test_computed_thunk_invariant_violating_writes_rejected(field, bad_value):
@@ -226,6 +227,19 @@ def test_computed_thunk_derived_and_status_fields_writable():
     assert computed.thinking == "some reasoning"
     assert computed.parsed_repr == "finalized"
     assert computed._cancelled is True
+
+
+def test_computed_thunk_parsed_flag_only_moves_to_true():
+    """An unparsed computed thunk may be parsed (even to `None`), but never un-parsed."""
+    computed = ComputedModelOutputThunk(ModelOutputThunk(value="ok"))
+    assert computed._parsed is False
+
+    computed.parsed_repr = None
+    assert computed._parsed is True
+
+    with pytest.raises(AttributeError, match="computed invariant"):
+        computed._parsed = False
+    assert computed._parsed is True
 
 
 def test_pre_wrap_value_edit_still_allowed():
