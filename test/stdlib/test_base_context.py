@@ -650,6 +650,110 @@ def test_usage_scale_without_the_reply_in_items_falls_back():
     assert ctx._usage_scale([q0, q1], lambda i: 100) == 1.0
 
 
+@pytest.mark.parametrize(
+    "invalid",
+    [
+        "other_model",
+        "no_usage",
+        "zero_usage",
+        "no_receipt",
+        "receipt_mismatch",
+        "receipt_longer_than_history",
+        "action_mismatch",
+    ],
+)
+def test_usage_scale_skips_unverifiable_reply(invalid):
+    # The newest measured reply fails a verification check, so the scan
+    # continues to the older valid reply (ratio 156 / 300 = 0.52) instead of
+    # disabling the correction for the rest of the conversation.
+    q0, q1, q2 = _block("a"), _block("b"), _block("c")
+    reply = _measured_reply(156, [q0], q1)
+    newest = _measured_reply(450, [reply], q2)
+    if invalid == "other_model":
+        newest.generation.model = "org/other-model"
+    elif invalid == "no_usage":
+        newest.generation.usage = None
+    elif invalid == "zero_usage":
+        newest.generation.usage = {"total_tokens": 0}
+    elif invalid == "no_receipt":
+        newest._call.context = None
+    elif invalid == "receipt_mismatch":
+        newest._call.context = [q0]
+    elif invalid == "receipt_longer_than_history":
+        newest._call.context = [_block("z"), _block("y"), _block("x"), q2]
+    elif invalid == "action_mismatch":
+        newest._call.action = q0
+    ctx = ChatContext(model_id=_tiny()).add(q0).add(q1).add(reply).add(q2).add(newest)
+    assert ctx._usage_scale(ctx.as_list(), lambda i: 100) == pytest.approx(0.52)
+
+
+def test_usage_scale_skips_reply_with_undersized_measured_segment():
+    # The newest reply verifies, but the segment it covers is too small for
+    # a reliable ratio, so the scan falls through to the older reply (0.52).
+    q0, q1 = _block("a"), _block("b")
+    reply = _measured_reply(156, [q0], q1)
+    small_action = CBlock("s" * 12)
+    newest = _measured_reply(50, [], small_action, value="r" * 8)
+    ctx = (
+        ChatContext(model_id=_tiny())
+        .add(q0)
+        .add(q1)
+        .add(reply)
+        .add(small_action)
+        .add(newest)
+    )
+    estimates = {0: 100, 1: 100, 2: 100, 3: 5, 4: 2}
+    assert ctx._usage_scale(ctx.as_list(), lambda i: estimates[i]) == pytest.approx(
+        0.52
+    )
+
+
+def test_usage_scale_prefers_newest_verifiable_reply():
+    # Two valid measurements: the newest wins. The older reply measured
+    # 156 / 300 (~0.52), the newer one 450 / 300 (1.5) — the scan returns 1.5.
+    q0, q1, q2, q3 = _block("a"), _block("b"), _block("c"), _block("d")
+    reply = _measured_reply(156, [q0], q1)
+    newest = _measured_reply(450, [q2], q3)
+    ctx = (
+        ChatContext(model_id=_tiny())
+        .add(q0)
+        .add(q1)
+        .add(reply)
+        .add(q2)
+        .add(q3)
+        .add(newest)
+    )
+    assert ctx._usage_scale(ctx.as_list(), lambda i: 100) == 1.5
+
+
+def test_usage_scale_returns_one_when_every_reply_is_unverifiable():
+    # The newest reply has no receipt and the older one is from a different
+    # model, so no usable measurement exists and the plain estimate stands.
+    q0, q1, q2 = _block("a"), _block("b"), _block("c")
+    reply = _measured_reply(156, [q0], q1)
+    reply.generation.model = "org/other-model"
+    newest = _measured_reply(450, [reply], q2)
+    newest._call.context = None
+    ctx = ChatContext(model_id=_tiny()).add(q0).add(q1).add(reply).add(q2).add(newest)
+    assert ctx._usage_scale(ctx.as_list(), lambda i: 100) == 1.0
+
+
+def test_view_for_generation_unusable_newest_reply_uses_older_measurement():
+    # Six items at 100 estimated tokens each overflow the 390-token budget,
+    # so the plain estimate would keep only the newest three. The newest
+    # reply carries no receipt (a raw-path reply), but the scan continues to
+    # the older reply's measurement: ratio 156 / 300 = 0.52 costs every item
+    # at 52 and all six fit.
+    q0, q1, q2, q3 = _block("a"), _block("b"), _block("c"), _block("d")
+    reply = _measured_reply(156, [q0], q1)
+    raw_reply = _measured_reply(450, [q2], q3)
+    raw_reply._call.context = None
+    ctx = ChatContext(model_id=_tiny())
+    for item in (q0, q1, reply, q2, q3, raw_reply):
+        ctx = ctx.add(item)
+    assert ctx.view_for_generation() == ctx.as_list()
+
+
 def test_estimate_tokens_counts_tool_calls_and_reasoning():
     from mellea.stdlib.context.chat import _estimate_tokens
 
