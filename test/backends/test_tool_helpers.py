@@ -243,5 +243,52 @@ def test_parse_tools_json_inside_tool_call_tags_still_parses():
     assert parse_tools(raw) == [("get_weather", {"city": "Boston"})]
 
 
+# --- parse_tools: JSON string arguments keep their whitespace (#1844) ---
+
+
+def test_parse_tools_json_code_argument_keeps_indentation():
+    """Indented code in a string argument survives, so it can still run."""
+    import json
+
+    code = "def f(x):\n    if x:\n        return 1\n    return 0\nprint(f(1))"
+    call = json.dumps({"name": "python", "arguments": {"code": code}})
+    raw = f"<tool_call>\n{call}\n</tool_call>"
+    assert parse_tools(raw) == [("python", {"code": code})]
+
+
+def test_parse_tools_json_string_argument_keeps_repeated_spaces():
+    """Whitespace inside a JSON string value is data, not formatting."""
+    import json
+
+    call = json.dumps(
+        {"name": "write_doc", "arguments": {"text": "exact  phrase   here"}}
+    )
+    raw = f"<tool_call>\n{call}\n</tool_call>"
+    assert parse_tools(raw) == [("write_doc", {"text": "exact  phrase   here"})]
+
+
+def test_parse_tools_json_string_with_literal_newline_still_decodes():
+    """An unescaped newline inside a string still decodes — models emit it."""
+    raw = '{"name": "write_doc", "arguments": {"text": "line one\nline two"}}'
+    assert parse_tools(raw) == [("write_doc", {"text": "line one\nline two"})]
+
+
+def test_to_tool_calls_json_code_argument_keeps_indentation():
+    """The `LocalHFBackend` path: the argument reaches the call intact."""
+    import json
+
+    from mellea.backends.utils import to_tool_calls
+
+    def run(code: str) -> str:
+        return code
+
+    code = "def f(x):\n    if x:\n        return 1\n    return 0\nprint(f(1))"
+    call = json.dumps({"name": "run", "arguments": {"code": code}})
+    raw = f"<tool_call>\n{call}\n</tool_call>"
+    calls = to_tool_calls({"run": MelleaTool.from_callable(run)}, raw)
+    assert calls is not None
+    assert calls[0].args["code"] == code
+
+
 if __name__ == "__main__":
     pytest.main([__file__])

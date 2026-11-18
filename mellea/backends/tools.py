@@ -446,17 +446,20 @@ def convert_tools_to_json(tools: dict[str, AbstractMelleaTool]) -> list[dict]:
     return [t.as_json_tool for t in tools.values()]
 
 
-def json_extraction(text: str) -> Generator[dict, None, None]:
+def json_extraction(text: str, *, strict: bool = True) -> Generator[dict, None, None]:
     """Yield the next valid JSON object found in a given string.
 
     Args:
         text: Input string potentially containing one or more JSON objects.
+        strict: Passed to `json.JSONDecoder`. With `strict=False`, string
+            values may contain literal control characters such as unescaped
+            newlines.
 
     Yields:
         Each valid JSON object found in `text`, in order of appearance.
     """
     index = 0
-    decoder = json.JSONDecoder()
+    decoder = json.JSONDecoder(strict=strict)
 
     # Keep trying to find valid json by jumping to the next
     # opening curly bracket. Will ignore non-json text.
@@ -526,7 +529,8 @@ _XML_PARAMETER_RE = re.compile(r"<parameter=([^>\n]+)>(.*?)</parameter>", re.DOT
 def _json_tool_call_spans(text: str) -> list[tuple[int, int]]:
     """Return the `(start, end)` offsets in `text` of the calls `json_extraction` would find."""
     spans: list[tuple[int, int]] = []
-    # Raw text, unlike `json_extraction`'s, so strings may hold literal newlines.
+    # Raw model output, so strings may hold literal newlines — same decoder
+    # `json_extraction` uses on the tool-call path.
     decoder = json.JSONDecoder(strict=False)
     index = text.find("{")
     while index != -1:
@@ -604,9 +608,11 @@ def _parse_tool_calls(llm_response: str) -> tuple[list[tuple[str, Mapping, bool]
     # XML calls are blanked out of `remainder`, so their values aren't re-parsed as JSON.
     xml_calls, remainder = _parse_xml_tool_calls(llm_response)
     tools = [(name, args, True) for name, args in xml_calls]
-    processed = " ".join(remainder.split())
 
-    for possible_tool in json_extraction(processed):
+    # Decode the raw remainder — collapsing whitespace first would also
+    # rewrite whitespace inside JSON string values. strict=False keeps the
+    # literal newlines that the collapse used to turn into spaces decodable.
+    for possible_tool in json_extraction(remainder, strict=False):
         tool_name, tool_arguments = find_func(possible_tool)
         if tool_name is not None and tool_arguments is not None:
             tools.append((tool_name, tool_arguments, False))
