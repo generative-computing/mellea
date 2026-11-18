@@ -29,7 +29,7 @@ import threading
 from collections import OrderedDict, deque
 from collections.abc import Callable, Coroutine, Iterable, Mapping
 from copy import copy, deepcopy
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from io import BytesIO
 from typing import (
     TYPE_CHECKING,
@@ -1817,6 +1817,51 @@ class ModelOutputThunk(Generic[S]):
         deepcopied.generation = deepcopy(self.generation)
         deepcopied.raw = deepcopy(self.raw)
         return deepcopied
+
+    def __getstate__(self) -> dict[str, Any]:
+        """Return the picklable state, dropping in-flight and backend-native fields.
+
+        Pickling mirrors the `__copy__` contract: a reloaded thunk is a computed,
+        post-generation object. The in-flight machinery in `_gen` (asyncio tasks,
+        the stream queue, backend-bound callbacks) and the backend-native payloads
+        on `raw` (`response`, `streamed_chunks`) and `generation`
+        (`logits`, `raw_logits`, which are provider SDK objects or torch tensors)
+        are not portable, so they are stripped here rather than pickled. Only a
+        computed thunk may be pickled.
+
+        Fields that reference caller-supplied objects (`tool_calls`, `_meta`,
+        `parsed_repr`, `_call`, `_generate_log`) are left as-is; their
+        picklability is the caller's responsibility, as with `copy`.
+
+        Raises:
+            RuntimeError: If the thunk has not been computed; copies and pickles
+                are post-generation.
+        """
+        if not self._computed:
+            raise RuntimeError(
+                "Cannot pickle an uncomputed ModelOutputThunk; pickles are post-generation."
+            )
+        state = self.__dict__.copy()
+        # Reset in-flight machinery, matching the fresh `_gen` that `__copy__` leaves.
+        state["_gen"] = _GenerationState()
+        state["_aiter_started"] = False
+        # Drop backend-native payloads, preserving their portable sibling fields.
+        generation = replace(self.generation, logits=None, raw_logits=None)
+        state["generation"] = generation
+        state["raw"] = replace(self.raw, response=None, streamed_chunks=None)
+        return state
+
+    def __setstate__(self, state: dict[str, Any]) -> None:
+        """Restore pickled state, guaranteeing a fresh `_gen` on the loaded thunk.
+
+        Assigns straight to `__dict__` so the `ComputedModelOutputThunk`
+        invariant guard in `__setattr__` is not re-run during reconstruction. A
+        `_gen` is always installed (even if an older pickle omitted it) so the
+        loaded thunk is a clean, non-generating object.
+        """
+        self.__dict__.update(state)
+        if self.__dict__.get("_gen") is None:
+            self.__dict__["_gen"] = _GenerationState()
 
 
 class ComputedModelOutputThunk(ModelOutputThunk[S]):
