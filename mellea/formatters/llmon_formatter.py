@@ -6,7 +6,7 @@
 LLMON (LLM Object Notation, arXiv:2603.22519) marks a prompt up with special-token
 blocks, so an LLMON-trained model can tell what it should do (`instr`) from what it
 should only read (`data`, `doc`) and what its answer must satisfy (`req`). The
-granite LLMON models' chat template writes that markup itself from the fields
+Granite LLMON models' chat template writes that markup itself from the fields
 of each chat message: a user message's `content` and `instruction` items become
 `instr` blocks, its `data` items `data` blocks, its `requirement` items `req` blocks,
 and its `documents` `doc` blocks, each wired into the `exec` block the template adds.
@@ -135,7 +135,7 @@ class _Turn:
 class LLMONFormatter(ChatFormatter):
     """Formatter that sends components to LLMON-trained models through their chat template.
 
-    The granite LLMON models' chat template writes the LLMON markup from each
+    The Granite LLMON models' chat template writes the LLMON markup from each
     message's fields, so this formatter fills those fields rather than writing LLMON.
     An `Instruction` becomes a user message from its `format_for_llm()` args: its
     prefix and description, joined, are the message's content, which the template
