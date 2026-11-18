@@ -117,10 +117,13 @@ async def log_validation_post_check(
             else:
                 logger.info(f"    {status} {req_desc}")
 
-                # Show reason if available and informative
+                # Show reason if available and informative, otherwise the error
                 reason = getattr(result, "reason", None)
+                error = getattr(result, "error", None)
                 if reason and reason not in ("yes", "no", ""):
                     logger.info(f"       └─ {reason}")
+                elif error is not None:
+                    logger.info(f"       └─ {error!s}")
 
                 # Show score if available
                 score = getattr(result, "score", None)

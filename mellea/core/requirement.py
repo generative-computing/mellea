@@ -41,11 +41,13 @@ class ValidationResult:
         score (float | None): Optional numeric score returned by the validator.
         thunk (ModelOutputThunk | None): The `ModelOutputThunk` produced during LLM-as-a-Judge validation, if applicable.
         context (Context | None): The context associated with the validation backend call, if applicable.
-        error (Exception | None): Set when validation could not produce a verdict because the
-            output could not be parsed — for example an `AdapterSchemaMismatchError` from a
-            custom `output_to_bool`. When set, `bool(result)` fails closed to `False`
-            regardless of `result`, so callers that ignore errors do not silently pass.
-            Inspect `error` to distinguish "requirement not met" from "output unparsable".
+        error (Exception | None): Set when validation could not produce a verdict. This covers
+            output that could not be parsed — for example an `AdapterSchemaMismatchError` from a
+            custom `output_to_bool` — and a validator that could not run, such as a setup
+            problem or a backend or adapter failure. When set, `bool(result)` fails closed to
+            `False` regardless of `result`, so callers that ignore errors do not silently pass.
+            Inspect `error` to distinguish "requirement not met" from "validation could not
+            produce a verdict".
 
     """
 
@@ -89,21 +91,23 @@ class ValidationResult:
 
     @property
     def error(self) -> Exception | None:
-        """The exception raised while parsing the validation output, if any.
+        """The exception explaining why validation could not produce a verdict, if any.
 
-        Set when `validate()` could not produce a verdict because the output was
+        Set when `validate()` could not produce a verdict: the output was
         unparsable (e.g. an `AdapterSchemaMismatchError` from a custom
-        `output_to_bool`). `None` for an ordinary pass or fail. When set,
-        `as_bool()` returns `False` regardless of the underlying result.
+        `output_to_bool`), or the validator could not run (e.g. a setup problem or
+        a backend or adapter failure). `None` for an ordinary pass or fail. When
+        set, `as_bool()` returns `False` regardless of the underlying result.
         """
         return self._error
 
     def as_bool(self) -> bool:
         """Return a boolean value based on the validation result.
 
-        Fails closed when an `error` is set: an unparsable output is never
-        treated as a pass, so callers that only check the boolean fail safely
-        rather than silently accepting a result that was never computed.
+        Fails closed when an `error` is set: an unparsable output, or a validator
+        that could not run, is never treated as a pass, so callers that only check
+        the boolean fail safely rather than silently accepting a result that was
+        never computed.
 
         Returns:
             bool: `True` if the requirement passed and no error is set, `False` otherwise.
