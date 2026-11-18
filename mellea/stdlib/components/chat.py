@@ -331,7 +331,11 @@ class ToolMessage(Message):
 
 
 def message_from_template_representation(
-    tr: TemplateRepresentation, *, default_role: "Message.Role", content: str
+    tr: TemplateRepresentation,
+    *,
+    default_role: "Message.Role",
+    content: str,
+    message_cls: type[Message] = Message,
 ) -> Message:
     """Build a `Message` from a component's `TemplateRepresentation`.
 
@@ -346,12 +350,15 @@ def message_from_template_representation(
         tr: The template representation returned by the component's `format_for_llm`.
         default_role: The positional role guess to use when `tr.role` is `None`.
         content: The already-rendered text content for the message.
+        message_cls: The class to build: `Message` or a subclass that takes the
+            same constructor arguments.
 
     Returns:
-        A `Message` with the resolved role, content, attachments, and tool metadata.
+        A `message_cls` instance with the resolved role, content, attachments, and
+        tool metadata.
     """
     role = tr.role if tr.role is not None else default_role
-    return Message(
+    return message_cls(
         role=role,  # type: ignore[arg-type]  # validated by Message.__init__
         content=content,
         images=tr.images,
