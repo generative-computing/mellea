@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, Any, Self, cast
+from typing import TYPE_CHECKING, Self, cast
 
 from mellea.backends.context_lengths import get_context_length
 from mellea.backends.model_ids import ModelIdentifier
@@ -286,10 +286,9 @@ class ChatContext(Context):
         `_MAX_USAGE_SCALE` keeps the effect small.
 
         Returns `1.0`, meaning no correction, when no reply in `items` yields
-        a verifiable measurement. The estimates are then used as they are —
-        still `_estimate_tokens`, which counts tool-call arguments and
-        reasoning text unconditionally, so the uncorrected path does not
-        reproduce the pre-measurement `len(str(item)) // 4` estimate.
+        a verifiable measurement. The estimates are then used as they are:
+        `_estimate_tokens` over the formatter render, counting tool-call
+        arguments and reasoning text unconditionally.
 
         Args:
             items (list[Span]): The context's items, oldest first.
@@ -307,14 +306,13 @@ class ChatContext(Context):
             item = items[idx]
             if not isinstance(item, ModelOutputThunk):
                 continue
-            thunk = item
-            if thunk.generation.usage is None:
+            if item.generation.usage is None:
                 continue
 
-            if not _model_matches(self._model_id, thunk.generation.model):
+            if not _model_matches(self._model_id, item.generation.model):
                 continue
 
-            receipt = thunk._call.context
+            receipt = item._call.context
             if receipt is None:
                 continue
 
@@ -322,14 +320,16 @@ class ChatContext(Context):
             start = action_idx - len(receipt)
             if start < 0:
                 continue
-            if items[action_idx] is not thunk._call.action:
+            if items[action_idx] is not item._call.action:
                 continue
             if any(a is not b for a, b in zip(items[start:action_idx], receipt)):
                 continue
 
-            measured = _usage_total(thunk.generation.usage)
+            measured = _usage_total(item.generation.usage)
+            if measured is None:
+                continue
             estimated = sum(estimate(i) for i in range(start, idx + 1))
-            if measured is None or estimated < _MIN_MEASURED_ESTIMATE:
+            if estimated < _MIN_MEASURED_ESTIMATE:
                 continue
             return min(max(measured / estimated, _MIN_USAGE_SCALE), _MAX_USAGE_SCALE)
 
@@ -350,9 +350,8 @@ class ChatContext(Context):
         ratio of measured to estimated tokens for the items that reply was
         generated from (see `_usage_scale`), which corrects for the model's
         tokenizer and chat template. Otherwise the estimates are used as they
-        are — still `_estimate_tokens`, which counts tool-call arguments and
-        reasoning text unconditionally, so the uncorrected path is not the
-        pre-measurement `len(str(item)) // 4` estimate.
+        are: `_estimate_tokens` over the formatter render, counting tool-call
+        arguments and reasoning text unconditionally.
 
         A 0.75 headroom factor (retaining 75% of the rated context length)
         reserves capacity for the system prompt, injected tool schemas, the
