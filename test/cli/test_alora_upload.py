@@ -95,6 +95,45 @@ def test_upload_intrinsic_token_lookup(monkeypatch, tmp_path, token):
     get_token.assert_called_once_with()
 
 
+def test_upload_intrinsic_leaves_source_directory_untouched(monkeypatch, tmp_path):
+    """Staging must not modify the adapter directory (issue #1812)."""
+    from cli.alora import intrinsic_uploader
+
+    weights = tmp_path / "weights"
+    weights.mkdir()
+    (weights / "adapter_config.json").write_text("{}")
+    (weights / "README.md").write_text("# my model card\n")
+    io_yaml = tmp_path / "io.yaml"
+    io_yaml.write_text("instruction: synthetic test\n")
+    before = sorted(p.name for p in weights.iterdir())
+
+    staged_names = []
+
+    def capture_upload(**kwargs):
+        staged = Path(kwargs["folder_path"])
+        staged_names.append(sorted(p.name for p in staged.iterdir()))
+
+    monkeypatch.setattr(intrinsic_uploader, "get_token", Mock(return_value="t"))
+    monkeypatch.setattr(
+        intrinsic_uploader,
+        "create_repo",
+        Mock(return_value=SimpleNamespace(url="https://example.invalid")),
+    )
+    monkeypatch.setattr(
+        intrinsic_uploader, "upload_folder", Mock(side_effect=capture_upload)
+    )
+
+    intrinsic_uploader.upload_intrinsic(
+        str(weights), "example/adapter", "example/base", "alora", str(io_yaml)
+    )
+
+    # The staged copy adds io.yaml and leaves out README.md...
+    assert staged_names == [["adapter_config.json", "io.yaml"]]
+    # ...while the source directory keeps every file it had.
+    assert sorted(p.name for p in weights.iterdir()) == before
+    assert (weights / "README.md").read_text() == "# my model card\n"
+
+
 @pytest.mark.parametrize("token", [None, "test-token-not-a-real-credential"])
 def test_add_readme_token_lookup(monkeypatch, token):
     """README orchestration uses Hub token lookup, with generation isolated."""
