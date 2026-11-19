@@ -10,8 +10,10 @@ aggregates per-input pass/fail counts, and saves the full results to JSON or JSO
 """
 
 import json
+import os
 import re
 from pathlib import Path
+from typing import Any
 
 from rich.console import Console
 from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn
@@ -22,6 +24,7 @@ from mellea.backends.backend import Backend
 from mellea.core import ModelOutputThunk
 from mellea.stdlib.components import SimpleComponent
 from mellea.stdlib.components.unit_test_eval import TestBasedEval
+from mellea.stdlib.start_backend import _resolve_model_id_str
 
 console = Console()
 
@@ -122,6 +125,30 @@ class TestEvalResult:
         return self.passed_count / self.total_count if self.total_count > 0 else 0.0
 
 
+def _eval_model_options(
+    max_tokens: int | None, thinking: bool | None
+) -> dict[str, Any]:
+    """Build the session-wide model options for an eval session.
+
+    Eval caps generation and judging at a small token budget. Thinking-capable
+    models such as Granite 4.2 reason by default, and that reasoning counts against
+    the budget, which can leave an empty answer or an unparsable judgement.
+
+    Args:
+        max_tokens: Maximum number of tokens to generate, or `None` for the
+            backend default.
+        thinking: Value for `ModelOption.THINKING`, or `None` to leave thinking at
+            the model's default.
+
+    Returns:
+        The options dict to pass as `model_options` to the backend.
+    """
+    options: dict[str, Any] = {ModelOption.MAX_NEW_TOKENS: max_tokens}
+    if thinking is not None:
+        options[ModelOption.THINKING] = thinking
+    return options
+
+
 def create_session(
     backend: str, model: str | None, max_tokens: int | None
 ) -> mellea.MelleaSession:
@@ -131,7 +158,8 @@ def create_session(
         backend: Backend name: `"ollama"`, `"openai"`, `"hf"`,
             `"watsonx"`, or `"litellm"`.
         model: Model ID or `ModelIdentifier` attribute name, or `None`
-            to use the default model.
+            to let the backend choose its own default model. The `"hf"`
+            backend has no default of its own, so `None` selects Granite 4.2 3B.
         max_tokens: Maximum number of tokens to generate, or `None` for
             the backend default.
 
@@ -143,7 +171,7 @@ def create_session(
         Exception: Re-raised from backend or session construction if
             initialisation fails.
     """
-    model_id = None
+    model_id: str | mellea.model_ids.ModelIdentifier | None = None
     if model:
         if model.isupper() or "_" in model:
             if hasattr(mellea.model_ids, model):
@@ -152,8 +180,10 @@ def create_session(
                 model_id = model
         else:
             model_id = model
-    else:
-        model_id = mellea.model_ids.IBM_GRANITE_4_1_3B
+
+    # Only forward a model when the user named one, so each backend otherwise
+    # applies its own default instead of a value forced by eval.
+    model_kwargs: dict[str, Any] = {} if model_id is None else {"model_id": model_id}
 
     try:
         backend_lower = backend.lower()
@@ -163,40 +193,75 @@ def create_session(
             from mellea.backends.ollama import OllamaModelBackend
 
             backend_instance = OllamaModelBackend(
-                model_id=model_id,
-                model_options={ModelOption.MAX_NEW_TOKENS: max_tokens},
+                **model_kwargs,
+                model_options=_eval_model_options(max_tokens, thinking=False),
             )
 
         elif backend_lower == "openai":
             from mellea.backends.openai import OpenAIBackend
+            from mellea.helpers.server_type import _server_type, _ServerType
 
+            # The CLI takes no base URL, so the backend reads OPENAI_BASE_URL. Apply
+            # the backend's own test: an unset URL means the OpenAI platform.
+            base_url = os.getenv("OPENAI_BASE_URL")
+            on_openai_platform = (
+                base_url is None or _server_type(base_url) == _ServerType.OPENAI
+            )
+            # Thinking is left at the model's default only on the OpenAI platform: for
+            # a bool, the backend adds `chat_template_kwargs` to the request body,
+            # which a hosted OpenAI endpoint may not accept. Other servers (Ollama,
+            # vLLM) get thinking off; the backend sends `reasoning_effort="none"` there.
+            # A model that reasons by default on the OpenAI platform can still use up
+            # --max-gen-tokens; raise the caps if answers come back empty.
             backend_instance = OpenAIBackend(
-                model_id=model_id,
-                model_options={ModelOption.MAX_NEW_TOKENS: max_tokens},
+                **model_kwargs,
+                model_options=_eval_model_options(
+                    max_tokens, thinking=None if on_openai_platform else False
+                ),
             )
 
         elif backend_lower in ["hf", "huggingface"]:
             from mellea.backends.huggingface import LocalHFBackend
 
+            if model_id is None:
+                # LocalHFBackend requires a model, so eval supplies the default.
+                console.print(
+                    "No model given for the hf backend; using Granite 4.2 3B "
+                    "(downloaded on first use)."
+                )
+                model_id = mellea.model_ids.IBM_GRANITE_4_2_3B
             backend_instance = LocalHFBackend(
                 model_id=model_id,
-                model_options={ModelOption.MAX_NEW_TOKENS: max_tokens},
+                model_options=_eval_model_options(max_tokens, thinking=False),
             )
 
         elif backend_lower == "watsonx":
             from mellea.backends.watsonx import WatsonxAIBackend
 
+            # The WatsonX backend has no thinking mapping, so leave thinking unset.
             backend_instance = WatsonxAIBackend(
-                model_id=model_id,
-                model_options={ModelOption.MAX_NEW_TOKENS: max_tokens},
+                **model_kwargs,
+                model_options=_eval_model_options(max_tokens, thinking=None),
             )
 
         elif backend_lower == "litellm":
             from mellea.backends.litellm import LiteLLMBackend
 
+            # LiteLLM takes a plain string, so convert a resolved ModelIdentifier.
+            litellm_kwargs: dict[str, Any] = (
+                {} if model_id is None else {"model_id": str(model_id)}
+            )
+            # The thinking toggle is only applied to Ollama-routed models, matching
+            # how LiteLLMBackend maps it. The backend default is Ollama-routed.
+            litellm_model = litellm_kwargs.get("model_id")
+            ollama_routed = (
+                litellm_model is None or "ollama" in litellm_model.split("/")[0]
+            )
             backend_instance = LiteLLMBackend(
-                model_id=str(model_id),
-                model_options={ModelOption.MAX_NEW_TOKENS: max_tokens},
+                **litellm_kwargs,
+                model_options=_eval_model_options(
+                    max_tokens, thinking=False if ollama_routed else None
+                ),
             )
 
         else:
@@ -212,9 +277,26 @@ def create_session(
 
     except Exception as e:
         console.print(
-            f"[red]Error creating session with backend={backend}, model={model_id}: {e}[/red]"
+            f"[red]Error creating session with backend={backend}, model={model or 'backend default'}: {e}[/red]"
         )
         raise
+
+
+def _resolved_model_name(session: mellea.MelleaSession, backend_name: str) -> str:
+    """Return the model name a session's backend will actually request.
+
+    Args:
+        session: A session built by `create_session`.
+        backend_name: The backend name the session was created with.
+
+    Returns:
+        The model name as the backend sends it, or `"unknown"` if the backend
+        does not expose one.
+    """
+    model_id = getattr(session.backend, "model_id", None)
+    if model_id is None:
+        return "unknown"
+    return _resolve_model_id_str(model_id, backend_name.lower())
 
 
 def run_evaluations(
@@ -267,15 +349,17 @@ def run_evaluations(
     total_inputs = sum(len(test_eval.inputs) for test_eval in all_test_evals)
     console.print(f"Total inputs to run: {total_inputs}")
 
-    console.print(f"Generation model: {model}")
-    console.print(f"Judge model: {judge_model}")
-
     m = create_session(backend=backend, model=model, max_tokens=max_gen_tokens)
     # Use same backend as generator if judge_backend not specified
+    judge_backend_name = judge_backend if judge_backend else backend
     judge_session = create_session(
-        backend=judge_backend if judge_backend else backend,
-        model=judge_model,
-        max_tokens=max_judge_tokens,
+        backend=judge_backend_name, model=judge_model, max_tokens=max_judge_tokens
+    )
+
+    # Report what the backends resolved, since an omitted model is chosen by the backend.
+    console.print(f"Generation model: {_resolved_model_name(m, backend)}")
+    console.print(
+        f"Judge model: {_resolved_model_name(judge_session, judge_backend_name)}"
     )
 
     all_results = []
