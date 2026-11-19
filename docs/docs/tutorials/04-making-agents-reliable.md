@@ -408,10 +408,6 @@ threshold. The available criteria are: `"harm"`, `"jailbreak"`, `"social_bias"`,
 `"profanity"`, `"violence"`, `"unethical_behavior"`, `"groundedness"`,
 `"answer_relevance"`, `"context_relevance"`, and `"function_call"`.
 
-> **Note:** If you were using `GuardianRisk.SEXUAL_CONTENT` from the old API,
-> there is no direct equivalent key in `CRITERIA_BANK`. Use a custom free-text
-> criteria string instead — see [Custom criteria](../how-to/safety-guardrails.md#custom-criteria) in the Guardian how-to guide.
-
 ---
 
 ## Step 5: Running multiple Guardian checks with a shared backend
@@ -489,10 +485,6 @@ The available criteria are: `"harm"`, `"jailbreak"`, `"social_bias"`,
 `"profanity"`, `"violence"`, `"unethical_behavior"`, `"groundedness"`,
 `"answer_relevance"`, `"context_relevance"`, and `"function_call"`.
 
-> **Note:** If you were using `GuardianRisk.SEXUAL_CONTENT` from the old API,
-> there is no direct equivalent key in `CRITERIA_BANK`. Use a custom free-text
-> criteria string instead — see [Custom criteria](../how-to/safety-guardrails.md#custom-criteria) in the Guardian how-to guide.
-
 ---
 
 ## Step 6: Groundedness checks with retrieved context
@@ -557,7 +549,7 @@ doc = Document(text=RETRIEVED_CONTEXT, title="Mellea docs")
 check_ctx = ChatContext().add(Message("user", question))
 hallucination_result = rag.flag_hallucinated_content(output_text, [doc], check_ctx, guardian_backend)
 
-flagged = [s for s in hallucination_result if s.get("faithfulness") == "No"]
+flagged = [s for s in hallucination_result if s.get("faithfulness") in ("unfaithful", "partial")]
 if not flagged:
     print("Grounded response:", output_text)
 else:

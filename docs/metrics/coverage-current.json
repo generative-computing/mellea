@@ -1,7 +1,7 @@
 {
-  "total_symbols": 2029,
+  "total_symbols": 2019,
   "documented_symbols": 313,
-  "coverage_percentage": 15.43,
+  "coverage_percentage": 15.5,
   "missing_symbols": {
     "mellea.model_ids": [
       "ModelIdentifier",
@@ -1580,18 +1580,6 @@
       "Context",
       "Requirement",
       "ValidationResult"
-    ],
-    "mellea.stdlib.requirements.safety.guardian": [
-      "Backend",
-      "BaseModelSubclass",
-      "CBlock",
-      "Context",
-      "MelleaLogger",
-      "Requirement",
-      "ValidationResult",
-      "Message",
-      "ChatContext",
-      "BackendType"
     ],
     "mellea.stdlib.components": [
       "CBlock",

@@ -71,7 +71,9 @@ class LiteLLMBackend(FormatterBackend):
         model_id (str): The LiteLLM model identifier string; typically
             `"<provider>/<model_creator>/<model_name>"`.
         formatter (ChatFormatter | None): Formatter for rendering components.
-            Defaults to `TemplateFormatter`.
+            Defaults to a `TemplateFormatter`. Only `LocalHFBackend` supports
+            LLMON, so an `LLMONFormatter` or a registered LLMON model raises
+            `ValueError`.
         base_url (str | None): Base URL for the LLM API endpoint. When set,
             forwarded as `api_base` to LiteLLM. When `None` (default),
             LiteLLM infers the endpoint from the model prefix (e.g.

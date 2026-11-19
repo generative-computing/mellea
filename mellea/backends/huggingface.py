@@ -73,7 +73,7 @@ from ..core import (
     get_images_from_component,
 )
 from ..core.base import AbstractMelleaTool
-from ..formatters import ChatFormatter, TemplateFormatter, granite as granite_formatters
+from ..formatters import ChatFormatter, default_formatter, granite as granite_formatters
 from ..formatters.granite import intrinsics as intrinsics
 from ..formatters.granite.base.util import (
     _LLGUIDANCE_GRAMMAR_DEFAULTS,
@@ -613,7 +613,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         model_id (str | ModelIdentifier): Used to load the model and tokenizer via
             Hugging Face `Auto*` classes.
         formatter (ChatFormatter | None): Formatter for rendering components into
-            prompts. Defaults to `TemplateFormatter`.
+            prompts. Defaults to `default_formatter(model_id)`: an `LLMONFormatter`
+            for a registered LLMON model, otherwise a `TemplateFormatter`.
         use_caches (bool): If `False`, KV caching is disabled even if a `Cache`
             is provided.
         cache (Cache | None): Caching strategy; defaults to
@@ -654,6 +655,9 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
     _cached_blocks: dict[str, DynamicCache] = dict()
     _supports_composed_adapters = True
+    # The one backend that hands the chat template each message as it is, with the
+    # fields an LLMON template reads a turn's parts from.
+    _supports_llmon = True
 
     def __init__(
         self,
@@ -670,9 +674,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         model_options: dict | None = None,
     ):
         """Load model weights from the given model ID, or from a custom config if provided."""
-        formatter = (
-            formatter if formatter is not None else TemplateFormatter(model_id=model_id)
-        )
+        formatter = formatter if formatter is not None else default_formatter(model_id)
 
         super().__init__(model_id, formatter, model_options=model_options)
 

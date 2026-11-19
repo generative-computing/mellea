@@ -331,7 +331,11 @@ class ToolMessage(Message):
 
 
 def message_from_template_representation(
-    tr: TemplateRepresentation, *, default_role: "Message.Role", content: str
+    tr: TemplateRepresentation,
+    *,
+    default_role: "Message.Role",
+    content: str,
+    message_cls: type[Message] = Message,
 ) -> Message:
     """Build a `Message` from a component's `TemplateRepresentation`.
 
@@ -346,12 +350,15 @@ def message_from_template_representation(
         tr: The template representation returned by the component's `format_for_llm`.
         default_role: The positional role guess to use when `tr.role` is `None`.
         content: The already-rendered text content for the message.
+        message_cls: The class to build: `Message` or a subclass that takes the
+            same constructor arguments.
 
     Returns:
-        A `Message` with the resolved role, content, attachments, and tool metadata.
+        A `message_cls` instance with the resolved role, content, attachments, and
+        tool metadata.
     """
     role = tr.role if tr.role is not None else default_role
-    return Message(
+    return message_cls(
         role=role,  # type: ignore[arg-type]  # validated by Message.__init__
         content=content,
         images=tr.images,
@@ -430,6 +437,9 @@ def as_generic_chat_history(
     - `CBlock` subclasses (subclasses only; plain `CBlock` is stringified)
     - Other unknown component types
 
+    A `ModelOutputThunk` that was never parsed renders as its raw model output
+    string; one that parsed to `None` renders as an empty assistant message.
+
     Existing `Message` objects are preserved as-is; their content is not formatted.
     This design preserves Message fidelity while providing an escape hatch for unknown types.
 
@@ -458,13 +468,16 @@ def as_generic_chat_history(
                     return c.parsed_repr
                 if isinstance(c.parsed_repr, str):
                     return Message(role="assistant", content=c.parsed_repr)
-                # Use value if parsed_repr is None
-                if c.parsed_repr is None:
+                if not c._parsed:
                     if c.value is None:
                         raise ValueError(
-                            "ModelOutputThunk has no value and no parsed_repr — was it evaluated?"
+                            "ModelOutputThunk has no value and no parsed_repr — "
+                            f"was it evaluated? is_computed()={c.is_computed()}"
                         )
                     content = str(c.value)
+                elif c.parsed_repr is None:
+                    # Parsed to `None`: nothing to render, so emit an empty message.
+                    content = ""
                 else:
                     _logger.warning(
                         f"ModelOutputThunk.parsed_repr is {type(c.parsed_repr).__name__}, "

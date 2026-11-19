@@ -426,33 +426,6 @@ See: [Safety Guardrails](../how-to/safety-guardrails.md)
 
 ---
 
-## GuardianCheck
-
-> **Deprecated as of v0.4.** Use [`guardian_check()`](#guardian_check),
-> [`policy_guardrails()`](#policy_guardrails), or
-> [`factuality_detection()`](#factuality_detection) from the Guardian adapter functions
-> instead. See [Safety Guardrails](../how-to/safety-guardrails.md).
-
-A deprecated `Requirement` subclass that validates LLM outputs using a separately loaded
-Granite Guardian model. Requires an independent Ollama or Hugging Face backend
-for the Guardian model.
-
-See: [Safety Guardrails](../how-to/safety-guardrails.md)
-
----
-
-## GuardianRisk
-
-> **Deprecated as of v0.4.** Use [`CRITERIA_BANK`](#criteria_bank) string keys
-> with [`guardian_check()`](#guardian_check) instead.
-
-An enum specifying which safety risk category the deprecated `GuardianCheck`
-class should detect. Replaced by the string keys in `CRITERIA_BANK`.
-
-See: [Safety Guardrails](../how-to/safety-guardrails.md)
-
----
-
 ## policy_guardrails()
 
 A Guardian adapter function that checks whether a scenario complies with a
@@ -545,6 +518,19 @@ Use `simple_validate` instead when the criterion is deterministic (word count,
 regex, type check) — no second LLM call is needed.
 
 See: [Evaluate with LLM-as-a-Judge](../how-to/evaluate-with-llm-as-a-judge.md)
+
+---
+
+## LLMON
+
+LLM Object Notation ([arXiv:2603.22519](https://arxiv.org/abs/2603.22519)), an
+LLM-native markup that marks a prompt up with special-token blocks, so a model
+trained on it can tell what it should do (`instr`) from what it should only read
+(`data`, `doc`) and what its answer must satisfy (`req`). Mellea sends components
+to the Granite LLMON models with `LLMONFormatter`, which fills the message
+fields their chat template turns into LLMON. Only `LocalHFBackend` supports it.
+
+See: [LLMON](../concepts/llmon.md)
 
 ---
 

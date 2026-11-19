@@ -20,6 +20,7 @@ import yaml
 
 from mellea.backends.adapters._core import Adapter, EmbeddedBinding
 from mellea.backends.adapters.adapter import (
+    _embedded_adapter_from_entry,
     _embedded_adapters_from_hub,
     _embedded_adapters_from_model_directory,
     _embedded_adapters_from_source,
@@ -105,6 +106,70 @@ def _by_name(pairs: list[tuple[Adapter, dict]]) -> dict[str, tuple[Adapter, dict
 
 
 # ---- _embedded_adapters_from_model_directory ----
+
+
+_PROBE_CONFIG = {
+    "model": None,
+    "response_format": None,
+    "transformations": [{"type": "first_token", "labels": ["no", "yes"]}],
+    "instruction": None,
+    "parameters": {"temperature": 0.0, "max_completion_tokens": 1},
+    "sentence_boundaries": None,
+}
+
+
+def _write_mixed_model_dir(root: pathlib.Path) -> pathlib.Path:
+    """A Switch dir with a LoRA slot, a probe slot and an unsupported slot type."""
+    entries = [
+        ("answerability", "lora"),
+        ("answerability_probe", "probe"),
+        ("future_slot", "sr"),
+    ]
+    index = {
+        "model_info": {"num_adapters": len(entries), "base_model": "test-model"},
+        "adapters": [
+            {
+                "adapter_index": i + 1,
+                "adapter_name": name,
+                "technology": tech,
+                "control_token": {"token": f"<|{name}|>", "id": 1000 + i},
+                "io_config": f"io_configs/{name}/io.yaml",
+            }
+            for i, (name, tech) in enumerate(entries)
+        ],
+    }
+    (root / "adapter_index.json").write_text(json.dumps(index))
+    for name, _ in entries[:2]:
+        d = root / "io_configs" / name
+        d.mkdir(parents=True)
+        cfg = _PROBE_CONFIG if name.endswith("_probe") else _ANSWERABILITY_CONFIG
+        (d / "io.yaml").write_text(yaml.safe_dump(cfg))
+    # No io.yaml for future_slot: it must be skipped before the read.
+    return root
+
+
+class TestProbeSlots:
+    def test_probe_technology_registers_as_lora(self):
+        adapter = _embedded_adapter_from_entry("answerability_probe", "probe")
+        assert adapter.identity.name == "answerability_probe"
+        assert adapter.identity.adapter_type == "lora"
+        assert isinstance(adapter.weights, EmbeddedBinding)
+
+    def test_invalid_technology_raises(self):
+        with pytest.raises(ValueError, match="technology must be one of"):
+            _embedded_adapter_from_entry("test", "qlora")
+
+    def test_probe_and_lora_load_and_unknown_technology_is_skipped(
+        self, tmp_path, caplog
+    ):
+        model_dir = _write_mixed_model_dir(tmp_path)
+        pairs = _embedded_adapters_from_model_directory(model_dir)
+        assert {(a.identity.name, a.identity.adapter_type) for a, _ in pairs} == {
+            ("answerability", "lora"),
+            ("answerability_probe", "lora"),
+        }
+        assert "future_slot" in caplog.text
+        assert "'sr' is not supported" in caplog.text
 
 
 class TestFromModelDirectory:
@@ -205,8 +270,8 @@ class TestFromModelDirectory:
                 model_dir, intrinsic_name="nonexistent"
             )
 
-    def test_invalid_technology_raises(self, tmp_path):
-        """An unsupported technology in the index is rejected."""
+    def test_unsupported_technology_is_skipped(self, tmp_path, caplog):
+        """An unsupported technology is skipped; with nothing else, none load."""
         index = {
             "adapters": [
                 {
@@ -221,8 +286,9 @@ class TestFromModelDirectory:
         cfg_dir.mkdir(parents=True)
         (cfg_dir / "io.yaml").write_text(yaml.dump({"model": None}))
 
-        with pytest.raises(ValueError, match="must be 'lora' or 'alora'"):
+        with pytest.raises(ValueError, match="No adapters found"):
             _embedded_adapters_from_model_directory(tmp_path)
+        assert "'qlora' is not supported" in caplog.text
 
     def test_path_traversal_in_io_config_raises(self, tmp_path):
         """io_config paths with ../ traversal that escape model_path are rejected."""
@@ -483,6 +549,27 @@ class TestFromHub:
             (cache_dir / "mellea" / "embedded-adapter-configs").iterdir()
         )
         assert len(materialized_dirs) == 2
+
+    def test_from_hub_skips_unsupported_technology_without_io_config(
+        self, tmp_path, caplog
+    ):
+        """A Hub index skips an unsupported slot before its io.yaml is resolved.
+
+        Materialisation must apply the same technology filter as
+        `_embedded_adapters_from_model_directory`, which skips the slot before reading a file the
+        slot need not publish.
+        """
+        snapshot_dir = _write_mixed_model_dir(tmp_path)
+        with patch("huggingface_hub.snapshot_download", return_value=str(snapshot_dir)):
+            pairs = _embedded_adapters_from_hub(
+                "ibm-granite/granite-switch-mixed", cache_dir=str(tmp_path / "cache")
+            )
+
+        assert {(a.identity.name, a.identity.adapter_type) for a, _ in pairs} == {
+            ("answerability", "lora"),
+            ("answerability_probe", "lora"),
+        }
+        assert "future_slot" in caplog.text
 
     def test_missing_huggingface_hub_raises(self):
         with patch.dict("sys.modules", {"huggingface_hub": None}):

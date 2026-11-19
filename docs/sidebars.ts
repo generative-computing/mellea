@@ -36,6 +36,7 @@ const sidebars: SidebarsConfig = {
         'concepts/context-and-sessions',
         'concepts/mobjects-and-mify',
         'concepts/plugins',
+        'concepts/llmon',
       ],
     },
     {

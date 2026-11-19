@@ -550,8 +550,13 @@ def _embedded_adapter_from_entry(
     Args:
         intrinsic_name (str): Adapter function name from the index entry
             (e.g. `"answerability"`).
-        technology (str): Adapter technology in the switch model — `"lora"` or
-            `"alora"`. Determines the `Identity.adapter_type`.
+        technology (str): Adapter technology in the switch model: `"lora"`,
+            `"alora"`, or `"probe"` (a classifier head that answers with one
+            label token, registered as LoRA). Determines the
+            `Identity.adapter_type`. A probe slot must carry its own adapter
+            function name (conventionally `<name>_probe`): the output contract
+            is keyed by name, so reusing a generative capability's name would
+            apply that capability's schema to the one-token readout.
 
     Returns:
         _AdapterCore: A composed `Adapter` whose `weights` is an
@@ -559,17 +564,21 @@ def _embedded_adapter_from_entry(
             template), carrying the declared I/O contract for `intrinsic_name`.
 
     Raises:
-        ValueError: If `technology` is neither `"lora"` nor `"alora"`.
+        ValueError: If `technology` is not `"lora"`, `"alora"`, or `"probe"`.
     """
-    if technology not in ("lora", "alora"):
-        raise ValueError(f"technology must be 'lora' or 'alora', got '{technology}'")
+    if technology not in _EMBEDDED_TECHNOLOGIES:
+        raise ValueError(
+            "technology must be one of "
+            f"{sorted(_EMBEDDED_TECHNOLOGIES)}, got '{technology}'"
+        )
+    adapter_type = "lora" if technology == "probe" else technology
     capability = intrinsic_name
     if intrinsic_name in known_intrinsic_names():
         capability = fetch_intrinsic_metadata(intrinsic_name).effective_capability
     return _AdapterCore(
         identity=Identity(
             name=intrinsic_name,
-            adapter_type=cast(Literal["lora", "alora"], technology),
+            adapter_type=cast(Literal["lora", "alora"], adapter_type),
             capability=capability,
         ),
         io_contract=get_io_contract(intrinsic_name),
@@ -600,7 +609,9 @@ def _embedded_adapters_from_model_directory(
         FileNotFoundError: If `adapter_index.json` is missing.
         ValueError: If an `io.yaml` file listed in the index cannot be found,
             if an `io_config` path escapes the model directory, if an entry's
-            `technology` is not `"lora"`/`"alora"`, or if no adapters are found.
+            no adapters are found. Entries
+            with an unsupported `technology` (e.g. `"sr"`) are skipped with a
+            warning so the remaining adapters still load.
     """
     import json as _json
 
@@ -628,6 +639,17 @@ def _embedded_adapters_from_model_directory(
         io_config_rel = entry.get("io_config")
         if io_config_rel is None:
             continue
+        technology = entry.get("technology", "lora")
+        if not _is_supported_embedded_technology(technology):
+            # Skip unsupported slots before reading an io.yaml they may not publish.
+            MelleaLogger.get_logger().warning(
+                "Skipping embedded adapter function %r: technology %r is not "
+                "supported (supported: %s).",
+                entry_name,
+                technology,
+                sorted(_EMBEDDED_TECHNOLOGIES),
+            )
+            continue
 
         io_config_path = model_path / io_config_rel
         try:
@@ -646,9 +668,7 @@ def _embedded_adapters_from_model_directory(
         with open(io_config_path, encoding="utf-8") as f:
             config_dict = yaml.safe_load(f)
 
-        adapter = _embedded_adapter_from_entry(
-            entry_name, entry.get("technology", "lora")
-        )
+        adapter = _embedded_adapter_from_entry(entry_name, technology)
         adapters.append((adapter, config_dict))
 
     if not adapters:
@@ -766,6 +786,12 @@ def _embedded_adapters_from_hub(
                 for entry in index.get("adapters", []):
                     io_config_rel = entry.get("io_config")
                     if io_config_rel is None:
+                        continue
+                    if not _is_supported_embedded_technology(
+                        entry.get("technology", "lora")
+                    ):
+                        # `_embedded_adapters_from_model_directory` skips these
+                        # too, possibly before an absent io.yaml would be read.
                         continue
                     io_config_path = (snapshot_root / io_config_rel).resolve(
                         strict=True
@@ -914,6 +940,25 @@ def _discover_embedded_adapters(
             merged_invocation_text=merged_invocation_text,
         )
     return results, skip_reasons
+
+
+# Supported adapter_index.json `technology` values. A probe is a classifier head
+# that answers with one label token; it activates and generates like a LoRA, so
+# it is registered as one.
+_EMBEDDED_TECHNOLOGIES = frozenset({"lora", "alora", "probe"})
+
+
+def _is_supported_embedded_technology(technology: object) -> bool:
+    """Return whether an `adapter_index.json` entry names a supported technology.
+
+    Args:
+        technology (object): Raw `technology` value from an index entry.
+
+    Returns:
+        bool: `True` for a supported technology string, `False` for an
+        unsupported technology or a non-string value.
+    """
+    return isinstance(technology, str) and technology in _EMBEDDED_TECHNOLOGIES
 
 
 def get_adapter_for_intrinsic(
