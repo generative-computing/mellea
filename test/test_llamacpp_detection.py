@@ -24,6 +24,7 @@ import pytest
 from test.conftest import (
     LLAMACPP_DEFAULT_BASE_URL,
     LLAMACPP_PROPS_KEYS,
+    LLAMACPP_SWITCH_DEFAULT_BASE_URL,
     _check_llamacpp_available,
 )
 
@@ -176,3 +177,19 @@ def test_base_url_env_override_is_resolved_to_props(monkeypatch, base_url, expec
     )
     assert _check_llamacpp_available() is True
     assert urls == [expected]
+
+
+def test_switch_gate_reads_its_own_base_url(monkeypatch):
+    """The `llamacpp_switch` gate probes the Switch server, never the base one."""
+    monkeypatch.setenv("LLAMACPP_BASE_URL", "http://127.0.0.1:9999/v1")
+    monkeypatch.delenv("LLAMACPP_SWITCH_BASE_URL", raising=False)
+    urls = _patch_urlopen(
+        monkeypatch, lambda _: _FakeResponse(json.dumps(LLAMACPP_PROPS).encode())
+    )
+    assert (
+        _check_llamacpp_available(
+            "LLAMACPP_SWITCH_BASE_URL", LLAMACPP_SWITCH_DEFAULT_BASE_URL
+        )
+        is True
+    )
+    assert urls == ["http://127.0.0.1:8081/props"]

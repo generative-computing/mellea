@@ -8,7 +8,9 @@ description: "Route support tickets with decide, choose, and score. Each answer 
 > and this API may change or be removed at any time without a deprecation period.
 
 **Prerequisites:** a Granite Switch model with the decision adapter, such as
-`granite-switch-4.1-8b`, served via vLLM on `localhost:8000`. The preview
+`granite-switch-4.1-8b`, served via vLLM on `localhost:8000`, or via
+llama-server on `127.0.0.1:8081` without a GPU (see
+[Granite Switch on llama-server](../advanced/intrinsics.md#granite-switch-on-llama-server)). The preview
 checkpoints do not include it (see
 [Choosing a model](../advanced/intrinsics.md#choosing-a-model)). Serving setup
 is on the
