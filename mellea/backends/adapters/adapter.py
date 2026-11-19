@@ -711,8 +711,8 @@ class _NoEmbeddedAdaptersError(ValueError):
         elif skipped:
             details = "; ".join(f"{name!r}: {why}" for name, why in skipped.items())
             message = (
-                f"No adapters found in {location}: no adapter function has a "
-                f"supported technology ({details})"
+                f"No adapters found in {location}; skipped unsupported "
+                f"entries: {details}"
             )
         else:
             message = f"No adapters found in {location}"
