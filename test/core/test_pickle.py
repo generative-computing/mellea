@@ -14,6 +14,8 @@ import pickle
 
 import pytest
 
+from mellea import start_session
+from mellea.backends.model_ids import IBM_GRANITE_4_2_3B
 from mellea.core import CBlock, ComputedModelOutputThunk, ModelOutputThunk
 from mellea.core.base import GenerateType
 from mellea.stdlib.context.chat import ChatContext
@@ -170,6 +172,34 @@ def test_computed_mot_subclass_pickle_preserves_type():
     # The computed invariant still rejects an uncomputing write.
     with pytest.raises(AttributeError):
         loaded.value = None  # type: ignore[assignment]
+
+
+@pytest.mark.e2e
+@pytest.mark.ollama
+def test_backend_produced_context_pickle_drops_raw_payloads():
+    """A context holding a real Ollama generation pickles without backend-native payloads."""
+    m = start_session("ollama", model_id=IBM_GRANITE_4_2_3B, ctx=ChatContext())
+    m.instruct("Say hello in one word.")
+
+    # Sanity: the backend populated the SDK payload on both the raw and the log.
+    thunks = [i for i in m.ctx.as_list() if isinstance(i, ModelOutputThunk)]
+    assert thunks, "expected the generated thunk in the context"
+    source = thunks[-1]
+    assert source.raw.response is not None
+    assert source._generate_log is not None
+    assert source._generate_log.model_output is not None
+
+    loaded_ctx = pickle.loads(pickle.dumps(m.ctx))
+
+    loaded_thunks = [i for i in loaded_ctx.as_list() if isinstance(i, ModelOutputThunk)]
+    loaded = loaded_thunks[-1]
+    assert loaded.value == source.value
+    assert loaded.raw.response is None
+    assert loaded.raw.streamed_chunks is None
+    assert loaded._generate_log is not None
+    assert loaded._generate_log.model_output is None
+    # The source keeps its SDK payload.
+    assert source.raw.response is not None
 
 
 def test_cblock_pickle_roundtrip():
