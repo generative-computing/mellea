@@ -7,6 +7,7 @@ The README generator's LLM and the Hugging Face upload are replaced so these
 tests exercise only the layout resolution in `cli/alora/commands.py`.
 """
 
+import json
 import re
 
 import pytest
@@ -17,6 +18,19 @@ pytest.importorskip("huggingface_hub", reason="huggingface_hub not installed")
 from cli.m import cli
 
 runner = CliRunner()
+
+
+@pytest.fixture(autouse=True)
+def _no_hub_downloads(monkeypatch):
+    """Fail any unstubbed config download instead of reaching the real Hub.
+
+    Tests that care about the download replace this with their own stub.
+    """
+
+    def refuse(**_kwargs):
+        raise OSError("Hub downloads are disabled in this test")
+
+    monkeypatch.setattr("huggingface_hub.hf_hub_download", refuse)
 
 
 class _FakeHfApi:
@@ -171,7 +185,8 @@ def test_nested_weights_for_another_base_model_warn_but_still_generate(monkeypat
     assert "stembolts/granite-4.1-3b/lora/" in message
     assert "stembolts/granite-4.1-3b/alora/" in message
     assert captured["layout"] == "intrinsic"
-    assert captured["adapter_type"] == "alora"
+    # No weights were found, so there is no type to report; the generator defaults.
+    assert captured["adapter_type"] is None
 
 
 def test_unmapped_org_qualified_base_model_is_found_without_a_false_warning(
@@ -195,16 +210,69 @@ def test_unmapped_org_qualified_base_model_is_found_without_a_false_warning(
     assert captured["adapter_type"] == "lora"
 
 
-@pytest.mark.unit
 @pytest.mark.parametrize(
     "extra_args", [["--layout", "intrinsic"], ["--layout", "flat"]]
 )
-def test_explicit_layout_documents_alora_without_inspecting(monkeypatch, extra_args):
-    """Without detection there is nothing to read the type from, so alora stays."""
+def test_explicit_layout_reports_no_adapter_type(monkeypatch, extra_args):
+    """Without inspecting the repo there is nothing to read the type from."""
     result, captured = _invoke_add_readme(monkeypatch, extra_args)
 
     assert result.exit_code == 0, result.output
-    assert captured["adapter_type"] == "alora"
+    assert captured["adapter_type"] is None
+
+
+@pytest.mark.parametrize(
+    ("config", "expected_type"),
+    [
+        # PEFT writes the key for every LoRA config and nulls it unless activated.
+        ({"alora_invocation_tokens": None, "r": 6}, "lora"),
+        ({"alora_invocation_tokens": [1, 2, 3], "r": 32}, "alora"),
+    ],
+)
+def test_flat_repo_adapter_type_is_read_from_its_config(
+    monkeypatch, tmp_path, config, expected_type
+):
+    """A flat repo's type comes from the root `adapter_config.json`."""
+    config_path = tmp_path / "adapter_config.json"
+    config_path.write_text(json.dumps(config))
+    downloaded: dict = {}
+
+    def fake_download(**kwargs):
+        downloaded.update(kwargs)
+        return str(config_path)
+
+    monkeypatch.setattr("huggingface_hub.hf_hub_download", fake_download)
+    monkeypatch.setattr(
+        "huggingface_hub.HfApi", lambda: _FakeHfApi(["adapter_config.json"])
+    )
+
+    result, captured = _invoke_add_readme(monkeypatch, [])
+
+    assert result.exit_code == 0, result.output
+    assert captured["layout"] == "flat"
+    assert captured["adapter_type"] == expected_type
+    # Only the one small config file is fetched, from the target repo.
+    assert downloaded["repo_id"] == "acme/stembolts"
+    assert downloaded["filename"] == "adapter_config.json"
+
+
+def test_unreadable_flat_config_warns_and_reports_no_type(monkeypatch):
+    """If the config cannot be fetched the README makes no claim about the type."""
+
+    def failing_download(**_kwargs):
+        raise OSError("connection reset")
+
+    monkeypatch.setattr("huggingface_hub.hf_hub_download", failing_download)
+    monkeypatch.setattr(
+        "huggingface_hub.HfApi", lambda: _FakeHfApi(["adapter_config.json"])
+    )
+
+    result, captured = _invoke_add_readme(monkeypatch, [])
+
+    assert result.exit_code == 0, result.output
+    assert captured["layout"] == "flat"
+    assert captured["adapter_type"] is None
+    assert "could not read adapter_config.json" in _plain(result.output)
 
 
 @pytest.mark.unit

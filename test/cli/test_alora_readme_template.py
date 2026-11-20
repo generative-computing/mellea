@@ -36,7 +36,14 @@ _TEMPLATE_VARS = {
     "adapter_type": "alora",
 }
 
-_FLAT_TEMPLATE_VARS = {**_TEMPLATE_VARS, "intrinsic_layout": False}
+_FLAT_TEMPLATE_VARS = {
+    **_TEMPLATE_VARS,
+    "intrinsic_layout": False,
+    "example_item_literal": repr("Flywheel imbalance detected."),
+    "invocation_prompt_literal": repr(
+        "<|start_of_role|>check_requirement<|end_of_role|>"
+    ),
+}
 
 
 def _render_template(vars_dict: dict | None = None) -> str:
@@ -67,7 +74,6 @@ def test_readme_template_renders_and_python_sample_compiles():
     assert "LocalFileBinding" in content
 
 
-@pytest.mark.unit
 def test_readme_template_flat_layout_documents_peft_not_intrinsic_loading():
     """A flat upload must get a PEFT sample, not intrinsic code that cannot find it.
 
@@ -84,6 +90,48 @@ def test_readme_template_flat_layout_documents_peft_not_intrinsic_loading():
     # The prose may mention LocalFileBinding; the sample must not use it.
     assert "LocalFileBinding(" not in content
     assert "Intrinsic" not in code
+
+
+def test_readme_template_flat_sample_prompts_and_decodes_the_adapter():
+    """The flat sample must do something with the adapter, not stop at loading it.
+
+    Regression guard: the sample used to end after `from_pretrained`, so it ran
+    and showed nothing, and a reader calling `generate()` on plain text got
+    base-model output and concluded the adapter was broken. It must build the
+    prompt shape training used and print only the generated reply.
+    """
+    code = _extract_python_sample(_render_template(_FLAT_TEMPLATE_VARS))
+
+    assert (
+        'prompt = f"{item}\\nRequirement: <|end_of_text|>\\n{INVOCATION_PROMPT}"'
+        in code
+    )
+    assert (
+        "INVOCATION_PROMPT = '<|start_of_role|>check_requirement<|end_of_role|>'"
+        in code
+    )
+    assert "item = 'Flywheel imbalance detected.'" in code
+    assert "add_special_tokens=False" in code
+    assert "model.generate(" in code
+    assert 'inputs["input_ids"].shape[1]' in code
+
+
+@pytest.mark.parametrize(
+    ("adapter_type", "expected", "unexpected"),
+    [
+        ("alora", "activated LoRA (aLoRA)", "This is a LoRA adapter"),
+        ("lora", "This is a LoRA adapter", "aLoRA"),
+        (None, "trained on prompts of one fixed shape, ending in", "aLoRA"),
+    ],
+)
+def test_readme_template_flat_prose_follows_the_adapter_type(
+    adapter_type, expected, unexpected
+):
+    """The explanation only claims a type the repository's config confirmed."""
+    content = _render_template({**_FLAT_TEMPLATE_VARS, "adapter_type": adapter_type})
+
+    assert expected in content
+    assert unexpected not in content
 
 
 @pytest.mark.unit

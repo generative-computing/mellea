@@ -5,7 +5,12 @@
 
 import pytest
 
-from cli.alora.layout import adapter_weight_dirs, detect_repo_layout, find_adapter_types
+from cli.alora.layout import (
+    adapter_type_from_config,
+    adapter_weight_dirs,
+    detect_repo_layout,
+    find_adapter_types,
+)
 
 
 @pytest.mark.unit
@@ -106,6 +111,22 @@ def test_find_adapter_types_uses_the_requested_base_model():
         )
         == []
     )
+
+
+@pytest.mark.parametrize(
+    ("adapter_config", "expected"),
+    [
+        # PEFT writes the key for every LoRA config and nulls it unless activated,
+        # so presence of the key must not be mistaken for an aLoRA.
+        ({"alora_invocation_tokens": None, "r": 6}, "lora"),
+        ({"alora_invocation_tokens": [], "r": 6}, "lora"),
+        ({"r": 6}, "lora"),
+        ({"alora_invocation_tokens": [49152, 2, 7], "r": 32}, "alora"),
+    ],
+)
+def test_adapter_type_from_config(adapter_config, expected):
+    """The tokens' value, not the key's presence, marks an activated LoRA."""
+    assert adapter_type_from_config(adapter_config) == expected
 
 
 @pytest.mark.parametrize(

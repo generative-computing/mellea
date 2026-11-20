@@ -13,9 +13,9 @@ A trained adapter can be published in two layouts:
   loading cannot find it.
 """
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from pathlib import PurePath
-from typing import Literal
+from typing import Any, Literal
 
 RepoLayout = Literal["intrinsic", "flat", "unknown"]
 AdapterTypeName = Literal["lora", "alora"]
@@ -47,6 +47,22 @@ def detect_repo_layout(repo_files: Iterable[str], intrinsic_name: str) -> RepoLa
     if "adapter_config.json" in files:
         return "flat"
     return "unknown"
+
+
+def adapter_type_from_config(adapter_config: Mapping[str, Any]) -> AdapterTypeName:
+    """Tell a LoRA adapter from an aLoRA adapter using its `adapter_config.json`.
+
+    PEFT writes `alora_invocation_tokens` for every LoRA config and sets it to
+    `null` unless the adapter is an activated LoRA, so the value decides, not
+    whether the key is present.
+
+    Args:
+        adapter_config: Parsed contents of the adapter's `adapter_config.json`.
+
+    Returns:
+        `"alora"` if `alora_invocation_tokens` holds any tokens, else `"lora"`.
+    """
+    return "alora" if adapter_config.get("alora_invocation_tokens") else "lora"
 
 
 def adapter_weight_dirs(
