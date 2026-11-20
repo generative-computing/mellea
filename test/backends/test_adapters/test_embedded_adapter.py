@@ -220,6 +220,36 @@ class TestProbeSlots:
         assert "technology 'sr' is not supported" in message
         assert str(tmp_path) not in message
 
+    def test_hub_load_failure_reason_survives_rewrite(self, tmp_path):
+        """A non-not-found ValueError keeps its reason when restated per repo."""
+        snapshot = tmp_path / "snapshot"
+        snapshot.mkdir()
+        # The copy loop validates io_config paths against the snapshot's cache
+        # root (two levels above the snapshot), so this resolves outside it.
+        outside = tmp_path.parent.parent / "mellea-escape-probe.yaml"
+        outside.write_text("{}")
+        index = {
+            "adapters": [
+                {
+                    "adapter_name": "answerability",
+                    "technology": "lora",
+                    "io_config": "../../../mellea-escape-probe.yaml",
+                }
+            ]
+        }
+        (snapshot / "adapter_index.json").write_text(json.dumps(index))
+        with patch("huggingface_hub.snapshot_download", return_value=str(snapshot)):
+            with pytest.raises(ValueError) as exc:
+                _embedded_adapters_from_hub(
+                    "ibm-granite/granite-switch-mixed",
+                    cache_dir=str(tmp_path / "cache"),
+                    intrinsic_name="answerability",
+                )
+        message = str(exc.value)
+        assert "No adapter found for adapter function 'answerability'" in message
+        assert "ibm-granite/granite-switch-mixed" in message
+        assert "escapes" in message
+
     def test_resolve_adapter_reports_unsupported_technology(self, tmp_path):
         """The error a caller sees when resolving an unsupported slot by name."""
         backend = MagicMock()

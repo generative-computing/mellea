@@ -879,11 +879,16 @@ def _embedded_adapters_from_hub(
     except _NoEmbeddedAdaptersError as e:
         raise _NoEmbeddedAdaptersError(repo_id, e.intrinsic_name, e.skipped) from e
     except ValueError as e:
+        # Restate the location against the repo ID, keeping the reason (e.g. a
+        # missing io.yaml or a path that escapes the snapshot) rather than
+        # discarding it: the index may list the slot even when loading fails.
+        reason = str(e)
         if intrinsic_name is not None:
             raise ValueError(
-                f"No adapter found for adapter function '{intrinsic_name}' in {repo_id}"
+                f"No adapter found for adapter function '{intrinsic_name}' "
+                f"in {repo_id}: {reason}"
             ) from e
-        raise ValueError(f"No adapters found in {repo_id}") from e
+        raise ValueError(f"No adapters found in {repo_id}: {reason}") from e
 
 
 def _embedded_adapters_from_source(
