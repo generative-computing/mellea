@@ -5,7 +5,7 @@ tags:
   - mellea
 ---
 
-# {{ adapter_name }} Intrinsic Adapter
+# {{ adapter_name }} {% if intrinsic_layout %}Intrinsic Adapter{% else %}Adapter{% endif %}
 
 {{ high_level_description }}
 
@@ -27,6 +27,7 @@ tags:
 
 ## How to Use
 
+{% if intrinsic_layout %}
 To use this intrinsic adapter in your application, you need to compose an adapter
 (a factory function returning it, rather than a dedicated shim class) and an intrinsic
 component. The adapter connects to the HuggingFace model repository
@@ -35,7 +36,7 @@ component that can be used with any compatible backend.
 
 > **Repo layout:** the code below only works if `{{ userid }}/{{ intrinsic_name }}`
 > was uploaded with `m alora upload ... --intrinsic --io-yaml ./io.yaml` — that
-> command places weights at `{{ intrinsic_name }}/<base-model>/alora/`, which is
+> command places weights at `{{ intrinsic_name }}/<base-model>/{{ adapter_type }}/`, which is
 > where `LocalFileBinding` looks for them. The plain `m alora upload` (without
 > `--intrinsic`) pushes weights to the repo root instead, and this code will
 > fail with `ValueError: Intrinsic '{{ intrinsic_name }}' ... not found`.
@@ -56,7 +57,7 @@ from mellea.stdlib.components.intrinsic import Intrinsic
 
 _INTRINSIC_MODEL_ID = "{{ userid }}/{{ intrinsic_name }}"
 _INTRINSIC_ADAPTER_NAME = "{{ intrinsic_name }}"
-_INTRINSIC_QUALIFIED_NAME = f"{_INTRINSIC_ADAPTER_NAME}_{AdapterType.ALORA.value}"
+_INTRINSIC_QUALIFIED_NAME = f"{_INTRINSIC_ADAPTER_NAME}_{AdapterType.{{ adapter_type | upper }}.value}"
 
 
 def _{{ intrinsic_name }}_adapter() -> Adapter:
@@ -64,11 +65,11 @@ def _{{ intrinsic_name }}_adapter() -> Adapter:
     from its Identity, output contract, and weights binding, rather than a
     dedicated shim class."""
     return Adapter(
-        identity=Identity(name=_INTRINSIC_ADAPTER_NAME, adapter_type="alora"),
+        identity=Identity(name=_INTRINSIC_ADAPTER_NAME, adapter_type="{{ adapter_type }}"),
         io_contract=get_io_contract(_INTRINSIC_ADAPTER_NAME),
         weights=LocalFileBinding(
             name=_INTRINSIC_ADAPTER_NAME,
-            adapter_type=AdapterType.ALORA,
+            adapter_type=AdapterType.{{ adapter_type | upper }},
             repo_id=_INTRINSIC_MODEL_ID,
             # A custom, non-catalog adapter has no catalog entry to resolve
             # revision=None from — pin it explicitly.
@@ -85,7 +86,7 @@ class {{ intrinsic_name_camelcase }}Intrinsic(Intrinsic, SimpleComponent):
         Intrinsic.__init__(
             self,
             intrinsic_name=_INTRINSIC_ADAPTER_NAME,
-            adapter_types=(AdapterType.ALORA,),
+            adapter_types=(AdapterType.{{ adapter_type | upper }},),
             # `_generate_from_intrinsic` never adds `action` to the context —
             # intrinsics reach the model only through their rewriter, driven
             # by `intrinsic_kwargs` — so these arguments must be passed here,
@@ -115,9 +116,51 @@ def {{ intrinsic_name }}({{ arglist }}, ctx: Context, backend: Backend | Adapter
 
 if __name__ == "__main__":
     from mellea.backends.huggingface import LocalHFBackend
-    from mellea.backends.model_ids import IBM_GRANITE_4_1_3B
     from mellea.stdlib.context import ChatContext
-    backend = LocalHFBackend(IBM_GRANITE_4_1_3B)
+    backend = LocalHFBackend({{ base_model_literal }})
     result, ctx = {{ intrinsic_name }}({{ example_call_kwargs }}, ctx=ChatContext(), backend=backend)
     print(result.value)
 ```
+{% else %}
+This repository uses the **flat** adapter layout: the trained weights are stored
+at the repository root.
+
+> **Mellea adapter functions:** Mellea's `LocalFileBinding` and adapter-function
+> loading expect weights at `<adapter-name>/<base-model>/<lora|alora>/`, so they
+> cannot load this repository as an intrinsic. To use this adapter as a Mellea
+> adapter function, re-upload it with
+> `m alora upload ... --intrinsic --io-yaml ./io.yaml`, then regenerate this
+> README with `m alora add-readme`.
+
+{% if adapter_type == "alora" -%}
+This is an activated LoRA (aLoRA) adapter. It only activates from its invocation
+string onward, so the prompt must contain that string, after the input, the same
+way it did in training.
+{%- elif adapter_type == "lora" -%}
+This is a LoRA adapter. It was trained on prompts of one fixed shape, so use the
+same shape at inference.
+{%- else -%}
+The adapter was trained on prompts of one fixed shape, ending in an invocation
+string, so use the same shape at inference.
+{%- endif %}
+
+Load it with PEFT, build the prompt, and decode only the generated reply:
+
+```python
+from peft import AutoPeftModelForCausalLM
+from transformers import AutoTokenizer
+
+model = AutoPeftModelForCausalLM.from_pretrained("{{ userid }}/{{ intrinsic_name }}")
+tokenizer = AutoTokenizer.from_pretrained({{ base_model_literal }})
+
+# Training formatted every input as: the item, a "Requirement:" line, then the
+# invocation string.
+INVOCATION_PROMPT = {{ invocation_prompt_literal }}
+item = {{ example_item_literal }}
+prompt = f"{item}\nRequirement: <|end_of_text|>\n{INVOCATION_PROMPT}"
+
+inputs = tokenizer(prompt, return_tensors="pt", add_special_tokens=False)
+output = model.generate(**inputs, max_new_tokens=32)
+print(tokenizer.decode(output[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True))
+```
+{% endif %}

@@ -8,20 +8,55 @@ from a JSONL training dataset — including a high-level description, the inferr
 Python argument list, and Jinja2-renderable sample rows. Validates the generated
 output with deterministic requirements (correct naming conventions, syntactically
 valid argument lists) before rendering the final `INTRINSIC_README.md` via a
-Jinja2 template.
+Jinja2 template. The rendered integration code matches the target repository's
+adapter layout: intrinsic (Mellea adapter-function usage) or flat (plain PEFT).
 """
 
 import ast
 import json
 import os
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel
 
+from cli.alora.layout import AdapterTypeName
 from mellea import start_session
 from mellea.stdlib.requirements.requirement import check, req, simple_validate
 from mellea.stdlib.sampling import RejectionSamplingStrategy
 from mellea.stdlib.session import MelleaSession
+
+DEFAULT_INVOCATION_PROMPT = "<|start_of_role|>check_requirement<|end_of_role|>"
+"""Invocation string `m alora train` uses when no `--promptfile` is given.
+
+Must match the default in `cli/alora/train.py`; a test checks that it does.
+"""
+
+
+def load_invocation_prompt(prompt_file: str | None) -> str:
+    """Return the invocation string the adapter was trained with.
+
+    Reads the file the same way `m alora train` does: a JSON object with an
+    `invocation_prompt` key. Without a file, returns the training default.
+
+    Args:
+        prompt_file: Path to the `--promptfile` JSON, or `None`/empty for the default.
+
+    Returns:
+        The invocation string appended to every training input.
+
+    Raises:
+        ValueError: The file has no `invocation_prompt` key, which training would
+            have rejected too.
+    """
+    if not prompt_file:
+        return DEFAULT_INVOCATION_PROMPT
+    with open(prompt_file, encoding="utf-8") as f:
+        config = json.load(f)
+    if not isinstance(config, dict) or "invocation_prompt" not in config:
+        raise ValueError(
+            f"{prompt_file} must be a JSON object with an 'invocation_prompt' key."
+        )
+    return config["invocation_prompt"]
 
 
 class ReadmeTemplateVars(BaseModel):
@@ -140,6 +175,8 @@ def make_readme_jinja_dict(
     prompt_file: str,
     name: str,
     hints: str | None,
+    layout: Literal["intrinsic", "flat"] = "intrinsic",
+    adapter_type: AdapterTypeName | None = None,
 ) -> dict[str, Any]:
     """Generate all template variables for the intrinsic README using an LLM.
 
@@ -155,6 +192,11 @@ def make_readme_jinja_dict(
         name: Destination model name on Hugging Face Hub
             (e.g. `"acme/carbchecker-alora"`).
         hints: Optional string of additional domain hints to include in the prompt.
+        layout: Adapter layout of the target repository; selects the integration
+            code the rendered README documents.
+        adapter_type: The adapter's type, if known. The intrinsic sample loads it
+            as that type and assumes `"alora"` when `None`; the flat README
+            describes it as that type, or makes no claim when `None`.
 
     Returns:
         Dict of Jinja2 template variables for rendering the `INTRINSIC_README.md`.
@@ -214,7 +256,12 @@ def make_readme_jinja_dict(
     if hints is not None:
         hints = "\n\nHere are some additional details about the domain:\n" + hints
 
-    description = f"""You are generating metadata for a README file for a machine learning intrinsic adapter trained on the dataset below.{hints_text}
+    # A flat repository is not usable as an intrinsic, so its README, and the prompt
+    # that steers the LLM writing it, should not call the adapter one.
+    kind = "intrinsic adapter" if layout == "intrinsic" else "adapter"
+    noun = "intrinsic" if layout == "intrinsic" else "adapter"
+
+    description = f"""You are generating metadata for a README file for a machine learning {kind} trained on the dataset below.{hints_text}
 
 Here are the first few samples from the training dataset (JSONL format):
 {sample_text}
@@ -225,10 +272,10 @@ Base model: {base_model}
 {arglist_hint}
 
 Generate appropriate values for each field:
-- high_level_description: A 2-3 sentence description of what this intrinsic adapter does based on the training data
+- high_level_description: A 2-3 sentence description of what this {kind} does based on the training data
 - dataset_description: A brief description of the training dataset contents and format
 - userid: Set this to "your-username" as a placeholder for the HuggingFace user ID. MUST be {name.split("/")[0]}
-- intrinsic_name: A short snake_case identifier for this intrinsic (e.g., "stembolts"). No hyphens. MUST be {name.split("/")[1]}
+- intrinsic_name: A short snake_case identifier for this {noun} (e.g., "stembolts"). No hyphens. MUST be {name.split("/")[1]}
 - intrinsic_name_camelcase: The CamelCase version of intrinsic_name (e.g., "Stembolt"). No underscores.
 - arglist: The Python function argument list with type hints based on the input data structure. This will be used as function parameters.
 - arglist_without_type_annotations: The arglist without any type annotations."""
@@ -282,7 +329,19 @@ Generate appropriate values for each field:
         parts = [f"{arg_names[0]}={str(first_item)!r}"]
     vars_dict["example_call_kwargs"] = ", ".join(parts)
 
+    # What the flat sample feeds the model: the first training item, formatted the
+    # way training formatted it, then the invocation string. Both are rendered as
+    # Python literals so quotes, braces, and backslashes in the data stay valid.
+    vars_dict["example_item_literal"] = repr(str(first_item))
+    vars_dict["invocation_prompt_literal"] = repr(load_invocation_prompt(prompt_file))
+
     vars_dict["base_model"] = base_model
+    # Rendered into sample code, so as a literal: it may be a path with odd characters.
+    vars_dict["base_model_literal"] = repr(base_model)
+    vars_dict["intrinsic_layout"] = layout == "intrinsic"
+    vars_dict["adapter_type"] = adapter_type or (
+        "alora" if layout == "intrinsic" else None
+    )
 
     return vars_dict
 
@@ -294,6 +353,8 @@ def generate_readme(
     output_path: str,
     name: str,
     hints: str | None,
+    layout: Literal["intrinsic", "flat"] = "intrinsic",
+    adapter_type: AdapterTypeName | None = None,
 ) -> str:
     """Generate an INTRINSIC_README.md file from the dataset and template.
 
@@ -307,6 +368,11 @@ def generate_readme(
         output_path: Destination path for the generated README file.
         name: Destination model name on Hugging Face Hub.
         hints: Optional string of additional domain hints for the LLM.
+        layout: Adapter layout of the target repository. `"intrinsic"` documents
+            Mellea adapter-function usage; `"flat"` documents plain PEFT usage.
+        adapter_type: The adapter's type, if known. The intrinsic sample loads it
+            as that type and assumes `"alora"` when `None`; the flat README
+            describes it as that type, or makes no claim when `None`.
 
     Returns:
         The path to the written output file (same as `output_path`).
@@ -317,7 +383,14 @@ def generate_readme(
 
     try:
         template_vars = make_readme_jinja_dict(
-            m, dataset_path, base_model, prompt_file or "", name, hints
+            m,
+            dataset_path,
+            base_model,
+            prompt_file or "",
+            name,
+            hints,
+            layout,
+            adapter_type,
         )
 
         template_dir = os.path.dirname(os.path.abspath(__file__))
@@ -329,7 +402,7 @@ def generate_readme(
         with open(output_path, "w") as f:
             f.write(readme_content)
 
-        print(f"Generated INTRINSIC_README.md at {output_path}")
+        print(f"Generated README at {output_path}")
         return output_path
     finally:
         m.cleanup()
