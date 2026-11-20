@@ -192,12 +192,18 @@ class TestProbeSlots:
             ]
         }
         (tmp_path / "adapter_index.json").write_text(json.dumps(index))
-        with pytest.raises(
-            ValueError, match="no adapter function has a supported technology"
-        ) as exc:
+        with pytest.raises(ValueError, match="skipped unsupported entries") as exc:
             _embedded_adapters_from_model_directory(tmp_path)
         assert "'slot_a': technology 'sr'" in str(exc.value)
         assert "'slot_b': technology 'sr'" in str(exc.value)
+
+    def test_unsupported_slot_without_io_config_names_technology(self, tmp_path):
+        index = {"adapters": [{"adapter_name": "future_slot", "technology": "sr"}]}
+        (tmp_path / "adapter_index.json").write_text(json.dumps(index))
+        with pytest.raises(ValueError, match="technology 'sr' is not supported"):
+            _embedded_adapters_from_model_directory(
+                tmp_path, intrinsic_name="future_slot"
+            )
 
     def test_hub_unsupported_slot_reason_survives_materialisation(self, tmp_path):
         (tmp_path / "snapshot").mkdir()

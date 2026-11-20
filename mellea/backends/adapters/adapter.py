@@ -637,12 +637,11 @@ def _embedded_adapters_from_model_directory(
             continue
         if intrinsic_name is not None and entry_name != intrinsic_name:
             continue
-        io_config_rel = entry.get("io_config")
-        if io_config_rel is None:
-            continue
         technology = entry.get("technology", "lora")
         if not _is_supported_embedded_technology(technology):
-            # Skip unsupported slots before reading an io.yaml they may not publish.
+            # Skip unsupported slots before reading an io.yaml they may not publish,
+            # and before the io_config check below so an entry that omits it is
+            # still reported by technology rather than silently dropped.
             skipped[entry_name] = (
                 f"technology {technology!r} is not supported "
                 f"(supported: {sorted(_EMBEDDED_TECHNOLOGIES)})"
@@ -652,6 +651,10 @@ def _embedded_adapters_from_model_directory(
                 entry_name,
                 skipped[entry_name],
             )
+            continue
+
+        io_config_rel = entry.get("io_config")
+        if io_config_rel is None:
             continue
 
         io_config_path = model_path / io_config_rel
