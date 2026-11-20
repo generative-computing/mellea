@@ -33,6 +33,7 @@ _TEMPLATE_VARS = {
     "arglist_as_kwargs": "description=description",
     "example_call_kwargs": "description='a cracked stembolt'",
     "intrinsic_layout": True,
+    "adapter_type": "alora",
 }
 
 _FLAT_TEMPLATE_VARS = {**_TEMPLATE_VARS, "intrinsic_layout": False}
@@ -105,6 +106,33 @@ def test_readme_template_constructs_composed_adapter_for_non_catalog_name():
 
     intrinsic = namespace["StemboltsIntrinsic"](description="a cracked stembolt")
     assert intrinsic.metadata.name == "stembolts"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("adapter_type", ["lora", "alora"])
+def test_readme_template_uses_the_detected_adapter_type_throughout(adapter_type):
+    """Every place the sample names the adapter type must follow `adapter_type`.
+
+    Regression guard: the sample used to hardcode `AdapterType.ALORA` (the
+    binding, the `Intrinsic`, the identity, and the qualified name), so a LoRA
+    adapter was documented, registered, and looked up as an aLoRA.
+    """
+    from mellea.backends.adapters.catalog import AdapterType
+
+    code = _extract_python_sample(
+        _render_template({**_TEMPLATE_VARS, "adapter_type": adapter_type})
+    )
+    namespace: dict = {}
+    exec(code, namespace)
+
+    expected = AdapterType(adapter_type)
+    adapter = namespace["_stembolts_adapter"]()
+    assert adapter.weights.adapter_type is expected
+    assert adapter.identity.adapter_type == adapter_type
+    assert namespace["_INTRINSIC_QUALIFIED_NAME"] == f"stembolts_{adapter_type}"
+
+    intrinsic = namespace["StemboltsIntrinsic"](description="a cracked stembolt")
+    assert intrinsic.adapter_types == (expected,)
 
 
 @pytest.mark.unit

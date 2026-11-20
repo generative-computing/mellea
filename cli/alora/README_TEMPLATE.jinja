@@ -36,7 +36,7 @@ component that can be used with any compatible backend.
 
 > **Repo layout:** the code below only works if `{{ userid }}/{{ intrinsic_name }}`
 > was uploaded with `m alora upload ... --intrinsic --io-yaml ./io.yaml` — that
-> command places weights at `{{ intrinsic_name }}/<base-model>/alora/`, which is
+> command places weights at `{{ intrinsic_name }}/<base-model>/{{ adapter_type }}/`, which is
 > where `LocalFileBinding` looks for them. The plain `m alora upload` (without
 > `--intrinsic`) pushes weights to the repo root instead, and this code will
 > fail with `ValueError: Intrinsic '{{ intrinsic_name }}' ... not found`.
@@ -57,7 +57,7 @@ from mellea.stdlib.components.intrinsic import Intrinsic
 
 _INTRINSIC_MODEL_ID = "{{ userid }}/{{ intrinsic_name }}"
 _INTRINSIC_ADAPTER_NAME = "{{ intrinsic_name }}"
-_INTRINSIC_QUALIFIED_NAME = f"{_INTRINSIC_ADAPTER_NAME}_{AdapterType.ALORA.value}"
+_INTRINSIC_QUALIFIED_NAME = f"{_INTRINSIC_ADAPTER_NAME}_{AdapterType.{{ adapter_type | upper }}.value}"
 
 
 def _{{ intrinsic_name }}_adapter() -> Adapter:
@@ -65,11 +65,11 @@ def _{{ intrinsic_name }}_adapter() -> Adapter:
     from its Identity, output contract, and weights binding, rather than a
     dedicated shim class."""
     return Adapter(
-        identity=Identity(name=_INTRINSIC_ADAPTER_NAME, adapter_type="alora"),
+        identity=Identity(name=_INTRINSIC_ADAPTER_NAME, adapter_type="{{ adapter_type }}"),
         io_contract=get_io_contract(_INTRINSIC_ADAPTER_NAME),
         weights=LocalFileBinding(
             name=_INTRINSIC_ADAPTER_NAME,
-            adapter_type=AdapterType.ALORA,
+            adapter_type=AdapterType.{{ adapter_type | upper }},
             repo_id=_INTRINSIC_MODEL_ID,
             # A custom, non-catalog adapter has no catalog entry to resolve
             # revision=None from — pin it explicitly.
@@ -86,7 +86,7 @@ class {{ intrinsic_name_camelcase }}Intrinsic(Intrinsic, SimpleComponent):
         Intrinsic.__init__(
             self,
             intrinsic_name=_INTRINSIC_ADAPTER_NAME,
-            adapter_types=(AdapterType.ALORA,),
+            adapter_types=(AdapterType.{{ adapter_type | upper }},),
             # `_generate_from_intrinsic` never adds `action` to the context —
             # intrinsics reach the model only through their rewriter, driven
             # by `intrinsic_kwargs` — so these arguments must be passed here,
