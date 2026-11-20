@@ -227,9 +227,12 @@ def _ask_adapter_layout(model_name: str) -> Literal["intrinsic", "flat"]:
 def _read_flat_adapter_type(model_name: str, token: str) -> AdapterTypeName | None:
     """Read a flat repository's adapter type from its `adapter_config.json`.
 
-    Downloads only that one small file. Best-effort like the rest of the
-    inspection: any failure returns `None`, and the README then describes the
-    adapter without claiming a type.
+    Downloads only that one small file, into a temporary directory that is
+    removed afterwards, so nothing is left in the shared Hugging Face cache. A
+    fresh directory also means a failed request cannot silently fall back to a
+    stale cached copy. Best-effort like the rest of the inspection: any failure
+    returns `None`, and the README then describes the adapter without claiming a
+    type.
 
     Args:
         model_name: Target Hugging Face repository name.
@@ -240,12 +243,17 @@ def _read_flat_adapter_type(model_name: str, token: str) -> AdapterTypeName | No
     """
     from huggingface_hub import hf_hub_download
 
+    print(f"Reading adapter_config.json from {model_name} (read-only, temporary copy).")
     try:
-        config_path = hf_hub_download(
-            repo_id=model_name, filename="adapter_config.json", token=token
-        )
-        with open(config_path, encoding="utf-8") as fh:
-            return adapter_type_from_config(json.load(fh))
+        with tempfile.TemporaryDirectory() as cache_dir:
+            config_path = hf_hub_download(
+                repo_id=model_name,
+                filename="adapter_config.json",
+                token=token,
+                cache_dir=cache_dir,
+            )
+            with open(config_path, encoding="utf-8") as fh:
+                return adapter_type_from_config(json.load(fh))
     except Exception as e:
         print(f"Warning: could not read adapter_config.json from {model_name}: {e}")
         return None
@@ -287,10 +295,18 @@ def _inspect_repo(
             'Please install them with: pip install "mellea[hf]"'
         ) from e
 
+    print(
+        f"Checking {model_name} on Hugging Face (read-only) to detect its adapter layout."
+    )
     try:
         repo_files = HfApi().list_repo_files(repo_id=model_name, token=token)
     except RepositoryNotFoundError:
-        print(f"{model_name} does not exist yet; its adapter layout is unknown.")
+        # Hugging Face also raises this for a private repository the token cannot
+        # see, so it does not prove the repository is missing.
+        print(
+            f"Could not find {model_name} on Hugging Face: it may not exist yet, or "
+            "your token may not have access to it. Its adapter layout is unknown."
+        )
         return "unknown", None
     except Exception as e:
         print(f"Warning: could not inspect the layout of {model_name}: {e}")
@@ -348,9 +364,10 @@ def alora_add_readme(
     ),
     layout: str = typer.Option(
         "auto",
-        help="Adapter layout of the target repository: 'auto' detects it and "
-        "asks when it cannot be verified, 'intrinsic' is "
-        "<name>/<base-model>/<lora|alora>/, and 'flat' is the repository root.",
+        help="Adapter layout of the target repository: 'auto' looks it up on "
+        "Hugging Face with read-only requests and asks when it cannot be "
+        "verified, 'intrinsic' is <name>/<base-model>/<lora|alora>/, and 'flat' "
+        "is the repository root. 'intrinsic' and 'flat' make no requests.",
     ),
 ):
     """Generate and upload an INTRINSIC_README.md for a trained adapter.
@@ -362,10 +379,14 @@ def alora_add_readme(
     The generated usage code depends on how the adapter was published. The
     command detects the repository's layout by default (weights nested under
     `<name>/<base-model>/<lora|alora>/` versus flat at the root) and renders
-    matching code; if the layout cannot be verified — for example the README is
+    matching code. Detection makes read-only requests to Hugging Face with your
+    token, before anything is generated or uploaded: a listing of the
+    repository's files and, for a flat repository, its small
+    `adapter_config.json`, which is downloaded to a temporary directory and
+    removed. If the layout cannot be verified — for example the README is
     generated before the weights are uploaded — it asks which layout to use, or
     exits with an error when there is no terminal to ask on. Pass `--layout` to
-    skip detection and state it explicitly, for example in scripts and CI.
+    skip detection and those requests, for example in scripts and CI.
 
     Prerequisites:
         Hugging Face token available (set `HF_TOKEN` or run `hf auth login`).

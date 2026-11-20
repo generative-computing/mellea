@@ -9,6 +9,7 @@ tests exercise only the layout resolution in `cli/alora/commands.py`.
 
 import json
 import re
+from pathlib import Path
 
 import pytest
 from typer.testing import CliRunner
@@ -244,13 +245,17 @@ def test_explicit_layout_reports_no_adapter_type(monkeypatch, extra_args):
 def test_flat_repo_adapter_type_is_read_from_its_config(
     monkeypatch, tmp_path, config, expected_type
 ):
-    """A flat repo's type comes from the root `adapter_config.json`."""
-    config_path = tmp_path / "adapter_config.json"
-    config_path.write_text(json.dumps(config))
+    """A flat repo's type comes from the root `adapter_config.json`.
+
+    The file is downloaded into a throwaway directory, not the shared Hugging Face
+    cache, and that directory is gone once the type has been read.
+    """
     downloaded: dict = {}
 
     def fake_download(**kwargs):
         downloaded.update(kwargs)
+        config_path = Path(kwargs["cache_dir"]) / "adapter_config.json"
+        config_path.write_text(json.dumps(config))
         return str(config_path)
 
     monkeypatch.setattr("huggingface_hub.hf_hub_download", fake_download)
@@ -266,6 +271,84 @@ def test_flat_repo_adapter_type_is_read_from_its_config(
     # Only the one small config file is fetched, from the target repo.
     assert downloaded["repo_id"] == "acme/stembolts"
     assert downloaded["filename"] == "adapter_config.json"
+    # ...into a temporary directory outside the shared cache, removed afterwards.
+    from huggingface_hub.constants import HF_HUB_CACHE
+
+    cache_dir = Path(downloaded["cache_dir"])
+    assert not str(cache_dir).startswith(str(HF_HUB_CACHE))
+    assert not cache_dir.exists()
+
+
+def test_hub_requests_are_announced_before_they_are_made(monkeypatch, tmp_path):
+    """The user is told about each read-only Hub request, not just its result."""
+
+    def fake_download(**kwargs):
+        path = Path(kwargs["cache_dir"]) / "adapter_config.json"
+        path.write_text(json.dumps({"alora_invocation_tokens": None}))
+        return str(path)
+
+    monkeypatch.setattr("huggingface_hub.hf_hub_download", fake_download)
+    monkeypatch.setattr(
+        "huggingface_hub.HfApi", lambda: _FakeHfApi(["adapter_config.json"])
+    )
+
+    result, _ = _invoke_add_readme(monkeypatch, [])
+
+    message = _plain(result.output)
+    assert "Checking acme/stembolts on Hugging Face (read-only)" in message
+    assert "Reading adapter_config.json from acme/stembolts" in message
+    # The announcement comes before the outcome it precedes.
+    assert message.index("Checking acme/stembolts") < message.index(
+        "Detected the flat adapter layout"
+    )
+
+
+@pytest.mark.parametrize("layout", ["intrinsic", "flat"])
+def test_explicit_layout_makes_and_announces_no_hub_requests(monkeypatch, layout):
+    """`--layout` skips detection entirely, so there is nothing to announce."""
+
+    def forbidden(*_args, **_kwargs):
+        raise AssertionError("an explicit --layout must not contact Hugging Face")
+
+    monkeypatch.setattr("huggingface_hub.HfApi", forbidden)
+    monkeypatch.setattr("huggingface_hub.hf_hub_download", forbidden)
+
+    result, _ = _invoke_add_readme(monkeypatch, ["--layout", layout])
+
+    assert result.exit_code == 0, result.output
+    assert "on Hugging Face (read-only)" not in _plain(result.output)
+
+
+def test_not_found_does_not_claim_the_repository_is_missing(monkeypatch):
+    """Hugging Face also raises not-found for a private repo the token cannot see.
+
+    The message must not state the repository does not exist, which could be false.
+    """
+    import httpx
+    from huggingface_hub.errors import RepositoryNotFoundError
+
+    class NotFoundApi:
+        def list_repo_files(self, **_kwargs):
+            raise RepositoryNotFoundError(
+                "401 Client Error. Repository Not Found",
+                response=httpx.Response(
+                    401,
+                    request=httpx.Request(
+                        "GET", "https://huggingface.co/api/models/acme/stembolts"
+                    ),
+                ),
+            )
+
+    monkeypatch.setattr("huggingface_hub.HfApi", NotFoundApi)
+
+    result, captured = _invoke_add_readme(monkeypatch, [])
+
+    message = _plain(result.output)
+    assert "Could not find acme/stembolts" in message
+    assert "may not exist yet, or your token may not have access" in message
+    assert "does not exist yet" not in message
+    # Unverifiable, so it falls through to asking, as before.
+    assert captured["layout"] == "intrinsic"
 
 
 def test_unreadable_flat_config_warns_and_reports_no_type(monkeypatch):
