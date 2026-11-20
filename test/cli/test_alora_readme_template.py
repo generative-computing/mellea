@@ -20,7 +20,9 @@ import pytest
 pytest.importorskip("jinja2", reason="jinja2 not installed")
 
 _TEMPLATE_VARS = {
-    "base_model": "ibm-granite/granite-4.1-3b",
+    # Deliberately not granite-4.1-3b, the model the sample used to hardcode.
+    "base_model": "ibm-granite/granite-3.3-2b-instruct",
+    "base_model_literal": repr("ibm-granite/granite-3.3-2b-instruct"),
     "adapter_name": "Stembolts",
     "high_level_description": "Detects defective stembolts from inspection notes.",
     "dataset_description": "JSONL rows of inspection notes and defect labels.",
@@ -55,14 +57,17 @@ def _render_template(vars_dict: dict | None = None) -> str:
     return template.render(**(vars_dict or _TEMPLATE_VARS))
 
 
-def _extract_python_sample(readme_content: str) -> str:
+def _extract_full_sample(readme_content: str) -> str:
     match = re.search(r"```python\n(.*?)\n```", readme_content, re.DOTALL)
     assert match is not None, "README template has no fenced python code sample"
-    code = match.group(1)
+    return match.group(1)
+
+
+def _extract_python_sample(readme_content: str) -> str:
     # The `if __name__ == "__main__":` block calls the generated function against
     # a real LocalHFBackend — exercise only the adapter/intrinsic construction,
     # not model loading or generation.
-    return code.split('if __name__ == "__main__":')[0]
+    return _extract_full_sample(readme_content).split('if __name__ == "__main__":')[0]
 
 
 @pytest.mark.unit
@@ -87,6 +92,9 @@ def test_readme_template_flat_layout_documents_peft_not_intrinsic_loading():
 
     assert "AutoPeftModelForCausalLM" in code
     assert "acme/stembolts" in code
+    assert (
+        "AutoTokenizer.from_pretrained('ibm-granite/granite-3.3-2b-instruct')" in code
+    )
     # The prose may mention LocalFileBinding; the sample must not use it.
     assert "LocalFileBinding(" not in content
     assert "Intrinsic" not in code
@@ -181,6 +189,65 @@ def test_readme_template_uses_the_detected_adapter_type_throughout(adapter_type)
 
     intrinsic = namespace["StemboltsIntrinsic"](description="a cracked stembolt")
     assert intrinsic.adapter_types == (expected,)
+
+
+@pytest.mark.parametrize(
+    "base_model",
+    [
+        "ibm-granite/granite-3.3-2b-instruct",
+        "myorg/my-finetune",
+        # A path with characters that would break a naively quoted string.
+        '/models/it\'s \\ "mine"',
+    ],
+)
+def test_readme_template_main_loads_the_base_model_the_adapter_was_trained_on(
+    monkeypatch, base_model
+):
+    """The runnable `__main__` must build its backend from `--basemodel`.
+
+    Regression guard: it hardcoded `LocalHFBackend(IBM_GRANITE_4_1_3B)`, but the
+    loader looks for weights under the *backend's* base model, so for an adapter
+    trained on anything else the README's own code failed with the same
+    "not found" error as a flat upload.
+    """
+    import sys
+    import types
+    from types import SimpleNamespace
+
+    import mellea.stdlib.functional as mfuncs
+
+    built: list = []
+
+    class RecordingBackend:
+        def __init__(self, model_id):
+            built.append(model_id)
+
+        def list_adapters(self):
+            return []
+
+        def add_adapter(self, adapter):
+            pass
+
+    fake_module = types.ModuleType("mellea.backends.huggingface")
+    fake_module.LocalHFBackend = RecordingBackend  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "mellea.backends.huggingface", fake_module)
+    monkeypatch.setattr(
+        mfuncs, "act", lambda action, ctx, backend: (SimpleNamespace(value="ok"), ctx)
+    )
+
+    code = _extract_full_sample(
+        _render_template(
+            {
+                **_TEMPLATE_VARS,
+                "base_model": base_model,
+                "base_model_literal": repr(base_model),
+            }
+        )
+    )
+    exec(code, {"__name__": "__main__"})
+
+    assert built == [base_model]
+    assert "IBM_GRANITE_4_1_3B" not in code
 
 
 @pytest.mark.unit
