@@ -23,7 +23,11 @@ from cli.alora.readme_generator import (
 class _FakeSession:
     """Stand-in for `MelleaSession` returning a fixed, valid template answer."""
 
-    def instruct(self, *_args, **_kwargs) -> str:
+    def __init__(self) -> None:
+        self.description = ""
+
+    def instruct(self, description: str, *_args, **_kwargs) -> str:
+        self.description = description
         return json.dumps(
             {
                 "high_level_description": "Finds defective parts.",
@@ -37,11 +41,11 @@ class _FakeSession:
         )
 
 
-def _template_vars(tmp_path, item, **kwargs):
+def _template_vars(tmp_path, item, session=None, **kwargs):
     data = tmp_path / "data.jsonl"
     data.write_text(json.dumps({"item": item, "label": "flywheel"}) + "\n")
     return make_readme_jinja_dict(
-        _FakeSession(),  # type: ignore[arg-type]
+        session or _FakeSession(),  # type: ignore[arg-type]
         str(data),
         "ibm-granite/granite-4.1-3b",
         kwargs.pop("prompt_file", ""),
@@ -132,3 +136,40 @@ def test_adapter_type_defaulting(tmp_path, layout, adapter_type, expected):
     result = _template_vars(tmp_path, "note", layout=layout, adapter_type=adapter_type)
 
     assert result["adapter_type"] == expected
+
+
+def test_llm_prompt_calls_a_flat_adapter_an_adapter_not_an_intrinsic(tmp_path):
+    """The prompt steers the description the LLM writes, so it must not call a flat
+    repository an intrinsic, which it is not usable as.
+    """
+    session = _FakeSession()
+    _template_vars(tmp_path, "note", session=session, layout="flat")
+
+    prompt = session.description
+    assert "machine learning adapter trained on the dataset" in prompt
+    assert "what this adapter does" in prompt
+    assert "identifier for this adapter" in prompt
+    assert "intrinsic adapter" not in prompt
+    assert "this intrinsic" not in prompt
+
+
+def test_llm_prompt_keeps_the_intrinsic_wording_for_intrinsic_repos(tmp_path):
+    session = _FakeSession()
+    _template_vars(tmp_path, "note", session=session, layout="intrinsic")
+
+    prompt = session.description
+    assert "machine learning intrinsic adapter trained on the dataset" in prompt
+    assert "what this intrinsic adapter does" in prompt
+    assert "identifier for this intrinsic" in prompt
+
+
+@pytest.mark.parametrize("layout", ["intrinsic", "flat"])
+def test_llm_prompt_keeps_the_field_names_the_model_must_fill(tmp_path, layout):
+    """`intrinsic_name` is a field identifier the output schema and template use,
+    not framing, so it stays in both prompts.
+    """
+    session = _FakeSession()
+    _template_vars(tmp_path, "note", session=session, layout=layout)
+
+    assert "- intrinsic_name:" in session.description
+    assert "- intrinsic_name_camelcase:" in session.description

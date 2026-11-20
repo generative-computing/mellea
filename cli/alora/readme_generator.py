@@ -256,7 +256,12 @@ def make_readme_jinja_dict(
     if hints is not None:
         hints = "\n\nHere are some additional details about the domain:\n" + hints
 
-    description = f"""You are generating metadata for a README file for a machine learning intrinsic adapter trained on the dataset below.{hints_text}
+    # A flat repository is not usable as an intrinsic, so its README, and the prompt
+    # that steers the LLM writing it, should not call the adapter one.
+    kind = "intrinsic adapter" if layout == "intrinsic" else "adapter"
+    noun = "intrinsic" if layout == "intrinsic" else "adapter"
+
+    description = f"""You are generating metadata for a README file for a machine learning {kind} trained on the dataset below.{hints_text}
 
 Here are the first few samples from the training dataset (JSONL format):
 {sample_text}
@@ -267,10 +272,10 @@ Base model: {base_model}
 {arglist_hint}
 
 Generate appropriate values for each field:
-- high_level_description: A 2-3 sentence description of what this intrinsic adapter does based on the training data
+- high_level_description: A 2-3 sentence description of what this {kind} does based on the training data
 - dataset_description: A brief description of the training dataset contents and format
 - userid: Set this to "your-username" as a placeholder for the HuggingFace user ID. MUST be {name.split("/")[0]}
-- intrinsic_name: A short snake_case identifier for this intrinsic (e.g., "stembolts"). No hyphens. MUST be {name.split("/")[1]}
+- intrinsic_name: A short snake_case identifier for this {noun} (e.g., "stembolts"). No hyphens. MUST be {name.split("/")[1]}
 - intrinsic_name_camelcase: The CamelCase version of intrinsic_name (e.g., "Stembolt"). No underscores.
 - arglist: The Python function argument list with type hints based on the input data structure. This will be used as function parameters.
 - arglist_without_type_annotations: The arglist without any type annotations."""
@@ -395,7 +400,7 @@ def generate_readme(
         with open(output_path, "w") as f:
             f.write(readme_content)
 
-        print(f"Generated INTRINSIC_README.md at {output_path}")
+        print(f"Generated README at {output_path}")
         return output_path
     finally:
         m.cleanup()
