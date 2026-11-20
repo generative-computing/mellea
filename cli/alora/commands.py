@@ -479,7 +479,11 @@ def alora_add_readme(
             path_or_fileobj=readme_path,
             path_in_repo="README.md",
             repo_id=name,
-            commit_message="Upload intrinsic README.",
+            commit_message=(
+                "Upload intrinsic README."
+                if resolved_layout == "intrinsic"
+                else "Upload README."
+            ),
             token=token,
         )
 

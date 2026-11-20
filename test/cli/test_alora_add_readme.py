@@ -80,7 +80,10 @@ def _invoke_add_readme(
     monkeypatch.setattr("cli.alora.commands._stdin_is_interactive", lambda: interactive)
     monkeypatch.setattr("huggingface_hub.get_token", lambda: token)
     monkeypatch.setattr("huggingface_hub.create_repo", lambda **_kwargs: None)
-    monkeypatch.setattr("huggingface_hub.upload_file", lambda **_kwargs: None)
+    monkeypatch.setattr(
+        "huggingface_hub.upload_file",
+        lambda **kwargs: captured.setdefault("upload_file", kwargs),
+    )
     monkeypatch.setattr(
         "cli.alora.readme_generator.generate_readme", fake_generate_readme
     )
@@ -208,6 +211,20 @@ def test_unmapped_org_qualified_base_model_is_found_without_a_false_warning(
     assert "no weights for base model" not in _plain(result.output)
     assert captured["layout"] == "intrinsic"
     assert captured["adapter_type"] == "lora"
+
+
+@pytest.mark.parametrize(
+    ("layout", "expected_message"),
+    [("intrinsic", "Upload intrinsic README."), ("flat", "Upload README.")],
+)
+def test_upload_commit_message_matches_the_layout(
+    monkeypatch, layout, expected_message
+):
+    """A flat repository's history must not call its README an intrinsic README."""
+    result, captured = _invoke_add_readme(monkeypatch, ["--layout", layout])
+
+    assert result.exit_code == 0, result.output
+    assert captured["upload_file"]["commit_message"] == expected_message
 
 
 @pytest.mark.parametrize(
