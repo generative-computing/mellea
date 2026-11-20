@@ -173,6 +173,13 @@ def alora_upload(
     print("✅ Upload complete!")
 
 
+def _stdin_is_interactive() -> bool:
+    """Report whether a person can answer prompts on standard input."""
+    import sys
+
+    return sys.stdin.isatty()
+
+
 def _ask_adapter_layout(model_name: str) -> Literal["intrinsic", "flat"]:
     """Ask which upload layout the target repository uses.
 
@@ -182,7 +189,19 @@ def _ask_adapter_layout(model_name: str) -> Literal["intrinsic", "flat"]:
     Returns:
         `"intrinsic"` if the user will upload with `--intrinsic --io-yaml`,
         otherwise `"flat"`.
+
+    Raises:
+        typer.BadParameter: If standard input is not a terminal, so there is
+            nobody to ask. Waiting on `input()` there would hang or die with
+            `EOFError`, so fail before the slow README generation instead.
     """
+    if not _stdin_is_interactive():
+        raise typer.BadParameter(
+            f"Cannot determine the adapter layout of {model_name} and there is "
+            "no terminal to ask. Pass --layout intrinsic or --layout flat.",
+            param_hint="--layout",
+        )
+
     answer: str | None = None
     while answer not in ("yes", "no"):
         answer = (
@@ -271,8 +290,9 @@ def alora_add_readme(
     command detects the repository's layout by default (weights nested under
     `<name>/<base-model>/<lora|alora>/` versus flat at the root) and renders
     matching code; if the layout cannot be verified — for example the README is
-    generated before the weights are uploaded — it asks which layout to use.
-    Pass `--layout` to skip detection and state it explicitly.
+    generated before the weights are uploaded — it asks which layout to use, or
+    exits with an error when there is no terminal to ask on. Pass `--layout` to
+    skip detection and state it explicitly, for example in scripts and CI.
 
     Prerequisites:
         Hugging Face token available (set `HF_TOKEN` or run `hf auth login`).
@@ -300,7 +320,9 @@ def alora_add_readme(
 
     Raises:
         OSError: If no Hugging Face authentication token is found.
-        typer.BadParameter: If `layout` is not `"auto"`, `"intrinsic"`, or `"flat"`.
+        typer.BadParameter: If `layout` is not `"auto"`, `"intrinsic"`, or `"flat"`,
+            or if it is `"auto"`, the repository's layout cannot be detected, and
+            standard input is not a terminal to ask on.
         SystemExit: If the user declines to upload the generated README.
     """
     try:
