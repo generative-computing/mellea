@@ -105,7 +105,6 @@ def _invoke_add_readme(
     return result, captured
 
 
-@pytest.mark.unit
 @pytest.mark.parametrize("layout", ["intrinsic", "flat"])
 def test_explicit_layout_skips_detection(monkeypatch, layout):
     """`--layout` is forwarded to the generator without inspecting the repo."""
@@ -115,7 +114,6 @@ def test_explicit_layout_skips_detection(monkeypatch, layout):
     assert captured["layout"] == layout
 
 
-@pytest.mark.unit
 @pytest.mark.parametrize(
     ("repo_files", "expected_layout"),
     [
@@ -133,7 +131,6 @@ def test_auto_detects_repo_layout(monkeypatch, repo_files, expected_layout):
     assert captured["layout"] == expected_layout
 
 
-@pytest.mark.unit
 @pytest.mark.parametrize(
     ("repo_files", "expected_type"),
     [
@@ -154,7 +151,6 @@ def test_detected_adapter_type_reaches_the_generator(
     assert captured["adapter_type"] == expected_type
 
 
-@pytest.mark.unit
 def test_both_adapter_types_present_documents_alora(monkeypatch):
     """A repo holding both types is documented as alora, and says so."""
     repo_files = [
@@ -170,7 +166,6 @@ def test_both_adapter_types_present_documents_alora(monkeypatch):
     assert "both lora and alora weights" in _plain(result.output)
 
 
-@pytest.mark.unit
 def test_nested_weights_for_another_base_model_warn_but_still_generate(monkeypatch):
     """Nested weights the loader would not find for `--basemodel` get a warning.
 
@@ -292,7 +287,6 @@ def test_unreadable_flat_config_warns_and_reports_no_type(monkeypatch):
     assert "could not read adapter_config.json" in _plain(result.output)
 
 
-@pytest.mark.unit
 def test_unrecognized_repo_layout_asks_user(monkeypatch):
     """An empty/unrecognized repo prompts for the intended upload layout."""
     monkeypatch.setattr("huggingface_hub.HfApi", lambda: _FakeHfApi(["README.md"]))
@@ -305,7 +299,6 @@ def test_unrecognized_repo_layout_asks_user(monkeypatch):
     assert "has no recognizable adapter layout" in result.output
 
 
-@pytest.mark.unit
 def test_unknown_layout_without_terminal_fails_before_generation(monkeypatch):
     """With nobody to ask, an undetectable layout fails fast and names `--layout`.
 
@@ -324,7 +317,6 @@ def test_unknown_layout_without_terminal_fails_before_generation(monkeypatch):
     assert captured == {}
 
 
-@pytest.mark.unit
 def test_missing_token_without_terminal_fails_before_generation(monkeypatch):
     """No token means no repo inspection, which falls through to the same failure."""
     result, captured = _invoke_add_readme(
@@ -336,7 +328,6 @@ def test_missing_token_without_terminal_fails_before_generation(monkeypatch):
     assert captured == {}
 
 
-@pytest.mark.unit
 @pytest.mark.parametrize(
     ("extra_args", "repo_files", "expected_layout"),
     [
@@ -359,7 +350,6 @@ def test_no_terminal_needs_no_prompt_when_layout_is_known(
     assert captured["layout"] == expected_layout
 
 
-@pytest.mark.unit
 def test_invalid_layout_rejected(monkeypatch):
     """An unsupported `--layout` value is a usage error before generation."""
     result, captured = _invoke_add_readme(monkeypatch, ["--layout", "bogus"])

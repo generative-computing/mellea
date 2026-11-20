@@ -13,7 +13,6 @@ from cli.alora.layout import (
 )
 
 
-@pytest.mark.unit
 @pytest.mark.parametrize(
     ("repo_files", "expected"),
     [
@@ -41,7 +40,6 @@ def test_detect_repo_layout(repo_files, expected):
     assert detect_repo_layout(repo_files, "stembolts") == expected
 
 
-@pytest.mark.unit
 def test_detect_repo_layout_prefers_intrinsic_over_root_weights():
     """A nested adapter wins when a repo also has (stale) root-level weights."""
     repo_files = [
@@ -51,7 +49,6 @@ def test_detect_repo_layout_prefers_intrinsic_over_root_weights():
     assert detect_repo_layout(repo_files, "stembolts") == "intrinsic"
 
 
-@pytest.mark.unit
 def test_adapter_weight_dirs_matches_the_loader():
     """Directories come from `adapter_subpath`, canonicalizing the base model."""
     expected = {
@@ -65,7 +62,6 @@ def test_adapter_weight_dirs_matches_the_loader():
         )
 
 
-@pytest.mark.unit
 @pytest.mark.parametrize(
     ("repo_files", "expected"),
     [
@@ -97,7 +93,6 @@ def test_find_adapter_types(repo_files, expected):
     )
 
 
-@pytest.mark.unit
 def test_find_adapter_types_uses_the_requested_base_model():
     """The same repository matches one base model and not another."""
     repo_files = ["stembolts/granite-3.3-2b-instruct/alora/adapter_config.json"]

@@ -164,7 +164,6 @@ def test_readme_template_constructs_composed_adapter_for_non_catalog_name():
     assert intrinsic.metadata.name == "stembolts"
 
 
-@pytest.mark.unit
 @pytest.mark.parametrize("adapter_type", ["lora", "alora"])
 def test_readme_template_uses_the_detected_adapter_type_throughout(adapter_type):
     """Every place the sample names the adapter type must follow `adapter_type`.
