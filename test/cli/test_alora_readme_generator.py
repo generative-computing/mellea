@@ -15,6 +15,7 @@ import pytest
 
 from cli.alora.readme_generator import (
     DEFAULT_INVOCATION_PROMPT,
+    generate_readme,
     load_invocation_prompt,
     make_readme_jinja_dict,
 )
@@ -25,6 +26,10 @@ class _FakeSession:
 
     def __init__(self) -> None:
         self.description = ""
+        self.cleaned_up = False
+
+    def cleanup(self) -> None:
+        self.cleaned_up = True
 
     def instruct(self, description: str, *_args, **_kwargs) -> str:
         self.description = description
@@ -173,3 +178,78 @@ def test_llm_prompt_keeps_the_field_names_the_model_must_fill(tmp_path, layout):
 
     assert "- intrinsic_name:" in session.description
     assert "- intrinsic_name_camelcase:" in session.description
+
+
+def _generate(monkeypatch, tmp_path, **kwargs):
+    """Run `generate_readme` with the LLM session replaced; return (text, session)."""
+    session = _FakeSession()
+    monkeypatch.setattr("cli.alora.readme_generator.start_session", lambda: session)
+    data = tmp_path / "data.jsonl"
+    data.write_text(
+        json.dumps({"item": "a cracked stembolt", "label": "stembolt"}) + "\n"
+    )
+    output = tmp_path / "README.md"
+
+    returned = generate_readme(
+        dataset_path=str(data),
+        base_model="ibm-granite/granite-3.3-2b-instruct",
+        prompt_file=None,
+        output_path=str(output),
+        name="acme/stembolts",
+        hints=None,
+        **kwargs,
+    )
+
+    assert returned == str(output)
+    return output.read_text(), session
+
+
+def test_generate_readme_renders_a_flat_readme_end_to_end(
+    monkeypatch, tmp_path, capsys
+):
+    """The layout and adapter type given to `generate_readme` reach the rendered file."""
+    text, session = _generate(monkeypatch, tmp_path, layout="flat", adapter_type="lora")
+
+    assert "AutoPeftModelForCausalLM" in text
+    assert "This is a LoRA adapter" in text
+    assert "ibm-granite/granite-3.3-2b-instruct" in text
+    assert "LocalFileBinding(" not in text
+    assert session.cleaned_up
+    assert f"Generated README at {tmp_path / 'README.md'}" in capsys.readouterr().out
+
+
+def test_generate_readme_renders_an_intrinsic_readme_end_to_end(monkeypatch, tmp_path):
+    """Without a detected type the intrinsic README documents alora, as before."""
+    text, session = _generate(monkeypatch, tmp_path, layout="intrinsic")
+
+    assert "LocalFileBinding(" in text
+    assert "AdapterType.ALORA" in text
+    assert "LocalHFBackend('ibm-granite/granite-3.3-2b-instruct')" in text
+    assert session.cleaned_up
+
+
+def test_generate_readme_cleans_up_the_session_when_generation_fails(
+    monkeypatch, tmp_path
+):
+    """A failing LLM call must not leave the session running."""
+    session = _FakeSession()
+
+    def failing_instruct(*_args, **_kwargs):
+        raise RuntimeError("model unavailable")
+
+    session.instruct = failing_instruct  # type: ignore[method-assign]
+    monkeypatch.setattr("cli.alora.readme_generator.start_session", lambda: session)
+    data = tmp_path / "data.jsonl"
+    data.write_text(json.dumps({"item": "x", "label": "y"}) + "\n")
+
+    with pytest.raises(RuntimeError, match="model unavailable"):
+        generate_readme(
+            dataset_path=str(data),
+            base_model="ibm-granite/granite-3.3-2b-instruct",
+            prompt_file=None,
+            output_path=str(tmp_path / "README.md"),
+            name="acme/stembolts",
+            hints=None,
+        )
+
+    assert session.cleaned_up

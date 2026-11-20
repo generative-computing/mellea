@@ -286,14 +286,10 @@ def _inspect_repo(
         LoRA and an aLoRA adapter are present). For the flat layout it is read
         from the root `adapter_config.json` (`None` if that cannot be read).
     """
-    try:
-        from huggingface_hub import HfApi
-        from huggingface_hub.errors import RepositoryNotFoundError
-    except ImportError as e:
-        raise ImportError(
-            "The 'm alora' command requires extra dependencies. "
-            'Please install them with: pip install "mellea[hf]"'
-        ) from e
+    # `alora_add_readme`, the only caller, has already imported `huggingface_hub`
+    # and raised the friendly missing-extra error if it is absent.
+    from huggingface_hub import HfApi
+    from huggingface_hub.errors import RepositoryNotFoundError
 
     print(
         f"Checking {model_name} on Hugging Face (read-only) to detect its adapter layout."
@@ -320,8 +316,6 @@ def _inspect_repo(
     print(f"Detected the {detected} adapter layout in {model_name}.")
     if detected == "flat":
         return detected, _read_flat_adapter_type(model_name, token)
-    if detected != "intrinsic":
-        return detected, None
 
     found = find_adapter_types(repo_files, intrinsic_name, base_model, model_name)
     if not found:

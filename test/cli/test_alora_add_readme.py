@@ -54,18 +54,21 @@ def _invoke_add_readme(
     monkeypatch,
     extra_args: list[str],
     *,
-    interactive: bool = True,
+    interactive: bool | None = True,
     token: str | None = "test-token",
     basemodel: str = "ibm-granite/granite-4.1-3b",
+    answers: list[str] | None = None,
 ):
     """Run `add-readme` with generation and uploading stubbed out.
 
     Args:
         monkeypatch: Pytest monkeypatch fixture.
         extra_args: Additional CLI arguments appended after `--name`.
-        interactive: Whether standard input counts as a terminal.
+        interactive: Whether standard input counts as a terminal, or `None` to
+            leave the real check in place (under `CliRunner` it is not a terminal).
         token: Hugging Face token returned by `get_token`, or `None` for none.
         basemodel: Value passed as `--basemodel`.
+        answers: Replies to successive prompts; defaults to "yes" every time.
 
     Returns:
         Tuple of the CLI result and the kwargs passed to `generate_readme`.
@@ -78,7 +81,10 @@ def _invoke_add_readme(
             fh.write("# README\n")
         return kwargs["output_path"]
 
-    monkeypatch.setattr("cli.alora.commands._stdin_is_interactive", lambda: interactive)
+    if interactive is not None:
+        monkeypatch.setattr(
+            "cli.alora.commands._stdin_is_interactive", lambda: interactive
+        )
     monkeypatch.setattr("huggingface_hub.get_token", lambda: token)
     monkeypatch.setattr("huggingface_hub.create_repo", lambda **_kwargs: None)
     monkeypatch.setattr(
@@ -88,7 +94,11 @@ def _invoke_add_readme(
     monkeypatch.setattr(
         "cli.alora.readme_generator.generate_readme", fake_generate_readme
     )
-    monkeypatch.setattr("builtins.input", lambda *_args, **_kwargs: "yes")
+    replies = iter(answers) if answers is not None else None
+    monkeypatch.setattr(
+        "builtins.input",
+        lambda *_args, **_kwargs: next(replies) if replies is not None else "yes",
+    )
 
     result = runner.invoke(
         cli,
@@ -431,6 +441,54 @@ def test_no_terminal_needs_no_prompt_when_layout_is_known(
 
     assert result.exit_code == 0, result.output
     assert captured["layout"] == expected_layout
+
+
+def test_layout_question_is_asked_again_after_an_invalid_answer(monkeypatch):
+    """Anything but yes/no repeats the question rather than guessing a layout."""
+    monkeypatch.setattr("huggingface_hub.HfApi", lambda: _FakeHfApi(["README.md"]))
+
+    # "maybe" is rejected, "no" means a flat upload, and the last "yes" approves the README.
+    result, captured = _invoke_add_readme(
+        monkeypatch, [], answers=["maybe", "no", "yes"]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Please answer with only 'yes' or 'no'." in _plain(result.output)
+    assert captured["layout"] == "flat"
+
+
+def test_a_failed_listing_warns_and_asks_instead_of_failing(monkeypatch):
+    """Offline, rate-limited, or any other Hub error must not abort the command."""
+
+    class FailingApi:
+        def list_repo_files(self, **_kwargs):
+            raise OSError("connection reset by peer")
+
+    monkeypatch.setattr("huggingface_hub.HfApi", FailingApi)
+
+    result, captured = _invoke_add_readme(monkeypatch, [])
+
+    assert result.exit_code == 0, result.output
+    message = _plain(result.output)
+    assert "could not inspect the layout of acme/stembolts" in message
+    assert "connection reset by peer" in message
+    # Unverifiable, so it asks (the stubbed answer "yes" means an intrinsic upload).
+    assert captured["layout"] == "intrinsic"
+
+
+def test_unknown_layout_is_refused_when_stdin_is_really_not_a_terminal(monkeypatch):
+    """With the real terminal check in place, a non-interactive run fails fast.
+
+    `CliRunner` replaces standard input with a stream that is not a terminal, so
+    this exercises the actual `isatty()` probe rather than a stand-in for it.
+    """
+    monkeypatch.setattr("huggingface_hub.HfApi", lambda: _FakeHfApi(["README.md"]))
+
+    result, captured = _invoke_add_readme(monkeypatch, [], interactive=None)
+
+    assert result.exit_code != 0
+    assert "no terminal to ask" in _plain(result.output)
+    assert captured == {}
 
 
 def test_invalid_layout_rejected(monkeypatch):
