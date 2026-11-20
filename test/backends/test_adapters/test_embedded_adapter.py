@@ -9,6 +9,7 @@ read a Granite Switch model directory (or Hub snapshot) and return composed
 `(Adapter, io_yaml_config)` pairs directly, with no shim intermediary.
 """
 
+import contextlib
 import json
 import os
 import pathlib
@@ -20,6 +21,7 @@ import yaml
 
 from mellea.backends.adapters._core import Adapter, EmbeddedBinding
 from mellea.backends.adapters.adapter import (
+    AdapterMixin,
     _embedded_adapter_from_entry,
     _embedded_adapters_from_hub,
     _embedded_adapters_from_model_directory,
@@ -170,6 +172,96 @@ class TestProbeSlots:
         }
         assert "future_slot" in caplog.text
         assert "'sr' is not supported" in caplog.text
+
+    def test_requesting_unsupported_slot_names_technology(self, tmp_path):
+        model_dir = _write_mixed_model_dir(tmp_path)
+        with pytest.raises(
+            ValueError,
+            match=r"'future_slot'.*technology 'sr' is not supported \(supported: "
+            r"\['alora', 'lora', 'probe'\]\)",
+        ):
+            _embedded_adapters_from_model_directory(
+                model_dir, intrinsic_name="future_slot"
+            )
+
+    def test_all_slots_unsupported_names_skipped_slots(self, tmp_path):
+        index = {
+            "adapters": [
+                {"adapter_name": name, "technology": "sr", "io_config": "x.yaml"}
+                for name in ("slot_a", "slot_b")
+            ]
+        }
+        (tmp_path / "adapter_index.json").write_text(json.dumps(index))
+        with pytest.raises(ValueError, match="skipped unsupported entries") as exc:
+            _embedded_adapters_from_model_directory(tmp_path)
+        assert "'slot_a': technology 'sr'" in str(exc.value)
+        assert "'slot_b': technology 'sr'" in str(exc.value)
+
+    def test_unsupported_slot_without_io_config_names_technology(self, tmp_path):
+        index = {"adapters": [{"adapter_name": "future_slot", "technology": "sr"}]}
+        (tmp_path / "adapter_index.json").write_text(json.dumps(index))
+        with pytest.raises(ValueError, match="technology 'sr' is not supported"):
+            _embedded_adapters_from_model_directory(
+                tmp_path, intrinsic_name="future_slot"
+            )
+
+    def test_hub_unsupported_slot_reason_survives_materialisation(self, tmp_path):
+        (tmp_path / "snapshot").mkdir()
+        snapshot_dir = _write_mixed_model_dir(tmp_path / "snapshot")
+        with patch("huggingface_hub.snapshot_download", return_value=str(snapshot_dir)):
+            with pytest.raises(ValueError) as exc:
+                _embedded_adapters_from_hub(
+                    "ibm-granite/granite-switch-mixed",
+                    cache_dir=str(tmp_path / "cache"),
+                    intrinsic_name="future_slot",
+                )
+        message = str(exc.value)
+        assert "ibm-granite/granite-switch-mixed" in message
+        assert "technology 'sr' is not supported" in message
+        assert str(tmp_path) not in message
+
+    def test_hub_load_failure_reason_survives_rewrite(self, tmp_path):
+        """A non-not-found ValueError keeps its reason when restated per repo."""
+        snapshot = tmp_path / "snapshot"
+        snapshot.mkdir()
+        # The copy loop validates io_config paths against the snapshot's cache
+        # root (two levels above the snapshot), so this resolves outside it.
+        outside = tmp_path.parent.parent / "mellea-escape-probe.yaml"
+        outside.write_text("{}")
+        index = {
+            "adapters": [
+                {
+                    "adapter_name": "answerability",
+                    "technology": "lora",
+                    "io_config": "../../../mellea-escape-probe.yaml",
+                }
+            ]
+        }
+        (snapshot / "adapter_index.json").write_text(json.dumps(index))
+        with patch("huggingface_hub.snapshot_download", return_value=str(snapshot)):
+            with pytest.raises(ValueError) as exc:
+                _embedded_adapters_from_hub(
+                    "ibm-granite/granite-switch-mixed",
+                    cache_dir=str(tmp_path / "cache"),
+                    intrinsic_name="answerability",
+                )
+        message = str(exc.value)
+        assert "No adapter found for adapter function 'answerability'" in message
+        assert "ibm-granite/granite-switch-mixed" in message
+        assert "escapes" in message
+
+    def test_resolve_adapter_reports_unsupported_technology(self, tmp_path):
+        """The error a caller sees when resolving an unsupported slot by name."""
+        backend = MagicMock()
+        backend.base_model_name = "test-model"
+        backend._adapter_resolve_lock.return_value = contextlib.nullcontext()
+        backend._uses_embedded_adapters = True
+        backend._adapter_source = str(_write_mixed_model_dir(tmp_path))
+        backend._adapter_revision = "main"
+        backend._adapter_skip_reasons = {}
+        backend._find_adapter.return_value = None
+        with pytest.raises(ValueError, match="technology 'sr' is not supported"):
+            AdapterMixin.resolve_adapter(backend, "future_slot")
 
 
 class TestFromModelDirectory:

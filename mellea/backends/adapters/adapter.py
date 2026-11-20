@@ -608,10 +608,10 @@ def _embedded_adapters_from_model_directory(
     Raises:
         FileNotFoundError: If `adapter_index.json` is missing.
         ValueError: If an `io.yaml` file listed in the index cannot be found,
-            if an `io_config` path escapes the model directory, if an entry's
-            no adapters are found. Entries
-            with an unsupported `technology` (e.g. `"sr"`) are skipped with a
-            warning so the remaining adapters still load.
+            if an `io_config` path escapes the model directory, or if no
+            adapters are found. Entries with an unsupported `technology` (e.g.
+            `"sr"`) are skipped with a warning so the remaining adapters still
+            load; when nothing loads, the error names the skipped entries.
     """
     import json as _json
 
@@ -630,25 +630,31 @@ def _embedded_adapters_from_model_directory(
     allowed_root = _io_config_root(model_path)
 
     adapters: list[tuple[_AdapterCore, dict]] = []
+    skipped: dict[str, str] = {}
     for entry in index.get("adapters", []):
         entry_name = entry.get("adapter_name")
         if entry_name is None:
             continue
         if intrinsic_name is not None and entry_name != intrinsic_name:
             continue
-        io_config_rel = entry.get("io_config")
-        if io_config_rel is None:
-            continue
         technology = entry.get("technology", "lora")
         if not _is_supported_embedded_technology(technology):
-            # Skip unsupported slots before reading an io.yaml they may not publish.
-            MelleaLogger.get_logger().warning(
-                "Skipping embedded adapter function %r: technology %r is not "
-                "supported (supported: %s).",
-                entry_name,
-                technology,
-                sorted(_EMBEDDED_TECHNOLOGIES),
+            # Skip unsupported slots before reading an io.yaml they may not publish,
+            # and before the io_config check below so an entry that omits it is
+            # still reported by technology rather than silently dropped.
+            skipped[entry_name] = (
+                f"technology {technology!r} is not supported "
+                f"(supported: {sorted(_EMBEDDED_TECHNOLOGIES)})"
             )
+            MelleaLogger.get_logger().warning(
+                "Skipping embedded adapter function %r: %s.",
+                entry_name,
+                skipped[entry_name],
+            )
+            continue
+
+        io_config_rel = entry.get("io_config")
+        if io_config_rel is None:
             continue
 
         io_config_path = model_path / io_config_rel
@@ -672,13 +678,48 @@ def _embedded_adapters_from_model_directory(
         adapters.append((adapter, config_dict))
 
     if not adapters:
-        if intrinsic_name is not None:
-            raise ValueError(
-                f"No adapter found for adapter function '{intrinsic_name}' in {model_path}"
-            )
-        raise ValueError(f"No adapters found in {model_path}")
+        raise _NoEmbeddedAdaptersError(model_path, intrinsic_name, skipped)
 
     return adapters
+
+
+class _NoEmbeddedAdaptersError(ValueError):
+    """No registrable adapter in a Granite Switch index, naming any skipped entries.
+
+    Carries its parts so `_embedded_adapters_from_hub` can restate the message
+    against the repo ID instead of the materialised cache path.
+
+    Args:
+        location (str | pathlib.Path): Model directory or Hub repo ID searched.
+        intrinsic_name (str | None): The adapter function requested, if any.
+        skipped (dict[str, str]): Skipped entry names mapped to their reasons.
+    """
+
+    def __init__(
+        self,
+        location: str | pathlib.Path,
+        intrinsic_name: str | None,
+        skipped: dict[str, str],
+    ) -> None:
+        """Build the message from the searched location and skipped entries."""
+        self.intrinsic_name = intrinsic_name
+        self.skipped = skipped
+        if intrinsic_name is not None:
+            message = (
+                f"No adapter found for adapter function '{intrinsic_name}' "
+                f"in {location}"
+            )
+            if intrinsic_name in skipped:
+                message += f": {skipped[intrinsic_name]}"
+        elif skipped:
+            details = "; ".join(f"{name!r}: {why}" for name, why in skipped.items())
+            message = (
+                f"No adapters found in {location}; skipped unsupported "
+                f"entries: {details}"
+            )
+        else:
+            message = f"No adapters found in {location}"
+        super().__init__(message)
 
 
 def _embedded_adapters_from_hub(
@@ -835,12 +876,19 @@ def _embedded_adapters_from_hub(
             "or gated, confirm you are authenticated (run "
             "`hf auth login` or set the HF_TOKEN environment variable)."
         ) from e
+    except _NoEmbeddedAdaptersError as e:
+        raise _NoEmbeddedAdaptersError(repo_id, e.intrinsic_name, e.skipped) from e
     except ValueError as e:
+        # Restate the location against the repo ID, keeping the reason (e.g. a
+        # missing io.yaml or a path that escapes the snapshot) rather than
+        # discarding it: the index may list the slot even when loading fails.
+        reason = str(e)
         if intrinsic_name is not None:
             raise ValueError(
-                f"No adapter found for adapter function '{intrinsic_name}' in {repo_id}"
+                f"No adapter found for adapter function '{intrinsic_name}' "
+                f"in {repo_id}: {reason}"
             ) from e
-        raise ValueError(f"No adapters found in {repo_id}") from e
+        raise ValueError(f"No adapters found in {repo_id}: {reason}") from e
 
 
 def _embedded_adapters_from_source(
