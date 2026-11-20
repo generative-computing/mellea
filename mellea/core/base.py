@@ -29,7 +29,7 @@ import threading
 from collections import OrderedDict, deque
 from collections.abc import Callable, Coroutine, Iterable, Mapping
 from copy import copy, deepcopy
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from io import BytesIO
 from typing import (
     TYPE_CHECKING,
@@ -1818,6 +1818,55 @@ class ModelOutputThunk(Generic[S]):
         deepcopied.raw = deepcopy(self.raw)
         return deepcopied
 
+    def __getstate__(self) -> dict[str, Any]:
+        """Return the picklable state, dropping in-flight and backend-native fields.
+
+        Pickling mirrors the `__copy__` contract: a reloaded thunk is a computed,
+        post-generation object. The in-flight machinery in `_gen` (asyncio tasks,
+        the stream queue, backend-bound callbacks) and the backend-native payloads
+        on `raw` (`response`, `streamed_chunks`) and `generation`
+        (`logits`, `raw_logits`, which are provider SDK objects or torch tensors)
+        are not portable, so they are stripped here rather than pickled. Only a
+        computed thunk may be pickled.
+
+        Fields that reference caller-supplied objects (`tool_calls`, `_meta`,
+        `parsed_repr`, `_call`) are left as-is; their picklability is the
+        caller's responsibility, as with `copy`. `_generate_log` is kept, minus
+        its `model_output`, which duplicates `raw.response`. It can still carry
+        tool objects (`extra["tools_available"]`, `model_options`), so pickling a
+        session with an offered `@tool` depends on those objects being picklable.
+
+        Raises:
+            RuntimeError: If the thunk has not been computed; copies and pickles
+                are post-generation.
+        """
+        if not self._computed:
+            raise RuntimeError(
+                "Cannot pickle an uncomputed ModelOutputThunk; pickles are post-generation."
+            )
+        state = self.__dict__.copy()
+        # `_gen` is not pickled; a fresh one is installed in `__setstate__`, matching what `__copy__` leaves.
+        del state["_gen"]
+        state["_aiter_started"] = False
+        # Drop backend-native payloads, preserving their portable sibling fields.
+        generation = replace(self.generation, logits=None, raw_logits=None)
+        state["generation"] = generation
+        state["raw"] = replace(self.raw, response=None, streamed_chunks=None)
+        # The SDK payload also lives on the generate log's `model_output`; strip it too.
+        if self._generate_log is not None:
+            state["_generate_log"] = replace(self._generate_log, model_output=None)
+        return state
+
+    def __setstate__(self, state: dict[str, Any]) -> None:
+        """Restore pickled state, installing a fresh `_gen` on the loaded thunk.
+
+        Assigns straight to `__dict__` so the `ComputedModelOutputThunk`
+        invariant guard in `__setattr__` is not re-run during reconstruction.
+        `_gen` is not pickled, so a fresh one is always installed here.
+        """
+        self.__dict__.update(state)
+        self.__dict__["_gen"] = _GenerationState()
+
 
 class ComputedModelOutputThunk(ModelOutputThunk[S]):
     """A `ComputedModelOutputThunk` is a `ModelOutputThunk` that is guaranteed to be computed.
@@ -1868,12 +1917,10 @@ class ComputedModelOutputThunk(ModelOutputThunk[S]):
         so a rejected `thunk` is left untouched as the plain `ModelOutputThunk` the caller
         passed in.
 
-        `thunk is None` allocates a bare instance. Pickling a `ModelOutputThunk` or a
-        `ComputedModelOutputThunk` is not supported today — a generated thunk's `_gen`
-        holds asyncio tasks and backend-bound callbacks that cannot be pickled — but
-        pickle reconstructs via `cls.__new__(cls)`, so keeping this branch means adding
-        pickle support to the base class later needs no change here. A genuine no-arg call
-        is caught in `__init__` (which pickle skips).
+        `thunk is None` allocates a bare instance. Pickle reconstructs a
+        `ComputedModelOutputThunk` via `cls.__new__(cls)`, so this branch is what
+        lets a pickled thunk load (see `ModelOutputThunk.__getstate__`). A genuine
+        no-arg call is caught in `__init__` (which pickle skips).
 
         Raises:
             TypeError: If `thunk` is neither `None` nor a `ModelOutputThunk`.
