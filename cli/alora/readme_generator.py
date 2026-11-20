@@ -142,6 +142,7 @@ def make_readme_jinja_dict(
     name: str,
     hints: str | None,
     layout: Literal["intrinsic", "flat"] = "intrinsic",
+    adapter_type: Literal["lora", "alora"] = "alora",
 ) -> dict[str, Any]:
     """Generate all template variables for the intrinsic README using an LLM.
 
@@ -159,6 +160,8 @@ def make_readme_jinja_dict(
         hints: Optional string of additional domain hints to include in the prompt.
         layout: Adapter layout of the target repository; selects the integration
             code the rendered README documents.
+        adapter_type: Adapter type the intrinsic sample loads; only used with the
+            `"intrinsic"` layout.
 
     Returns:
         Dict of Jinja2 template variables for rendering the `INTRINSIC_README.md`.
@@ -288,6 +291,7 @@ Generate appropriate values for each field:
 
     vars_dict["base_model"] = base_model
     vars_dict["intrinsic_layout"] = layout == "intrinsic"
+    vars_dict["adapter_type"] = adapter_type
 
     return vars_dict
 
@@ -300,6 +304,7 @@ def generate_readme(
     name: str,
     hints: str | None,
     layout: Literal["intrinsic", "flat"] = "intrinsic",
+    adapter_type: Literal["lora", "alora"] = "alora",
 ) -> str:
     """Generate an INTRINSIC_README.md file from the dataset and template.
 
@@ -315,6 +320,8 @@ def generate_readme(
         hints: Optional string of additional domain hints for the LLM.
         layout: Adapter layout of the target repository. `"intrinsic"` documents
             Mellea adapter-function usage; `"flat"` documents plain PEFT usage.
+        adapter_type: Adapter type the intrinsic sample loads; only used with the
+            `"intrinsic"` layout.
 
     Returns:
         The path to the written output file (same as `output_path`).
@@ -325,7 +332,14 @@ def generate_readme(
 
     try:
         template_vars = make_readme_jinja_dict(
-            m, dataset_path, base_model, prompt_file or "", name, hints, layout
+            m,
+            dataset_path,
+            base_model,
+            prompt_file or "",
+            name,
+            hints,
+            layout,
+            adapter_type,
         )
 
         template_dir = os.path.dirname(os.path.abspath(__file__))

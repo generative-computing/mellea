@@ -41,6 +41,7 @@ def _invoke_add_readme(
     *,
     interactive: bool = True,
     token: str | None = "test-token",
+    basemodel: str = "ibm-granite/granite-4.1-3b",
 ):
     """Run `add-readme` with generation and uploading stubbed out.
 
@@ -49,6 +50,7 @@ def _invoke_add_readme(
         extra_args: Additional CLI arguments appended after `--name`.
         interactive: Whether standard input counts as a terminal.
         token: Hugging Face token returned by `get_token`, or `None` for none.
+        basemodel: Value passed as `--basemodel`.
 
     Returns:
         Tuple of the CLI result and the kwargs passed to `generate_readme`.
@@ -77,7 +79,7 @@ def _invoke_add_readme(
             "add-readme",
             "data.jsonl",
             "--basemodel",
-            "ibm-granite/granite-4.1-3b",
+            basemodel,
             "--name",
             "acme/stembolts",
             *extra_args,
@@ -112,6 +114,97 @@ def test_auto_detects_repo_layout(monkeypatch, repo_files, expected_layout):
 
     assert result.exit_code == 0, result.output
     assert captured["layout"] == expected_layout
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("repo_files", "expected_type"),
+    [
+        (["stembolts/granite-4.1-3b/alora/adapter_config.json"], "alora"),
+        (["stembolts/granite-4.1-3b/lora/adapter_config.json"], "lora"),
+    ],
+)
+def test_detected_adapter_type_reaches_the_generator(
+    monkeypatch, repo_files, expected_type
+):
+    """The adapter type found for `--basemodel` is documented, not assumed alora."""
+    monkeypatch.setattr("huggingface_hub.HfApi", lambda: _FakeHfApi(repo_files))
+
+    result, captured = _invoke_add_readme(monkeypatch, [])
+
+    assert result.exit_code == 0, result.output
+    assert captured["layout"] == "intrinsic"
+    assert captured["adapter_type"] == expected_type
+
+
+@pytest.mark.unit
+def test_both_adapter_types_present_documents_alora(monkeypatch):
+    """A repo holding both types is documented as alora, and says so."""
+    repo_files = [
+        "stembolts/granite-4.1-3b/lora/adapter_config.json",
+        "stembolts/granite-4.1-3b/alora/adapter_config.json",
+    ]
+    monkeypatch.setattr("huggingface_hub.HfApi", lambda: _FakeHfApi(repo_files))
+
+    result, captured = _invoke_add_readme(monkeypatch, [])
+
+    assert result.exit_code == 0, result.output
+    assert captured["adapter_type"] == "alora"
+    assert "both lora and alora weights" in _plain(result.output)
+
+
+@pytest.mark.unit
+def test_nested_weights_for_another_base_model_warn_but_still_generate(monkeypatch):
+    """Nested weights the loader would not find for `--basemodel` get a warning.
+
+    The README is still generated: the user may have meant a different base
+    model, and generation is slow enough that refusing would be hostile.
+    """
+    repo_files = ["stembolts/granite-3.3-2b-instruct/alora/adapter_config.json"]
+    monkeypatch.setattr("huggingface_hub.HfApi", lambda: _FakeHfApi(repo_files))
+
+    result, captured = _invoke_add_readme(monkeypatch, [])
+
+    assert result.exit_code == 0, result.output
+    message = _plain(result.output)
+    assert "no weights for base model 'ibm-granite/granite-4.1-3b'" in message
+    assert "stembolts/granite-4.1-3b/lora/" in message
+    assert "stembolts/granite-4.1-3b/alora/" in message
+    assert captured["layout"] == "intrinsic"
+    assert captured["adapter_type"] == "alora"
+
+
+def test_unmapped_org_qualified_base_model_is_found_without_a_false_warning(
+    monkeypatch,
+):
+    """Weights uploaded for `myorg/my-finetune` live under `my-finetune/`.
+
+    The backend and `m alora upload --intrinsic` both drop the org, so checking
+    the full ID would warn that a correctly uploaded adapter has no weights.
+    """
+    repo_files = ["stembolts/my-finetune/lora/adapter_config.json"]
+    monkeypatch.setattr("huggingface_hub.HfApi", lambda: _FakeHfApi(repo_files))
+
+    result, captured = _invoke_add_readme(
+        monkeypatch, [], basemodel="myorg/my-finetune"
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "no weights for base model" not in _plain(result.output)
+    assert captured["layout"] == "intrinsic"
+    assert captured["adapter_type"] == "lora"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "extra_args", [["--layout", "intrinsic"], ["--layout", "flat"]]
+)
+def test_explicit_layout_documents_alora_without_inspecting(monkeypatch, extra_args):
+    """Without detection there is nothing to read the type from, so alora stays."""
+    result, captured = _invoke_add_readme(monkeypatch, extra_args)
+
+    assert result.exit_code == 0, result.output
+    assert captured["adapter_type"] == "alora"
 
 
 @pytest.mark.unit

@@ -18,7 +18,13 @@ from typing import Literal
 
 import typer
 
-from cli.alora.layout import RepoLayout, detect_repo_layout
+from cli.alora.layout import (
+    AdapterTypeName,
+    RepoLayout,
+    adapter_weight_dirs,
+    detect_repo_layout,
+    find_adapter_types,
+)
 
 alora_app = typer.Typer(
     name="alora", help="Train or upload aLoRAs for requirement validation."
@@ -217,20 +223,31 @@ def _ask_adapter_layout(model_name: str) -> Literal["intrinsic", "flat"]:
     return "intrinsic" if answer == "yes" else "flat"
 
 
-def _detect_repo_layout(model_name: str, token: str) -> RepoLayout:
-    """Inspect a Hub repository and classify its adapter layout.
+def _inspect_repo(
+    model_name: str, token: str, base_model: str
+) -> tuple[RepoLayout, AdapterTypeName | None]:
+    """Inspect a Hub repository for its adapter layout and adapter type.
 
     Verification is best-effort: a repository that does not exist yet (the
     README may be generated before the weights are uploaded) and any other Hub
     error both return `"unknown"`, so the caller can ask the user instead of
     failing.
 
+    For the intrinsic layout, also checks that weights exist where the loader
+    will look for them given `base_model`, and warns when they do not. The
+    generated code resolves weights from the backend's base model, so a nested
+    upload made for a different base model would still fail to load.
+
     Args:
         model_name: Target Hugging Face repository name.
         token: Hugging Face authentication token.
+        base_model: Base model the README's code will load the adapter against.
 
     Returns:
-        The detected layout, or `"unknown"` if it cannot be determined.
+        The detected layout, or `"unknown"` if it cannot be determined, and the
+        adapter type found for `base_model` — `None` unless the layout is
+        intrinsic and weights exist for that base model. When both a LoRA and an
+        aLoRA adapter are present, `"alora"` is returned.
     """
     try:
         from huggingface_hub import HfApi
@@ -245,17 +262,42 @@ def _detect_repo_layout(model_name: str, token: str) -> RepoLayout:
         repo_files = HfApi().list_repo_files(repo_id=model_name, token=token)
     except RepositoryNotFoundError:
         print(f"{model_name} does not exist yet; its adapter layout is unknown.")
-        return "unknown"
+        return "unknown", None
     except Exception as e:
         print(f"Warning: could not inspect the layout of {model_name}: {e}")
-        return "unknown"
+        return "unknown", None
 
-    detected = detect_repo_layout(repo_files, model_name.split("/")[-1])
+    intrinsic_name = model_name.split("/")[-1]
+    detected = detect_repo_layout(repo_files, intrinsic_name)
     if detected == "unknown":
         print(f"{model_name} has no recognizable adapter layout.")
-    else:
-        print(f"Detected the {detected} adapter layout in {model_name}.")
-    return detected
+        return detected, None
+    print(f"Detected the {detected} adapter layout in {model_name}.")
+    if detected != "intrinsic":
+        return detected, None
+
+    found = find_adapter_types(repo_files, intrinsic_name, base_model, model_name)
+    if not found:
+        expected = ", ".join(
+            f"{directory}/"
+            for directory in adapter_weight_dirs(
+                intrinsic_name, base_model, model_name
+            ).values()
+        )
+        print(
+            f"Warning: {model_name} has no weights for base model '{base_model}'. "
+            f"The generated code looks in {expected} and will not find this "
+            "adapter. Pass the --basemodel you uploaded with, or re-upload for "
+            "this base model."
+        )
+        return detected, None
+    if len(found) > 1:
+        print(
+            f"{model_name} has both lora and alora weights for '{base_model}'; "
+            "documenting alora."
+        )
+        return detected, "alora"
+    return detected, found[0]
 
 
 def alora_add_readme(
@@ -345,6 +387,8 @@ def alora_add_readme(
     token = get_token()
 
     resolved_layout: Literal["intrinsic", "flat"]
+    # Only detection can tell lora from alora; otherwise document alora, as before.
+    detected_adapter_type: AdapterTypeName | None = None
     if layout == "auto":
         if token is None:
             print(
@@ -353,7 +397,7 @@ def alora_add_readme(
             )
             detected: RepoLayout = "unknown"
         else:
-            detected = _detect_repo_layout(name, token)
+            detected, detected_adapter_type = _inspect_repo(name, token, basemodel)
         if detected == "unknown":
             resolved_layout = _ask_adapter_layout(name)
         else:
@@ -373,6 +417,7 @@ def alora_add_readme(
             name=name,
             hints=open(hints).read() if hints is not None else None,
             layout=resolved_layout,
+            adapter_type=detected_adapter_type or "alora",
         )
 
         print(open(readme_path).read())
