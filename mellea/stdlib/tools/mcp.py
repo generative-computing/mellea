@@ -21,13 +21,13 @@ Mellea's shared background event loop via `_run_async_in_thread`.
 """
 
 import asyncio
+import importlib
 import logging
 from collections.abc import AsyncGenerator, Callable
 from contextlib import asynccontextmanager
 from typing import Any
 
 try:
-    import httpx
     from mcp import ClientSession, StdioServerParameters, stdio_client
     from mcp.client.sse import sse_client
     from mcp.client.streamable_http import streamable_http_client
@@ -38,7 +38,14 @@ try:
         ResourceLink,
         TextContent,
         TextResourceContents,
+        Tool,
     )
+
+    # mcp 2.x renamed the model fields to snake_case (`inputSchema` ->
+    # `input_schema`) and moved its HTTP stack from `httpx` to `httpx2`. The
+    # client below follows whichever major version is installed.
+    _MCP_V2 = "input_schema" in Tool.model_fields
+    httpx: Any = importlib.import_module("httpx2" if _MCP_V2 else "httpx")
 except ImportError as e:
     raise ImportError(
         "MCP integration requires the `mcp` and `httpx` packages. "
@@ -49,6 +56,14 @@ from mellea.backends.tools import MelleaTool
 from mellea.helpers.event_loop_helper import _run_async_in_thread
 
 logger = logging.getLogger(__name__)
+
+
+def _field(obj: Any, snake: str, camel: str) -> Any:
+    """Read a model field that mcp 2.x spells `snake` and mcp 1.x spells `camel`."""
+    try:
+        return getattr(obj, snake)
+    except AttributeError:
+        return getattr(obj, camel)
 
 
 class MCPToolSpec:
@@ -137,7 +152,7 @@ async def discover_mcp_tools(connection: dict[str, Any]) -> list[MCPToolSpec]:
             MCPToolSpec(
                 name=tool.name,
                 description=tool.description or "",
-                input_schema=tool.inputSchema if tool.inputSchema is not None else {},
+                input_schema=_field(tool, "input_schema", "inputSchema") or {},
                 connection=connection,
             )
             for tool in result.tools
@@ -264,7 +279,10 @@ async def _open_session(
         ) as http_client:
             async with streamable_http_client(
                 connection["url"], http_client=http_client
-            ) as (read, write, _):
+            ) as streams:
+                # mcp 1.x yields (read, write, get_session_id); mcp 2.x yields
+                # (read, write).
+                read, write = streams[0], streams[1]
                 async with ClientSession(read, write) as session:
                     await session.initialize()
                     yield session
@@ -302,7 +320,7 @@ async def _execute_tool(
     """Open a session, invoke the tool, and flatten the result to a string."""
     async with _open_session(connection) as session:
         result = await session.call_tool(tool_name, arguments=kwargs)
-        if result.isError:
+        if _field(result, "is_error", "isError"):
             error_parts = [
                 b.text for b in (result.content or []) if isinstance(b, TextContent)
             ]
@@ -318,7 +336,7 @@ async def _execute_tool(
                 ):
                     parts.append(block.resource.text)
                 elif isinstance(block, (ImageContent, AudioContent)):
-                    parts.append(f"[binary: {block.mimeType}]")
+                    parts.append(f"[binary: {_field(block, 'mime_type', 'mimeType')}]")
                 elif isinstance(block, ResourceLink):
                     try:
                         resource_result = await session.read_resource(block.uri)
@@ -326,7 +344,9 @@ async def _execute_tool(
                             if isinstance(item, TextResourceContents):
                                 parts.append(item.text)
                             else:
-                                mime = item.mimeType or "unknown"
+                                mime = (
+                                    _field(item, "mime_type", "mimeType") or "unknown"
+                                )
                                 parts.append(f"[binary: {mime}]")
                     except Exception:
                         logger.debug(
@@ -335,7 +355,7 @@ async def _execute_tool(
                         parts.append(f"[resource: {block.uri}]")
                 elif isinstance(block, EmbeddedResource):
                     # BlobResourceContents
-                    mime = block.resource.mimeType or "unknown"
+                    mime = _field(block.resource, "mime_type", "mimeType") or "unknown"
                     parts.append(f"[binary: {mime}]")
             return "\n".join(parts) if parts else ""
         return ""
