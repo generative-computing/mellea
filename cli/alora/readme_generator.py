@@ -19,10 +19,44 @@ from typing import Any, Literal
 
 from pydantic import BaseModel
 
+from cli.alora.layout import AdapterTypeName
 from mellea import start_session
 from mellea.stdlib.requirements.requirement import check, req, simple_validate
 from mellea.stdlib.sampling import RejectionSamplingStrategy
 from mellea.stdlib.session import MelleaSession
+
+DEFAULT_INVOCATION_PROMPT = "<|start_of_role|>check_requirement<|end_of_role|>"
+"""Invocation string `m alora train` uses when no `--promptfile` is given.
+
+Must match the default in `cli/alora/train.py`; a test checks that it does.
+"""
+
+
+def load_invocation_prompt(prompt_file: str | None) -> str:
+    """Return the invocation string the adapter was trained with.
+
+    Reads the file the same way `m alora train` does: a JSON object with an
+    `invocation_prompt` key. Without a file, returns the training default.
+
+    Args:
+        prompt_file: Path to the `--promptfile` JSON, or `None`/empty for the default.
+
+    Returns:
+        The invocation string appended to every training input.
+
+    Raises:
+        ValueError: The file has no `invocation_prompt` key, which training would
+            have rejected too.
+    """
+    if not prompt_file:
+        return DEFAULT_INVOCATION_PROMPT
+    with open(prompt_file, encoding="utf-8") as f:
+        config = json.load(f)
+    if not isinstance(config, dict) or "invocation_prompt" not in config:
+        raise ValueError(
+            f"{prompt_file} must be a JSON object with an 'invocation_prompt' key."
+        )
+    return config["invocation_prompt"]
 
 
 class ReadmeTemplateVars(BaseModel):
@@ -142,7 +176,7 @@ def make_readme_jinja_dict(
     name: str,
     hints: str | None,
     layout: Literal["intrinsic", "flat"] = "intrinsic",
-    adapter_type: Literal["lora", "alora"] = "alora",
+    adapter_type: AdapterTypeName | None = None,
 ) -> dict[str, Any]:
     """Generate all template variables for the intrinsic README using an LLM.
 
@@ -160,8 +194,9 @@ def make_readme_jinja_dict(
         hints: Optional string of additional domain hints to include in the prompt.
         layout: Adapter layout of the target repository; selects the integration
             code the rendered README documents.
-        adapter_type: Adapter type the intrinsic sample loads; only used with the
-            `"intrinsic"` layout.
+        adapter_type: The adapter's type, if known. The intrinsic sample loads it
+            as that type and assumes `"alora"` when `None`; the flat README
+            describes it as that type, or makes no claim when `None`.
 
     Returns:
         Dict of Jinja2 template variables for rendering the `INTRINSIC_README.md`.
@@ -289,9 +324,17 @@ Generate appropriate values for each field:
         parts = [f"{arg_names[0]}={str(first_item)!r}"]
     vars_dict["example_call_kwargs"] = ", ".join(parts)
 
+    # What the flat sample feeds the model: the first training item, formatted the
+    # way training formatted it, then the invocation string. Both are rendered as
+    # Python literals so quotes, braces, and backslashes in the data stay valid.
+    vars_dict["example_item_literal"] = repr(str(first_item))
+    vars_dict["invocation_prompt_literal"] = repr(load_invocation_prompt(prompt_file))
+
     vars_dict["base_model"] = base_model
     vars_dict["intrinsic_layout"] = layout == "intrinsic"
-    vars_dict["adapter_type"] = adapter_type
+    vars_dict["adapter_type"] = adapter_type or (
+        "alora" if layout == "intrinsic" else None
+    )
 
     return vars_dict
 
@@ -304,7 +347,7 @@ def generate_readme(
     name: str,
     hints: str | None,
     layout: Literal["intrinsic", "flat"] = "intrinsic",
-    adapter_type: Literal["lora", "alora"] = "alora",
+    adapter_type: AdapterTypeName | None = None,
 ) -> str:
     """Generate an INTRINSIC_README.md file from the dataset and template.
 
@@ -320,8 +363,9 @@ def generate_readme(
         hints: Optional string of additional domain hints for the LLM.
         layout: Adapter layout of the target repository. `"intrinsic"` documents
             Mellea adapter-function usage; `"flat"` documents plain PEFT usage.
-        adapter_type: Adapter type the intrinsic sample loads; only used with the
-            `"intrinsic"` layout.
+        adapter_type: The adapter's type, if known. The intrinsic sample loads it
+            as that type and assumes `"alora"` when `None`; the flat README
+            describes it as that type, or makes no claim when `None`.
 
     Returns:
         The path to the written output file (same as `output_path`).

@@ -21,6 +21,7 @@ import typer
 from cli.alora.layout import (
     AdapterTypeName,
     RepoLayout,
+    adapter_type_from_config,
     adapter_weight_dirs,
     detect_repo_layout,
     find_adapter_types,
@@ -223,6 +224,33 @@ def _ask_adapter_layout(model_name: str) -> Literal["intrinsic", "flat"]:
     return "intrinsic" if answer == "yes" else "flat"
 
 
+def _read_flat_adapter_type(model_name: str, token: str) -> AdapterTypeName | None:
+    """Read a flat repository's adapter type from its `adapter_config.json`.
+
+    Downloads only that one small file. Best-effort like the rest of the
+    inspection: any failure returns `None`, and the README then describes the
+    adapter without claiming a type.
+
+    Args:
+        model_name: Target Hugging Face repository name.
+        token: Hugging Face authentication token.
+
+    Returns:
+        `"alora"` or `"lora"`, or `None` if the config could not be read.
+    """
+    from huggingface_hub import hf_hub_download
+
+    try:
+        config_path = hf_hub_download(
+            repo_id=model_name, filename="adapter_config.json", token=token
+        )
+        with open(config_path, encoding="utf-8") as fh:
+            return adapter_type_from_config(json.load(fh))
+    except Exception as e:
+        print(f"Warning: could not read adapter_config.json from {model_name}: {e}")
+        return None
+
+
 def _inspect_repo(
     model_name: str, token: str, base_model: str
 ) -> tuple[RepoLayout, AdapterTypeName | None]:
@@ -245,9 +273,10 @@ def _inspect_repo(
 
     Returns:
         The detected layout, or `"unknown"` if it cannot be determined, and the
-        adapter type found for `base_model` — `None` unless the layout is
-        intrinsic and weights exist for that base model. When both a LoRA and an
-        aLoRA adapter are present, `"alora"` is returned.
+        adapter type. For the intrinsic layout that is the type found for
+        `base_model` (`None` if no weights exist for it; `"alora"` when both a
+        LoRA and an aLoRA adapter are present). For the flat layout it is read
+        from the root `adapter_config.json` (`None` if that cannot be read).
     """
     try:
         from huggingface_hub import HfApi
@@ -273,6 +302,8 @@ def _inspect_repo(
         print(f"{model_name} has no recognizable adapter layout.")
         return detected, None
     print(f"Detected the {detected} adapter layout in {model_name}.")
+    if detected == "flat":
+        return detected, _read_flat_adapter_type(model_name, token)
     if detected != "intrinsic":
         return detected, None
 
@@ -387,7 +418,8 @@ def alora_add_readme(
     token = get_token()
 
     resolved_layout: Literal["intrinsic", "flat"]
-    # Only detection can tell lora from alora; otherwise document alora, as before.
+    # Only inspecting the repository can tell lora from alora; the generator
+    # decides what to document when it could not.
     detected_adapter_type: AdapterTypeName | None = None
     if layout == "auto":
         if token is None:
@@ -417,7 +449,7 @@ def alora_add_readme(
             name=name,
             hints=open(hints).read() if hints is not None else None,
             layout=resolved_layout,
-            adapter_type=detected_adapter_type or "alora",
+            adapter_type=detected_adapter_type,
         )
 
         print(open(readme_path).read())

@@ -133,7 +133,19 @@ at the repository root.
 > `m alora upload ... --intrinsic --io-yaml ./io.yaml`, then regenerate this
 > README with `m alora add-readme`.
 
-Load the adapter directly with PEFT:
+{% if adapter_type == "alora" -%}
+This is an activated LoRA (aLoRA) adapter. It only activates from its invocation
+string onward, so the prompt must contain that string, after the input, the same
+way it did in training.
+{%- elif adapter_type == "lora" -%}
+This is a LoRA adapter. It was trained on prompts of one fixed shape, so use the
+same shape at inference.
+{%- else -%}
+The adapter was trained on prompts of one fixed shape, ending in an invocation
+string, so use the same shape at inference.
+{%- endif %}
+
+Load it with PEFT, build the prompt, and decode only the generated reply:
 
 ```python
 from peft import AutoPeftModelForCausalLM
@@ -141,5 +153,15 @@ from transformers import AutoTokenizer
 
 model = AutoPeftModelForCausalLM.from_pretrained("{{ userid }}/{{ intrinsic_name }}")
 tokenizer = AutoTokenizer.from_pretrained("{{ base_model }}")
+
+# Training formatted every input as: the item, a "Requirement:" line, then the
+# invocation string.
+INVOCATION_PROMPT = {{ invocation_prompt_literal }}
+item = {{ example_item_literal }}
+prompt = f"{item}\nRequirement: <|end_of_text|>\n{INVOCATION_PROMPT}"
+
+inputs = tokenizer(prompt, return_tensors="pt", add_special_tokens=False)
+output = model.generate(**inputs, max_new_tokens=32)
+print(tokenizer.decode(output[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True))
 ```
 {% endif %}
