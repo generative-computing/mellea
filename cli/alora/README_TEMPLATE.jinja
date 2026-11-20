@@ -116,9 +116,8 @@ def {{ intrinsic_name }}({{ arglist }}, ctx: Context, backend: Backend | Adapter
 
 if __name__ == "__main__":
     from mellea.backends.huggingface import LocalHFBackend
-    from mellea.backends.model_ids import IBM_GRANITE_4_1_3B
     from mellea.stdlib.context import ChatContext
-    backend = LocalHFBackend(IBM_GRANITE_4_1_3B)
+    backend = LocalHFBackend({{ base_model_literal }})
     result, ctx = {{ intrinsic_name }}({{ example_call_kwargs }}, ctx=ChatContext(), backend=backend)
     print(result.value)
 ```
@@ -152,7 +151,7 @@ from peft import AutoPeftModelForCausalLM
 from transformers import AutoTokenizer
 
 model = AutoPeftModelForCausalLM.from_pretrained("{{ userid }}/{{ intrinsic_name }}")
-tokenizer = AutoTokenizer.from_pretrained("{{ base_model }}")
+tokenizer = AutoTokenizer.from_pretrained({{ base_model_literal }})
 
 # Training formatted every input as: the item, a "Requirement:" line, then the
 # invocation string.

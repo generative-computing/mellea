@@ -336,6 +336,8 @@ Generate appropriate values for each field:
     vars_dict["invocation_prompt_literal"] = repr(load_invocation_prompt(prompt_file))
 
     vars_dict["base_model"] = base_model
+    # Rendered into sample code, so as a literal: it may be a path with odd characters.
+    vars_dict["base_model_literal"] = repr(base_model)
     vars_dict["intrinsic_layout"] = layout == "intrinsic"
     vars_dict["adapter_type"] = adapter_type or (
         "alora" if layout == "intrinsic" else None
