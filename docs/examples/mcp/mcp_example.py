@@ -17,7 +17,10 @@ Usage:
 import io
 from contextlib import redirect_stdout
 
-from mcp.server.fastmcp import FastMCP
+try:
+    from mcp.server.mcpserver import MCPServer  # mcp 2.x
+except ImportError:
+    from mcp.server.fastmcp import FastMCP as MCPServer  # mcp 1.x
 
 from mellea import MelleaSession
 from mellea.backends import ModelOption, model_ids
@@ -27,7 +30,7 @@ from mellea.stdlib.requirements import simple_validate
 from mellea.stdlib.sampling import RejectionSamplingStrategy
 
 # Create an MCP server
-mcp = FastMCP("Demo")
+mcp = MCPServer("Demo")
 
 
 @mcp.tool()
