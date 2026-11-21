@@ -3,8 +3,13 @@
 
 """Unit tests for eval runner pure-logic helpers — no backend, no model required.
 
-Covers InputEvalResult, TestEvalResult, parse_judge_output, _extract_first_json.
+Covers InputEvalResult, TestEvalResult, parse_judge_output, _extract_first_json,
+and create_session model resolution (backends are stubbed).
 """
+
+import sys
+import types
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -12,8 +17,11 @@ from cli.eval.runner import (
     InputEvalResult,
     TestEvalResult,
     _extract_first_json,
+    _resolved_model_name,
+    create_session,
     parse_judge_output,
 )
+from mellea.backends import ModelOption, model_ids
 from mellea.stdlib.components.unit_test_eval import TestBasedEval
 
 # --- InputEvalResult ---
@@ -199,6 +207,127 @@ def test_extract_first_json_no_json_returns_none():
 
 def test_extract_first_json_no_score_key_returns_none():
     assert _extract_first_json('{"justification": "no score anywhere"}') is None
+
+
+# --- create_session model resolution ---
+
+_BACKEND_CLASSES = {
+    "ollama": ("mellea.backends.ollama", "OllamaModelBackend"),
+    "openai": ("mellea.backends.openai", "OpenAIBackend"),
+    "hf": ("mellea.backends.huggingface", "LocalHFBackend"),
+    "watsonx": ("mellea.backends.watsonx", "WatsonxAIBackend"),
+    "litellm": ("mellea.backends.litellm", "LiteLLMBackend"),
+}
+
+
+@pytest.fixture
+def stub_backend(monkeypatch):
+    """Replace the backend module for `name` with a stub and return the class mock.
+
+    Stubbing the module (rather than the class) keeps these tests independent of
+    optional extras such as torch or the watsonx SDK.
+    """
+
+    def _stub(name: str) -> MagicMock:
+        module_name, class_name = _BACKEND_CLASSES[name]
+        cls = MagicMock(name=class_name)
+        module = types.ModuleType(module_name)
+        setattr(module, class_name, cls)
+        monkeypatch.setitem(sys.modules, module_name, module)
+        return cls
+
+    with patch("cli.eval.runner.mellea.MelleaSession"):
+        yield _stub
+
+
+@pytest.mark.parametrize("backend", ["ollama", "openai", "watsonx", "litellm"])
+def test_create_session_without_model_uses_backend_default(stub_backend, backend):
+    cls = stub_backend(backend)
+    create_session(backend=backend, model=None, max_tokens=8)
+    assert "model_id" not in cls.call_args.kwargs
+
+
+def test_create_session_hf_without_model_falls_back_to_granite_4_2(stub_backend):
+    cls = stub_backend("hf")
+    create_session(backend="hf", model=None, max_tokens=8)
+    assert cls.call_args.kwargs["model_id"] is model_ids.IBM_GRANITE_4_2_3B
+
+
+def test_create_session_string_model_passes_through(stub_backend):
+    cls = stub_backend("ollama")
+    create_session(backend="ollama", model="granite4.2:8b", max_tokens=8)
+    assert cls.call_args.kwargs["model_id"] == "granite4.2:8b"
+
+
+def test_create_session_attribute_name_resolves_to_model_identifier(stub_backend):
+    cls = stub_backend("ollama")
+    create_session(backend="ollama", model="IBM_GRANITE_4_2_8B", max_tokens=8)
+    assert cls.call_args.kwargs["model_id"] is model_ids.IBM_GRANITE_4_2_8B
+
+
+def test_create_session_litellm_string_model_passes_through(stub_backend):
+    cls = stub_backend("litellm")
+    create_session(backend="litellm", model="ollama_chat/granite4.2:3b", max_tokens=8)
+    assert cls.call_args.kwargs["model_id"] == "ollama_chat/granite4.2:3b"
+
+
+# --- create_session thinking default ---
+
+_UNSET = object()  # THINKING is not in the options at all
+
+
+@pytest.mark.parametrize("backend", ["ollama", "hf"])
+def test_create_session_local_backends_turn_thinking_off(stub_backend, backend):
+    cls = stub_backend(backend)
+    create_session(backend=backend, model=None, max_tokens=8)
+    assert cls.call_args.kwargs["model_options"][ModelOption.THINKING] is False
+
+
+@pytest.mark.parametrize(
+    ("base_url", "expected"),
+    [
+        pytest.param(None, _UNSET, id="unset-means-openai-platform"),
+        pytest.param("https://api.openai.com/v1", _UNSET, id="openai-platform"),
+        pytest.param("http://localhost:11434/v1", False, id="ollama"),
+        pytest.param("https://vllm.example.com/v1", False, id="self-hosted"),
+    ],
+)
+def test_create_session_openai_thinking_follows_server(
+    stub_backend, monkeypatch, base_url, expected
+):
+    if base_url is None:
+        monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
+    else:
+        monkeypatch.setenv("OPENAI_BASE_URL", base_url)
+    cls = stub_backend("openai")
+    create_session(backend="openai", model=None, max_tokens=8)
+    options = cls.call_args.kwargs["model_options"]
+    assert options.get(ModelOption.THINKING, _UNSET) is expected
+
+
+@pytest.mark.parametrize(
+    ("model", "expected"),
+    [
+        pytest.param(None, False, id="backend-default-is-ollama-routed"),
+        pytest.param("ollama_chat/granite4.2:3b", False, id="ollama-route"),
+        pytest.param("openai/gpt-4o", _UNSET, id="non-ollama-route"),
+    ],
+)
+def test_create_session_litellm_thinking_follows_route(stub_backend, model, expected):
+    cls = stub_backend("litellm")
+    create_session(backend="litellm", model=model, max_tokens=8)
+    options = cls.call_args.kwargs["model_options"]
+    assert options.get(ModelOption.THINKING, _UNSET) is expected
+
+
+# --- _resolved_model_name ---
+
+
+def test_resolved_model_name_gives_the_backend_specific_name():
+    session = types.SimpleNamespace(
+        backend=types.SimpleNamespace(model_id=model_ids.IBM_GRANITE_4_2_3B)
+    )
+    assert _resolved_model_name(session, "ollama") == "granite4.2:3b"
 
 
 if __name__ == "__main__":
