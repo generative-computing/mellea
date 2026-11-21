@@ -398,3 +398,27 @@ def test_json_schema_rejects_recursive_refs(definition, siblings):
     }
     with pytest.raises(ValueError, match="recursive"):
         json_schema_to_pydantic(schema, "RecursiveRefExample")
+
+
+def test_json_schema_rejects_top_level_recursive_ref():
+    """A root-level $ref that cycles back to itself must raise ValueError."""
+    schema = {
+        "$ref": "#/$defs/A",
+        "$defs": {"A": {"type": "object", "properties": {"a": {"$ref": "#/$defs/A"}}}},
+    }
+    with pytest.raises(ValueError, match="recursive"):
+        json_schema_to_pydantic(schema, "TopLevelRecursiveRef")
+
+
+def test_json_schema_rejects_mutual_recursive_refs():
+    """Two $defs that reference each other in a cycle must raise ValueError."""
+    schema = {
+        "type": "object",
+        "properties": {"a": {"$ref": "#/$defs/A"}},
+        "$defs": {
+            "A": {"type": "array", "items": {"$ref": "#/$defs/B"}},
+            "B": {"type": "object", "properties": {"a": {"$ref": "#/$defs/A"}}},
+        },
+    }
+    with pytest.raises(ValueError, match="recursive"):
+        json_schema_to_pydantic(schema, "MutualRecursiveRef")
