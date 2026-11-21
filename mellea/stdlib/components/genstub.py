@@ -8,6 +8,7 @@ import functools
 import inspect
 import json
 import types
+import warnings
 from collections.abc import Awaitable, Callable, Coroutine
 from copy import deepcopy
 from dataclasses import dataclass, fields
@@ -41,6 +42,7 @@ from ...core import (
     MelleaLogger,
     ModelOutputThunk,
     Requirement,
+    SamplingResult,
     SamplingStrategy,
     Span,
     TemplateRepresentation,
@@ -204,6 +206,13 @@ class ArgPreconditionRequirement(Requirement):
 
     def __deepcopy__(self, memo):
         return ArgPreconditionRequirement(deepcopy(self.req, memo))
+
+
+class RequirementsNotMetWarning(UserWarning):
+    """Warning emitted when a generative stub's sampling strategy runs out of attempts without satisfying the requirements.
+
+    The stub still returns the best of the failed attempts, so the returned value may not meet `requirements`.
+    """
 
 
 class PreconditionException(Exception):
@@ -739,6 +748,29 @@ class GenerativeStub(Component[R], Generic[P, R]):
 
         return function_response.result
 
+    def _unpack_act_output(
+        self, out: Any, *, session_form: bool
+    ) -> tuple[ModelOutputThunk, Context | None]:
+        """Normalize the output of `act`/`aact` to `(response, context)`.
+
+        `context` is `None` for the session form. When `out` is a `SamplingResult`
+        whose strategy found no passing result, warns that the returned value may
+        violate the requirements (the best failed attempt is still returned).
+        """
+        if not isinstance(out, SamplingResult):
+            return (out, None) if session_form else out
+        if not out.success:
+            validations = (out.sample_validations or [[]])[out.result_index]
+            unmet = [r.description or str(r) for r, v in validations if not bool(v)]
+            warnings.warn(
+                f"generative stub '{self._function._function_dict['name']}' returned "
+                f"a value that did not satisfy its requirements after "
+                f"{len(out.sample_generations)} attempt(s); unsatisfied requirement: {unmet}",
+                RequirementsNotMetWarning,
+                stacklevel=3,  # the caller of the stub
+            )
+        return out.result, (None if session_form else out.result_ctx)
+
 
 class SyncGenerativeStub(GenerativeStub, Generic[P, R]):
     """A synchronous generative stub that blocks until the LLM response is ready.
@@ -793,6 +825,9 @@ class SyncGenerativeStub(GenerativeStub, Generic[P, R]):
         Raises:
             TypeError: if any of the original function's parameters were passed as positional args
             PreconditionException: if the precondition validation fails, catch the err to get the validation results
+
+        Warns:
+            RequirementsNotMetWarning: if a `strategy` is set and it runs out of attempts without satisfying `requirements`; the best of the failed attempts is still returned
         """
         extracted = self.extract_args_and_kwargs(*args, **kwargs)
 
@@ -856,12 +891,15 @@ class SyncGenerativeStub(GenerativeStub, Generic[P, R]):
             stub_copy.requirements if extracted.strategy is not None else None
         )
 
-        response, context = None, None
+        # With a strategy, request the `SamplingResult` so a failed validation loop
+        # is surfaced (as a warning) instead of silently returning a failed attempt.
+        sampled = extracted.strategy is not None
         if extracted.m is not None:
-            response = extracted.m.act(
+            out = extracted.m.act(
                 stub_copy,
                 requirements=forwarded_requirements,
                 strategy=extracted.strategy,
+                return_sampling_results=sampled,  # type: ignore[call-overload]
                 format=self._response_model,
                 model_options=extracted.model_options,
             )
@@ -869,15 +907,19 @@ class SyncGenerativeStub(GenerativeStub, Generic[P, R]):
             # We know these aren't None from the `extract_args_and_kwargs` function.
             assert extracted.context is not None
             assert extracted.backend is not None
-            response, context = mfuncs.act(
+            out = mfuncs.act(
                 stub_copy,
                 extracted.context,
                 extracted.backend,
                 requirements=forwarded_requirements,
                 strategy=extracted.strategy,
+                return_sampling_results=sampled,  # type: ignore[call-overload]
                 format=self._response_model,
                 model_options=extracted.model_options,
             )
+        response, context = self._unpack_act_output(
+            out, session_form=extracted.m is not None
+        )
 
         # `parsed_repr` is the decorated function's return value, which may be `None`
         # when the return type admits it (e.g. `-> str | None`).
@@ -936,6 +978,9 @@ class AsyncGenerativeStub(GenerativeStub, Generic[P, R]):
         Raises:
             TypeError: if any of the original function's parameters were passed as positional args
             PreconditionException: if the precondition validation fails, catch the err to get the validation results
+
+        Warns:
+            RequirementsNotMetWarning: if a `strategy` is set and it runs out of attempts without satisfying `requirements`; the best of the failed attempts is still returned
         """
         extracted = self.extract_args_and_kwargs(*args, **kwargs)
 
@@ -960,8 +1005,6 @@ class AsyncGenerativeStub(GenerativeStub, Generic[P, R]):
         # they must return a coroutine object.
         async def __async_call__() -> tuple[R, Context] | R:
             """Use async calls so that control flow doesn't get stuck here in async event loops."""
-            response, context = None, None
-
             # Do precondition validation first.
             if stub_copy._arguments is not None:
                 # Preconditions are judged over the arguments alone, so they get a fresh
@@ -1007,11 +1050,16 @@ class AsyncGenerativeStub(GenerativeStub, Generic[P, R]):
                 stub_copy.requirements if extracted.strategy is not None else None
             )
 
+            # With a strategy, request the `SamplingResult` so a failed validation
+            # loop is surfaced (as a warning) instead of silently returning a failed
+            # attempt.
+            sampled = extracted.strategy is not None
             if extracted.m is not None:
-                response = await extracted.m.aact(
+                out = await extracted.m.aact(
                     stub_copy,
                     requirements=forwarded_requirements,
                     strategy=extracted.strategy,
+                    return_sampling_results=sampled,  # type: ignore[call-overload]
                     format=self._response_model,
                     model_options=extracted.model_options,
                     await_result=True,
@@ -1020,16 +1068,20 @@ class AsyncGenerativeStub(GenerativeStub, Generic[P, R]):
                 # We know these aren't None from the `extract_args_and_kwargs` function.
                 assert extracted.context is not None
                 assert extracted.backend is not None
-                response, context = await mfuncs.aact(
+                out = await mfuncs.aact(
                     stub_copy,
                     extracted.context,
                     extracted.backend,
                     requirements=forwarded_requirements,
                     strategy=extracted.strategy,
+                    return_sampling_results=sampled,  # type: ignore[call-overload]
                     format=self._response_model,
                     model_options=extracted.model_options,
                     await_result=True,
                 )
+            response, context = self._unpack_act_output(
+                out, session_form=extracted.m is not None
+            )
 
             assert response.is_computed(), (
                 "unexpectedly received uncomputed model output thunk in async generative stub"
@@ -1096,6 +1148,9 @@ def generative(func: Callable[P, R]) -> GenerativeStub[P, R]:
         ValidationError: (raised when calling the generative stub) if the generated output cannot be parsed into the expected return type. Typically happens when the token limit for the generated output results in invalid json.
         TypeError: (raised when calling the generative stub) if any of the original function's parameters were passed as positional args
         PreconditionException: (raised when calling the generative stub) if the precondition validation of the args fails; catch the exception to get the validation results
+
+    Warns:
+        RequirementsNotMetWarning: (emitted when calling the generative stub) if a `strategy` is set and it runs out of attempts without satisfying `requirements`. The best of the failed attempts is still returned.
 
     Examples:
         ```python
@@ -1182,4 +1237,4 @@ def generative(func: Callable[P, R]) -> GenerativeStub[P, R]:
 
 
 # Export the decorator as the interface. Export the specific exception for debugging.
-__all__ = ["PreconditionException", "generative"]
+__all__ = ["PreconditionException", "RequirementsNotMetWarning", "generative"]

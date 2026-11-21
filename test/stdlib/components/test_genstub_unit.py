@@ -9,6 +9,7 @@ create_response_format, GenerativeStub.format_for_llm, and @generative routing.
 
 import inspect
 import json
+import warnings
 from typing import Any, Literal, get_type_hints
 from unittest.mock import MagicMock
 
@@ -16,7 +17,7 @@ import pytest
 from pydantic import BaseModel
 
 import mellea.stdlib.functional as mfuncs
-from mellea import generative
+from mellea import MelleaSession, generative
 from mellea.core import (
     Backend,
     ModelOutputThunk,
@@ -31,6 +32,7 @@ from mellea.stdlib.components.genstub import (
     AsyncGenerativeStub,
     Function,
     PreconditionException,
+    RequirementsNotMetWarning,
     SyncGenerativeStub,
     _format_type,
     bind_function_arguments,
@@ -39,7 +41,9 @@ from mellea.stdlib.components.genstub import (
     get_argument,
 )
 from mellea.stdlib.context import SimpleContext
+from mellea.stdlib.requirements import simple_validate
 from mellea.stdlib.requirements.requirement import reqify
+from mellea.stdlib.sampling import RejectionSamplingStrategy
 from test.stdlib.components._postponed_annotation_samples import (
     extract_requirements,
     greet,
@@ -828,6 +832,75 @@ async def test_async_stub_returns_none_result():
         context=SimpleContext(), backend=backend, text="The car is parked outside."
     )
     assert result is None
+
+
+# --- failed sampling must not be silent (issue #1840) ---
+
+
+def test_sync_stub_warns_when_sampling_fails():
+    """A failed sampling loop warns the caller but still returns the best attempt."""
+
+    @generative
+    def name_fruit(text: str) -> str:
+        """Name the fruit mentioned in the text."""
+
+    session = MelleaSession(backend=_FixedJSONBackend('{"result": "banana"}'))
+    always_fails = Requirement(
+        "must be apple", validation_fn=simple_validate(lambda _: (False, "not apple"))
+    )
+    with pytest.warns(RequirementsNotMetWarning, match="must be apple"):
+        result = name_fruit(
+            m=session,
+            text="x",
+            requirements=[always_fails],
+            strategy=RejectionSamplingStrategy(loop_budget=2),
+        )
+    assert result == "banana"
+
+
+def test_sync_stub_does_not_warn_when_sampling_succeeds():
+    """No warning when requirements pass; the (result, context) shape is unchanged."""
+
+    @generative
+    def name_fruit(text: str) -> str:
+        """Name the fruit mentioned in the text."""
+
+    always_passes = Requirement(
+        "anything goes", validation_fn=simple_validate(lambda _: (True, ""))
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", RequirementsNotMetWarning)
+        result, ctx = name_fruit(
+            context=SimpleContext(),
+            backend=_FixedJSONBackend('{"result": "banana"}'),
+            text="x",
+            requirements=[always_passes],
+            strategy=RejectionSamplingStrategy(loop_budget=2),
+        )
+    assert result == "banana"
+    assert ctx is not None
+
+
+async def test_async_stub_warns_when_sampling_fails():
+    """The async path warns too, and returns the context."""
+
+    @generative
+    async def name_fruit(text: str) -> str:
+        """Name the fruit mentioned in the text."""
+
+    always_fails = Requirement(
+        "must be apple", validation_fn=simple_validate(lambda _: (False, "not apple"))
+    )
+    with pytest.warns(RequirementsNotMetWarning, match="must be apple"):
+        result, ctx = await name_fruit(
+            context=SimpleContext(),
+            backend=_FixedJSONBackend('{"result": "banana"}'),
+            text="x",
+            requirements=[always_fails],
+            strategy=RejectionSamplingStrategy(loop_budget=2),
+        )
+    assert result == "banana"
+    assert ctx is not None
 
 
 if __name__ == "__main__":
