@@ -830,9 +830,9 @@ class GroundednessRequirement(Requirement):
             # Case is preserved here (not upper-cased) so _norm can still
             # see camelCase word boundaries like "notFullySupported".
             level: str | None
-            if "support_level" in judgment:
-                support_level_raw = _normalise_label(judgment.get("support_level"))
-                level = _norm(support_level_raw) if support_level_raw else None
+            support_level_raw = _normalise_label(judgment.get("support_level"))
+            if support_level_raw:
+                level = _norm(support_level_raw)
             else:
                 # Handle nested format: {"span_id": 0, "evidence": [{"support_level": "..."}]}
                 # Checks both "evidence" and "citations" (prior key, kept defensively).
