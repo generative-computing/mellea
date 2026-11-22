@@ -17,7 +17,7 @@ client = openai.OpenAI(api_key="na", base_url=f"http://localhost:{PORT}/v1")
 
 response = client.chat.completions.create(
     messages=[{"role": "user", "content": "Find all the real roots of x^3 + 1."}],
-    model="granite4.1:3b",
+    model="granite4.2:3b",
 )
 
 print(response.choices[0])

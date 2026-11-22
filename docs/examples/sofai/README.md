@@ -9,7 +9,7 @@ using fast and slow models. For usage guidance, `s2_solver_mode`, `judge_backend
 
 | File | Description |
 | :--- | :--- |
-| [`sofai_graph_coloring.py`](./sofai_graph_coloring.py) | Complete example using SOFAI for constraint satisfaction problems (graph coloring), with a `granite4.1:3b` S1 solver, a `granite4:latest` S2 solver, and a custom validator that returns detailed feedback. Consumer-grade hardware friendly. |
+| [`sofai_graph_coloring.py`](./sofai_graph_coloring.py) | Complete example using SOFAI for constraint satisfaction problems (graph coloring), with a `granite4.2:3b` S1 solver, a `granite4:latest` S2 solver, and a custom validator that returns detailed feedback. Consumer-grade hardware friendly. |
 
 ## SOFAI Architecture
 

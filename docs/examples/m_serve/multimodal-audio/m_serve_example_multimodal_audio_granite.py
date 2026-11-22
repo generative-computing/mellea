@@ -10,7 +10,7 @@ This example uses that endpoint to split the work into two steps:
 1. **Transcribe** — POST the raw audio bytes to Ollama's
    `/v1/audio/transcriptions` endpoint using
    `hf.co/ibm-granite/granite-speech-4.1-2b-GGUF:Q4_K_M`.
-2. **Chat** — pass the transcript to a standard `granite4.1:3b` session
+2. **Chat** — pass the transcript to a standard `granite4.2:3b` session
    (via Mellea's Ollama backend) so the model can reason about it and
    produce a response to the caller's question.
 
@@ -30,13 +30,13 @@ Prerequisites:
 
     ```bash
     ollama pull hf.co/ibm-granite/granite-speech-4.1-2b-GGUF:Q4_K_M
-    ollama pull granite4.1:3b
+    ollama pull granite4.2:3b
     ```
 
 Environment variables (all optional):
     OLLAMA_HOST            Ollama server base URL  (default: http://localhost:11434)
     GRANITE_SPEECH_MODEL   speech model name       (default: hf.co/ibm-granite/granite-speech-4.1-2b-GGUF:Q4_K_M)
-    GRANITE_CHAT_MODEL     chat model name         (default: granite4.1:3b)
+    GRANITE_CHAT_MODEL     chat model name         (default: granite4.2:3b)
 
 Usage:
     m serve docs/examples/m_serve/multimodal-audio/m_serve_example_multimodal_audio_granite.py
@@ -62,7 +62,7 @@ _ollama_host = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
 _speech_model = os.environ.get(
     "GRANITE_SPEECH_MODEL", "hf.co/ibm-granite/granite-speech-4.1-2b-GGUF:Q4_K_M"
 )
-_chat_model = os.environ.get("GRANITE_CHAT_MODEL", "granite4.1:3b")
+_chat_model = os.environ.get("GRANITE_CHAT_MODEL", "granite4.2:3b")
 
 
 def _audio_block_to_bytes(block: AudioBlock) -> tuple[bytes, str]:
@@ -114,7 +114,7 @@ async def serve(
     """Serve function that emulates audio-text-to-text via two Ollama calls.
 
     Step 1: `hf.co/ibm-granite/granite-speech-4.1-2b-GGUF:Q4_K_M` transcribes the audio.
-    Step 2: `granite4.1:3b` answers the user's text question, informed by the transcript.
+    Step 2: `granite4.2:3b` answers the user's text question, informed by the transcript.
 
     Caller-supplied `requirements` and `model_options` are forwarded to `ainstruct`.
     """

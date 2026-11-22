@@ -10,7 +10,7 @@ Prerequisites:
     uv pip install pip
     uv run python -m spacy download en_core_web_sm
     ollama serve
-    ollama pull granite4.1:3b
+    ollama pull granite4.2:3b
 
 Usage:
     m serve docs/examples/m_serve/pii/pii_serve.py

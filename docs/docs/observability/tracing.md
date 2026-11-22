@@ -266,7 +266,7 @@ Backend spans nest inside application spans:
 ```text
 start_session             (mellea.application)
                           [gen_ai.provider.name=ollama]
-                          [gen_ai.request.model=granite4.1:3b]
+                          [gen_ai.request.model=granite4.2:3b]
 
 session                   (mellea.application)
 ├── action                (mellea.application)
@@ -275,7 +275,7 @@ session                   (mellea.application)
 │       │                 [mellea.sampling.strategy_type=RejectionSamplingStrategy]
 │       ├── chat          (mellea.backend)
 │       │                 [gen_ai.provider.name=ollama]
-│       │                 [gen_ai.request.model=granite4.1:3b]
+│       │                 [gen_ai.request.model=granite4.2:3b]
 │       │                 [gen_ai.usage.input_tokens=150]
 │       │                 [gen_ai.usage.output_tokens=42]
 │       └── validation    (mellea.application)
@@ -302,9 +302,9 @@ nest under the `stream` span as sibling `chat` spans:
 stream                    (mellea.application)
 │                         [mellea.streaming.chunking_strategy=SentenceChunking]
 ├── chat                  (mellea.backend)    ← streaming generation
-│                         [gen_ai.request.model=granite4.1:3b]
+│                         [gen_ai.request.model=granite4.2:3b]
 └── chat                  (mellea.backend)    ← per-chunk validation
-                          [gen_ai.request.model=granite4.1:3b]
+                          [gen_ai.request.model=granite4.2:3b]
 ```
 
 The `stream` span itself parents under whatever span is active when the run

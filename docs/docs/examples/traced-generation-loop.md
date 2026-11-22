@@ -23,7 +23,7 @@ operations, and the backend trace covers raw LLM calls.
 ## Prerequisites
 
 - [Quick Start](../getting-started/quickstart.md) complete
-- Ollama running locally with `granite4.1:3b` pulled
+- Ollama running locally with `granite4.2:3b` pulled
 - (Optional) [Jaeger](https://www.jaegertracing.io/) running locally for span
   visualisation — see the Jaeger section below
 

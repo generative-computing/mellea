@@ -80,19 +80,16 @@ With structured JSON output enabled, the same `SUCCESS` record looks like:
 
 ```json
 {
-  "timestamp": "2026-04-08T11:11:25",
-  "level": "INFO",
-  "message": "SUCCESS",
-  "module": "base",
-  "function": "sample",
-  "line_number": 258,
-  "process_id": 73738,
-  "thread_id": 6179762176,
-  "session_id": "550e8400-e29b-41d4-a716-446655440000",
-  "backend": "OllamaModelBackend",
-  "model_id": "granite4.1:3b",
-  "strategy": "RejectionSamplingStrategy",
-  "loop_budget": 3
+    "timestamp": "2026-11-21T16:19:35",
+    "level": "INFO",
+    "message": "Sampling was successful.",
+    "module": "base",
+    "function": "_sample",
+    "line_number": 414,
+    "process_id": 456489,
+    "thread_id": 137849217304256,
+    "strategy": "RejectionSamplingStrategy",
+    "loop_budget": 2
 }
 ```
 
