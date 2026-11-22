@@ -547,7 +547,7 @@ def test_parse_batch_support_output_empty_top_level_support_level_with_valid_nes
     ]
     """
     result = req._parse_batch_support_output(output_text, 1)
-    assert result == {0: None}
+    assert result == {0: "FULLY_SUPPORTED"}
 
 
 def test_parse_batch_support_output_non_list_evidence_with_valid_citations():
