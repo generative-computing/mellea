@@ -532,7 +532,7 @@ def test_parse_batch_support_output_ignores_non_string_support_level():
 
 
 def test_parse_batch_support_output_empty_top_level_support_level_with_valid_nested_evidence():
-    """Explicitly empty/unreadable top-level support label must produce None, not fall back to nested evidence."""
+    """An empty top-level support label falls back to nested evidence, as on main."""
     req = GroundednessRequirement()
 
     output_text = """
