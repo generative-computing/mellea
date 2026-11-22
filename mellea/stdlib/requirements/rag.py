@@ -398,23 +398,20 @@ class GroundednessRequirement(Requirement):
         logger.debug(f"Necessity judgment prompt:\n{prompt}\n")
 
         # Get LLM judgment using prompt as the action/instruction
-        try:
-            action = CBlock(prompt)
-            result, _ = await backend.generate_from_context(
-                action,
-                context,
-                model_options={
-                    "temperature": 0.0,
-                    ModelOption.MAX_NEW_TOKENS: self.max_new_tokens,
-                },
-            )
-            await result.avalue()
-            output_text = result.value
-            if output_text is None:
-                raise ValueError("LLM judgment returned None")
-            logger.debug(f"LLM necessity judgment output: {output_text}")
-        except Exception as e:
-            raise ValueError(f"LLM judgment failed: {e}")
+        action = CBlock(prompt)
+        result, _ = await backend.generate_from_context(
+            action,
+            context,
+            model_options={
+                "temperature": 0.0,
+                ModelOption.MAX_NEW_TOKENS: self.max_new_tokens,
+            },
+        )
+        await result.avalue()
+        output_text = result.value
+        if output_text is None:
+            raise ValueError("LLM judgment returned None")
+        logger.debug(f"LLM necessity judgment output: {output_text}")
 
         # Parse LLM output
         span_necessity = self._parse_necessity_output(output_text, spans)
@@ -503,22 +500,19 @@ class GroundednessRequirement(Requirement):
             f"Batch support assessment prompt (spans={len(spans_to_assess)}):\n{prompt}\n"
         )
 
-        try:
-            action = CBlock(prompt)
-            result, _ = await backend.generate_from_context(
-                action,
-                context,
-                model_options={
-                    "temperature": 0.0,
-                    ModelOption.MAX_NEW_TOKENS: self.max_new_tokens,
-                },
-            )
-            await result.avalue()
-            output_text = result.value
-            if output_text is None:
-                raise ValueError("LLM judgment returned None")
-        except Exception as e:
-            raise ValueError(f"Batch LLM judgment for support failed: {e}")
+        action = CBlock(prompt)
+        result, _ = await backend.generate_from_context(
+            action,
+            context,
+            model_options={
+                "temperature": 0.0,
+                ModelOption.MAX_NEW_TOKENS: self.max_new_tokens,
+            },
+        )
+        await result.avalue()
+        output_text = result.value
+        if output_text is None:
+            raise ValueError("LLM judgment returned None")
 
         # Parse batch results
         batch_results = self._parse_batch_support_output(

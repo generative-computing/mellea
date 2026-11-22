@@ -292,18 +292,19 @@ async def test_identify_citation_necessity_backend_failure():
         {"response_begin": 0, "response_end": 14, "response_text": "The sky is blue"}
     ]
 
+    original_error = ValueError("Backend error")
     mock_backend = AsyncMock()
-    mock_backend.generate_from_context = AsyncMock(
-        side_effect=ValueError("Backend error")
-    )
+    mock_backend.generate_from_context = AsyncMock(side_effect=original_error)
 
     context = ChatContext().add(Message("user", "What color is the sky?"))
 
-    # Should raise ValueError when backend fails
-    with pytest.raises(ValueError, match="LLM judgment failed"):
+    # Should raise the exact original exception when backend fails
+    with pytest.raises(ValueError) as exc_info:
         await req._identify_citation_necessity(
             response, citations, mock_backend, context
         )
+
+    assert exc_info.value is original_error
 
 
 @pytest.mark.asyncio
@@ -1199,33 +1200,30 @@ async def test_stage1_citation_failure_preserves_original_exception(caplog):
 
 
 @pytest.mark.asyncio
-async def test_stage2_backend_failure_is_wrapped(caplog):
-    """Stage 2 wraps a model-call failure; the original is on `__context__`."""
+async def test_stage2_backend_failure_is_unwrapped(caplog):
+    """Stage 2 model-call failure propagates the original exception."""
     backend = _adapter_backend(_ORIGINAL)
     with _patch_citations([]), caplog.at_level(logging.ERROR, logger="mellea"):
         result = await _req().validate(backend, _ctx())
     _assert_errored(result)
-    assert isinstance(result.error, ValueError)
-    assert str(result.error).startswith("LLM judgment failed:")
-    assert result.error.__context__ is _ORIGINAL
+    assert result.error is _ORIGINAL
     assert "Citation necessity assessment failed" in caplog.text
 
 
 @pytest.mark.asyncio
-async def test_stage2_none_output_is_wrapped():
-    """Stage 2 `None` output: the inner error is wrapped again."""
+async def test_stage2_none_output_is_unwrapped():
+    """Stage 2 `None` output raises a plain ValueError."""
     backend = _adapter_backend(None)
     with _patch_citations([]):
         result = await _req().validate(backend, _ctx())
     _assert_errored(result)
-    assert str(result.error).startswith("LLM judgment failed:")
-    assert isinstance(result.error.__context__, ValueError)
-    assert "returned None" in str(result.error.__context__)
+    assert isinstance(result.error, ValueError)
+    assert "returned None" in str(result.error)
 
 
 @pytest.mark.asyncio
 async def test_stage2_parser_failure_is_unwrapped():
-    """A parser exception is raised outside the wrapper and arrives as is."""
+    """A parser exception arrives as is."""
     backend = _adapter_backend("[]")
     with (
         _patch_citations([]),
@@ -1239,27 +1237,25 @@ async def test_stage2_parser_failure_is_unwrapped():
 
 
 @pytest.mark.asyncio
-async def test_stage3_backend_failure_is_wrapped(caplog):
-    """Stage 3 wraps a model-call failure; the original is on `__context__`."""
+async def test_stage3_backend_failure_is_unwrapped(caplog):
+    """Stage 3 model-call failure propagates the original exception."""
     backend = _adapter_backend(_NECESSITY_BOTH, _ORIGINAL)
     with _patch_citations([_CITATION]), caplog.at_level(logging.ERROR, logger="mellea"):
         result = await _req().validate(backend, _ctx())
     _assert_errored(result)
-    assert str(result.error).startswith("Batch LLM judgment for support failed:")
-    assert result.error.__context__ is _ORIGINAL
+    assert result.error is _ORIGINAL
     assert "Citation support assessment failed" in caplog.text
 
 
 @pytest.mark.asyncio
-async def test_stage3_none_output_is_wrapped():
-    """Stage 3 `None` output: the inner error is wrapped again."""
+async def test_stage3_none_output_is_unwrapped():
+    """Stage 3 `None` output raises a plain ValueError."""
     backend = _adapter_backend(_NECESSITY_BOTH, None)
     with _patch_citations([_CITATION]):
         result = await _req().validate(backend, _ctx())
     _assert_errored(result)
-    assert str(result.error).startswith("Batch LLM judgment for support failed:")
-    assert isinstance(result.error.__context__, ValueError)
-    assert "returned None" in str(result.error.__context__)
+    assert isinstance(result.error, ValueError)
+    assert "returned None" in str(result.error)
 
 
 @pytest.mark.asyncio
@@ -1893,12 +1889,11 @@ async def test_setup_failure_does_not_reach_repair_prompt():
 
 @pytest.mark.asyncio
 async def test_stage2_failure_does_not_reach_repair_prompt():
-    """Stage 2 failure: `error` is the wrapper with the original on `__context__`."""
+    """Stage 2 failure: `error` is the original exception."""
     req = _req()
     with _patch_citations([]):
         result = await req.validate(_adapter_backend(_ORIGINAL), _ctx())
-    assert str(result.error).startswith("LLM judgment failed:")
-    assert result.error.__context__ is _ORIGINAL
+    assert result.error is _ORIGINAL
 
     plain, friendly = _repair_strings(req, result)
 
