@@ -121,7 +121,7 @@ stop_server() {
     fi
     SERVER_PID=""
 }
-trap 'stop_server; rm -f "$GGUF.partial"' EXIT
+trap 'stop_server; rm -f "$GGUF.partial.$$"' EXIT
 # Route signal kills through the EXIT trap so the server is always torn down.
 trap 'INTERRUPTED=1; exit 130' INT
 trap 'INTERRUPTED=1; exit 143' TERM
@@ -208,16 +208,23 @@ if isinstance(config.get("extra_special_tokens"), list):
 PY
 
     log "Converting to GGUF (this takes a few minutes and ~9 GB of disk)..."
-    # Write to a .partial file and move it into place on success: the converter
-    # writes its output directly, so a Ctrl-C, full disk, or OOM kill midway
-    # would otherwise leave a truncated GGUF that the cache check above accepts
-    # on every later run. The EXIT trap removes this run's leftover .partial
-    # file, and only that one, so a concurrent run for another model keeps its own.
+    # Write to a per-run .partial.<pid> file and move it into place on success:
+    # the converter writes its output directly, so a Ctrl-C, full disk, or OOM
+    # kill midway would otherwise leave a truncated GGUF that the cache check
+    # above accepts on every later run. The pid keeps concurrent runs, for the
+    # same model or another, from writing the same file; the final mv is an
+    # atomic rename within one directory, so the last finisher simply replaces
+    # an identical GGUF. The EXIT trap removes this run's leftover file, and a
+    # SIGKILLed run's (which no trap sees) is removed below once its pid is gone.
+    for stale in "$GGUF".partial.*; do
+        [[ -e "$stale" ]] || continue
+        kill -0 "${stale##*.}" 2>/dev/null || rm -f "$stale"
+    done
     "$CONVERTER_VENV/bin/python" "$LLAMA_CPP_DIR/convert_hf_to_gguf.py" \
         "$SHADOW_DIR" \
         --outtype "$LLAMACPP_SWITCH_QUANT" \
-        --outfile "$GGUF.partial"
-    mv "$GGUF.partial" "$GGUF"
+        --outfile "$GGUF.partial.$$"
+    mv "$GGUF.partial.$$" "$GGUF"
 fi
 
 # The GGUF is a conversion of whatever checkpoint revision the first run
