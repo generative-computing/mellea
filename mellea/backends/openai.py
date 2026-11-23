@@ -1281,9 +1281,14 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         # replacing it, so a caller's `json_object` would collide with the
         # io.yaml `json` constraint and a caller's `text` would leave it in
         # force. Drop the io.yaml constraint unless the caller set
-        # `structured_outputs` themselves.
-        # A `None` value counts as unset, so it cannot switch constraining off.
-        if user_api_params.get("response_format") is not None and not (
+        # `structured_outputs` themselves. The caller's format can arrive as a
+        # model option or inside `extra_body` (which the SDK merges over the
+        # typed kwargs), so resolve it from both. A `None` value counts as
+        # unset, so it cannot switch constraining off.
+        caller_response_format = user_api_params.get("response_format")
+        if caller_response_format is None:
+            caller_response_format = extra_body.get("response_format")
+        if caller_response_format is not None and not (
             user_extra_body and "structured_outputs" in user_extra_body
         ):
             extra_body.pop("structured_outputs", None)
@@ -1293,7 +1298,11 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             if isinstance(structured_outputs, dict)
             else None
         )
-        if isinstance(schema, dict) and api_params.get("response_format") is None:
+        if (
+            isinstance(schema, dict)
+            and api_params.get("response_format") is None
+            and caller_response_format is None
+        ):
             api_params["response_format"] = {
                 "type": "json_schema",
                 "json_schema": {"name": action.intrinsic_name, "schema": schema},

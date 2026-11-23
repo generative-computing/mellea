@@ -896,6 +896,43 @@ async def test_user_response_format_not_overwritten(caller_format):
     assert "structured_outputs" not in call_kwargs["extra_body"]
 
 
+async def test_user_extra_body_response_format_drops_io_yaml_constraint():
+    """A caller's `extra_body.response_format` wins like a top-level one.
+
+    The SDK merges `extra_body` over the typed kwargs, so leaving the io.yaml
+    `structured_outputs` or the mirrored `response_format` in place would send
+    two constraints and vLLM would reject the request.
+    """
+    backend = _make_backend_with_adapter(
+        {**_SIMPLE_CONFIG, "response_format": _ANSWERABILITY_SCHEMA}
+    )
+    mock_create = AsyncMock(return_value=_simple_chat_completion('"answerable"'))
+
+    mock_client = MagicMock()
+    mock_client.chat.completions.create = mock_create
+
+    caller_format = {"type": "json_object"}
+    with patch.object(
+        OpenAIBackend,
+        "_async_client",
+        new_callable=PropertyMock,
+        return_value=mock_client,
+    ):
+        mot, _ = await mfuncs.aact(
+            Intrinsic("answerability"),
+            _make_context(),
+            backend,
+            strategy=None,
+            model_options={"extra_body": {"response_format": caller_format}},
+        )
+        await mot.avalue()
+
+    call_kwargs = mock_create.call_args.kwargs
+    assert call_kwargs["extra_body"]["response_format"] == caller_format
+    assert "structured_outputs" not in call_kwargs["extra_body"]
+    assert "response_format" not in call_kwargs
+
+
 async def test_user_response_format_none_keeps_io_yaml_constraint():
     """`response_format=None` counts as unset, so the io.yaml schema still goes out."""
     backend = _make_backend_with_adapter(
