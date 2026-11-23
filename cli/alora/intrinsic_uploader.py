@@ -100,13 +100,15 @@ def upload_intrinsic(
         target_dir = os.path.join(temp_dir, model_name, base_model_path, type)
         os.makedirs(target_dir, exist_ok=True)
 
-        # Copy the io_yaml file to the target directory
-        shutil.copy2(io_yaml, weight_path)
-
-        # Copy the model files to the target directory.
-        if "README.md" in os.listdir(weight_path):
-            os.remove(os.path.join(weight_path, "README.md"))
-        shutil.copytree(weight_path, target_dir, dirs_exist_ok=True)
+        # Copy the model files to the staging directory, adding io.yaml and
+        # leaving out README.md, without touching the source directory.
+        shutil.copytree(
+            weight_path,
+            target_dir,
+            dirs_exist_ok=True,
+            ignore=shutil.ignore_patterns("README.md"),
+        )
+        shutil.copy2(io_yaml, target_dir)
 
         # Commit and push changes
         assert len(model_name.split("/")) == 2
