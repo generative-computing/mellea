@@ -33,15 +33,15 @@ Usage:
 from typing import Any
 
 import mellea
-from mellea.backends.model_ids import IBM_GRANITE_4_1_3B, IBM_GRANITE_4_1_8B
+from mellea.backends.model_ids import IBM_GRANITE_4_2_3B, IBM_GRANITE_4_2_8B
 from mellea.core import ModelOutputThunk
 from mellea.serve import ChatMessage
 
-_DEFAULT_MODEL = IBM_GRANITE_4_1_3B
+_DEFAULT_MODEL = IBM_GRANITE_4_2_3B
 
 _ALLOWED_MODELS: dict[str, Any] = {
-    IBM_GRANITE_4_1_3B.ollama_name: IBM_GRANITE_4_1_3B,  # type: ignore[dict-item]
-    IBM_GRANITE_4_1_8B.ollama_name: IBM_GRANITE_4_1_8B,  # type: ignore[dict-item]
+    IBM_GRANITE_4_2_3B.ollama_name: IBM_GRANITE_4_2_3B,  # type: ignore[dict-item]
+    IBM_GRANITE_4_2_8B.ollama_name: IBM_GRANITE_4_2_8B,  # type: ignore[dict-item]
 }
 
 

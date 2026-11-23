@@ -70,8 +70,8 @@ message
 Running `m.instruct(...)` inside a session produces lines like:
 
 ```text
-=== 11:11:25-INFO ======
-SUCCESS
+=== 13:29:32-INFO ======
+Sampling was successful.
 ```
 
 ### JSON format (`MELLEA_LOGS_JSON=1`)
@@ -80,14 +80,17 @@ With structured JSON output enabled, the same `SUCCESS` record looks like:
 
 ```json
 {
-    "timestamp": "2026-11-21T16:19:35",
+    "timestamp": "2026-11-23T13:26:29",
     "level": "INFO",
     "message": "Sampling was successful.",
     "module": "base",
-    "function": "_sample",
-    "line_number": 414,
-    "process_id": 456489,
-    "thread_id": 137849217304256,
+    "function": "sample",
+    "line_number": 422,
+    "process_id": 375230,
+    "thread_id": 140519124498112,
+    "session_id": "7eee63a7-630c-4194-83bd-4ab979860d57",
+    "backend": "OllamaModelBackend",
+    "model_id": "granite4.2:3b",
     "strategy": "RejectionSamplingStrategy",
     "loop_budget": 2
 }

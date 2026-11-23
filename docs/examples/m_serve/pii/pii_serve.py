@@ -19,7 +19,7 @@ Usage:
 import spacy
 
 import mellea
-from mellea.backends.model_ids import IBM_GRANITE_4_1_3B
+from mellea.backends.model_ids import IBM_GRANITE_4_2_3B
 from mellea.core import ModelOutputThunk, SamplingResult
 from mellea.serve import ChatMessage
 from mellea.stdlib.requirements import req, simple_validate
@@ -93,7 +93,7 @@ def serve(
 ) -> ModelOutputThunk | SamplingResult | str:
     """Simple serve example to do PII stuff."""
     message = input[-1].get_text_content()
-    session = mellea.start_session(model_id=IBM_GRANITE_4_1_3B)
+    session = mellea.start_session(model_id=IBM_GRANITE_4_2_3B)
     result = pii_remove_validate(
         session, message, requirements=requirements, model_options=model_options
     )
