@@ -19,6 +19,7 @@ from mellea.backends.huggingface import (
     LocalHFBackend,
     _native_parse_thinking,
     _prompt_opens_think,
+    _resolve_generation_caps,
     _split_think_tags,
 )
 from mellea.core.base import CBlock, ModelOutputThunk
@@ -108,7 +109,9 @@ def test_split_think_tags_truncated_reasoning_output_opens_think() -> None:
 def test_split_think_tags_truncated_with_signal() -> None:
     """Prompt-opened think block plus a genuine truncation signal: whole text is thinking."""
     thinking, answer = _split_think_tags(
-        "step one, step two, and then I", prompt_opens_think=True, truncated=True
+        "step one, step two, and then I",
+        prompt_opens_think=lambda: True,
+        truncated=True,
     )
     assert thinking == "step one, step two, and then I"
     assert answer == ""
@@ -118,7 +121,7 @@ def test_split_think_tags_plain_answer_not_truncated_without_signal() -> None:
     """A prompt-opened think block alone is not evidence of truncation: the model may
     have answered directly, and that answer must stay intact."""
     thinking, answer = _split_think_tags(
-        "The answer is 408.", prompt_opens_think=True, truncated=False
+        "The answer is 408.", prompt_opens_think=lambda: True, truncated=False
     )
     assert thinking is None
     assert answer == "The answer is 408."
@@ -127,10 +130,50 @@ def test_split_think_tags_plain_answer_not_truncated_without_signal() -> None:
 def test_split_think_tags_close_tag_wins_over_prompt_opens_think() -> None:
     """A complete block still splits normally when the prompt opened it."""
     thinking, answer = _split_think_tags(
-        "reasoning</think>answer", prompt_opens_think=True
+        "reasoning</think>answer", prompt_opens_think=lambda: True
     )
     assert thinking == "reasoning"
     assert answer == "answer"
+
+
+@pytest.mark.parametrize(
+    ("text", "truncated", "expected_calls", "expected_thinking", "expected_answer"),
+    [
+        # No truncation signal: the callable is not consulted.
+        ("The answer is 408.", False, [], None, "The answer is 408."),
+        # The output opens its own think tag: short-circuits before the callable.
+        (
+            f"\n{hf_backend._THINK_OPEN_TAG}\nstill working",
+            True,
+            [],
+            "still working",
+            "",
+        ),
+        # All preconditions hold: the callable decides the split.
+        ("step one, and then I", True, [1], "step one, and then I", ""),
+    ],
+)
+def test_split_think_tags_lazy_prompt_check(
+    text: str,
+    truncated: bool,
+    expected_calls: list[int],
+    expected_thinking: str | None,
+    expected_answer: str,
+) -> None:
+    """The prompt-open callable runs only when truncation is suspected and the
+    output neither opens nor closes a think block itself."""
+    calls: list[int] = []
+
+    def _opens() -> bool:
+        calls.append(1)
+        return True
+
+    thinking, answer = _split_think_tags(
+        text, prompt_opens_think=_opens, truncated=truncated
+    )
+    assert calls == expected_calls
+    assert thinking == expected_thinking
+    assert answer == expected_answer
 
 
 @pytest.mark.parametrize(
@@ -168,10 +211,14 @@ def test_prompt_opens_think_without_input_ids_or_on_decode_failure() -> None:
     assert _prompt_opens_think(_FakeTok(), None) is False
     assert _prompt_opens_think(_Broken(), torch.tensor([[1, 2]])) is False
     assert _prompt_opens_think(None, torch.tensor([[1, 2]])) is False
+    assert _prompt_opens_think(_FakeTok(), {"not_input_ids": 1}) is False
 
 
 def _make_backend(
-    *, thinking_template_var: str | None = "think", use_caches: bool = False
+    *,
+    thinking_template_var: str | None = "think",
+    use_caches: bool = False,
+    generation_config=None,
 ) -> LocalHFBackend:
     """Return a LocalHFBackend with __init__ bypassed, wired with the minimum
     state post_processing needs when there is no real GenerateDecoderOnlyOutput
@@ -184,6 +231,8 @@ def _make_backend(
             or None for a template that does not reference any of them.
         use_caches: whether to wire up a real `SimpleLRUCache` so the KV-cache
             branch in post_processing actually runs.
+        generation_config: real `GenerationConfig` for the fake model's
+            persistent config, or None for no `_model`.
     """
     b: LocalHFBackend = LocalHFBackend.__new__(LocalHFBackend)
     b._model_id = "test-org/test-model"
@@ -206,7 +255,71 @@ def _make_backend(
         chat_template = template
 
     object.__setattr__(b, "_tokenizer", _FakeTokenizer())
+    if generation_config is not None:
+
+        class _FakeModel:
+            def __init__(self) -> None:
+                self.generation_config = generation_config
+
+        object.__setattr__(b, "_model", _FakeModel())
     return b
+
+
+def _generation_config(**kwargs):
+    """A real transformers `GenerationConfig`, lazily imported, so fakes carry
+    the true attribute shape and `None` defaults for unset caps."""
+    from transformers import GenerationConfig
+
+    return GenerationConfig(**kwargs)
+
+
+# transformers' built-in default cap, applied when nothing is set anywhere
+# (its `max_length` default counts new tokens: generate() adds the prompt).
+# Read from the library via the backend's own import so tests track the
+# installed version rather than a hardcoded constant.
+_DEFAULT_CAP = hf_backend.GenerationConfig._get_default_generation_params()[
+    "max_length"
+]
+
+
+async def _post_process_fake_generation(
+    *,
+    value: str,
+    gen_ids: tuple[int, ...] = (7, 8, 9),
+    prompt_len: int = 3,
+    eos_token_id: int | None = 2,
+    model_options: dict | None = None,
+    generation_config=None,
+    prompt_tail: str | None = None,
+) -> ModelOutputThunk:
+    """Run post_processing over a fabricated single-sequence generation.
+
+    The prompt decodes to `prompt_tail` (default: an open think block, as
+    granite-4.2 renders), the completion tokens are `gen_ids`, and the
+    tokenizer's EOS id is `eos_token_id`, so the caller controls exactly
+    which finish reason the derivation should reach.
+    """
+    if prompt_tail is None:
+        prompt_tail = f"assistant\n{hf_backend._THINK_OPEN_TAG}\n"
+    backend = _make_backend(generation_config=generation_config)
+    object.__setattr__(backend._tokenizer, "decode", lambda ids, **_kw: prompt_tail)
+    if eos_token_id is not None:
+        object.__setattr__(backend._tokenizer, "eos_token_id", eos_token_id)
+    mot = ModelOutputThunk(value=value)
+    mot.raw.response = _hf_output(prompt_len=prompt_len, gen_ids=gen_ids)
+    mot._call.action = CBlock("test")
+    mot._call.model_options = model_options if model_options is not None else {}
+
+    await backend.post_processing(
+        mot,
+        conversation=[],
+        _format=None,
+        tool_calls=False,
+        tools={},
+        seed=None,
+        input_ids=torch.tensor([list(range(1, prompt_len + 1))]),
+    )
+    return mot
 
 
 async def test_post_processing_splits_thinking_before_tool_scan(monkeypatch) -> None:
@@ -423,6 +536,40 @@ async def test_post_processing_preserves_answer_mentioning_think_tag() -> None:
     assert mot.value == "The </think> tag marks the end of a reasoning block."
 
 
+async def test_post_processing_skips_prompt_decode_when_close_tag_present() -> None:
+    """The prompt-open decode must not run when the close tag is present, even
+    on a length-truncated generation (a counter, not a raising stub, because
+    `_prompt_opens_think` swallows decode exceptions)."""
+    decode_calls: list[int] = []
+
+    def _record_decode(ids, **_kwargs):
+        decode_calls.append(1)
+        return f"assistant\n{hf_backend._THINK_OPEN_TAG}\n"
+
+    backend = _make_backend()
+    object.__setattr__(backend._tokenizer, "decode", _record_decode)
+    object.__setattr__(backend._tokenizer, "eos_token_id", 2)
+    mot = ModelOutputThunk(value=f"reasoning{hf_backend._THINK_CLOSE_TAG}answer")
+    mot.raw.response = _hf_output(prompt_len=3, gen_ids=(7, 8, 9))
+    mot._call.action = CBlock("test")
+    mot._call.model_options = {ModelOption.MAX_NEW_TOKENS: 3}
+
+    await backend.post_processing(
+        mot,
+        conversation=[],
+        _format=None,
+        tool_calls=False,
+        tools={},
+        seed=None,
+        input_ids=torch.tensor([[1, 2, 3]]),
+    )
+
+    assert mot.generation.finish_reasons == ["length"]
+    assert decode_calls == []
+    assert mot.thinking == "reasoning"
+    assert mot.value == "answer"
+
+
 async def test_post_processing_truncated_reasoning_goes_to_thinking() -> None:
     """End-to-end through post_processing: the prompt ends inside an open <think>
     block and generation stopped on length before </think>, so mot.value must not
@@ -451,6 +598,147 @@ async def test_post_processing_truncated_reasoning_goes_to_thinking() -> None:
     assert mot.generation.finish_reasons == ["length"]
     assert mot.thinking == "step one, step two, and then I"
     assert mot.value == ""
+
+
+async def test_post_processing_invokes_lazy_prompt_check_when_truncated() -> None:
+    """Laziness must not become never: on a genuinely truncated generation the
+    prompt-open check (and its tokenizer decode) does run, exactly once."""
+    decode_calls: list[int] = []
+
+    def _record_decode(ids, **_kwargs):
+        decode_calls.append(1)
+        return f"assistant\n{hf_backend._THINK_OPEN_TAG}\n"
+
+    backend = _make_backend()
+    object.__setattr__(backend._tokenizer, "decode", _record_decode)
+    object.__setattr__(backend._tokenizer, "eos_token_id", 2)
+    mot = ModelOutputThunk(value="step one, and then I")
+    mot.raw.response = _hf_output(prompt_len=3, gen_ids=(7, 8, 9))
+    mot._call.action = CBlock("test")
+    # 3 completion tokens, last token is not EOS -> finish_reasons == ["length"].
+    mot._call.model_options = {ModelOption.MAX_NEW_TOKENS: 3}
+
+    await backend.post_processing(
+        mot,
+        conversation=[],
+        _format=None,
+        tool_calls=False,
+        tools={},
+        seed=None,
+        input_ids=torch.tensor([[1, 2, 3]]),
+    )
+
+    assert mot.generation.finish_reasons == ["length"]
+    assert decode_calls == [1]
+    assert mot.thinking == "step one, and then I"
+    assert mot.value == ""
+
+
+@pytest.mark.parametrize(
+    ("config", "n_generated", "expected_finish"),
+    [
+        # Cap from the model config's max_new_tokens, reached exactly.
+        ({"max_new_tokens": 3}, 3, "length"),
+        # max_length counts the prompt: 3 prompt + 3 completion == 6.
+        ({"max_length": 6}, 3, "length"),
+        # Nothing configured: transformers' built-in default cap applies.
+        ({}, _DEFAULT_CAP, "length"),
+        # Below a configured cap.
+        ({"max_new_tokens": 5}, 3, None),
+        # Total length below a configured max_length.
+        ({"max_length": 10}, 3, None),
+        # Below the built-in default cap.
+        ({}, 3, None),
+    ],
+)
+async def test_post_processing_length_stop_by_cap_source(
+    config: dict, n_generated: int, expected_finish: str | None
+) -> None:
+    """A length stop is derived (or not) from each cap source: the model's
+    `generation_config` or transformers' built-in default."""
+    mot = await _post_process_fake_generation(
+        value="step one, and then I",
+        gen_ids=tuple(range(7, 7 + n_generated)),
+        generation_config=_generation_config(**config),
+    )
+    assert mot.generation.finish_reasons == (
+        [expected_finish] if expected_finish is not None else None
+    )
+    if expected_finish == "length":
+        assert mot.thinking == "step one, and then I"
+        assert mot.value == ""
+    else:
+        assert mot.thinking is None
+        assert mot.value == "step one, and then I"
+
+
+async def test_post_processing_eos_at_cap_reports_stop() -> None:
+    """EOS reached exactly at the cap reports stop, not length."""
+    mot = await _post_process_fake_generation(
+        value="all done",
+        eos_token_id=9,
+        generation_config=_generation_config(max_new_tokens=3),
+    )
+    assert mot.generation.finish_reasons == ["stop"]
+    assert mot.thinking is None
+    assert mot.value == "all done"
+
+
+async def test_post_processing_stop_string_at_cap_reports_stop() -> None:
+    """A stop string landing at the cap wins over the length report."""
+    mot = await _post_process_fake_generation(
+        value="the answer<STOP>",
+        model_options={
+            ModelOption.MAX_NEW_TOKENS: 3,
+            ModelOption.STOP_SEQUENCES: ["<STOP>"],
+        },
+    )
+    assert mot.generation.finish_reasons == ["stop"]
+    assert mot.value == "the answer<STOP>"
+
+
+@pytest.mark.parametrize(
+    ("model_options", "model_config", "expected"),
+    [
+        # Per-call option wins over everything.
+        ({ModelOption.MAX_NEW_TOKENS: 7}, {"max_new_tokens": 3}, (7, None)),
+        # Per-call generation_config kwarg shadows the model's persistent config.
+        (
+            {"generation_config": _generation_config(max_new_tokens=7)},
+            {"max_new_tokens": 3},
+            (7, None),
+        ),
+        # Within a config, max_new_tokens ignores max_length.
+        ({}, {"max_new_tokens": 7, "max_length": 4}, (7, None)),
+        # max_length alone is resolved as the total-length cap.
+        ({}, {"max_length": 9}, (None, 9)),
+        # A free per-call max_length kwarg overrides the config's max_length.
+        ({"max_length": 9}, {"max_length": 4}, (None, 9)),
+        # But not a config's max_new_tokens.
+        ({"max_length": 9}, {"max_new_tokens": 4}, (4, None)),
+    ],
+)
+def test_resolve_generation_caps(model_options, model_config, expected) -> None:
+    """Cap resolution mirrors generate()'s merge: per-call kwargs over config,
+    max_new_tokens over max_length."""
+
+    class _FakeModel:
+        def __init__(self) -> None:
+            self.generation_config = _generation_config(**model_config)
+
+    assert _resolve_generation_caps(model_options, _FakeModel()) == expected
+
+
+def test_resolve_generation_caps_transformers_default_when_unset() -> None:
+    """Nothing set anywhere: transformers' built-in default cap applies as a
+    new-token cap (`max_length` stays `None`), read from the library so it
+    tracks the installed version."""
+
+    class _FakeModel:
+        def __init__(self) -> None:
+            self.generation_config = _generation_config()
+
+    assert _resolve_generation_caps({}, _FakeModel()) == (_DEFAULT_CAP, None)
 
 
 async def test_post_processing_prompt_opened_think_without_length_stop_stays_value() -> (
@@ -631,6 +919,10 @@ def test_native_parse_thinking_skipped_without_template_or_inputs() -> None:
     assert _native_parse_thinking(None, _hf_output(), prompt) is None
     assert _native_parse_thinking(_WithTemplate(), _hf_output(), None) is None
     assert _native_parse_thinking(_WithTemplate(), None, prompt) is None
+    assert (
+        _native_parse_thinking(_WithTemplate(), _hf_output(), {"not_input_ids": 1})
+        is None
+    )
 
 
 @pytest.mark.parametrize("error", [ValueError("bad"), TypeError("old API")])

@@ -202,11 +202,15 @@ embedded raw in `result.value`. This split is skipped for streaming (`m serve`)
 calls, where the reasoning trace still arrives inline in `result.value`;
 incremental splitting for streaming is tracked in
 [#1799](https://github.com/generative-computing/mellea/issues/1799).
-If generation stops on length before `</think>` appears, `result.value` is an
-empty string and `result.thinking` carries the partial reasoning trace — raise
-`max_new_tokens` to give the model enough budget to finish; this differs from
-`ModelOption.THINKING: False`, which suppresses the split entirely and leaves
-the full output in `result.value`.
+If generation stops at its token limit before `</think>` appears, `result.value`
+is an empty string and `result.thinking` carries the partial reasoning
+trace — raise the limit (e.g. set `max_new_tokens`) to give the model
+enough budget to finish. The limit is detected however it is set:
+`max_new_tokens` or `max_length`, per call via `model_options`, on the
+model's `generation_config`, or transformers' built-in default when
+neither is set. This differs from `ModelOption.THINKING: False`, which
+suppresses the split entirely and leaves the full output in
+`result.value`.
 
 ```python
 import mellea

@@ -290,6 +290,11 @@ _THINK_OPEN_TAG: str = "<think>"
 _THINK_CLOSE_TAG: str = "</think>"
 
 
+def _input_ids_tensor(input_ids: Any) -> torch.Tensor:
+    """Return the prompt token tensor from a tensor or tokenized mapping."""
+    return input_ids if isinstance(input_ids, torch.Tensor) else input_ids["input_ids"]
+
+
 def _prompt_opens_think(tokenizer: Any, input_ids: Any) -> bool:
     """Return True if the prompt ends inside an unclosed `<think>` block.
 
@@ -299,8 +304,10 @@ def _prompt_opens_think(tokenizer: Any, input_ids: Any) -> bool:
     """
     if input_ids is None:
         return False
-    ids = input_ids if isinstance(input_ids, torch.Tensor) else input_ids["input_ids"]
     try:
+        # The helper's mapping lookup raising KeyError lands here: a mapping
+        # without the key takes the documented False fallback.
+        ids = _input_ids_tensor(input_ids)
         # Decode the whole prompt (not a trailing window) to avoid guessing how
         # many tokens the role header + `<think>` + optional newline occupy.
         prompt = tokenizer.decode(ids[0], skip_special_tokens=False)
@@ -328,10 +335,10 @@ def _native_parse_thinking(
         return None
     if input_ids is None or not isinstance(hf_output, GenerateDecoderOnlyOutput):
         return None
-    prompt_ids = (
-        input_ids if isinstance(input_ids, torch.Tensor) else input_ids["input_ids"]
-    )
     try:
+        # The helper's mapping lookup raising KeyError lands here: fall back
+        # to string splitting.
+        prompt_ids = _input_ids_tensor(input_ids)
         parsed = tokenizer.parse_response(
             hf_output.sequences[0, prompt_ids.shape[1] :], prefix=prompt_ids[0]
         )
@@ -350,22 +357,72 @@ def _native_parse_thinking(
     return str(thinking), str(parsed.get("content") or "")
 
 
+def _resolve_generation_caps(
+    model_options: dict | None, model: Any
+) -> tuple[int | None, int | None]:
+    """Resolve the (max_new_tokens, max_length) caps generation ran against.
+
+    Mirrors transformers' `generate` config merge: a per-call `MAX_NEW_TOKENS`
+    option or raw `max_length` kwarg first, then a per-call
+    `generation_config=` kwarg, then the model's persistent config.
+    `max_new_tokens` from any source discards `max_length` from every source;
+    `max_length` counts the prompt, so compare it against total sequence
+    length. When nothing is set anywhere, transformers' built-in default cap
+    applies (read from the library — its `max_length` default counts new
+    tokens, since `generate` adds the prompt), so a cap is always resolved.
+    """
+    options = model_options or {}
+    max_new_tokens = options.get(ModelOption.MAX_NEW_TOKENS)
+    max_length = options.get("max_length")
+    if max_new_tokens is None or max_length is None:
+        gen_config = options.get("generation_config")
+        if gen_config is None:
+            gen_config = getattr(model, "generation_config", None)
+        if gen_config is not None:
+            if max_new_tokens is None:
+                max_new_tokens = getattr(gen_config, "max_new_tokens", None)
+            if max_length is None:
+                max_length = getattr(gen_config, "max_length", None)
+    if max_new_tokens is None and max_length is None:
+        # transformers applies a model-agnostic default when nothing is set
+        # anywhere (`has_default_max_length` in generate); read it from the
+        # library rather than hardcoding it, and fall back to no cap (safe
+        # under-split) if the private accessor ever disappears.
+        defaults = getattr(GenerationConfig, "_get_default_generation_params", None)
+        if callable(defaults):
+            default_cap = defaults().get("max_length")
+            if default_cap is not None:
+                max_new_tokens = default_cap
+    if max_new_tokens is not None:
+        max_length = None
+    return max_new_tokens, max_length
+
+
 def _split_think_tags(
-    text: str, *, prompt_opens_think: bool = False, truncated: bool = False
+    text: str,
+    *,
+    prompt_opens_think: Callable[[], bool] | None = None,
+    truncated: bool = False,
 ) -> tuple[str | None, str]:
     r"""Split raw HF output into (thinking, answer) on the closing </think> tag.
 
     Fallback for `_native_parse_thinking` when no `response_template` exists.
     When no `</think>` is found, the output is treated as truncated reasoning
     (the whole text becomes `thinking` and the answer is `""`) only if two
-    independent signals both hold: the model was inside an open `<think>` block
-    (`prompt_opens_think` is set, or the output itself opens with `<think>`) AND
-    generation was genuinely cut off before EOS (`truncated`). `prompt_opens_think`
-    alone is not enough — it only says the prompt was set up for thinking, and the
-    model may still have answered directly without reasoning. `truncated` is the
-    evidence that something was cut off. A truncated generation can therefore
-    yield an empty `mot.value`, which callers must tolerate — an empty answer is
-    the correct reading of reasoning that never reached its close tag.
+    independent signals both hold: the model was inside an open `<think>`
+    block (reported by `prompt_opens_think`, or the output itself opens
+    with `<think>`) AND generation was genuinely cut off before EOS
+    (`truncated`). The prompt signal alone is not enough — a prompt set
+    up for thinking does not mean the model reasoned; it may have
+    answered directly. `truncated` is the evidence that something was
+    cut off. A truncated generation can therefore yield an empty
+    `mot.value`, which callers must tolerate — an empty answer is the
+    correct reading of reasoning that never reached its close tag.
+
+    `prompt_opens_think` is a zero-argument callable returning whether the
+    prompt ended inside an unclosed `<think>` block, evaluated only when the
+    close tag is absent, `truncated` is set, and the output does not
+    itself open with the tag; `None` (the default) skips the check.
 
     A token-position check against the raw generated sequence (scanning for
     Granite's `</think>` token id rather than re-scanning decoded text) would be
@@ -396,7 +453,8 @@ def _split_think_tags(
     """
     if _THINK_CLOSE_TAG not in text:
         if truncated and (
-            prompt_opens_think or text.lstrip().startswith(_THINK_OPEN_TAG)
+            text.lstrip().startswith(_THINK_OPEN_TAG)
+            or (prompt_opens_think is not None and prompt_opens_think())
         ):
             return text.strip().removeprefix(_THINK_OPEN_TAG).strip(), ""
         return None, text
@@ -2462,9 +2520,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             input_ids: The prompt token IDs used for decoding; required to slice off
                 the prompt portion from the generated sequences.
         """
-        input_ids_tensor = (
-            input_ids if isinstance(input_ids, torch.Tensor) else input_ids["input_ids"]
-        )
+        input_ids_tensor = _input_ids_tensor(input_ids)
 
         if mot._underlying_value is None:
             mot._underlying_value = ""
@@ -2588,11 +2644,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 kv_cache=kv_cache,
                 merged_token_ids=output_complete,
                 merged_attention=torch.ones_like(output_complete).to(self._device),
-                q_end=(
-                    input_ids
-                    if isinstance(input_ids, torch.Tensor)
-                    else input_ids["input_ids"]
-                ).shape[1],
+                q_end=_input_ids_tensor(input_ids).shape[1],
                 scores=hf_output.scores,
             )
 
@@ -2629,11 +2681,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         if isinstance(hf_output, GenerateDecoderOnlyOutput):
             try:
                 if input_ids is not None and hf_output.sequences is not None:
-                    n_prompt = (
-                        input_ids
-                        if isinstance(input_ids, torch.Tensor)
-                        else input_ids["input_ids"]
-                    ).shape[1]
+                    n_prompt = _input_ids_tensor(input_ids).shape[1]
                     n_completion = hf_output.sequences[0].shape[0] - n_prompt
             except Exception:
                 pass
@@ -2646,9 +2694,9 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             }
 
         # Derive finish reason: "stop" if last token is EOS or the output ends
-        # with a configured stop string, "length" if we hit max_new_tokens. HF
-        # has no provider response object; this is synthesised from local state
-        # (sequences + tokenizer.eos_token_id + model_options).
+        # with a configured stop string, "length" if we hit the generation cap
+        # (resolved via `_resolve_generation_caps`). HF has no provider
+        # response object; this is synthesised from local state.
         if (
             isinstance(hf_output, GenerateDecoderOnlyOutput)
             and hf_output.sequences is not None
@@ -2658,7 +2706,9 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 last_token = hf_output.sequences[0][-1].item()
                 eos = self._tokenizer.eos_token_id
                 eos_set = set(eos) if isinstance(eos, list) else {eos}
-                max_new_tokens = mot._call.model_options.get(ModelOption.MAX_NEW_TOKENS)
+                max_new_tokens, max_length = _resolve_generation_caps(
+                    mot._call.model_options, getattr(self, "_model", None)
+                )
                 stop_strings = (
                     mot._call.model_options.get(ModelOption.STOP_SEQUENCES) or []
                 )
@@ -2667,10 +2717,13 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 )
                 if last_token in eos_set or ends_with_stop_string:
                     mot.generation.finish_reasons = ["stop"]
-                elif (
-                    max_new_tokens is not None
-                    and n_completion is not None
-                    and n_completion >= max_new_tokens
+                elif n_completion is not None and (
+                    (max_new_tokens is not None and n_completion >= max_new_tokens)
+                    or (
+                        max_length is not None
+                        and n_prompt is not None
+                        and n_prompt + n_completion >= max_length
+                    )
                 ):
                     mot.generation.finish_reasons = ["length"]
             except (IndexError, AttributeError, TypeError) as e:
@@ -2725,12 +2778,16 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             native = _native_parse_thinking(tokenizer, hf_output, input_ids)
             # Only a genuine length-stop can mean an in-flight reasoning block was cut off.
             truncated = mot.generation.finish_reasons == ["length"]
+            # Lazy: the prompt-open check decodes the whole prompt, so defer it
+            # to the splitter.
             thinking, answer = (
                 native
                 if native is not None
                 else _split_think_tags(
                     raw_value,
-                    prompt_opens_think=_prompt_opens_think(tokenizer, input_ids),
+                    prompt_opens_think=lambda: _prompt_opens_think(
+                        tokenizer, input_ids
+                    ),
                     truncated=truncated,
                 )
             )
