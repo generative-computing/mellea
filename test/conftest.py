@@ -562,8 +562,9 @@ def pytest_collection_modifyitems(config, items):
         "or set LLAMACPP_BASE_URL)"
     )
     skip_llamacpp_switch = pytest.mark.skip(
-        reason="llama.cpp Switch server not reachable (start "
-        "scripts/start_llamacpp_switch.sh, or set LLAMACPP_SWITCH_BASE_URL)"
+        reason="llama.cpp Switch server not reachable at LLAMACPP_SWITCH_BASE_URL "
+        "(default port 8081); each example's docstring names the checkpoint "
+        "to serve and the command that starts it"
     )
 
     # Auto-apply 'unit' marker to tests without explicit granularity markers.

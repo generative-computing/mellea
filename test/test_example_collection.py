@@ -227,7 +227,7 @@ def test_collection_capability_gates(monkeypatch):
     ("has_llamacpp", "has_llamacpp_switch", "skipped", "reason_fragment"),
     [
         (False, True, ["llamacpp"], "start_llamacpp.sh"),
-        (True, False, ["llamacpp_switch"], "start_llamacpp_switch.sh"),
+        (True, False, ["llamacpp_switch"], "LLAMACPP_SWITCH_BASE_URL"),
     ],
 )
 def test_llamacpp_gates_are_independent(

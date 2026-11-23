@@ -290,8 +290,9 @@ def _should_skip_collection(markers, config=None):
         if not capabilities.get("has_llamacpp_switch", False):
             return (
                 True,
-                "llama.cpp Switch server not reachable (start "
-                "scripts/start_llamacpp_switch.sh, or set LLAMACPP_SWITCH_BASE_URL)",
+                "llama.cpp Switch server not reachable at LLAMACPP_SWITCH_BASE_URL "
+                "(default port 8081); each example's docstring names the "
+                "checkpoint to serve and the command that starts it",
             )
 
     # Skip tests requiring API keys
