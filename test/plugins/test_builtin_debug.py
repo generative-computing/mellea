@@ -637,3 +637,86 @@ class TestValidationPostCheckPlugin:
         assert len(records) > 0, (
             f"Expected mismatch warning, got records: {[r.message for r in caplog.records]}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Error fallback when there is no informative reason
+# ---------------------------------------------------------------------------
+
+
+def _failed_result(reason, error):
+    """Build a failed mock result. `error` is set explicitly (a bare MagicMock attribute is truthy)."""
+    result = MagicMock()
+    result.as_bool.return_value = False
+    result.reason = reason
+    result.error = error
+    result.score = None
+    return result
+
+
+_ERROR_CASES = [
+    # (reason, error, expect_reason, expect_error)
+    ("the reason", None, True, False),
+    (None, RuntimeError("adapter boom"), False, True),
+    ("the reason", RuntimeError("adapter boom"), True, False),
+    (None, None, False, False),
+    ("yes", RuntimeError("adapter boom"), False, True),
+    ("no", RuntimeError("adapter boom"), False, True),
+]
+
+
+class TestDebugPluginsShowErrorWithoutReason:
+    """Both debug plugins fall back to `str(result.error)` when no reason is informative."""
+
+    @pytest.mark.parametrize(
+        ("reason", "error", "expect_reason", "expect_error"), _ERROR_CASES
+    )
+    async def test_sampling_iteration(
+        self, caplog, reason, error, expect_reason, expect_error
+    ) -> None:
+        register(log_sampling_iteration)
+        req = MagicMock()
+        req.description = "Requirement 1"
+        payload = SamplingIterationPayload(
+            iteration=1,
+            valid_count=0,
+            total_count=1,
+            all_validations_passed=False,
+            validation_results=[(req, _failed_result(reason, error))],
+        )
+
+        with caplog.at_level(
+            logging.DEBUG, logger="mellea.plugins.builtin_debug.sampling"
+        ):
+            await invoke_hook(HookType.SAMPLING_ITERATION, payload)
+
+        text = "\n".join(r.message for r in caplog.records)
+        assert ("the reason" in text) is expect_reason
+        assert ("adapter boom" in text) is expect_error
+
+    @pytest.mark.parametrize(
+        ("reason", "error", "expect_reason", "expect_error"),
+        [*_ERROR_CASES, ("", RuntimeError("adapter boom"), False, True)],
+    )
+    async def test_validation_post_check(
+        self, caplog, reason, error, expect_reason, expect_error
+    ) -> None:
+        register(log_validation_post_check)
+        req = MagicMock()
+        req.description = "Requirement 1"
+        payload = ValidationPostCheckPayload(
+            requirements=[req],
+            passed_count=0,
+            failed_count=1,
+            all_validations_passed=False,
+            results=[_failed_result(reason, error)],
+        )
+
+        with caplog.at_level(
+            logging.DEBUG, logger="mellea.plugins.builtin_debug.validation"
+        ):
+            await invoke_hook(HookType.VALIDATION_POST_CHECK, payload)
+
+        text = "\n".join(r.message for r in caplog.records)
+        assert ("the reason" in text) is expect_reason
+        assert ("adapter boom" in text) is expect_error

@@ -104,10 +104,13 @@ async def log_sampling_iteration(
                     logger.debug(f"    {status} {req_desc}")
                 else:
                     logger.info(f"    {status} {req_desc}")
-                    # Show detailed reason only if informative
+                    # Show detailed reason only if informative, otherwise the error
                     reason = getattr(result, "reason", None)
+                    error = getattr(result, "error", None)
                     if reason and reason not in ("yes", "no"):
                         logger.info(f"       └─ {reason}")
+                    elif error is not None:
+                        logger.info(f"       └─ {error!s}")
 
 
 @hook(HookType.SAMPLING_REPAIR)

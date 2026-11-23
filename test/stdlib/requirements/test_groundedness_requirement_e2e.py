@@ -78,6 +78,7 @@ async def test_groundedness_e2e_ungrounded_claim(backend, simple_docs):
     result = await req.validate(backend, ctx)
     # Berlin claim is not grounded (not in documents), should return False
     assert result.as_bool() is False
+    assert result.error is None, f"validation could not run: {result.error!r}"
     assert result.reason is not None
 
 
