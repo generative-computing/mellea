@@ -1083,12 +1083,15 @@ class _CallInfo:
         model_options: Model options passed to the originating generate call.
         generation_id: Mellea-side hook correlation ID; distinct from the
             provider-assigned `GenerationMetadata.response_id`.
+        backend_name: Originating backend's `model_id` (matching
+            `build_global_context`), propagated to thunk-fired generation hooks.
     """
 
     action: Span | None = None
     context: list[Span] | None = None
     model_options: dict[str, Any] | None = None
     generation_id: str | None = None
+    backend_name: Any = None
 
 
 # Max chunks buffered per stream before the producer blocks; bounded for memory.
@@ -1238,6 +1241,12 @@ class ModelOutputThunk(Generic[S]):
             self.generation.ttfb_ms = self._elapsed_ms()
             self._gen.first_chunk_received = True
 
+    def _hook_context_fields(self) -> dict[str, Any]:
+        """Return ambient global-context fields for thunk-fired generation hooks."""
+        if self._call.backend_name is not None:
+            return {"backend_name": self._call.backend_name}
+        return {}
+
     async def _emit_event(self, event_name: str, **data: Any) -> None:
         """Fire a `generation_event` hook named `event_name` carrying `data`, if any plugin subscribes."""
         if has_plugins(HookType.GENERATION_EVENT):
@@ -1250,7 +1259,9 @@ class ModelOutputThunk(Generic[S]):
                 provider=self.generation.provider,
                 data=data,
             )
-            await invoke_hook(HookType.GENERATION_EVENT, event_payload)
+            await invoke_hook(
+                HookType.GENERATION_EVENT, event_payload, **self._hook_context_fields()
+            )
 
     async def cancel_generation(self, error: Exception | None = None) -> None:
         """Cancel an in-progress streaming generation, drain the queue, and fire the `generation_error` hook.
@@ -1355,6 +1366,7 @@ class ModelOutputThunk(Generic[S]):
                         generation_id=self._call.generation_id,
                         latency_ms=self._elapsed_ms(),
                     ),
+                    **self._hook_context_fields(),
                 )
 
     @property
@@ -1550,7 +1562,11 @@ class ModelOutputThunk(Generic[S]):
                     generation_id=self._call.generation_id,
                     latency_ms=self._elapsed_ms(),
                 )
-                await invoke_hook(HookType.GENERATION_ERROR, err_payload)
+                await invoke_hook(
+                    HookType.GENERATION_ERROR,
+                    err_payload,
+                    **self._hook_context_fields(),
+                )
 
             raise chunks[-1]
 
@@ -1599,7 +1615,11 @@ class ModelOutputThunk(Generic[S]):
                     latency_ms=self._elapsed_ms(),
                     generation_id=self._call.generation_id,
                 )
-                await invoke_hook(HookType.GENERATION_POST_CALL, post_payload)
+                await invoke_hook(
+                    HookType.GENERATION_POST_CALL,
+                    post_payload,
+                    **self._hook_context_fields(),
+                )
                 # NOTE: If we allow generation_post_call to modify the model output thunk, we need to
                 # set the value and copy over fields here.
                 # replacement = await invoke_hook(...)
@@ -1813,6 +1833,7 @@ class ModelOutputThunk(Generic[S]):
             context=copy(self._call.context),
             model_options=copy(self._call.model_options),
             generation_id=self._call.generation_id,
+            backend_name=self._call.backend_name,
         )
         deepcopied.generation = deepcopy(self.generation)
         deepcopied.raw = deepcopy(self.raw)

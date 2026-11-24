@@ -185,8 +185,9 @@ class Backend(abc.ABC):
                     backend=self,
                 )
             raise
-        # Save the ID for the post_call / error hooks.
+        # Save the ID and backend name for the post_call / error / event hooks.
         mot._call.generation_id = generation_id
+        mot._call.backend_name = getattr(self, "model_id", "unknown")
         return mot, new_ctx
 
     @abc.abstractmethod
