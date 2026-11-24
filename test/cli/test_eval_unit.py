@@ -22,6 +22,7 @@ from cli.eval.runner import (
     parse_judge_output,
 )
 from mellea.backends import ModelOption, model_ids
+from mellea.helpers.server_type import _ServerType
 from mellea.stdlib.components.unit_test_eval import TestBasedEval
 
 # --- InputEvalResult ---
@@ -225,12 +226,17 @@ def stub_backend(monkeypatch):
     """Replace the backend module for `name` with a stub and return the class mock.
 
     Stubbing the module (rather than the class) keeps these tests independent of
-    optional extras such as torch or the watsonx SDK.
+    optional extras such as torch or the watsonx SDK. Keyword arguments to `_stub`
+    set attributes on the stubbed instance, e.g. `_server_type`.
     """
 
-    def _stub(name: str) -> MagicMock:
+    def _stub(name: str, **instance_attributes: object) -> MagicMock:
         module_name, class_name = _BACKEND_CLASSES[name]
         cls = MagicMock(name=class_name)
+        instance = cls.return_value
+        instance.model_options = {}
+        for key, value in instance_attributes.items():
+            setattr(instance, key, value)
         module = types.ModuleType(module_name)
         setattr(module, class_name, cls)
         monkeypatch.setitem(sys.modules, module_name, module)
@@ -276,47 +282,68 @@ def test_create_session_litellm_string_model_passes_through(stub_backend):
 _UNSET = object()  # THINKING is not in the options at all
 
 
+@pytest.mark.parametrize("backend", ["ollama", "openai", "hf", "watsonx", "litellm"])
+def test_create_session_builds_backend_with_token_cap_only(stub_backend, backend):
+    """Only the token cap is passed at construction; thinking is set afterwards."""
+    cls = stub_backend(backend)
+    create_session(backend=backend, model=None, max_tokens=8)
+    assert cls.call_args.kwargs["model_options"] == {ModelOption.MAX_NEW_TOKENS: 8}
+
+
 @pytest.mark.parametrize("backend", ["ollama", "hf"])
 def test_create_session_local_backends_turn_thinking_off(stub_backend, backend):
     cls = stub_backend(backend)
     create_session(backend=backend, model=None, max_tokens=8)
-    assert cls.call_args.kwargs["model_options"][ModelOption.THINKING] is False
+    assert cls.return_value.model_options[ModelOption.THINKING] is False
+
+
+def test_create_session_watsonx_leaves_thinking_unset(stub_backend):
+    cls = stub_backend("watsonx")
+    create_session(backend="watsonx", model=None, max_tokens=8)
+    assert cls.return_value.model_options.get(ModelOption.THINKING, _UNSET) is _UNSET
 
 
 @pytest.mark.parametrize(
-    ("base_url", "expected"),
+    ("server_type", "expected"),
     [
-        pytest.param(None, _UNSET, id="unset-means-openai-platform"),
-        pytest.param("https://api.openai.com/v1", _UNSET, id="openai-platform"),
-        pytest.param("http://localhost:11434/v1", False, id="ollama"),
-        pytest.param("https://vllm.example.com/v1", False, id="self-hosted"),
+        pytest.param(_ServerType.OPENAI, _UNSET, id="openai-platform"),
+        pytest.param(_ServerType.LOCALHOST, False, id="local-server"),
+        pytest.param(_ServerType.UNKNOWN, False, id="unknown-server"),
     ],
 )
 def test_create_session_openai_thinking_follows_server(
-    stub_backend, monkeypatch, base_url, expected
+    stub_backend, server_type, expected
 ):
-    if base_url is None:
-        monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
-    else:
-        monkeypatch.setenv("OPENAI_BASE_URL", base_url)
-    cls = stub_backend("openai")
+    cls = stub_backend("openai", _server_type=server_type)
     create_session(backend="openai", model=None, max_tokens=8)
-    options = cls.call_args.kwargs["model_options"]
+    options = cls.return_value.model_options
     assert options.get(ModelOption.THINKING, _UNSET) is expected
 
 
 @pytest.mark.parametrize(
-    ("model", "expected"),
+    ("model", "resolved_model_id", "expected"),
     [
-        pytest.param(None, False, id="backend-default-is-ollama-routed"),
-        pytest.param("ollama_chat/granite4.2:3b", False, id="ollama-route"),
-        pytest.param("openai/gpt-4o", _UNSET, id="non-ollama-route"),
+        pytest.param(
+            None,
+            "ollama_chat/granite4.2:3b",
+            False,
+            id="backend-default-is-ollama-routed",
+        ),
+        pytest.param(
+            "ollama_chat/granite4.2:3b",
+            "ollama_chat/granite4.2:3b",
+            False,
+            id="ollama-route",
+        ),
+        pytest.param("openai/gpt-4o", "openai/gpt-4o", _UNSET, id="non-ollama-route"),
     ],
 )
-def test_create_session_litellm_thinking_follows_route(stub_backend, model, expected):
-    cls = stub_backend("litellm")
+def test_create_session_litellm_thinking_follows_route(
+    stub_backend, model, resolved_model_id, expected
+):
+    cls = stub_backend("litellm", _model_id=resolved_model_id)
     create_session(backend="litellm", model=model, max_tokens=8)
-    options = cls.call_args.kwargs["model_options"]
+    options = cls.return_value.model_options
     assert options.get(ModelOption.THINKING, _UNSET) is expected
 
 

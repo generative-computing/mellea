@@ -10,7 +10,6 @@ aggregates per-input pass/fail counts, and saves the full results to JSON or JSO
 """
 
 import json
-import os
 import re
 from pathlib import Path
 from typing import Any
@@ -125,28 +124,33 @@ class TestEvalResult:
         return self.passed_count / self.total_count if self.total_count > 0 else 0.0
 
 
-def _eval_model_options(
-    max_tokens: int | None, thinking: bool | None
-) -> dict[str, Any]:
-    """Build the session-wide model options for an eval session.
+def _auto_thinking(backend_instance: Backend, backend_name: str) -> bool | None:
+    """Choose the eval thinking default from the built backend's own state.
 
-    Eval caps generation and judging at a small token budget. Thinking-capable
-    models such as Granite 4.2 reason by default, and that reasoning counts against
-    the budget, which can leave an empty answer or an unparsable judgement.
+    Reasoning counts against eval's small token budget, so thinking is turned
+    off wherever the backend supports it.
 
     Args:
-        max_tokens: Maximum number of tokens to generate, or `None` for the
-            backend default.
-        thinking: Value for `ModelOption.THINKING`, or `None` to leave thinking at
-            the model's default.
+        backend_instance: The constructed backend.
+        backend_name: Lower-case backend name.
 
     Returns:
-        The options dict to pass as `model_options` to the backend.
+        The value for `ModelOption.THINKING`, or `None` to leave thinking at
+        the model's default.
     """
-    options: dict[str, Any] = {ModelOption.MAX_NEW_TOKENS: max_tokens}
-    if thinking is not None:
-        options[ModelOption.THINKING] = thinking
-    return options
+    from mellea.helpers.server_type import _ServerType
+
+    if backend_name in ("ollama", "hf", "huggingface"):
+        return False
+    if backend_name == "openai":
+        # On the OpenAI platform a bool adds `chat_template_kwargs`, so leave it.
+        server_type = getattr(backend_instance, "_server_type")
+        return None if server_type == _ServerType.OPENAI else False
+    if backend_name == "litellm":
+        # LiteLLM maps THINKING only for Ollama-routed models.
+        model_id = str(getattr(backend_instance, "_model_id"))
+        return False if "ollama" in model_id.split("/")[0] else None
+    return None  # watsonx has no thinking mapping
 
 
 def create_session(
@@ -193,31 +197,14 @@ def create_session(
             from mellea.backends.ollama import OllamaModelBackend
 
             backend_instance = OllamaModelBackend(
-                **model_kwargs,
-                model_options=_eval_model_options(max_tokens, thinking=False),
+                **model_kwargs, model_options={ModelOption.MAX_NEW_TOKENS: max_tokens}
             )
 
         elif backend_lower == "openai":
             from mellea.backends.openai import OpenAIBackend
-            from mellea.helpers.server_type import _server_type, _ServerType
 
-            # The CLI takes no base URL, so the backend reads OPENAI_BASE_URL. Apply
-            # the backend's own test: an unset URL means the OpenAI platform.
-            base_url = os.getenv("OPENAI_BASE_URL")
-            on_openai_platform = (
-                base_url is None or _server_type(base_url) == _ServerType.OPENAI
-            )
-            # Thinking is left at the model's default only on the OpenAI platform: for
-            # a bool, the backend adds `chat_template_kwargs` to the request body,
-            # which a hosted OpenAI endpoint may not accept. Other servers (Ollama,
-            # vLLM) get thinking off; the backend sends `reasoning_effort="none"` there.
-            # A model that reasons by default on the OpenAI platform can still use up
-            # --max-gen-tokens; raise the caps if answers come back empty.
             backend_instance = OpenAIBackend(
-                **model_kwargs,
-                model_options=_eval_model_options(
-                    max_tokens, thinking=None if on_openai_platform else False
-                ),
+                **model_kwargs, model_options={ModelOption.MAX_NEW_TOKENS: max_tokens}
             )
 
         elif backend_lower in ["hf", "huggingface"]:
@@ -232,16 +219,14 @@ def create_session(
                 model_id = mellea.model_ids.IBM_GRANITE_4_2_3B
             backend_instance = LocalHFBackend(
                 model_id=model_id,
-                model_options=_eval_model_options(max_tokens, thinking=False),
+                model_options={ModelOption.MAX_NEW_TOKENS: max_tokens},
             )
 
         elif backend_lower == "watsonx":
             from mellea.backends.watsonx import WatsonxAIBackend
 
-            # The WatsonX backend has no thinking mapping, so leave thinking unset.
             backend_instance = WatsonxAIBackend(
-                **model_kwargs,
-                model_options=_eval_model_options(max_tokens, thinking=None),
+                **model_kwargs, model_options={ModelOption.MAX_NEW_TOKENS: max_tokens}
             )
 
         elif backend_lower == "litellm":
@@ -251,23 +236,19 @@ def create_session(
             litellm_kwargs: dict[str, Any] = (
                 {} if model_id is None else {"model_id": str(model_id)}
             )
-            # The thinking toggle is only applied to Ollama-routed models, matching
-            # how LiteLLMBackend maps it. The backend default is Ollama-routed.
-            litellm_model = litellm_kwargs.get("model_id")
-            ollama_routed = (
-                litellm_model is None or "ollama" in litellm_model.split("/")[0]
-            )
             backend_instance = LiteLLMBackend(
-                **litellm_kwargs,
-                model_options=_eval_model_options(
-                    max_tokens, thinking=False if ollama_routed else None
-                ),
+                **litellm_kwargs, model_options={ModelOption.MAX_NEW_TOKENS: max_tokens}
             )
 
         else:
             raise ValueError(
                 f"Unknown backend: {backend}. Supported: ollama, openai, hf, watsonx, litellm"
             )
+
+        # THINKING is read at request time, so it can be set after construction.
+        auto_thinking = _auto_thinking(backend_instance, backend_lower)
+        if auto_thinking is not None:
+            backend_instance.model_options[ModelOption.THINKING] = auto_thinking
 
         # create session with backend instance
         from mellea.stdlib.context import SimpleContext
