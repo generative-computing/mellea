@@ -171,8 +171,8 @@ def alora_add_readme(
     ),
     io_yaml: str = typer.Option(
         default=None,
-        help="Location of the io.yaml file that configures input and output "
-        "processing if the model is invoked as an intrinsic.",
+        help="Deprecated — ignored by 'add-readme'; will be removed in a "
+        "future release.",
     ),
 ):
     """Generate and upload an INTRINSIC_README.md for a trained adapter.
@@ -201,7 +201,9 @@ def alora_add_readme(
         promptfile: Path to the prompt format file, or `None`.
         name: Destination model name on Hugging Face Hub.
         hints: Path to a file containing additional domain hints, or `None`.
-        io_yaml: Path to the `io.yaml` intrinsic configuration file, or `None`.
+        io_yaml: Deprecated and ignored — the generated README does not use
+            the `io.yaml` configuration. Accepted for backwards compatibility;
+            a warning is printed when a value is given.
 
     Raises:
         OSError: If no Hugging Face authentication token is found.
@@ -216,6 +218,13 @@ def alora_add_readme(
         ) from e
 
     from cli.alora.readme_generator import generate_readme
+
+    if io_yaml is not None:
+        typer.echo(
+            "Warning: --io-yaml is ignored by 'm alora add-readme' and is "
+            "deprecated; it will be removed in a future release.",
+            err=True,
+        )
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         readme_path = os.path.join(tmp_dir, "README.md")

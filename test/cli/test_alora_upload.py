@@ -134,6 +134,40 @@ def test_upload_intrinsic_leaves_source_directory_untouched(monkeypatch, tmp_pat
     assert (weights / "README.md").read_text() == "# my model card\n"
 
 
+def test_add_readme_io_yaml_warns_it_is_ignored(monkeypatch, capsys):
+    """--io-yaml is deprecated in add-readme: it warns and is not forwarded (#1860)."""
+    import huggingface_hub
+
+    from cli.alora.commands import alora_add_readme
+
+    generator = ModuleType("cli.alora.readme_generator")
+    seen = {}
+
+    def generate_readme(**kwargs):
+        seen.update(kwargs)
+        Path(kwargs["output_path"]).write_text("# Synthetic adapter\n")
+
+    monkeypatch.setattr(generator, "generate_readme", generate_readme, raising=False)
+    monkeypatch.setitem(sys.modules, "cli.alora.readme_generator", generator)
+    monkeypatch.setattr("builtins.input", lambda _: "yes")
+    monkeypatch.setattr(huggingface_hub, "get_token", Mock(return_value="t"))
+    monkeypatch.setattr(huggingface_hub, "create_repo", Mock())
+    monkeypatch.setattr(huggingface_hub, "upload_file", Mock())
+
+    alora_add_readme(
+        datafile="synthetic.jsonl",
+        basemodel="example/base",
+        promptfile=None,
+        name="example/adapter",
+        hints=None,
+        io_yaml="unused.yaml",
+    )
+
+    err = capsys.readouterr().err
+    assert "--io-yaml" in err and "ignored" in err
+    assert "io_yaml" not in seen
+
+
 @pytest.mark.parametrize("token", [None, "test-token-not-a-real-credential"])
 def test_add_readme_token_lookup(monkeypatch, token):
     """README orchestration uses Hub token lookup, with generation isolated."""
