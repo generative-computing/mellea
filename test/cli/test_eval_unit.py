@@ -235,6 +235,10 @@ def stub_backend(monkeypatch):
         cls = MagicMock(name=class_name)
         instance = cls.return_value
         instance.model_options = {}
+        if name == "openai" and "_server_type" not in instance_attributes:
+            # The real backend resolves an unset OPENAI_BASE_URL as the OpenAI
+            # platform, so that is the stub default too.
+            instance._server_type = _ServerType.OPENAI
         for key, value in instance_attributes.items():
             setattr(instance, key, value)
         module = types.ModuleType(module_name)
@@ -315,7 +319,9 @@ def test_create_session_openai_thinking_follows_server(
     stub_backend, server_type, expected
 ):
     cls = stub_backend("openai", _server_type=server_type)
-    create_session(backend="openai", model=None, max_tokens=8)
+    # A model is named so the off-platform cases reach the thinking logic
+    # instead of the missing-model error.
+    create_session(backend="openai", model="granite4.2:3b", max_tokens=8)
     options = cls.return_value.model_options
     assert options.get(ModelOption.THINKING, _UNSET) is expected
 
@@ -345,6 +351,34 @@ def test_create_session_litellm_thinking_follows_route(
     create_session(backend="litellm", model=model, max_tokens=8)
     options = cls.return_value.model_options
     assert options.get(ModelOption.THINKING, _UNSET) is expected
+
+
+# --- create_session openai model requirement ---
+
+
+@pytest.mark.parametrize(
+    "server_type",
+    [_ServerType.LOCALHOST, _ServerType.UNKNOWN, _ServerType.REMOTE_VLLM],
+    ids=["localhost", "unknown", "remote-vllm"],
+)
+def test_create_session_openai_without_model_raises_off_platform(
+    stub_backend, server_type
+):
+    stub_backend("openai", _server_type=server_type)
+    with pytest.raises(ValueError, match="--model"):
+        create_session(backend="openai", model=None, max_tokens=8)
+
+
+def test_create_session_openai_without_model_ok_on_platform(stub_backend):
+    cls = stub_backend("openai", _server_type=_ServerType.OPENAI)
+    create_session(backend="openai", model=None, max_tokens=8)
+    assert "model_id" not in cls.call_args.kwargs
+
+
+def test_create_session_openai_with_model_ok_off_platform(stub_backend):
+    cls = stub_backend("openai", _server_type=_ServerType.LOCALHOST)
+    create_session(backend="openai", model="granite4.2:3b", max_tokens=8)
+    assert cls.call_args.kwargs["model_id"] == "granite4.2:3b"
 
 
 # --- _resolved_model_name ---

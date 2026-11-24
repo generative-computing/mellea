@@ -171,7 +171,9 @@ def create_session(
         A configured `MelleaSession` ready for generation.
 
     Raises:
-        ValueError: If `backend` is not one of the supported backend names.
+        ValueError: If `backend` is not one of the supported backend names, or
+            if `backend` is `"openai"`, `model` is `None`, and
+            `OPENAI_BASE_URL` is not the OpenAI platform.
         Exception: Re-raised from backend or session construction if
             initialisation fails.
     """
@@ -202,10 +204,19 @@ def create_session(
 
         elif backend_lower == "openai":
             from mellea.backends.openai import OpenAIBackend
+            from mellea.helpers.server_type import _ServerType
 
-            backend_instance = OpenAIBackend(
+            openai_backend = OpenAIBackend(
                 **model_kwargs, model_options={ModelOption.MAX_NEW_TOKENS: max_tokens}
             )
+            if model_id is None and openai_backend._server_type != _ServerType.OPENAI:
+                raise ValueError(
+                    "No --model given and OPENAI_BASE_URL "
+                    f"({openai_backend._base_url}) is not the OpenAI platform, "
+                    f"where the default {openai_backend._model_id} lives. "
+                    "Pass --model or --judge-model."
+                )
+            backend_instance = openai_backend
 
         elif backend_lower in ["hf", "huggingface"]:
             from mellea.backends.huggingface import LocalHFBackend
