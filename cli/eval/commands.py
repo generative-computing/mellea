@@ -42,6 +42,13 @@ def eval_run(
     max_judge_tokens: int = typer.Option(
         256, "--max-judge-tokens", help="Max tokens for the judge model's judgement."
     ),
+    thinking: bool | None = typer.Option(
+        None,
+        "--thinking/--no-thinking",
+        help="Force reasoning on or off for generation and judge. Default: off "
+        "where supported, model default on the OpenAI platform and watsonx. "
+        "Ignored on watsonx.",
+    ),
     output_path: str = typer.Option(
         "eval_results", "--output-path", "-o", help="Output path for results"
     ),
@@ -67,6 +74,7 @@ def eval_run(
     off for `ollama`, `hf`, Ollama-routed `litellm` models, and `openai` when
     `OPENAI_BASE_URL` points at a server other than the OpenAI platform. It is
     left at the model's default on the OpenAI platform and on `watsonx`.
+    `--thinking`/`--no-thinking` overrides this.
 
     Prerequisites:
         Mellea installed (`uv add mellea`). At least one inference backend
@@ -97,6 +105,8 @@ def eval_run(
             (Granite 4.2 3B for `hf`; `openai` requires a model off the
             OpenAI platform).
         max_judge_tokens: Maximum tokens for the judge model's output.
+        thinking: Force reasoning on or off for both models, or `None` for
+            the automatic per-backend default.
         output_path: File path prefix for the results file.
         output_format: Output format -- `"json"` or `"jsonl"`.
         continue_on_error: If `True`, skip failed tests instead of raising.
@@ -114,6 +124,7 @@ def eval_run(
         output_path=output_path,
         output_format=output_format,
         continue_on_error=continue_on_error,
+        thinking=thinking,
     )
 
 

@@ -154,7 +154,10 @@ def _auto_thinking(backend_instance: Backend, backend_name: str) -> bool | None:
 
 
 def create_session(
-    backend: str, model: str | None, max_tokens: int | None
+    backend: str,
+    model: str | None,
+    max_tokens: int | None,
+    thinking: bool | None = None,
 ) -> mellea.MelleaSession:
     """Create a mellea session with the specified backend and model.
 
@@ -166,6 +169,8 @@ def create_session(
             backend has no default of its own, so `None` selects Granite 4.2 3B.
         max_tokens: Maximum number of tokens to generate, or `None` for
             the backend default.
+        thinking: Force reasoning on or off, or `None` for the automatic
+            per-backend default. Ignored with a warning on `watsonx`.
 
     Returns:
         A configured `MelleaSession` ready for generation.
@@ -257,9 +262,17 @@ def create_session(
             )
 
         # THINKING is read at request time, so it can be set after construction.
-        auto_thinking = _auto_thinking(backend_instance, backend_lower)
-        if auto_thinking is not None:
-            backend_instance.model_options[ModelOption.THINKING] = auto_thinking
+        if thinking is None:
+            auto_thinking = _auto_thinking(backend_instance, backend_lower)
+            if auto_thinking is not None:
+                backend_instance.model_options[ModelOption.THINKING] = auto_thinking
+        elif backend_lower == "watsonx":
+            console.print(
+                "[yellow]warning:[/yellow] watsonx has no thinking mapping; "
+                "ignoring --thinking/--no-thinking."
+            )
+        else:
+            backend_instance.model_options[ModelOption.THINKING] = thinking
 
         # create session with backend instance
         from mellea.stdlib.context import SimpleContext
@@ -302,6 +315,7 @@ def run_evaluations(
     output_path: str,
     output_format: str,
     continue_on_error: bool,
+    thinking: bool | None = None,
 ):
     """Run all unit-test evaluations against a generation model and a judge model.
 
@@ -322,6 +336,8 @@ def run_evaluations(
         output_format: Output format: `"json"` or `"jsonl"`.
         continue_on_error: If `True`, skip failed test evaluations instead of
             raising.
+        thinking: Force reasoning on or off for both the generation and judge
+            models, or `None` for the automatic per-backend default.
     """
     all_test_evals: list[TestBasedEval] = []
 
@@ -341,11 +357,16 @@ def run_evaluations(
     total_inputs = sum(len(test_eval.inputs) for test_eval in all_test_evals)
     console.print(f"Total inputs to run: {total_inputs}")
 
-    m = create_session(backend=backend, model=model, max_tokens=max_gen_tokens)
+    m = create_session(
+        backend=backend, model=model, max_tokens=max_gen_tokens, thinking=thinking
+    )
     # Use same backend as generator if judge_backend not specified
     judge_backend_name = judge_backend if judge_backend else backend
     judge_session = create_session(
-        backend=judge_backend_name, model=judge_model, max_tokens=max_judge_tokens
+        backend=judge_backend_name,
+        model=judge_model,
+        max_tokens=max_judge_tokens,
+        thinking=thinking,
     )
 
     # Report what the backends resolved, since an omitted model is chosen by the backend.
