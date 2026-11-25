@@ -558,19 +558,21 @@ class IntrinsicsRewriter(ChatCompletionRewriter):
     def _reject_decision_incompatibilities(
         self, chat_completion: ChatCompletion
     ) -> None:
-        """Reject tools and documents on one-token decision calls.
+        """Reject undeclared tools and documents on one-token decision calls.
 
         Both would be appended to the trained system prompt by the chat
         template of a Switch-style model, changing the layout the decision
-        adapter was trained on.
+        adapter was trained on. Tools its configuration declares (`tools`)
+        are part of that layout, so they are allowed.
 
         Args:
             chat_completion (ChatCompletion): Argument to `_transform()`.
 
         Raises:
-            ValueError: If the request carries tools or RAG documents.
+            ValueError: If the request carries tools its configuration does
+                not declare, or RAG documents.
         """
-        if chat_completion.tools:
+        if chat_completion.tools and not self.config.get("tools"):
             raise ValueError(
                 "Decision calls do not support tools: a tool list would be "
                 "appended to the trained system prompt by the chat template "

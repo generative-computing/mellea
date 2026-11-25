@@ -28,7 +28,7 @@ from ..base.types import (
 # Local
 from . import _json_util
 from .input import sentence_delimiter
-from .util import make_config_dict
+from .util import make_config_dict, output_type
 
 _logger = logging.getLogger(__name__)
 
@@ -1509,6 +1509,18 @@ class IntrinsicsResultProcessor(ChatCompletionResultProcessor):
                         derived_content,
                     )
                 content = derived_content
+
+        # Text output: return the content as written, no JSON round-trip.
+        # The io.yaml declares `output: {type: text}` and has no transformation
+        # rules; the adapter produces free text (a sentence, a rewrite), not JSON.
+        if output_type(self.config) == "text" and not self.rules:
+            updated_message = choice.message.model_copy(
+                update={"content": content}
+            )
+            result = choice.model_copy(update={"message": updated_message})
+            if result.logprobs is not None:
+                del result.logprobs
+            return result
 
         # Parse JSON output twice: Once to verify valid JSON and once to compute offsets
         # Note that we don't currently check schema, as that would require an additional

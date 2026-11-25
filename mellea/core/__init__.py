@@ -12,7 +12,7 @@ building a new backend, formatter, or sampling strategy, or when you need the ty
 definitions shared across the library.
 """
 
-from .backend import Backend, BaseModelSubclass, generate_walk
+from .backend import Backend, BaseModelSubclass, RenderedRequest, generate_walk
 from .base import (
     AudioBlock,
     AudioUrlBlock,
@@ -102,6 +102,7 @@ __all__ = [
     "PartialValidationResult",
     "PartialValidationSummary",
     "RawProviderResponse",
+    "RenderedRequest",
     "Requirement",
     "S",
     "SampleActionType",

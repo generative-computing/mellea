@@ -34,6 +34,11 @@ class Intrinsic(Component[str]):
         adapter_types (tuple[AdapterType, ...] | None): Adapter types this
             intrinsic supports. Required for a name outside the catalog;
             optional (defaults to the catalog entry's own types) otherwise.
+        io_config (dict | None): The `io.yaml` the call declares, for an
+            adapter function that has no adapter yet (an `AdapterFunction`
+            before training). A backend's `render_request` renders the call
+            with it when no adapter of this name is registered; generating
+            still needs a registered adapter, whose own `io.yaml` then wins.
 
     Attributes:
         metadata: The intrinsic metadata fetched from the catalog, or a
@@ -44,6 +49,7 @@ class Intrinsic(Component[str]):
             reaching in via `intrinsic.metadata.repo_id`) should treat an
             empty `repo_id` as "no catalog entry", not as a real value.
         intrinsic_kwargs (dict): Keyword arguments passed to the intrinsic.
+        io_config (dict | None): The `io.yaml` the call declares, if any.
         intrinsic_name (str): User-visible name of this intrinsic (property).
         adapter_types (tuple[AdapterType, ...]): Available adapter types that
             implement this intrinsic (property). Defaults to values in self.metadata.
@@ -59,6 +65,7 @@ class Intrinsic(Component[str]):
         intrinsic_name: str,
         intrinsic_kwargs: dict | None = None,
         adapter_types: tuple[AdapterType, ...] | None = None,
+        io_config: dict | None = None,
     ) -> None:
         """Initialize Intrinsic by fetching metadata for the named intrinsic from the catalog."""
         try:
@@ -86,6 +93,7 @@ class Intrinsic(Component[str]):
             intrinsic_kwargs = {}
         self.intrinsic_kwargs = intrinsic_kwargs
         self._adapter_types = adapter_types
+        self.io_config = io_config
 
     @property
     def intrinsic_name(self):

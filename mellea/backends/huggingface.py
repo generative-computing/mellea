@@ -67,6 +67,7 @@ from ..core import (
     GenerateType,
     MelleaLogger,
     ModelOutputThunk,
+    RenderedRequest,
     Requirement,
     Span,
     get_audio_from_component,
@@ -79,6 +80,7 @@ from ..formatters.granite.base.util import (
     _LLGUIDANCE_GRAMMAR_DEFAULTS,
     _GuidanceLogitsProcessor,
 )
+from ..formatters.granite.intrinsics.util import json_field as _json_field
 from ..helpers import (
     DEFAULT_CHUNK_TIMEOUT,
     message_to_openai_message,
@@ -600,6 +602,162 @@ def _check_alora_activation(
         qualified_name=qualified_name,
         invocation_tokens=invocation_tokens,
     )
+
+
+@dataclasses.dataclass
+class _HFIntrinsicRender:
+    """An intrinsic call rendered: the request, and what generating it needs."""
+
+    request: RenderedRequest
+    rewritten: Any  # granite_formatters.ChatCompletion
+    conversation: list[dict]
+    tools: dict[str, AbstractMelleaTool]
+
+
+def _render_intrinsic(
+    backend: LocalHFBackend,
+    action: Intrinsic,
+    ctx: Context,
+    *,
+    adapter_name: str,
+    intrinsic_config: dict,
+    model_options: dict[str, Any],
+    tool_calls: bool,
+) -> _HFIntrinsicRender:
+    """Render an intrinsic call: the conversation, rewritten, and its tools.
+
+    Shared by `render_request` and `_generate_from_intrinsic`, so what is
+    recorded is what is passed to the chat template. Taken after the
+    intrinsic's rewriter.
+    """
+    # Collect tools if tool_calls is enabled.
+    tools: dict[str, AbstractMelleaTool] = dict()
+    if tool_calls:
+        add_tools_from_model_options(tools, model_options)
+        add_tools_from_context_actions(tools, ctx.actions_for_available_tools())
+        MelleaLogger.get_logger().info(f"Tools for call: {tools.keys()}")
+
+    linearized_ctx = ctx.view_for_generation()
+    assert linearized_ctx is not None, (
+        "If ctx.is_chat_context, then the context should be linearizable."
+    )
+    ctx_as_message_list: list[Message] = backend.formatter.to_chat_messages(
+        linearized_ctx
+    )
+
+    # NOTE: Explicitly do not add the action to the context here. Intrinsics modify the context
+    #       through their rewriters.
+
+    # Extract system prompt and prepend to conversation.
+    system_prompt = model_options.get(ModelOption.SYSTEM_PROMPT, "")
+    conversation: list[dict] = []
+    if system_prompt != "":
+        conversation.append({"role": "system", "content": system_prompt})
+    # Intrinsic/adapter calls are single-shot evaluations over a rewritten
+    # conversation, not multi-turn generation, so reasoning is never replayed
+    # here (no `replay_reasoning=`). The HF chat path serializes via
+    # `to_chat`/`apply_chat_template`, not this helper.
+    conversation.extend(
+        [
+            message_to_openai_message(m, provider=backend._provider)
+            for m in ctx_as_message_list
+        ]
+    )
+
+    docs = messages_to_docs(ctx_as_message_list)
+
+    rewriter = granite_formatters.IntrinsicsRewriter(
+        config_dict=intrinsic_config, model_name=adapter_name
+    )
+
+    json_tools = convert_tools_to_json(tools)
+    # An adapter function's io.yaml may declare the tools it was trained
+    # with; a call that passes none is rendered with those.
+    if not json_tools and intrinsic_config.get("tools"):
+        json_tools = [dict(t) for t in intrinsic_config["tools"]]
+    # The pydantic models used by the intrinsic rewriter are stricter than the actual OpenAI SDK.
+    # Extract the "function" fields from each json tool which contains `{"name":..., "description":..., "parameters":...}`.
+    formatted_tools = [tool["function"] for tool in json_tools]
+    # Convert our conversation into a proper chat completions dict.
+    # [{role: user, content: Hello}, {...}] -> {messages: [{role:user,...}, ...], model:..., ...}
+    request_json: dict = {
+        "messages": conversation,
+        "extra_body": {"documents": docs},
+        "tools": formatted_tools if len(formatted_tools) > 0 else None,
+    }
+
+    rewritten = rewriter.transform(request_json, **action.intrinsic_kwargs)
+
+    # Extract temperature and apply it to the rewritten request so that
+    # chat_completion_request_to_transformers_inputs handles the
+    # do_sample/temperature logic correctly.
+    temperature = model_options.get(ModelOption.TEMPERATURE, None)
+    if temperature is not None:
+        rewritten = rewritten.model_copy(update={"temperature": temperature})
+
+    # The messages passed to the chat template (`rewritten.model_dump()`, as
+    # `_generate_from_intrinsic` passes them), their unset (None) fields dropped.
+    messages_dicts = [
+        {k: v for k, v in m.items() if v is not None}
+        for m in rewritten.model_dump()["messages"]
+    ]
+    labels = intrinsics.input._first_token_labels(
+        intrinsic_config.get("transformations")
+    )
+    constraint: dict[str, Any] | None = None
+    if labels is not None:
+        constraint = {"labels": list(labels)}
+    elif intrinsic_config.get("response_format") is not None:
+        constraint = {"json_schema": _json_field(intrinsic_config["response_format"])}
+    request = RenderedRequest(
+        messages=messages_dicts,
+        tools=json_tools or None,
+        constraint=constraint,
+        adapter=adapter_name,
+    )
+    return _HFIntrinsicRender(request, rewritten, conversation, tools)
+
+
+def _render_chat(
+    backend: LocalHFBackend,
+    action: Span,
+    ctx: Context,
+    *,
+    _format: type[BaseModelSubclass] | None,
+    model_options: dict[str, Any],
+    tool_calls: bool,
+) -> tuple[RenderedRequest, list[dict], dict[str, AbstractMelleaTool]]:
+    """Render a chat call: the messages and tools passed to the chat template.
+
+    Shared by `render_request` and `_generate_from_context_standard`.
+    """
+    system_prompt = model_options.get(ModelOption.SYSTEM_PROMPT, None)
+    ctx_as_chat = to_chat(action, ctx, backend.formatter, system_prompt)
+
+    # Append tool call information if applicable.
+    tools: dict[str, AbstractMelleaTool] = dict()
+    if tool_calls:
+        if _format:
+            MelleaLogger.get_logger().warning(
+                f"Tool calling typically uses constrained generation, but you have specified a `format` in your generate call. NB: tool calling is superseded by format; we will NOT call tools for your request: {action}"
+            )
+        else:
+            add_tools_from_model_options(tools, model_options)
+            add_tools_from_context_actions(tools, ctx.actions_for_available_tools())
+
+            # Add the tools from the action for this generation last so that
+            # they overwrite conflicting names.
+            add_tools_from_context_actions(tools, [action])
+        MelleaLogger.get_logger().info(f"Tools for call: {tools.keys()}")
+    json_tools = convert_tools_to_json(tools)
+    request = RenderedRequest(
+        messages=ctx_as_chat,
+        tools=json_tools or None,
+        constraint=None
+        if _format is None
+        else {"json_schema": _format.model_json_schema()},
+    )
+    return request, ctx_as_chat, tools
 
 
 class LocalHFBackend(FormatterBackend, AdapterMixin):
@@ -1265,6 +1423,86 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             )
         return loaded
 
+    def render_request(
+        self,
+        action: Component[C] | CBlock | ModelOutputThunk,
+        ctx: Context,
+        *,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+    ) -> RenderedRequest:
+        """The request `generate_from_context` would pass to the chat template, without generating.
+
+        The same rendering the generate path uses: for an `Intrinsic`, taken
+        after its rewriter. An `Intrinsic` with no adapter registered under its
+        name renders with the `io_config` it declares (an adapter function not
+        yet trained). The KV-cache path (`use_caches`) is not covered.
+
+        Args:
+            action: The component to generate from, passed separately from `ctx`.
+            ctx: The rest of the context, excluding `action` (a chat context).
+            format: A response format for structured outputs (chat path only).
+            model_options: Per-call model options.
+            tool_calls: Whether the call exposes tools to the model.
+
+        Returns:
+            The request: its messages, the tools in OpenAI form, and its
+            constraint.
+
+        Raises:
+            NotImplementedError: For a non-chat context, or for a `Requirement`
+                action (whose rerouting to a requirement adapter is the
+                generate path's decision).
+            ValueError: For an `Intrinsic` with no adapter registered and no
+                `io_config`, or a context with images or audio.
+            TypeError: If the registered adapter is not a composed `Adapter`.
+        """
+        if not ctx.is_chat_context:
+            raise NotImplementedError("render_request needs a chat context.")
+        if isinstance(action, Requirement):
+            raise NotImplementedError(
+                "render_request does not render a Requirement: rerouting it to "
+                "a requirement adapter is decided when generating."
+            )
+        model_opts = self._simplify_and_merge(model_options)
+        if isinstance(action, Intrinsic):
+            _check_no_multimodal_blocks(None, ctx)
+            adapter = self._find_adapter(action.intrinsic_name, None)
+            if adapter is None:
+                if action.io_config is None:
+                    raise ValueError(
+                        f"backend ({self}) has no adapter for processing intrinsic: "
+                        f"{action.intrinsic_name}, and the call declares no "
+                        "io_config to render it with"
+                    )
+                adapter_name, config = action.intrinsic_name, action.io_config
+            else:
+                if not isinstance(adapter, _AdapterCore):
+                    raise TypeError(
+                        "LocalHFBackend only supports a composed Adapter, got: "
+                        f"{type(adapter).__name__}"
+                    )
+                adapter_name, config = self._intrinsic_adapter_name_and_config(adapter)
+            return _render_intrinsic(
+                self,
+                action,
+                ctx,
+                adapter_name=adapter_name,
+                intrinsic_config=config,
+                model_options=model_opts,
+                tool_calls=tool_calls,
+            ).request
+        _check_no_multimodal_blocks(action, ctx)
+        return _render_chat(
+            self,
+            action,
+            ctx,
+            _format=format,
+            model_options=model_opts,
+            tool_calls=tool_calls,
+        )[0]
+
     async def _generate_from_intrinsic(
         self,
         action: Intrinsic,
@@ -1317,47 +1555,11 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         if seed is not None:
             set_seed(seed)
 
-        # Collect tools if tool_calls is enabled.
-        tools: dict[str, AbstractMelleaTool] = dict()
-        if tool_calls:
-            add_tools_from_model_options(tools, model_options)
-            add_tools_from_context_actions(tools, ctx.actions_for_available_tools())
-            MelleaLogger.get_logger().info(f"Tools for call: {tools.keys()}")
-
         # Intrinsics don't support streaming because of their post-processing step.
         if model_options.get(ModelOption.STREAM, False):
             raise NotImplementedError(
                 "Intrinsics do not support streaming due to structured output parsing."
             )
-
-        linearized_ctx = ctx.view_for_generation()
-        assert linearized_ctx is not None, (
-            "If ctx.is_chat_context, then the context should be linearizable."
-        )
-        ctx_as_message_list: list[Message] = self.formatter.to_chat_messages(
-            linearized_ctx
-        )
-
-        # NOTE: Explicitly do not add the action to the context here. Intrinsics modify the context
-        #       through their rewriters.
-
-        # Extract system prompt and prepend to conversation.
-        system_prompt = model_options.get(ModelOption.SYSTEM_PROMPT, "")
-        conversation: list[dict] = []
-        if system_prompt != "":
-            conversation.append({"role": "system", "content": system_prompt})
-        # Intrinsic/adapter calls are single-shot evaluations over a rewritten
-        # conversation, not multi-turn generation, so reasoning is never replayed
-        # here (no `replay_reasoning=`). The HF chat path serializes via
-        # `to_chat`/`apply_chat_template`, not this helper.
-        conversation.extend(
-            [
-                message_to_openai_message(m, provider=self._provider)
-                for m in ctx_as_message_list
-            ]
-        )
-
-        docs = messages_to_docs(ctx_as_message_list)
 
         # resolve_adapter registers exactly one winner per capability, so match by
         # name only: pass None (not action.adapter_types, which is never None) so a
@@ -1380,32 +1582,25 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             adapter
         )
 
-        rewriter = granite_formatters.IntrinsicsRewriter(
-            config_dict=intrinsic_config, model_name=adapter_name
-        )
         result_processor = granite_formatters.IntrinsicsResultProcessor(
             config_dict=intrinsic_config
         )
 
-        # The pydantic models used by the intrinsic rewriter are stricter than the actual OpenAI SDK.
-        # Extract the "function" fields from each json tool which contains `{"name":..., "description":..., "parameters":...}`.
-        formatted_tools = [tool["function"] for tool in convert_tools_to_json(tools)]
-        # Convert our conversation into a proper chat completions dict.
-        # [{role: user, content: Hello}, {...}] -> {messages: [{role:user,...}, ...], model:..., ...}
-        request_json: dict = {
-            "messages": conversation,
-            "extra_body": {"documents": docs},
-            "tools": formatted_tools if len(formatted_tools) > 0 else None,
-        }
-
-        rewritten = rewriter.transform(request_json, **action.intrinsic_kwargs)
-
-        # Extract temperature and apply it to the rewritten request so that
-        # chat_completion_request_to_transformers_inputs handles the
-        # do_sample/temperature logic correctly.
+        render = _render_intrinsic(
+            self,
+            action,
+            ctx,
+            adapter_name=adapter_name,
+            intrinsic_config=intrinsic_config,
+            model_options=model_options,
+            tool_calls=tool_calls,
+        )
+        rewritten, conversation, tools = (
+            render.rewritten,
+            render.conversation,
+            render.tools,
+        )
         temperature = model_options.get(ModelOption.TEMPERATURE, None)
-        if temperature is not None:
-            rewritten = rewritten.model_copy(update={"temperature": temperature})
 
         # TODO: Handle caching here. granite_formatters doesn't tell us what changed,
         #       so we will have to invalidate the cache on our side. This requires
@@ -2092,26 +2287,14 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         # Otherwise, we will linearize the context and treat it as a raw input.
         if ctx.is_chat_context:
             _check_no_multimodal_blocks(action, ctx)
-            system_prompt = model_options.get(ModelOption.SYSTEM_PROMPT, None)
-            ctx_as_chat = to_chat(action, ctx, self.formatter, system_prompt)
-
-            # Append tool call information if applicable.
-            tools: dict[str, AbstractMelleaTool] = dict()
-            if tool_calls:
-                if _format:
-                    MelleaLogger.get_logger().warning(
-                        f"Tool calling typically uses constrained generation, but you have specified a `format` in your generate call. NB: tool calling is superseded by format; we will NOT call tools for your request: {action}"
-                    )
-                else:
-                    add_tools_from_model_options(tools, model_options)
-                    add_tools_from_context_actions(
-                        tools, ctx.actions_for_available_tools()
-                    )
-
-                    # Add the tools from the action for this generation last so that
-                    # they overwrite conflicting names.
-                    add_tools_from_context_actions(tools, [action])
-                MelleaLogger.get_logger().info(f"Tools for call: {tools.keys()}")
+            _, ctx_as_chat, tools = _render_chat(
+                self,
+                action,
+                ctx,
+                _format=_format,
+                model_options=model_options,
+                tool_calls=tool_calls,
+            )
 
             seed = model_options.get(ModelOption.SEED, None)
             if seed is not None:

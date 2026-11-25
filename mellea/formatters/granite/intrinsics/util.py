@@ -23,6 +23,33 @@ from .constants import (
 )
 
 
+def output_type(config: dict) -> str:
+    """What an adapter writes, per its parsed configuration: ``"text"`` or ``"json"``.
+
+    Args:
+        config: A configuration dict, as ``make_config_dict`` returns it.
+
+    Returns:
+        The ``output.type`` field, or ``"json"`` when ``output`` is absent.
+    """
+    output = config.get("output")
+    if isinstance(output, dict) and output.get("type") == "text":
+        return "text"
+    return "json"
+
+
+def json_field(value: object) -> object:
+    """A JSON-valued configuration field (``response_format``), parsed.
+
+    Args:
+        value: The field as written (a JSON string) or already parsed.
+
+    Returns:
+        The parsed value.
+    """
+    return json.loads(value) if isinstance(value, str) else value
+
+
 class AdapterNotFoundError(ValueError):
     """Raised when no adapter or prompt `io.yaml` exists at the expected repository path.
 

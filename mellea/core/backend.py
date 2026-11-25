@@ -14,6 +14,7 @@ hook firing and delegate to the backend implementations. Also provides
 
 import abc
 import asyncio
+import dataclasses
 import functools
 import itertools
 import time
@@ -43,6 +44,44 @@ from .utils import MelleaLogger
 BaseModelSubclass = typing_extensions.TypeVar(
     "BaseModelSubclass", bound=pydantic.BaseModel, default=pydantic.BaseModel
 )  # must be a subclass of BaseModel
+
+
+@dataclasses.dataclass
+class RenderedRequest:
+    """A generate call as the backend sends it: what a model, or an adapter, receives.
+
+    `Backend.render_request` returns it, and the backend's generate path sends
+    it, so a request rendered without generating (to record what an adapter
+    will be trained on) is the one generating would send. On the
+    adapter-function path it is taken after the adapter function's input
+    rewriter has run.
+
+    Args:
+        messages: The conversation as OpenAI-format messages, as sent.
+        tools: The tools declared to the model, as OpenAI-format JSON tool
+            schemas, or `None` for none.
+        tool_choice: The request's `tool_choice` (`"none"`, `"auto"`, ...), or
+            `None` when the request sets none.
+        constraint: What the output is constrained to, or `None`: `{"labels":
+            [...]}` for a one-token readout over labels, `{"json_schema":
+            {...}}` for structured output.
+        adapter: The adapter function the request activates, or `None` for
+            the base model.
+    """
+
+    messages: list[dict[str, Any]]
+    tools: list[dict[str, Any]] | None = None
+    tool_choice: str | None = None
+    constraint: dict[str, Any] | None = None
+    adapter: str | None = None
+
+    def to_json(self) -> dict[str, Any]:
+        """The request as JSON-ready data.
+
+        Returns:
+            Its fields as a dict.
+        """
+        return dataclasses.asdict(self)
 
 
 class Backend(abc.ABC):
@@ -188,6 +227,37 @@ class Backend(abc.ABC):
         # Save the ID for the post_call / error hooks.
         mot._call.generation_id = generation_id
         return mot, new_ctx
+
+    def render_request(
+        self,
+        action: Component[C] | CBlock | ModelOutputThunk,
+        ctx: Context,
+        *,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+    ) -> RenderedRequest:
+        """The request `generate_from_context` would send for these arguments, without sending it.
+
+        Backends whose generate path renders an OpenAI-format request override
+        this, and their generate path sends what it returns.
+
+        Args:
+            action: The component to generate from, passed separately from `ctx`.
+            ctx: The rest of the context, excluding `action`.
+            format: A response format for structured outputs.
+            model_options: Model options to upsert into the defaults for this call.
+            tool_calls: Whether the call exposes tools to the model.
+
+        Returns:
+            The rendered request.
+
+        Raises:
+            NotImplementedError: If this backend does not render requests.
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} does not render requests (render_request)"
+        )
 
     @abc.abstractmethod
     async def _generate_from_context(

@@ -11,12 +11,15 @@ YAML_OPTIONAL_FIELDS = [
     "docs_as_message",
     "instruction",
     "name",
+    "output",
     "parameters",
     "provenance",
     "sentence_boundaries",
     "state_template",
     "system_prompt",
     "invocation_text",
+    "tools",
+    "tool_choice",
 ]
 """Fields that may be present in every intrinsic's YAML configuration file. If
 not present, the parsed config dictionary will contain a null value in their place.

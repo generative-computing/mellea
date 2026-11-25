@@ -17,7 +17,7 @@ from test.predicates import require_gpu
 def backend():
     """Provide HuggingFace backend for tests (session-scoped to avoid OOM)."""
     with hf_skip():
-        return LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
+        return LocalHFBackend(model_id="ibm-granite/granite-4.1-3b")
 
 
 @pytest.fixture
