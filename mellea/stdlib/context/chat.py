@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, Any, Self, cast
+from typing import TYPE_CHECKING, Self, cast
 
 from mellea.backends.context_lengths import get_context_length
 from mellea.backends.model_ids import ModelIdentifier
@@ -263,11 +263,19 @@ class ChatContext(Context):
     def _usage_scale(self, items: list[Span], estimate: Callable[[int], int]) -> float:
         """Return how far off the `len // 4` estimates were for this context.
 
-        Compares the token usage measured on the most recent reply in `items`
-        with the estimated cost of the items that reply was generated from:
-        the items recorded as sent, the action, and the reply itself. Every
-        estimate is multiplied by the result, so `2.0` means the estimates
-        were half the real count.
+        Compares the token usage measured on the newest verifiable reply in
+        `items` with the estimated cost of the items that reply was generated
+        from: the items recorded as sent, the action, and the reply itself.
+        Every estimate is multiplied by the result, so `2.0` means the
+        estimates were half the real count.
+
+        The scan walks `items` newest-first and skips a reply whose
+        measurement cannot be verified — no recorded usage, a different model
+        than the context's, no receipt of what was sent (`_call.context`),
+        sent-items that do not match this history, or a measured segment too
+        small to give a reliable ratio — then keeps looking at older replies,
+        so one foreign or receipt-less reply does not disable the correction
+        for the rest of the conversation.
 
         The measured count also includes overhead that is not part of any
         item (system prompt, chat template, tool schemas), so the result folds
@@ -277,10 +285,10 @@ class ChatContext(Context):
         tokens and clamping the result to `_MIN_USAGE_SCALE` to
         `_MAX_USAGE_SCALE` keeps the effect small.
 
-        Returns `1.0`, meaning no correction, when no reply has usage, the
-        reply's model is not the context's model, the items before the reply
-        are not the ones it was generated from, or the measured items are too
-        small to give a reliable ratio.
+        Returns `1.0`, meaning no correction, when no reply in `items` yields
+        a verifiable measurement. The estimates are then used as they are:
+        `_estimate_tokens` over the formatter render, counting tool-call
+        arguments and reasoning text unconditionally.
 
         Args:
             items (list[Span]): The context's items, oldest first.
@@ -290,41 +298,42 @@ class ChatContext(Context):
         Returns:
             float: Measured tokens divided by estimated tokens, clamped to
             `_MIN_USAGE_SCALE` to `_MAX_USAGE_SCALE`, or `1.0` if that cannot
-            be worked out.
+            be worked out for any reply.
         """
         from mellea.stdlib.context.compactor import _usage_total
 
-        found: tuple[int, ModelOutputThunk, dict[str, Any]] | None = None
-        for i in reversed(range(len(items))):
-            item = items[i]
-            if isinstance(item, ModelOutputThunk) and item.generation.usage is not None:
-                found = (i, item, item.generation.usage)
-                break
-        if found is None:
-            return 1.0
-        idx, thunk, usage = found
+        for idx in reversed(range(len(items))):
+            item = items[idx]
+            if not isinstance(item, ModelOutputThunk):
+                continue
+            if item.generation.usage is None:
+                continue
 
-        if not _model_matches(self._model_id, thunk.generation.model):
-            return 1.0
+            if not _model_matches(self._model_id, item.generation.model):
+                continue
 
-        receipt = thunk._call.context
-        if receipt is None:
-            return 1.0
+            receipt = item._call.context
+            if receipt is None:
+                continue
 
-        action_idx = idx - 1
-        start = action_idx - len(receipt)
-        if start < 0:
-            return 1.0
-        if items[action_idx] is not thunk._call.action:
-            return 1.0
-        if any(a is not b for a, b in zip(items[start:action_idx], receipt)):
-            return 1.0
+            action_idx = idx - 1
+            start = action_idx - len(receipt)
+            if start < 0:
+                continue
+            if items[action_idx] is not item._call.action:
+                continue
+            if any(a is not b for a, b in zip(items[start:action_idx], receipt)):
+                continue
 
-        measured = _usage_total(usage)
-        estimated = sum(estimate(i) for i in range(start, idx + 1))
-        if measured is None or estimated < _MIN_MEASURED_ESTIMATE:
-            return 1.0
-        return min(max(measured / estimated, _MIN_USAGE_SCALE), _MAX_USAGE_SCALE)
+            measured = _usage_total(item.generation.usage)
+            if measured is None:
+                continue
+            estimated = sum(estimate(i) for i in range(start, idx + 1))
+            if estimated < _MIN_MEASURED_ESTIMATE:
+                continue
+            return min(max(measured / estimated, _MIN_USAGE_SCALE), _MAX_USAGE_SCALE)
+
+        return 1.0
 
     def _as_list_token_budget(self, token_budget: int) -> list[Span]:
         """Return history items that fit within *token_budget*, dropping oldest first.
@@ -336,11 +345,13 @@ class ChatContext(Context):
         Each item's token count starts as an estimate of about 4 characters
         per token (see `_estimate_tokens`), using the string produced by
         `TemplateFormatter` for the bound model, the same renderer used at
-        generation time. When the most recent reply carries measured token
-        usage from the bound model, every estimate is multiplied by the ratio
-        of measured to estimated tokens for the items that reply was generated
-        from (see `_usage_scale`), which corrects for the model's tokenizer and
-        chat template. Otherwise the estimates are used as they are.
+        generation time. When the newest verifiable reply carries measured
+        token usage from the bound model, every estimate is multiplied by the
+        ratio of measured to estimated tokens for the items that reply was
+        generated from (see `_usage_scale`), which corrects for the model's
+        tokenizer and chat template. Otherwise the estimates are used as they
+        are: `_estimate_tokens` over the formatter render, counting tool-call
+        arguments and reasoning text unconditionally.
 
         A 0.75 headroom factor (retaining 75% of the rated context length)
         reserves capacity for the system prompt, injected tool schemas, the
