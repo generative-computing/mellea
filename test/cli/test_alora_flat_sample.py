@@ -110,7 +110,8 @@ def _save_adapter(base_dir: Path, tokenizer, adapter_type: str, adapter_dir: Pat
         **activation,
     )
     model = get_peft_model(LlamaForCausalLM.from_pretrained(base_dir), peft_config)
-    model.save_pretrained(adapter_dir)
+    # PEFT's `save_pretrained` overloads want a `str`, unlike transformers'.
+    model.save_pretrained(str(adapter_dir))
 
 
 @pytest.mark.parametrize("adapter_type", ["lora", "alora"])
