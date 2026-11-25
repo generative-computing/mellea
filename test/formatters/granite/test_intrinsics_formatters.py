@@ -240,7 +240,6 @@ _YAML_JSON_COMBOS_LIST = [
         inputs_file=_INPUT_JSON_DIR / "context-attribution.json",
         task="context-attribution",
         repo_id=_CORE_R1_REPO_NAME,
-        # No Granite 4.1 version of this adapter
         base_model_id="ibm-granite/granite-4.1-3b",
     ),
     YamlJsonCombo(
@@ -306,7 +305,6 @@ _YAML_JSON_COMBOS = {c.short_name: c for c in _YAML_JSON_COMBOS_LIST}
 
 # Base models that are small enough to run locally with transformers
 _LOCAL_BASE_MODELS = {
-    "ibm-granite/granite-4.1-3b",
     "ibm-granite/granite-4.1-3b",
     "ibm-granite/granite-3.3-2b-instruct",
 }
