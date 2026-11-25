@@ -23,7 +23,9 @@ def eval_run(
     model: str = typer.Option(
         None,
         "--model",
-        help="Model name/id for the generation backend; uses backend default if omitted",
+        help="Model for generating responses. If omitted, the backend picks its own "
+        "default (hf: Granite 4.2 3B). With openai, --model is required unless "
+        "OPENAI_BASE_URL is the OpenAI platform.",
     ),
     max_gen_tokens: int = typer.Option(
         256, "--max-gen-tokens", help="Max tokens to generate for responses"
@@ -37,10 +39,19 @@ def eval_run(
     judge_model: str = typer.Option(
         None,
         "--judge-model",
-        help="Model name/id for the judge; uses judge backend default if omitted",
+        help="Model for the judge. If omitted, the judge backend picks its own "
+        "default; it does not reuse --model (hf: Granite 4.2 3B). With openai, "
+        "--judge-model is required unless OPENAI_BASE_URL is the OpenAI platform.",
     ),
     max_judge_tokens: int = typer.Option(
         256, "--max-judge-tokens", help="Max tokens for the judge model's judgement."
+    ),
+    thinking: bool | None = typer.Option(
+        None,
+        "--thinking/--no-thinking",
+        help="Force reasoning on or off for generation and judge. Default: off "
+        "where supported, model default on the OpenAI platform and watsonx. "
+        "Ignored on watsonx.",
     ),
     output_path: str = typer.Option(
         "eval_results", "--output-path", "-o", help="Output path for results"
@@ -59,6 +70,17 @@ def eval_run(
     Loads test cases from JSON/JSONL files, generates candidate responses using
     the specified generation backend, scores them with a judge model, and writes
     aggregated results to a file.
+
+    When `--model` or `--judge-model` is omitted, that backend chooses its own
+    default model (for `hf`, Granite 4.2 3B). The judge does not reuse
+    `--model`. With `openai`, a model is required unless `OPENAI_BASE_URL` is
+    the OpenAI platform.
+
+    Reasoning tokens count against `--max-gen-tokens` and `--max-judge-tokens`,
+    so thinking is turned off for `ollama`, `hf`, Ollama-routed `litellm`
+    models, and `openai` servers other than the OpenAI platform. It is left at
+    the model's default on the OpenAI platform and on `watsonx`.
+    `--thinking`/`--no-thinking` overrides this.
 
     Prerequisites:
         Mellea installed (`uv add mellea`). At least one inference backend
@@ -79,12 +101,18 @@ def eval_run(
     Args:
         test_files: Paths to JSON/JSONL files containing test cases.
         backend: Generation backend name.
-        model: Generation model name, or `None` for the default.
+        model: Model for the generation backend, or `None` to let the backend
+            choose its own default (Granite 4.2 3B for `hf`). With `openai`, a
+            model is required unless `OPENAI_BASE_URL` is the OpenAI platform.
         max_gen_tokens: Maximum tokens to generate for each response.
         judge_backend: Judge backend name, or `None` to reuse the generation
             backend.
-        judge_model: Judge model name, or `None` for the default.
+        judge_model: Model for the judge, or `None` to let the judge backend
+            choose its own default. This does not fall back to `model`. The
+            `hf` and `openai` rules are the same as for `model`.
         max_judge_tokens: Maximum tokens for the judge model's output.
+        thinking: Force reasoning on or off for both models, or `None` for
+            the automatic per-backend default.
         output_path: File path prefix for the results file.
         output_format: Output format -- `"json"` or `"jsonl"`.
         continue_on_error: If `True`, skip failed tests instead of raising.
@@ -102,6 +130,7 @@ def eval_run(
         output_path=output_path,
         output_format=output_format,
         continue_on_error=continue_on_error,
+        thinking=thinking,
     )
 
 

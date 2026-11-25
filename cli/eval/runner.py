@@ -12,6 +12,7 @@ aggregates per-input pass/fail counts, and saves the full results to JSON or JSO
 import json
 import re
 from pathlib import Path
+from typing import Any
 
 from rich.console import Console
 from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn
@@ -22,6 +23,7 @@ from mellea.backends.backend import Backend
 from mellea.core import ModelOutputThunk
 from mellea.stdlib.components import SimpleComponent
 from mellea.stdlib.components.unit_test_eval import TestBasedEval
+from mellea.stdlib.start_backend import _resolve_model_id_str
 
 console = Console()
 
@@ -122,8 +124,40 @@ class TestEvalResult:
         return self.passed_count / self.total_count if self.total_count > 0 else 0.0
 
 
+def _auto_thinking(backend_instance: Backend, backend_name: str) -> bool | None:
+    """Choose the eval thinking default from the built backend's own state.
+
+    Reasoning counts against eval's small token budget, so thinking is turned
+    off wherever the backend supports it.
+
+    Args:
+        backend_instance: The constructed backend.
+        backend_name: Lower-case backend name.
+
+    Returns:
+        The value for `ModelOption.THINKING`, or `None` to leave thinking at
+        the model's default.
+    """
+    from mellea.helpers.server_type import _ServerType
+
+    if backend_name in ("ollama", "hf", "huggingface"):
+        return False
+    if backend_name == "openai":
+        # On the OpenAI platform a bool adds `chat_template_kwargs`, so leave it.
+        server_type = getattr(backend_instance, "_server_type")
+        return None if server_type == _ServerType.OPENAI else False
+    if backend_name == "litellm":
+        # LiteLLM maps THINKING only for Ollama-routed models.
+        model_id = str(getattr(backend_instance, "_model_id"))
+        return False if "ollama" in model_id.split("/")[0] else None
+    return None  # watsonx has no thinking mapping
+
+
 def create_session(
-    backend: str, model: str | None, max_tokens: int | None
+    backend: str,
+    model: str | None,
+    max_tokens: int | None,
+    thinking: bool | None = None,
 ) -> mellea.MelleaSession:
     """Create a mellea session with the specified backend and model.
 
@@ -131,19 +165,24 @@ def create_session(
         backend: Backend name: `"ollama"`, `"openai"`, `"hf"`,
             `"watsonx"`, or `"litellm"`.
         model: Model ID or `ModelIdentifier` attribute name, or `None`
-            to use the default model.
+            to let the backend choose its own default model. The `"hf"`
+            backend has no default of its own, so `None` selects Granite 4.2 3B.
         max_tokens: Maximum number of tokens to generate, or `None` for
             the backend default.
+        thinking: Force reasoning on or off, or `None` for the automatic
+            per-backend default. Ignored with a warning on `watsonx`.
 
     Returns:
         A configured `MelleaSession` ready for generation.
 
     Raises:
-        ValueError: If `backend` is not one of the supported backend names.
+        ValueError: If `backend` is not one of the supported backend names, or
+            if `backend` is `"openai"`, `model` is `None`, and
+            `OPENAI_BASE_URL` is not the OpenAI platform.
         Exception: Re-raised from backend or session construction if
             initialisation fails.
     """
-    model_id = None
+    model_id: str | mellea.model_ids.ModelIdentifier | None = None
     if model:
         if model.isupper() or "_" in model:
             if hasattr(mellea.model_ids, model):
@@ -152,8 +191,10 @@ def create_session(
                 model_id = model
         else:
             model_id = model
-    else:
-        model_id = mellea.model_ids.IBM_GRANITE_4_1_3B
+
+    # Only forward a model when the user named one, so each backend otherwise
+    # applies its own default instead of a value forced by eval.
+    model_kwargs: dict[str, Any] = {} if model_id is None else {"model_id": model_id}
 
     try:
         backend_lower = backend.lower()
@@ -163,21 +204,35 @@ def create_session(
             from mellea.backends.ollama import OllamaModelBackend
 
             backend_instance = OllamaModelBackend(
-                model_id=model_id,
-                model_options={ModelOption.MAX_NEW_TOKENS: max_tokens},
+                **model_kwargs, model_options={ModelOption.MAX_NEW_TOKENS: max_tokens}
             )
 
         elif backend_lower == "openai":
             from mellea.backends.openai import OpenAIBackend
+            from mellea.helpers.server_type import _ServerType
 
-            backend_instance = OpenAIBackend(
-                model_id=model_id,
-                model_options={ModelOption.MAX_NEW_TOKENS: max_tokens},
+            openai_backend = OpenAIBackend(
+                **model_kwargs, model_options={ModelOption.MAX_NEW_TOKENS: max_tokens}
             )
+            if model_id is None and openai_backend._server_type != _ServerType.OPENAI:
+                raise ValueError(
+                    "No --model given and OPENAI_BASE_URL "
+                    f"({openai_backend._base_url}) is not the OpenAI platform, "
+                    f"where the default {openai_backend._model_id} lives. "
+                    "Pass --model or --judge-model."
+                )
+            backend_instance = openai_backend
 
         elif backend_lower in ["hf", "huggingface"]:
             from mellea.backends.huggingface import LocalHFBackend
 
+            if model_id is None:
+                # LocalHFBackend requires a model, so eval supplies the default.
+                console.print(
+                    "No model given for the hf backend; using Granite 4.2 3B "
+                    "(downloaded on first use)."
+                )
+                model_id = mellea.model_ids.IBM_GRANITE_4_2_3B
             backend_instance = LocalHFBackend(
                 model_id=model_id,
                 model_options={ModelOption.MAX_NEW_TOKENS: max_tokens},
@@ -187,22 +242,37 @@ def create_session(
             from mellea.backends.watsonx import WatsonxAIBackend
 
             backend_instance = WatsonxAIBackend(
-                model_id=model_id,
-                model_options={ModelOption.MAX_NEW_TOKENS: max_tokens},
+                **model_kwargs, model_options={ModelOption.MAX_NEW_TOKENS: max_tokens}
             )
 
         elif backend_lower == "litellm":
             from mellea.backends.litellm import LiteLLMBackend
 
+            # LiteLLM takes a plain string, so convert a resolved ModelIdentifier.
+            litellm_kwargs: dict[str, Any] = (
+                {} if model_id is None else {"model_id": str(model_id)}
+            )
             backend_instance = LiteLLMBackend(
-                model_id=str(model_id),
-                model_options={ModelOption.MAX_NEW_TOKENS: max_tokens},
+                **litellm_kwargs, model_options={ModelOption.MAX_NEW_TOKENS: max_tokens}
             )
 
         else:
             raise ValueError(
                 f"Unknown backend: {backend}. Supported: ollama, openai, hf, watsonx, litellm"
             )
+
+        # THINKING is read at request time, so it can be set after construction.
+        if thinking is None:
+            auto_thinking = _auto_thinking(backend_instance, backend_lower)
+            if auto_thinking is not None:
+                backend_instance.model_options[ModelOption.THINKING] = auto_thinking
+        elif backend_lower == "watsonx":
+            console.print(
+                "[yellow]warning:[/yellow] watsonx has no thinking mapping; "
+                "ignoring --thinking/--no-thinking."
+            )
+        else:
+            backend_instance.model_options[ModelOption.THINKING] = thinking
 
         # create session with backend instance
         from mellea.stdlib.context import SimpleContext
@@ -212,9 +282,26 @@ def create_session(
 
     except Exception as e:
         console.print(
-            f"[red]Error creating session with backend={backend}, model={model_id}: {e}[/red]"
+            f"[red]Error creating session with backend={backend}, model={model or 'backend default'}: {e}[/red]"
         )
         raise
+
+
+def _resolved_model_name(session: mellea.MelleaSession, backend_name: str) -> str:
+    """Return the model name a session's backend will actually request.
+
+    Args:
+        session: A session built by `create_session`.
+        backend_name: The backend name the session was created with.
+
+    Returns:
+        The model name as the backend sends it, or `"unknown"` if the backend
+        does not expose one.
+    """
+    model_id = getattr(session.backend, "model_id", None)
+    if model_id is None:
+        return "unknown"
+    return _resolve_model_id_str(model_id, backend_name.lower())
 
 
 def run_evaluations(
@@ -228,6 +315,7 @@ def run_evaluations(
     output_path: str,
     output_format: str,
     continue_on_error: bool,
+    thinking: bool | None = None,
 ):
     """Run all unit-test evaluations against a generation model and a judge model.
 
@@ -248,6 +336,8 @@ def run_evaluations(
         output_format: Output format: `"json"` or `"jsonl"`.
         continue_on_error: If `True`, skip failed test evaluations instead of
             raising.
+        thinking: Force reasoning on or off for both the generation and judge
+            models, or `None` for the automatic per-backend default.
     """
     all_test_evals: list[TestBasedEval] = []
 
@@ -267,15 +357,22 @@ def run_evaluations(
     total_inputs = sum(len(test_eval.inputs) for test_eval in all_test_evals)
     console.print(f"Total inputs to run: {total_inputs}")
 
-    console.print(f"Generation model: {model}")
-    console.print(f"Judge model: {judge_model}")
-
-    m = create_session(backend=backend, model=model, max_tokens=max_gen_tokens)
+    m = create_session(
+        backend=backend, model=model, max_tokens=max_gen_tokens, thinking=thinking
+    )
     # Use same backend as generator if judge_backend not specified
+    judge_backend_name = judge_backend if judge_backend else backend
     judge_session = create_session(
-        backend=judge_backend if judge_backend else backend,
+        backend=judge_backend_name,
         model=judge_model,
         max_tokens=max_judge_tokens,
+        thinking=thinking,
+    )
+
+    # Report what the backends resolved, since an omitted model is chosen by the backend.
+    console.print(f"Generation model: {_resolved_model_name(m, backend)}")
+    console.print(
+        f"Judge model: {_resolved_model_name(judge_session, judge_backend_name)}"
     )
 
     all_results = []
