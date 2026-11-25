@@ -51,7 +51,7 @@ from .catalog import (
     fetch_intrinsic_metadata,
     known_intrinsic_names,
 )
-from .io_contracts import get_io_contract
+from .io_contracts import get_io_contract, io_contract_for
 
 
 class Adapter(abc.ABC):
@@ -543,7 +543,7 @@ def _io_config_root(model_path: pathlib.Path) -> pathlib.Path:
 
 
 def _embedded_adapter_from_entry(
-    intrinsic_name: str, technology: str
+    intrinsic_name: str, technology: str, config: dict | None = None
 ) -> "_AdapterCore":
     """Build a composed embedded `Adapter` from one `adapter_index.json` entry.
 
@@ -557,6 +557,9 @@ def _embedded_adapter_from_entry(
             function name (conventionally `<name>_probe`): the output contract
             is keyed by name, so reusing a generative capability's name would
             apply that capability's schema to the one-token readout.
+        config (dict | None): The adapter's parsed io.yaml configuration, used
+            to select the right I/O contract (e.g. ``_TextContract`` when the
+            io.yaml declares ``output: {type: text}``).
 
     Returns:
         _AdapterCore: A composed `Adapter` whose `weights` is an
@@ -581,7 +584,7 @@ def _embedded_adapter_from_entry(
             adapter_type=cast(Literal["lora", "alora"], adapter_type),
             capability=capability,
         ),
-        io_contract=get_io_contract(intrinsic_name),
+        io_contract=io_contract_for(intrinsic_name, config),
         weights=EmbeddedBinding(),
     )
 
@@ -674,7 +677,7 @@ def _embedded_adapters_from_model_directory(
         with open(io_config_path, encoding="utf-8") as f:
             config_dict = yaml.safe_load(f)
 
-        adapter = _embedded_adapter_from_entry(entry_name, technology)
+        adapter = _embedded_adapter_from_entry(entry_name, technology, config_dict)
         adapters.append((adapter, config_dict))
 
     if not adapters:

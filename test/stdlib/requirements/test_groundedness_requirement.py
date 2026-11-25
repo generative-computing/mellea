@@ -34,7 +34,7 @@ def backend():
         pytest.skip(str(exc))
 
     with hf_skip():
-        return LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
+        return LocalHFBackend(model_id="ibm-granite/granite-4.1-3b")
 
 
 @pytest.fixture
@@ -822,7 +822,7 @@ def test_necessity_true_unsupported_span_is_ordinary_failure():
 def test_parse_batch_support_output_nested_citations():
     """Test parsing batch support output when model nests support_level inside citations.
 
-    granite-4.0-micro frequently mirrors the input span structure from the prompt
+    granite-4.1-3b frequently mirrors the input span structure from the prompt
     and nests support_level inside a 'citations' array instead of using flat format.
     See issue #1291 for deep analysis.
     """

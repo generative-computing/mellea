@@ -132,6 +132,30 @@ class _GuardianCheckContract(IOContract):
         return data
 
 
+class _TextContract(IOContract):
+    """Pass-through contract for adapters whose output is free text.
+
+    An adapter whose ``io.yaml`` declares ``output: {type: text}`` produces a
+    plain string (a sentence, a rewrite, a line), not JSON.  The result
+    processor returns it as written; this contract wraps it in
+    ``{"text": content}`` so ``call_intrinsic``'s ``dict`` return type holds.
+    """
+
+    def build_prompt(self, **_kwargs: object) -> "Component":
+        raise NotImplementedError(_BUILD_PROMPT_NOT_IMPLEMENTED)
+
+    def parse(self, raw: str) -> dict[str, object]:
+        """Return the raw text wrapped in a dict.
+
+        Args:
+            raw: The model's output, as a plain string.
+
+        Returns:
+            ``{"text": raw}``
+        """
+        return {"text": raw}
+
+
 class _DecisionContract(IOContract):
     """Validate one-token decision readout output from the `first_token` rule.
 
@@ -531,4 +555,30 @@ def get_io_contract(name: str) -> IOContract:
         return contract
     # Custom/user-defined adapters outside the catalog have no declared schema;
     # accept any JSON object rather than rejecting on an arbitrary key set.
+    return _DictContract(name, frozenset())
+
+
+def io_contract_for(name: str, config: dict | None) -> IOContract:
+    """Return the output contract for an adapter, considering its io.yaml config.
+
+    Like :func:`get_io_contract`, but when the adapter's configuration declares
+    ``output: {type: text}``, returns a :class:`_TextContract` that passes raw
+    text through instead of requiring JSON.
+
+    Args:
+        name: Catalog name of the adapter function.
+        config: The adapter's parsed io.yaml configuration, or ``None``.
+
+    Returns:
+        The contract matching the adapter's declared output type.
+    """
+    # A built-in contract always wins (it encodes domain-specific validation).
+    contract = _INTRINSIC_IO_CONTRACTS.get(name)
+    if contract is not None:
+        return contract
+    # Check the io.yaml's output declaration.
+    if config is not None:
+        output = config.get("output")
+        if isinstance(output, dict) and output.get("type") == "text":
+            return _TextContract()
     return _DictContract(name, frozenset())

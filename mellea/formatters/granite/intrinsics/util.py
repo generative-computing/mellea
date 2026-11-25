@@ -23,6 +23,21 @@ from .constants import (
 )
 
 
+def output_type(config: dict) -> str:
+    """What an adapter writes, per its parsed configuration: ``"text"`` or ``"json"``.
+
+    Args:
+        config: A configuration dict, as ``make_config_dict`` returns it.
+
+    Returns:
+        The ``output.type`` field, or ``"json"`` when ``output`` is absent.
+    """
+    output = config.get("output")
+    if isinstance(output, dict) and output.get("type") == "text":
+        return "text"
+    return "json"
+
+
 class AdapterNotFoundError(ValueError):
     """Raised when no adapter or prompt `io.yaml` exists at the expected repository path.
 

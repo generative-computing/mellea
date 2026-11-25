@@ -11,6 +11,7 @@ YAML_OPTIONAL_FIELDS = [
     "docs_as_message",
     "instruction",
     "name",
+    "output",
     "parameters",
     "provenance",
     "sentence_boundaries",

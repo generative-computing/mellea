@@ -26,7 +26,7 @@ from .adapter import (
 )
 from .capabilities import KNOWN_CAPABILITIES
 from .catalog import validate_revision
-from .io_contracts import get_io_contract
+from .io_contracts import get_io_contract, io_contract_for
 
 __all__ = [
     "KNOWN_CAPABILITIES",
@@ -48,5 +48,6 @@ __all__ = [
     "fetch_intrinsic_metadata",
     "get_adapter_for_intrinsic",
     "get_io_contract",
+    "io_contract_for",
     "validate_revision",
 ]

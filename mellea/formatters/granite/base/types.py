@@ -119,9 +119,11 @@ class _ChatMessageBase(pydantic.BaseModel, NoDefaultsMixin):
     subclasses of this one.
     """
 
-    content: str
-    """Every message has raw string content, even if it also contains parsed structured
-    content such as a JSON record."""
+    content: str | None = None
+    """The message's text content. ``None`` on tool-call-only assistant turns
+    (the OpenAI format: Granite 4.1+ templates handle it natively).
+    Granite 3.x/4.0 templates require non-None content and are no longer
+    supported on the intrinsics path."""
 
     def _keep_these_fields(self):
         return ("role",)
@@ -151,27 +153,39 @@ class DocumentMessage(_ChatMessageBase):
     role: Annotated[str, StringConstraints(pattern=r"^document .+$")]
 
 
-class ToolCall(pydantic.BaseModel, NoDefaultsMixin):
-    """Represents a single tool-call entry produced by an assistant message.
+class ToolCallFunction(pydantic.BaseModel, NoDefaultsMixin):
+    """The function a tool call invokes: its name and arguments.
 
-    Captures the identifier, name, and arguments of a tool invocation returned
-    by the model during a chat completion response.
+    Part of the OpenAI tool-call format, nested inside :class:`ToolCall`.
+
+    Attributes:
+        name (str): The name of the tool to invoke.
+        arguments (str | dict[str, Any] | None): The arguments, as a JSON
+            string (OpenAI wire format) or a parsed dict. Conforms to the
+            parameter schema of the associated tool definition.
+    """
+
+    name: str
+    arguments: str | dict[str, Any] | None = None
+
+
+class ToolCall(pydantic.BaseModel, NoDefaultsMixin):
+    """A single tool-call entry in the OpenAI format.
+
+    This is the format Granite 4.1+ models are trained with and what every
+    OpenAI-compatible backend produces.  Granite 3.x/4.0 models inlined tool
+    calls in message content and are no longer supported on the intrinsics path.
 
     Attributes:
         id (str | None): An optional unique identifier for this tool call,
             used to correlate calls with their results.
-        name (str): The name of the tool to invoke.
-        arguments (dict[str, Any] | None): A mapping of argument names to
-            values, conforming to the parameter schema of the associated tool
-            definition.
+        type (str): Always ``"function"``.
+        function (ToolCallFunction): The function name and arguments.
     """
 
     id: str | None = None
-    name: str
-
-    # This field should adhere to the argument schema from the  associated
-    # FunctionDefinition in the generation request that produced it.
-    arguments: dict[str, Any] | None
+    type: Literal["function"] = "function"
+    function: ToolCallFunction
 
 
 class AssistantMessage(_ChatMessageBase):

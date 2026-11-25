@@ -1335,11 +1335,25 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 d["role"] = m.role
             messages_dicts.append(d)
 
+        # --- tool_choice for the intrinsic path ----------------------------
+        # No current adapter generates tool calls; they potentially only
+        # need the tool declarations in the prompt for context.  Without an
+        # explicit tool_choice, vLLM defaults to "auto" and rejects the
+        # request unless --enable-auto-tool-choice is set.
+        #
+        # When an adapter that makes tool calls is added, its io.yaml
+        # should declare that; this block should then read the config and
+        # set tool_choice accordingly (e.g. "auto" or "required").
+        intrinsic_tool_choice = "none"
+
+        tool_choice_value: str | None = intrinsic_tool_choice if use_tools else None
+
         chat_response = _await_generation_reporting_error(
             self._async_client.chat.completions.create(
                 model=self._model_id,
                 messages=messages_dicts,  # type: ignore
                 tools=formatted_tools if use_tools else None,  # type: ignore
+                tool_choice=tool_choice_value,  # type: ignore
                 extra_body=extra_body,
                 **api_params,
             ),

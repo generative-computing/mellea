@@ -48,7 +48,7 @@ _CITATIONS_CONFIG = {
 
 # Sample adapter_index.json for testing from_model_directory
 _SAMPLE_ADAPTER_INDEX = {
-    "model_info": {"num_adapters": 2, "base_model": "granite-4.0-micro"},
+    "model_info": {"num_adapters": 2, "base_model": "granite-4.1-3b"},
     "adapters": [
         {
             "adapter_index": 1,
