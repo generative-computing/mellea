@@ -88,7 +88,6 @@ After uploading your adapter, you can auto-generate a README for the Hugging Fac
 ```bash
 m alora add-readme \
     --name $HF_USERNAME/stembolts \
-    --io-yaml io.yaml \
     --basemodel granite-4.1-3b \
     stembolt_failure_dataset.jsonl
 ```
@@ -98,7 +97,6 @@ You can provide a `--hints` file with additional domain context to improve the g
 ```bash
 m alora add-readme \
     --name $HF_USERNAME/stembolts \
-    --io-yaml io.yaml \
     --basemodel granite-4.1-3b \
     --hints hints.txt \
     stembolt_failure_dataset.jsonl
