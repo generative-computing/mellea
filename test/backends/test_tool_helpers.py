@@ -290,5 +290,36 @@ def test_to_tool_calls_json_code_argument_keeps_indentation():
     assert calls[0].args["code"] == code
 
 
+# --- parse_tools: enveloped tool calls are found under any key (#1867) ---
+
+
+def test_parse_tools_enveloped_call_found_under_any_key():
+    """A `{name, arguments}` call nested in an envelope is found no matter which
+    value it sits under — `find_func` must not stop after the first value."""
+    raw = '{"meta": 1, "call": {"name": "f", "arguments": {"x": 1}}}'
+    assert parse_tools(raw) == [("f", {"x": 1})]
+
+
+def test_parse_tools_enveloped_call_first_key_still_works():
+    """Same envelope, call first: keeps working (regression for the old path)."""
+    raw = '{"call": {"name": "f", "arguments": {"x": 1}}, "meta": 1}'
+    assert parse_tools(raw) == [("f", {"x": 1})]
+
+
+def test_parse_tools_enveloped_call_found_after_non_dict_values():
+    """Several non-dict values before the call do not hide it."""
+    raw = (
+        '{"id": 7, "tag": "x", "ok": true, '
+        '"call": {"name": "f", "arguments": {"x": 1}}}'
+    )
+    assert parse_tools(raw) == [("f", {"x": 1})]
+
+
+def test_parse_tools_enveloped_call_found_through_deeper_nesting():
+    """The recursive search keeps descending through dict values."""
+    raw = '{"meta": {"a": 1}, "call": {"inner": {"name": "f", "arguments": {"x": 1}}}}'
+    assert parse_tools(raw) == [("f", {"x": 1})]
+
+
 if __name__ == "__main__":
     pytest.main([__file__])

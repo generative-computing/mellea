@@ -508,7 +508,9 @@ def find_func(d: object) -> tuple[str | None, Mapping | None]:
         return name, args
 
     for v in d.values():
-        return find_func(v)
+        result = find_func(v)
+        if result != (None, None):
+            return result
     return None, None
 
 
