@@ -6,12 +6,15 @@ description: "Expose Mellea functions as Model Context Protocol tools, callable 
 
 [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) is an open standard
 for exposing tools to AI clients. Mellea integrates with MCP via
-[FastMCP](https://github.com/jlowin/fastmcp): wrap any Mellea function as an MCP tool
+the [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk): wrap any Mellea function as an MCP tool
 and call it from Claude Desktop, Cursor, or any MCP-compatible client.
 
 > Looking to **call** tools from an MCP server? See [MCP tools](../how-to/tools-and-agents.md#mcp-tools) in Tools and Agents.
 
 **Prerequisites:** `pip install mellea`, `pip install "mcp[cli]"`, Ollama running locally.
+
+> **Note:** `MCPServer` is the server class in mcp 2.x; it was called `FastMCP` in
+> mcp 1.x. The examples below import whichever one is installed.
 
 ## Creating an MCP server
 
@@ -21,7 +24,10 @@ visible to the AI client.
 ```python
 # Requires: mcp[cli], mellea[ollama]
 # Returns: str
-from mcp.server.fastmcp import FastMCP
+try:
+    from mcp.server.mcpserver import MCPServer  # mcp 2.x
+except ImportError:
+    from mcp.server.fastmcp import FastMCP as MCPServer  # mcp 1.x
 from mellea import MelleaSession
 from mellea.backends import ModelOption, model_ids
 from mellea.backends.ollama import OllamaModelBackend
@@ -29,7 +35,7 @@ from mellea.core import Requirement
 from mellea.stdlib.requirements import simple_validate
 from mellea.stdlib.sampling import RejectionSamplingStrategy
 
-mcp = FastMCP("mellea-demo")
+mcp = MCPServer("mellea-demo")
 
 @mcp.tool()
 def write_a_poem(word_limit: int) -> str:
@@ -63,17 +69,20 @@ wraps the result.
 
 ## Multiple tools in one server
 
-A single `FastMCP` server can expose multiple tools, resources, and prompts:
+A single `MCPServer` instance can expose multiple tools, resources, and prompts:
 
 ```python
 # Requires: mcp[cli], mellea[ollama]
 # Returns: str
-from mcp.server.fastmcp import FastMCP
+try:
+    from mcp.server.mcpserver import MCPServer  # mcp 2.x
+except ImportError:
+    from mcp.server.fastmcp import FastMCP as MCPServer  # mcp 1.x
 from mellea import MelleaSession, generative, start_session
 from mellea.backends.ollama import OllamaModelBackend
 from typing import Literal
 
-mcp = FastMCP("mellea-tools")
+mcp = MCPServer("mellea-tools")
 
 @mcp.tool()
 def summarize(text: str, max_words: int = 100) -> str:
