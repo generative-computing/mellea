@@ -1431,6 +1431,15 @@ class ModelOutputThunk(Generic[S]):
         """Sets the value of the block."""
         self._underlying_value = v
 
+    @property
+    def meta(self) -> dict[str, Any]:
+        """The metadata given at construction, plus what the backend recorded.
+
+        Read-only: the attribute cannot be rebound, though the dict it returns
+        is the thunk's own, not a copy.
+        """
+        return self._meta
+
     async def avalue(self) -> str:
         """Returns the fully resolved value of the ModelOutputThunk, awaiting generation if necessary.
 
