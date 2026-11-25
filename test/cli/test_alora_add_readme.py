@@ -40,8 +40,12 @@ class _FakeHfApi:
     def __init__(self, repo_files: list[str]) -> None:
         self._repo_files = repo_files
 
-    def list_repo_files(self, **_kwargs) -> list[str]:
-        return self._repo_files
+    def model_info(self, **_kwargs):
+        from types import SimpleNamespace
+
+        return SimpleNamespace(
+            siblings=[SimpleNamespace(rfilename=path) for path in self._repo_files]
+        )
 
 
 def _plain(output: str) -> str:
@@ -338,7 +342,7 @@ def test_not_found_does_not_claim_the_repository_is_missing(monkeypatch):
     from huggingface_hub.errors import RepositoryNotFoundError
 
     class NotFoundApi:
-        def list_repo_files(self, **_kwargs):
+        def model_info(self, **_kwargs):
             raise RepositoryNotFoundError(
                 "401 Client Error. Repository Not Found",
                 response=httpx.Response(
@@ -461,7 +465,7 @@ def test_a_failed_listing_warns_and_asks_instead_of_failing(monkeypatch):
     """Offline, rate-limited, or any other Hub error must not abort the command."""
 
     class FailingApi:
-        def list_repo_files(self, **_kwargs):
+        def model_info(self, **_kwargs):
             raise OSError("connection reset by peer")
 
     monkeypatch.setattr("huggingface_hub.HfApi", FailingApi)
@@ -488,6 +492,54 @@ def test_unknown_layout_is_refused_when_stdin_is_really_not_a_terminal(monkeypat
 
     assert result.exit_code != 0
     assert "no terminal to ask" in _plain(result.output)
+    assert captured == {}
+
+
+def test_a_timeout_asks_which_layout_to_use(monkeypatch):
+    """A listing that never answers must not hang: give up and ask.
+
+    `list_repo_files` takes no timeout, so a connection that accepts and then
+    goes quiet would block the command before anything is generated. The listing
+    now goes through `model_info` with a 5 second limit.
+    """
+    import httpx
+
+    calls: list[dict] = []
+
+    class TimingOutApi:
+        def model_info(self, **kwargs):
+            calls.append(kwargs)
+            raise httpx.TimeoutException("timed out")
+
+    monkeypatch.setattr("huggingface_hub.HfApi", TimingOutApi)
+
+    result, captured = _invoke_add_readme(monkeypatch, [])
+
+    assert result.exit_code == 0, result.output
+    message = _plain(result.output)
+    assert "timed out after 5 seconds" in message
+    # The request itself must carry the limit; otherwise a silent server hangs it.
+    assert calls[0]["timeout"] == 5
+    # Unverifiable, so it asks (the stubbed answer "yes" means an intrinsic upload).
+    assert captured["layout"] == "intrinsic"
+
+
+def test_a_timeout_without_a_terminal_fails_before_generation(monkeypatch):
+    """A timeout in a non-interactive run fails fast, naming `--layout`."""
+    import httpx
+
+    class TimingOutApi:
+        def model_info(self, **_kwargs):
+            raise httpx.TimeoutException("timed out")
+
+    monkeypatch.setattr("huggingface_hub.HfApi", TimingOutApi)
+
+    result, captured = _invoke_add_readme(monkeypatch, [], interactive=False)
+
+    assert result.exit_code != 0
+    message = _plain(result.output)
+    assert "timed out after 5 seconds" in message
+    assert "no terminal to ask" in message
     assert captured == {}
 
 

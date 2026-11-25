@@ -288,6 +288,7 @@ def _inspect_repo(
     """
     # `alora_add_readme`, the only caller, has already imported `huggingface_hub`
     # and raised the friendly missing-extra error if it is absent.
+    import httpx
     from huggingface_hub import HfApi
     from huggingface_hub.errors import RepositoryNotFoundError
 
@@ -295,13 +296,24 @@ def _inspect_repo(
         f"Checking {model_name} on Hugging Face (read-only) to detect its adapter layout."
     )
     try:
-        repo_files = HfApi().list_repo_files(repo_id=model_name, token=token)
+        # `list_repo_files` takes no timeout, so a connection that accepts and
+        # then goes quiet (a dead proxy, a captive portal) would hang the command
+        # before anything is generated. `model_info` returns the same file list
+        # through `siblings` and does take a timeout.
+        info = HfApi().model_info(repo_id=model_name, token=token, timeout=5)
+        repo_files = [sibling.rfilename for sibling in info.siblings or []]
     except RepositoryNotFoundError:
         # Hugging Face also raises this for a private repository the token cannot
         # see, so it does not prove the repository is missing.
         print(
             f"Could not find {model_name} on Hugging Face: it may not exist yet, or "
             "your token may not have access to it. Its adapter layout is unknown."
+        )
+        return "unknown", None
+    except httpx.TimeoutException:
+        print(
+            f"Warning: checking {model_name} on Hugging Face timed out after 5 "
+            "seconds. Its adapter layout is unknown."
         )
         return "unknown", None
     except Exception as e:
@@ -380,7 +392,9 @@ def alora_add_readme(
     removed. If the layout cannot be verified — for example the README is
     generated before the weights are uploaded — it asks which layout to use, or
     exits with an error when there is no terminal to ask on. Pass `--layout` to
-    skip detection and those requests, for example in scripts and CI.
+    skip detection and those requests, for example in scripts and CI. Without a
+    token, `auto` skips the requests and asks which layout you intend to upload
+    instead; a token is only required to upload the README.
 
     Prerequisites:
         Hugging Face token available (set `HF_TOKEN` or run `hf auth login`).
