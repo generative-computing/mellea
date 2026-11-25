@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import datetime
+import logging
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -2850,6 +2851,130 @@ class TestGenerationPostCallObserveOnlyLazyPath:
         # Second avalue call should not re-fire
         await result.avalue()
         assert fire_count == 1
+
+
+class TestThunkHookBackendNamePropagation:
+    """Thunk-fired generation hooks receive backend_name in global_context.state."""
+
+    async def test_generation_post_call_receives_backend_name_matching_pre_call(
+        self,
+    ) -> None:
+        """GENERATION_POST_CALL receives the same backend_name as GENERATION_PRE_CALL."""
+        pre_states: list[dict[str, Any]] = []
+        post_states: list[dict[str, Any]] = []
+
+        @hook("generation_pre_call")
+        async def pre_recorder(payload: Any, ctx: Any) -> Any:
+            pre_states.append(dict(ctx.global_context.state))
+            return None
+
+        @hook("generation_post_call")
+        async def post_recorder(payload: Any, ctx: Any) -> Any:
+            post_states.append(dict(ctx.global_context.state))
+            return None
+
+        register(pre_recorder)
+        register(post_recorder)
+
+        backend = _MockLazyBackend()
+        mot, _ = await backend.generate_from_context(
+            CBlock("backend name test"), MagicMock(spec=Context)
+        )
+        await mot.avalue()
+
+        assert pre_states == [{"backend_name": "mock-lazy-model"}]
+        assert post_states == [{"backend_name": "mock-lazy-model"}]
+
+    async def test_log_generation_post_call_logs_backend_model_name(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """log_generation_post_call logs the backend model_id instead of model=unknown."""
+        from mellea.plugins.builtin_debug.generation import log_generation_post_call
+
+        register(log_generation_post_call)
+        backend = _MockLazyBackend()
+
+        with caplog.at_level(
+            logging.DEBUG, logger="mellea.plugins.builtin_debug.generation"
+        ):
+            mot, _ = await backend.generate_from_context(
+                CBlock("debug log test"), MagicMock(spec=Context)
+            )
+            await mot.avalue()
+
+        assert "model=mock-lazy-model" in caplog.text
+        assert "model=unknown" not in caplog.text
+
+    async def test_sibling_thunk_hooks_receive_backend_name(self) -> None:
+        """GENERATION_ERROR (astream & cancel_generation) and GENERATION_EVENT receive backend_name."""
+        error_states: list[dict[str, Any]] = []
+        event_states: list[dict[str, Any]] = []
+
+        @hook("generation_error")
+        async def error_recorder(payload: Any, ctx: Any) -> Any:
+            error_states.append(dict(ctx.global_context.state))
+            return None
+
+        @hook("generation_event")
+        async def event_recorder(payload: Any, ctx: Any) -> Any:
+            event_states.append(dict(ctx.global_context.state))
+            return None
+
+        register(error_recorder)
+        register(event_recorder)
+
+        # GENERATION_ERROR via astream() queue exception
+        err_mot = _make_thunk()
+        err_mot._call.backend_name = "mock-lazy-model"
+        await err_mot._gen.queue.put(ConnectionError("boom"))
+        with pytest.raises(ConnectionError, match="boom"):
+            await err_mot.astream()
+
+        # GENERATION_ERROR via cancel_generation()
+        cancel_mot = ModelOutputThunk(value=None)
+        cancel_mot._call.backend_name = "mock-lazy-model"
+        await cancel_mot.cancel_generation()
+
+        # GENERATION_EVENT via _emit_event()
+        event_mot = ModelOutputThunk(value=None)
+        event_mot._call.backend_name = "mock-lazy-model"
+        await event_mot._emit_event("custom_event", detail="ok")
+
+        assert error_states == [
+            {"backend_name": "mock-lazy-model"},
+            {"backend_name": "mock-lazy-model"},
+        ]
+        assert event_states == [{"backend_name": "mock-lazy-model"}]
+
+    async def test_standalone_thunk_omits_backend_name_from_global_context(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """A standalone thunk with backend_name=None leaves backend_name absent from state."""
+        from mellea.plugins.builtin_debug.generation import log_generation_post_call
+
+        post_states: list[dict[str, Any]] = []
+
+        @hook("generation_post_call")
+        async def post_recorder(payload: Any, ctx: Any) -> Any:
+            post_states.append(dict(ctx.global_context.state))
+            return None
+
+        register(post_recorder)
+        register(log_generation_post_call)
+
+        mot = _make_thunk()
+        assert mot._call.backend_name is None
+        await mot._gen.queue.put("standalone")
+        await mot._gen.queue.put(None)
+
+        with caplog.at_level(
+            logging.DEBUG, logger="mellea.plugins.builtin_debug.generation"
+        ):
+            await mot.avalue()
+
+        assert len(post_states) == 1
+        assert "backend_name" not in post_states[0]
+        assert "model=unknown" in caplog.text
 
 
 class TestSamplingLoopEndObserveOnly:

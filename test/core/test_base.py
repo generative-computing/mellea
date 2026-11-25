@@ -1241,6 +1241,7 @@ def test_deepcopy_resets_gen_and_preserves_call() -> None:
     mot._call.context = []
     mot._call.model_options = {"temperature": 0.5}
     mot._call.generation_id = "gen-123"
+    mot._call.backend_name = "test-model"
     # Dirty the in-flight machinery so a shared _gen would be observable.
     mot._gen.generate_type = GenerateType.ASYNC
     mot._gen.chunk_size = 99
@@ -1257,6 +1258,7 @@ def test_deepcopy_resets_gen_and_preserves_call() -> None:
     # _call is preserved.
     assert deep._call.model_options == {"temperature": 0.5}
     assert deep._call.generation_id == "gen-123"
+    assert deep._call.backend_name == "test-model"
     assert deep._call.context == []
     assert isinstance(deep._call.action, Message)
 
@@ -1268,6 +1270,7 @@ def test_copy_resets_gen_and_preserves_call() -> None:
     mot._call.context = []
     mot._call.model_options = {"temperature": 0.5}
     mot._call.generation_id = "gen-123"
+    mot._call.backend_name = "test-model"
     # Dirty the in-flight machinery so a shared _gen would be observable.
     mot._gen.generate_type = GenerateType.ASYNC
     mot._gen.chunk_size = 99
@@ -1284,6 +1287,7 @@ def test_copy_resets_gen_and_preserves_call() -> None:
     # _call is preserved.
     assert shallow._call.model_options == {"temperature": 0.5}
     assert shallow._call.generation_id == "gen-123"
+    assert shallow._call.backend_name == "test-model"
     assert shallow._call.context == []
     assert isinstance(shallow._call.action, Message)
 
