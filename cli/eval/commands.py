@@ -23,7 +23,9 @@ def eval_run(
     model: str = typer.Option(
         None,
         "--model",
-        help="Model name/id for the generation backend; uses backend default if omitted (hf: Granite 4.2 3B; openai: required off the OpenAI platform)",
+        help="Model for generating responses. If omitted, the backend picks its own "
+        "default (hf: Granite 4.2 3B). With openai, --model is required unless "
+        "OPENAI_BASE_URL is the OpenAI platform.",
     ),
     max_gen_tokens: int = typer.Option(
         256, "--max-gen-tokens", help="Max tokens to generate for responses"
@@ -37,7 +39,9 @@ def eval_run(
     judge_model: str = typer.Option(
         None,
         "--judge-model",
-        help="Model name/id for the judge; uses judge backend default if omitted (hf: Granite 4.2 3B; openai: required off the OpenAI platform)",
+        help="Model for the judge. If omitted, the judge backend picks its own "
+        "default; it does not reuse --model (hf: Granite 4.2 3B). With openai, "
+        "--judge-model is required unless OPENAI_BASE_URL is the OpenAI platform.",
     ),
     max_judge_tokens: int = typer.Option(
         256, "--max-judge-tokens", help="Max tokens for the judge model's judgement."
@@ -67,13 +71,15 @@ def eval_run(
     the specified generation backend, scores them with a judge model, and writes
     aggregated results to a file.
 
-    When `--model` or `--judge-model` is omitted, the backend chooses its own
-    default model (for `hf`, Granite 4.2 3B); `openai` requires `--model`
-    unless `OPENAI_BASE_URL` is the OpenAI platform. Reasoning tokens count
-    against `--max-gen-tokens` and `--max-judge-tokens`, so thinking is turned
-    off for `ollama`, `hf`, Ollama-routed `litellm` models, and `openai` when
-    `OPENAI_BASE_URL` points at a server other than the OpenAI platform. It is
-    left at the model's default on the OpenAI platform and on `watsonx`.
+    When `--model` or `--judge-model` is omitted, that backend chooses its own
+    default model (for `hf`, Granite 4.2 3B). The judge does not reuse
+    `--model`. With `openai`, a model is required unless `OPENAI_BASE_URL` is
+    the OpenAI platform.
+
+    Reasoning tokens count against `--max-gen-tokens` and `--max-judge-tokens`,
+    so thinking is turned off for `ollama`, `hf`, Ollama-routed `litellm`
+    models, and `openai` servers other than the OpenAI platform. It is left at
+    the model's default on the OpenAI platform and on `watsonx`.
     `--thinking`/`--no-thinking` overrides this.
 
     Prerequisites:
@@ -95,15 +101,15 @@ def eval_run(
     Args:
         test_files: Paths to JSON/JSONL files containing test cases.
         backend: Generation backend name.
-        model: Generation model name, or `None` for the backend default
-            (Granite 4.2 3B for `hf`; `openai` requires a model off the
-            OpenAI platform).
+        model: Model for the generation backend, or `None` to let the backend
+            choose its own default (Granite 4.2 3B for `hf`). With `openai`, a
+            model is required unless `OPENAI_BASE_URL` is the OpenAI platform.
         max_gen_tokens: Maximum tokens to generate for each response.
         judge_backend: Judge backend name, or `None` to reuse the generation
             backend.
-        judge_model: Judge model name, or `None` for the judge backend default
-            (Granite 4.2 3B for `hf`; `openai` requires a model off the
-            OpenAI platform).
+        judge_model: Model for the judge, or `None` to let the judge backend
+            choose its own default. This does not fall back to `model`. The
+            `hf` and `openai` rules are the same as for `model`.
         max_judge_tokens: Maximum tokens for the judge model's output.
         thinking: Force reasoning on or off for both models, or `None` for
             the automatic per-backend default.
