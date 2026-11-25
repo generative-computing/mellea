@@ -154,7 +154,6 @@ def instantiate(
     out_dir: Path,
     functions: Iterable[Learnable],
     train: Trainer,
-    formatter: Any,
     *,
     score: Scorer | None = None,
     record: Callable[[Record], dict[str, Any]] | None = None,
@@ -166,25 +165,26 @@ def instantiate(
     See the module's docstring for the loop.
 
     Args:
-        episodes: `(key, run)` pairs, as `capture` takes them; run once per
-            level, so each `run()` must start afresh.
-        out_dir: Where each pass's rows go (`pass_<L>.jsonl.gz`).
+        episodes: ``(key, run)`` pairs, as ``capture`` takes them; run once per
+            level, so each ``run()`` must start afresh.
+        out_dir: Where each pass's rows go (``pass_<L>.jsonl.gz``).
         functions: Every learnable function the episodes call, at any depth.
-        train: `train(fn, rows_path)`: `fn`'s student, trained on those rows.
-        score: Passed to `capture` on every pass.
-        record: Passed to `capture` on every pass; it must keep each row's
-            `function` and `calls`.
-        meta: Passed to `capture` on every pass.
-        log: Where progress goes (`None`: nowhere); passed to `capture`.
+        train: ``train(fn, rows_path)``: ``fn``'s student, trained on those
+            rows.
+        score: Passed to ``capture`` on every pass.
+        record: Passed to ``capture`` on every pass; it must keep each row's
+            ``function`` and ``calls``.
+        meta: Passed to ``capture`` on every pass.
+        log: Where progress goes (``None``: nowhere); passed to ``capture``.
 
     Returns:
         Each function's student, by qualified name. They are no longer
-        installed, so install them (`policy`) to serve.
+        installed, so install them (``policy``) to serve.
 
     Raises:
         ValueError: If the episodes call a learnable function not in
-            `functions`, if one in `functions` is never called, or if a row has
-            no `function` or `calls`.
+            ``functions``, if one in ``functions`` is never called, or if a row
+            has no ``function`` or ``calls``.
         RuntimeError: If an episode fails on any pass.
     """
     episodes = list(episodes)
@@ -196,7 +196,7 @@ def instantiate(
         if n > 0:  # depends on the students just installed: never resumed
             path.unlink(missing_ok=True)
         summary = capture(
-            episodes, path, formatter, score=score, record=record, meta=meta, log=log
+            episodes, path, score=score, record=record, meta=meta, log=log
         )
         if summary["failed"]:
             raise RuntimeError(

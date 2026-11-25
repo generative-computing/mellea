@@ -3,17 +3,18 @@
 
 """Capture: run a driver over episodes, record every learnable call, score them, write them.
 
-An *episode* is `(key, run)`: `run()` is plain driver code that calls
+An *episode* is ``(key, run)``: ``run()`` is plain driver code that calls
 learnable functions (an environment's loop, a simulated user, recorded
 traffic), so a conversation's next input can depend on the last output.
-`capture` runs each episode under a `Recorder`, which keeps its calls as a tree:
-the driver's own calls, each holding the calls its body made. Then, the episode
-ended, it scores every call the body left unscored, with `score(record,
-episode)`, which sees the whole tree, so what followed the call; and it writes
-the episode's top-level calls together, one row each with its nested calls
-inside, kept or not, each with its episode's key and number of top-level calls.
-So a rerun skips the episodes already written and writes again one that was cut
-short; an error fails only its episode, and the next run writes it:
+``capture`` runs each episode under a ``Recorder``, which keeps its calls as a
+tree: the driver's own calls, each holding the calls its body made. Then, the
+episode ended, it scores every call the body left unscored, with
+``score(record, episode)``, which sees the whole tree, so what followed the
+call; and it writes the episode's top-level calls together, one row each with
+its nested calls inside, kept or not, each with its episode's key and number of
+top-level calls. So a rerun skips the episodes already written and writes again
+one that was cut short; an error fails only its episode, and the next run writes
+it:
 
 ```python
 def run(ticket):
@@ -26,19 +27,19 @@ capture([(key, lambda t=t: run(t)) for key, t in tickets],
         Path("shard_0.jsonl.gz"), shard="0/8", score=score)
 ```
 
-`sft_rows` turns the kept completions of one function, at any depth, into TRL's
-conversational prompt-completion rows; `preference_rows` pairs a call's kept
-completions with its others into TRL's preference rows, on the same stored
-prompt. Every completion is written, kept or not: those not kept are the other
-side of preferences, and later of RL.
+``sft_rows`` turns the kept thunks of one function, at any depth, into TRL's
+conversational prompt-completion rows; ``preference_rows`` pairs a call's kept
+thunks with its others into TRL's preference rows, deriving the prompt from the
+thunk's captured context. Every thunk is written, kept or not: those not kept
+are the other side of preferences, and later of RL.
 
 The name is a CUDA graph's: run the real operations once, under a recording
-mode, and keep a replayable record of them for a later step (`instantiate`,
+mode, and keep a replayable record of them for a later step (``instantiate``,
 then training) to learn from. Nothing is trained here.
 
-An output path ending in `.gz` is written gzip-compressed (`read_rows` reads
-either): every record holds its whole prompt, so the records of a long
-conversation repeat it, and compress well.
+An output path ending in ``.gz`` is written gzip-compressed (``read_rows``
+reads either): every record holds its thunks' full context, so the records of a
+long conversation repeat it, and compress well.
 """
 
 from __future__ import annotations
@@ -54,7 +55,7 @@ from typing import Any
 from .learnable import Keep, Learnable, Record, Recorder, Score
 
 Scorer = Callable[[Record, list[Record]], list[Score]]
-"""`score(record, episode)`: one `Score` per completion of `record`, in order.
+"""`score(record, episode)`: one `Score` per thunk of `record`, in order.
 `episode` is the episode's top-level records, each holding its nested calls."""
 
 
@@ -167,15 +168,15 @@ def _score(episode: list[Record], score: Scorer) -> None:
 
     Raises:
         ValueError: If `score` returns a list whose length differs from the
-            record's number of completions.
+            record's number of thunks.
     """
     for r in walk(episode):
         if r.scores is None:
             scores = list(score(r, episode))
-            if len(scores) != len(r.completions):
+            if len(scores) != len(r.thunks):
                 raise ValueError(
                     f"the scorer gave {len(scores)} scores for "
-                    f"{len(r.completions)} completions of {r.function}"
+                    f"{len(r.thunks)} thunks of {r.function}"
                 )
             r.scores = scores
 
@@ -183,7 +184,6 @@ def _score(episode: list[Record], score: Scorer) -> None:
 def capture(
     episodes: Iterable[tuple[str, Callable[[], Any]]],
     out: Path,
-    formatter: Any,
     *,
     shard: str = "0/1",
     resume: bool = True,
@@ -193,38 +193,36 @@ def capture(
     keep: dict[Learnable, Keep] | None = None,
     log: Callable[[str], None] | None = print,
 ) -> dict[str, Any]:
-    """Run the episodes, and write every learnable call they made to `out`.
+    """Run the episodes, and write every learnable call they made to ``out``.
 
-    Scoring: `score` is called once for every record, at any depth, whose
-    `scores` the body left `None`, in start order, and its whole list assigned
-    at once; a record the body scored is not scored again. It receives the
-    record and the episode's whole tree, so it can judge a nested call against
-    what an enclosing or a sibling call did, and a call against what followed
-    it. Without `score`, unscored records stay unscored, which training reads
-    as every completion kept.
+    Scoring: ``score`` is called once for every record, at any depth, whose
+    ``scores`` the body left ``None``, in start order, and its whole list
+    assigned at once; a record the body scored is not scored again. It receives
+    the record and the episode's whole tree, so it can judge a nested call
+    against what an enclosing or a sibling call did, and a call against what
+    followed it. Without ``score``, unscored records stay unscored, which
+    training reads as every thunk kept.
 
     Args:
-        episodes: `(key, run)` pairs; `run()` is the episode's driver.
+        episodes: ``(key, run)`` pairs; ``run()`` is the episode's driver.
         out: The JSONL file the records go to (appended); gzip-compressed if
-            its name ends in `.gz`.
-        formatter: The backend's formatter (``TemplateFormatter``), so the
-            learnable view is rendered through the same path the backend uses.
-        shard: `"k/n"`: every n-th episode from the k-th.
-        resume: Skip the episodes `out` already holds whole.
-        score: `score(record, episode)`: one `Score` per completion of
-            `record`, given the episode's top-level records.
+            its name ends in ``.gz``.
+        shard: ``"k/n"``: every n-th episode from the k-th.
+        resume: Skip the episodes ``out`` already holds whole.
+        score: ``score(record, episode)``: one ``Score`` per thunk of
+            ``record``, given the episode's top-level records.
         record: A top-level record's row, its nested calls included (default
-            `Record.to_json`); the episode's key and number of top-level calls
-            are added to it.
+            ``Record.to_json``); the episode's key and number of top-level
+            calls are added to it.
         meta: The run's own notes (the code's version, its settings), written
-            with every row as `run`.
-        keep: Which calls of each function are written (`Recorder`'s
-            `keep`; `every(n)` writes one in n), counted per episode.
-        log: Where a line per episode goes (`None`: nowhere).
+            with every row as ``run``.
+        keep: Which calls of each function are written (``Recorder``'s
+            ``keep``; ``every(n)`` writes one in n), counted per episode.
+        log: Where a line per episode goes (``None``: nowhere).
 
     Returns:
-        `{"episodes", "calls", "kept", "completions", "failed"}`: what this run
-        wrote (`calls`: at every depth; `kept`: calls whose own completion, the
+        ``{"episodes", "calls", "kept", "thunks", "failed"}``: what this run
+        wrote (``calls``: at every depth; ``kept``: calls whose own thunk, the
         first, was kept) and the keys of the episodes that failed (run again to
         write them). An episode fails if its driver raises, or if a scorer
         raises or returns a list of the wrong length.
@@ -238,7 +236,7 @@ def capture(
         "episodes": 0,
         "calls": 0,
         "kept": 0,
-        "completions": 0,
+        "thunks": 0,
         "failed": [],
     }
     t0 = time.time()
@@ -247,7 +245,7 @@ def capture(
             if key in done:
                 continue
             try:
-                with Recorder(keep=keep, formatter=formatter) as rec:
+                with Recorder(keep=keep) as rec:
                     run()
                 episode = rec.records
                 if score is not None:
@@ -267,7 +265,7 @@ def capture(
             every = list(walk(episode))
             summary["episodes"] += 1
             summary["calls"] += len(every)
-            summary["completions"] += sum(len(r.completions) for r in every)
+            summary["thunks"] += sum(len(r.thunks) for r in every)
             summary["kept"] += sum(r.scores is None or r.scores[0].keep for r in every)
             if log is not None:
                 log(
@@ -279,10 +277,10 @@ def capture(
 
 
 def _kept(r: dict[str, Any]) -> list[bool]:
-    """Which of a written record's completions training takes."""
+    """Which of a written record's thunks training takes."""
     scores = r.get("scores")
     if scores is None:
-        return [True] * len(r["completions"])
+        return [True] * len(r["thunks"])
     return [bool(s["keep"]) for s in scores]
 
 
@@ -292,64 +290,100 @@ def _of(rows: Iterable[dict[str, Any]], function: Learnable | str) -> list[dict]
     return [r for r in walk_rows(rows) if r["function"] == name]
 
 
+def _strip_privileged(
+    context: list[dict[str, Any]], arguments: dict[str, Any], privileged: list[str]
+) -> list[dict[str, Any]]:
+    """Strip privileged argument keys from the context's structured-arguments message.
+
+    When the last user message is a JSON dict containing privileged keys, those
+    keys are removed so the student's training prompt carries only visible
+    arguments.
+    """
+    if not privileged or not context:
+        return context
+    last = context[-1]
+    if last.get("role") == "user":
+        try:
+            parsed = json.loads(last["content"])
+            if isinstance(parsed, dict) and any(k in parsed for k in privileged):
+                stripped = {k: v for k, v in parsed.items() if k not in privileged}
+                return [
+                    *context[:-1],
+                    {"role": "user", "content": json.dumps(stripped, sort_keys=True)},
+                ]
+        except (json.JSONDecodeError, KeyError, TypeError):
+            pass
+    return context
+
+
 def sft_rows(
     rows: Iterable[dict[str, Any]], function: Learnable | str
 ) -> list[dict[str, Any]]:
-    """The kept completions of `function` as TRL's conversational prompt-completion rows.
+    """The kept thunks of ``function`` as TRL's conversational prompt-completion rows.
 
-    Each is `{"prompt": messages, "completion": [assistant message], "tools"}`.
-    The calls of `function` are found at any depth.
+    Each is ``{"prompt": messages, "completion": [assistant message], "tools"}``.
+    The prompt is derived from each thunk's captured context, with privileged
+    argument keys stripped. The calls of ``function`` are found at any depth.
 
     Args:
-        rows: Written rows (as `Record.to_json` writes them: `function`,
-            `prompt`, `completions`, `scores` and the nested `calls`).
+        rows: Written rows (as ``Record.to_json`` writes them: ``function``,
+            ``thunks``, ``scores`` and the nested ``calls``).
         function: The learnable function, or its qualified name.
 
     Returns:
-        One row per completion kept, in order.
+        One row per thunk kept, in order.
     """
-    return [
-        {
-            "prompt": r["prompt"]["messages"],
-            "completion": [{"role": "assistant", "content": c["completion"]}],
-            "tools": r["prompt"]["tools"],
-        }
-        for r in _of(rows, function)
-        for c, kept in zip(r["completions"], _kept(r))
-        if kept
-    ]
+    out = []
+    for r in _of(rows, function):
+        for t, kept in zip(r["thunks"], _kept(r)):
+            if kept:
+                out.append(
+                    {
+                        "prompt": _strip_privileged(
+                            t["context"], r["arguments"], r["privileged"]
+                        ),
+                        "completion": [t["response"]],
+                        "tools": t["tools"],
+                    }
+                )
+    return out
 
 
 def preference_rows(
     rows: Iterable[dict[str, Any]], function: Learnable | str
 ) -> list[dict[str, Any]]:
-    """Each call's kept completions against its others, as TRL's preference rows.
+    """Each call's kept thunks against its others, as TRL's preference rows.
 
-    Each is `{"prompt": messages, "chosen": [assistant message], "rejected":
-    [assistant message], "tools", "meta"}` (`meta`: the two completions' own,
-    for analysis), on the call's stored prompt. The calls of `function` are
-    found at any depth.
+    Each is ``{"prompt": messages, "chosen": [assistant message], "rejected":
+    [assistant message], "tools", "meta"}`` (``meta``: the two thunks' own,
+    for analysis). The prompt is derived from the first thunk's captured
+    context, with privileged argument keys stripped. The calls of ``function``
+    are found at any depth.
 
     Args:
-        rows: Written rows, as for `sft_rows`.
+        rows: Written rows, as for ``sft_rows``.
         function: The learnable function, or its qualified name.
 
     Returns:
-        One row per (kept, not kept) pair of a call's completions, in order.
+        One row per (kept, not kept) pair of a call's thunks, in order.
     """
     out = []
     for r in _of(rows, function):
-        kept = _kept(r)
-        good = [c for c, k in zip(r["completions"], kept) if k]
-        bad = [c for c, k in zip(r["completions"], kept) if not k]
+        kept_flags = _kept(r)
+        good = [t for t, k in zip(r["thunks"], kept_flags) if k]
+        bad = [t for t, k in zip(r["thunks"], kept_flags) if not k]
+        prompt = _strip_privileged(
+            r["thunks"][0]["context"], r["arguments"], r["privileged"]
+        )
+        tools = r["thunks"][0]["tools"]
         for g in good:
             for b in bad:
                 out.append(
                     {
-                        "prompt": r["prompt"]["messages"],
-                        "chosen": [{"role": "assistant", "content": g["completion"]}],
-                        "rejected": [{"role": "assistant", "content": b["completion"]}],
-                        "tools": r["prompt"]["tools"],
+                        "prompt": prompt,
+                        "chosen": [g["response"]],
+                        "rejected": [b["response"]],
+                        "tools": tools,
                         "meta": {"chosen": g["meta"], "rejected": b["meta"]},
                     }
                 )

@@ -3,7 +3,7 @@
 
 """Learnable functions: functions a student can be trained to emulate.
 
-A *learnable function* is an ordinary Python function marked `@learnable`.
+A *learnable function* is an ordinary Python function marked ``@learnable``.
 Its signature is the student's interface; its body is the teacher, and can be
 anything (model calls, code that plans, judges, repair loops). Learning it is
 emulation: a student (an adapter) learns to produce what the body produces,
@@ -12,55 +12,59 @@ strategy: how the body earns its output is the body's own business.
 
 The signature:
 
-* At most one parameter is typed as a `Context`: the **context argument**,
+* At most one parameter is typed as a ``Context``: the **context argument**,
   the conversation the call takes place in. The others are **structured
   arguments**.
-* **Privileged parameters** (`@learnable(privileged=("turn",))`) are facts the
-  caller knows and the student is never told, given to the body to steer and
-  check its output (a question's structured type behind the words heard; what
-  someone really said before speech recognition). They are recorded apart from
-  the arguments and never reach the learnable view. **The rule that comes with
-  them:** they may steer and check, but any fact the output states must be
-  recoverable from the visible arguments, or the student learns to invent it.
-* On a method, `self` is the teacher's state between calls: hidden state, which
-  the student has to infer from its context. It is never part of the view.
-* The **return annotation is the output type**, and it is text: `str` (or no
-  annotation), or a `Literal` of strings. The output is the text itself, a
-  `Literal`'s checked against its values (`Learnable.parse`). Any other type
-  raises `TypeError`: a structured result is a tool call, not JSON in the
-  content. `Learnable.io_config` is the `io.yaml` a trained adapter of the
-  function would declare.
-
-The **learnable view** (`learnable_view`) is exactly what the student is trained
-on and served with: the context argument's messages (OpenAI format) and the
-tools it declares, then, if the function has structured arguments, one final
-user message holding them as sorted-key JSON. Neither the docstring nor
-anything privileged is in it. Its format is versioned (`VIEW`).
+* **Privileged parameters** (``@learnable(privileged=("turn",))``) are facts
+  the caller knows and the student is never told, given to the body to steer
+  and check its output. They are recorded by name on every ``Record`` and
+  stripped at training-data derivation time (``sft_rows``). **The rule that
+  comes with them:** they may steer and check, but any fact the output states
+  must be recoverable from the visible arguments, or the student learns to
+  invent it.
+* On a method, ``self`` is the teacher's state between calls: hidden state,
+  which the student has to infer from its context. It is never recorded.
+* The **return annotation is the output type**, and it is text: ``str`` (or no
+  annotation), or a ``Literal`` of strings. The output is the text itself, a
+  ``Literal``'s checked against its values (``Learnable.parse``). Any other
+  type raises ``TypeError``: a structured result is a tool call, not JSON in
+  the content. ``Learnable.io_config`` is the ``io.yaml`` a trained adapter
+  of the function would declare.
 
 A body returns its outputs, not a value: a non-empty
-`list[ComputedModelOutputThunk]`, or that list with a `Score` for each
-(`(outputs, scores)`). The first output is what the call returned; the rest are
-candidates not taken. Each output's text is its `value`; what the body notes
-about it goes in its `meta`.
+``list[ComputedModelOutputThunk]``, or that list with a ``Score`` for each
+(``(outputs, scores)``). The first output is what the call returned; the rest
+are candidates not taken. Each output's text is its ``value``; what the body
+notes about it goes in its ``meta``.
+
+**Recording captures the faithful trace.** Each thunk is snapshot *after* the
+call, reading the thunk's ``_call`` for the context and tools the backend
+actually used, and its ``generation`` for the model, latency, and usage. The
+snapshot is a ``Thunk``: the context as OpenAI messages, the tools, the full
+assistant response (content, tool calls, reasoning), and metadata. The student
+receives the visible arguments with Context objects intact — not a pre-rendered
+view — so it operates at the same Component-level abstraction the body does.
+OpenAI format conversion happens only at serialization time (``Record.to_json``)
+and training-data derivation (``sft_rows``, ``preference_rows``).
 
 **Two roles in every call.** The *policy* produces the output the call returns,
 which the caller uses, so the rest of the episode follows from it. The
 *teacher* labels the call: its outputs and their scores are what training
-learns. In a plain call the body is both. `fn.policy(student)` makes a student
-the policy for the calls inside its block (given the learnable view, it returns
-what a body returns): with no teacher, it is inference (serving, evaluation, a
-scripted test double); with `label=True`, the body still runs and labels, on
-the state the student's earlier outputs led to: on-policy data. The caller gets
-the policy's first output's text (checked, for a `Literal`) on every path, so
-the driver making the calls cannot tell who answered, nor whether a `Recorder`
-was listening.
+learns. In a plain call the body is both. ``fn.policy(student)`` makes a
+student the policy for the calls inside its block (given the visible arguments,
+it returns what a body returns): with no teacher, it is inference (serving,
+evaluation, a scripted test double); with ``label=True``, the body still runs
+and labels, on the state the student's earlier outputs led to: on-policy data.
+The caller gets the policy's first output's text (checked, for a ``Literal``)
+on every path, so the driver making the calls cannot tell who answered, nor
+whether a ``Recorder`` was listening.
 
-Called inside a `Recorder`, each call leaves a `Record`: the call's view (the
-prompt), its outputs (the teacher's, or with no teacher the policy's), their
-scores if given, who answered (`policy`), and the learnable calls its body
-made (`calls`), so the calls of an episode form a tree. A recorder may keep
-only some of a function's calls (`keep`). Outside a recorder, a learnable
-function is a plain function call.
+Called inside a ``Recorder``, each call leaves a ``Record``: the call's
+arguments, its thunks (the teacher's snapshots, or with no teacher the
+policy's), their scores if given, who answered (``policy``), and the learnable
+calls its body made (``calls``), so the calls of an episode form a tree. A
+recorder may keep only some of a function's calls (``keep``). Outside a
+recorder, a learnable function is a plain function call.
 """
 
 from __future__ import annotations
@@ -82,26 +86,36 @@ from typing import Any, Literal, TypeAlias
 
 from pydantic import BaseModel
 
-from ...core import ComputedModelOutputThunk, Context, ModelOutputThunk
+from ...core import ComputedModelOutputThunk, Context, ModelOutputThunk, Span
 from ...helpers.annotation_helpers import resolve_signature_annotations
-from ...helpers.openai_compatible_helpers import message_to_openai_message
+from ...helpers.openai_compatible_helpers import (
+    build_tool_calls,
+    message_to_openai_message,
+)
 
 
-def _context_to_openai(ctx: Context) -> list[dict[str, Any]]:
-    """Fallback for self-checks without a formatter: a direct conversion
-    that may miss tool declarations."""
+def _spans_to_openai(spans: list[Span]) -> list[dict[str, Any]]:
+    """Convert a flat span list (as stored on ``_CallInfo.context``) to OpenAI messages.
+
+    `Message` spans are serialized via `message_to_openai_message`.
+    `ModelOutputThunk` spans become assistant messages with content, tool_calls,
+    and reasoning_content when present.  Other component types are skipped.
+    """
     from ..components.chat import Message
 
-    out = []
-    for c in ctx.as_list():
-        if isinstance(c, ModelOutputThunk):
-            c = Message("assistant", str(c.value or ""))
-        if isinstance(c, Message):
-            out.append(message_to_openai_message(c))
+    out: list[dict[str, Any]] = []
+    for span in spans:
+        if isinstance(span, ModelOutputThunk):
+            msg: dict[str, Any] = {"role": "assistant", "content": span.value or ""}
+            tc = build_tool_calls(span)
+            if tc:
+                msg["tool_calls"] = tc
+            if span.thinking:
+                msg["reasoning_content"] = span.thinking
+            out.append(msg)
+        elif isinstance(span, Message):
+            out.append(message_to_openai_message(span))
     return out
-
-VIEW = 1
-"""The learnable view's format version (recorded on every record)."""
 
 
 def plain(value: Any) -> Any:
@@ -121,7 +135,7 @@ def plain(value: Any) -> Any:
             exact, so nothing is turned into text by guessing).
     """
     if isinstance(value, Context):
-        return _context_to_openai(value)
+        return _spans_to_openai(value.as_list())
     if isinstance(value, enum.Enum):
         return plain(value.value)
     if value is None or isinstance(value, str | int | float | bool):
@@ -154,6 +168,68 @@ class Score:
     keep: bool = True
 
 
+@dataclass
+class Thunk:
+    """A serializable snapshot of one completion's ModelOutputThunk.
+
+    Captured AFTER the call, from what the backend actually sent.
+
+    Args:
+        context: ``_call.context`` as OpenAI messages.
+        tools: Tools from ``_call.model_options``, or ``None``.
+        response: The full assistant message: content, tool_calls, reasoning_content.
+        meta: The thunk's metadata dict.
+        model: The model identifier from ``thunk.generation``.
+        latency_ms: Time-to-first-token in milliseconds, or ``None``.
+    """
+
+    context: list[dict[str, Any]]
+    tools: list[dict[str, Any]] | None
+    response: dict[str, Any]
+    meta: dict[str, Any]
+    model: str | None
+    latency_ms: float | None
+
+
+def _snapshot(thunk: ComputedModelOutputThunk) -> Thunk:
+    """Capture a `Thunk` from a computed thunk, reading ``_call`` for what the backend used."""
+    # Context: convert the span list the backend saw.
+    context = _spans_to_openai(thunk._call.context or [])
+
+    # Tools: extract from model_options if present.
+    tools: list[dict[str, Any]] | None = None
+    opts = thunk._call.model_options
+    if opts:
+        from ...backends.model_options import ModelOption
+        from ...backends.tools import convert_tools_to_json
+
+        raw_tools = opts.get(ModelOption.TOOLS)
+        if raw_tools:
+            tool_dict = (
+                raw_tools
+                if isinstance(raw_tools, dict)
+                else {t.name: t for t in raw_tools}
+            )
+            tools = convert_tools_to_json(tool_dict) or None
+
+    # Response: the assistant message.
+    response: dict[str, Any] = {"role": "assistant", "content": thunk.value}
+    tc = build_tool_calls(thunk)
+    if tc:
+        response["tool_calls"] = tc
+    if thunk.thinking:
+        response["reasoning_content"] = thunk.thinking
+
+    return Thunk(
+        context=context,
+        tools=tools,
+        response=response,
+        meta=dict(thunk.meta),
+        model=thunk.generation.model,
+        latency_ms=thunk.generation.ttfb_ms,
+    )
+
+
 Returned: TypeAlias = (
     list[ComputedModelOutputThunk] | tuple[list[ComputedModelOutputThunk], list[Score]]
 )
@@ -161,8 +237,9 @@ Returned: TypeAlias = (
 outputs, or its outputs and a score for each."""
 
 Student: TypeAlias = Callable[[dict[str, Any]], Returned]
-"""A policy other than the body: given a call's learnable view, it returns what a
-body returns."""
+"""A policy other than the body: given a call's visible arguments (a dict from
+parameter name to value, Context objects intact, privileged keys excluded), it
+returns what a body returns."""
 
 
 @dataclass
@@ -188,66 +265,52 @@ class Record:
 
     Args:
         function: The function's qualified name.
-        interface: The hash of its interface (`Learnable.interface`).
-        view: The learnable view's format version (`VIEW`).
-        args: Its visible arguments as passed (Python values).
-        privileged: Its privileged arguments as passed.
-        prompt: The learnable view: `{"messages", "tools"}`.
-        completions: The call's outputs: the teacher's (the body's) when there
-            is one, else the policy's; first the output it would return, then
-            the candidates not taken.
-        scores: `None`, or one `Score` per completion, in order: a call is
+        arguments: All arguments as passed (self excluded), including privileged.
+        privileged: Names of the privileged parameters.
+        thunks: One `Thunk` per completion (the teacher's outputs, or the
+            policy's when there is no teacher).
+        scores: ``None``, or one `Score` per thunk, in order: a call is
             scored whole or not at all.
         calls: The learnable calls its body made, in the order they started.
-        policy: `None` when the body answered (a plain call); otherwise who
-            did and what it returned. Under `fn.policy(student)` the
-            completions are the student's too; under `label=True` they are the
-            body's labels, and only `policy` holds what the student returned.
+        policy: ``None`` when the body answered (a plain call); otherwise who
+            did and what it returned.
     """
 
     function: str
-    interface: str
-    view: int
-    args: dict[str, Any]
-    privileged: dict[str, Any]
-    prompt: dict[str, Any]
-    completions: list[ComputedModelOutputThunk]
+    arguments: dict[str, Any]
+    privileged: tuple[str, ...]
+    thunks: list[Thunk]
     scores: list[Score] | None = None
     calls: list[Record] = field(default_factory=list)
     policy: Policy | None = None
 
     def __post_init__(self) -> None:
-        """Check that the scores, if any, are one per completion.
+        """Check that the scores, if any, are one per thunk.
 
         Raises:
-            ValueError: If `scores` is not `None` and its length differs from
-                that of `completions`.
+            ValueError: If ``scores`` is not ``None`` and its length differs
+                from that of ``thunks``.
         """
-        if self.scores is not None and len(self.scores) != len(self.completions):
+        if self.scores is not None and len(self.scores) != len(self.thunks):
             raise ValueError(
                 f"{self.function}: {len(self.scores)} scores for "
-                f"{len(self.completions)} completions"
+                f"{len(self.thunks)} thunks"
             )
 
     def to_json(self) -> dict[str, Any]:
         """The record as written (the standard row), its nested calls inside it.
 
         Returns:
-            Its fields as JSON-ready data: each completion as `{"completion",
-            "meta"}`, `scores` as `None` or a list of `Score`'s fields, `calls`
-            as their own rows, and `policy` as `None` or `{"by", "completion",
-            "meta"}`.
+            Its fields as JSON-ready data: each thunk as its dataclass dict,
+            ``scores`` as ``None`` or a list of ``Score``'s fields, ``calls``
+            as their own rows, and ``policy`` as ``None`` or ``{"by",
+            "completion", "meta"}``.
         """
         return {
             "function": self.function,
-            "interface": self.interface,
-            "view": self.view,
-            "args": plain(self.args),
-            "privileged": plain(self.privileged),
-            "prompt": self.prompt,
-            "completions": [
-                {"completion": c.value, "meta": plain(c.meta)} for c in self.completions
-            ],
+            "arguments": plain(self.arguments),
+            "privileged": list(self.privileged),
+            "thunks": [dataclasses.asdict(t) for t in self.thunks],
             "scores": None
             if self.scores is None
             else [dataclasses.asdict(s) for s in self.scores],
@@ -291,37 +354,26 @@ def every(n: int) -> Keep:
 class Recorder:
     """Collects a `Record` for every learnable call made inside it.
 
-    Use as a context manager. `records` holds the top-level calls, in the order
-    they started; each holds the calls its body made (`Record.calls`). A call
-    that raised leaves no record, nor do any of the calls it made. Recorders do
-    not nest.
+    Use as a context manager. ``records`` holds the top-level calls, in the
+    order they started; each holds the calls its body made (``Record.calls``).
+    A call that raised leaves no record, nor do any of the calls it made.
+    Recorders do not nest.
 
-    `keep` records only some of a function's calls: it maps a learnable
-    function to a rule (`every(n)`, or any `Keep`), which sees the call's index
-    among that function's calls since the recorder started. A function not in
-    it is kept every time. A call not kept runs exactly as one kept does and
-    returns its output; it leaves no record, and neither do the calls its body
-    made. Its learnable view is not rendered unless its policy needs it.
+    ``keep`` records only some of a function's calls: it maps a learnable
+    function to a rule (``every(n)``, or any ``Keep``), which sees the call's
+    index among that function's calls since the recorder started. A function
+    not in it is kept every time. A call not kept runs exactly as one kept does
+    and returns its output; it leaves no record, and neither do the calls its
+    body made.
 
-    The learnable view is rendered through the same path the backend uses —
-    ``view_for_generation`` → ``to_chat_messages`` →
-    ``message_to_openai_message`` — so it captures exactly what the model sees,
-    including tools declared on the context's components.
+    Each thunk is snapshot after the call, reading ``_call`` for the context
+    and tools the backend actually used.
 
     Args:
-        formatter: The backend's formatter (``TemplateFormatter``), used to
-            render the learnable view the same way the backend renders the
-            prompt.  ``None`` for self-checks that test the learnable
-            machinery without a backend; in that case the view falls back to
-            a direct conversion that may miss tool declarations.
         keep: Each function's rule.
     """
 
-    def __init__(
-        self,
-        formatter: Any = None,
-        keep: dict[Learnable, Keep] | None = None,
-    ) -> None:
+    def __init__(self, keep: dict[Learnable, Keep] | None = None) -> None:
         """Start with no records."""
         self.records: list[Record] = []
         # The calls still running, innermost last: each one's `calls`, filling.
@@ -329,7 +381,6 @@ class Recorder:
         self._token: contextvars.Token | None = None
         self._keep = {fn.name: rule for fn, rule in (keep or {}).items()}
         self._seen: Counter[str] = Counter()  # each function's calls so far
-        self.formatter = formatter
 
     def _keeps(self, fn: Learnable) -> bool:
         """Whether this call of `fn` is recorded; counts it."""
@@ -376,7 +427,8 @@ class _Output:
     ``first_token`` transformation rule, shared with probes and the decision
     helpers), not by a separate choice mechanism.  ``io_config()`` emits the
     ``first_token`` declaration; ``parse()`` validates the output against the
-    choices at training/recording time."""
+    choices at training/recording time.
+    """
 
     kind: Literal["text", "choice"]
     choices: tuple[str, ...] = ()
@@ -570,9 +622,10 @@ class Learnable:
         memory between calls (`self`) steps on every call either way.
 
         Args:
-            student: Given a call's learnable view, returns what a body returns
-                (see the module's docstring); `None`: no change (the body stays
-                the policy), so one driver serves every round.
+            student: Given a call's visible arguments (a dict from parameter
+                name to value, privileged keys excluded), returns what a body
+                returns (see the module's docstring); `None`: no change (the
+                body stays the policy), so one driver serves every round.
             label: Whether the body still labels each call.
             name: The policy's name in records (default: the student's
                 `__name__`, or its type's).
@@ -621,22 +674,20 @@ class Learnable:
         if recorder is not None:
             recorder._open.append([])
         try:
-            labels, answer = self._run(bound, arguments, None)
+            labels, answer = self._run(bound, arguments)
         finally:
             if recorder is not None:
                 recorder._open.pop()
         return (answer or labels)[0][0].value
 
     def _run(
-        self,
-        bound: inspect.BoundArguments,
-        arguments: dict[str, Any],
-        prompt: dict[str, Any] | None,
+        self, bound: inspect.BoundArguments, arguments: dict[str, Any]
     ) -> tuple[Any, Any]:
-        """The teacher's outputs and the student's, each checked, or `None`.
+        """The teacher's outputs and the student's, each checked, or ``None``.
 
-        The body runs unless a student answers alone; the view is rendered
-        only for a student, from `prompt` when the caller has it already.
+        The body runs unless a student answers alone.  The student receives the
+        visible arguments dict (privileged keys excluded, Context objects
+        intact).
         """
         installed = self._installed
         labels = None
@@ -644,35 +695,32 @@ class Learnable:
             labels = self._outputs(self._fn(*bound.args, **bound.kwargs))
         answer = None
         if installed is not None:
-            view = prompt if prompt is not None else learnable_view(self, arguments)
-            answer = self._outputs(installed.student(view))
+            visible = {
+                n: arguments[n] for n in arguments if n not in self.spec.privileged
+            }
+            answer = self._outputs(installed.student(visible))
         return labels, answer
 
     def _recorded(
         self, recorder: Recorder, bound: inspect.BoundArguments, arguments: dict
     ) -> Any:
-        prompt = learnable_view(self, arguments, recorder.formatter)  # as the student reads it, now
         calls: list[Record] = []
         recorder._open.append(calls)
         try:
-            labels, answer = self._run(bound, arguments, prompt)
+            labels, answer = self._run(bound, arguments)
         finally:
             recorder._open.pop()
         completions, scores = labels or answer
+        thunks = [_snapshot(c) for c in completions]
         policy = None
         if answer is not None:
             policy = Policy(by=self._installed.by, output=answer[0][0])  # type: ignore[union-attr]
         recorder._open[-1].append(
             Record(
                 function=self.name,
-                interface=self.interface,
-                view=VIEW,
-                args={
-                    n: arguments[n] for n in arguments if n not in self.spec.privileged
-                },
-                privileged={n: arguments[n] for n in self.spec.privileged},
-                prompt=prompt,
-                completions=completions,
+                arguments={n: arguments[n] for n in arguments},
+                privileged=self.spec.privileged,
+                thunks=thunks,
                 scores=scores,
                 calls=calls,
                 policy=policy,
@@ -730,75 +778,3 @@ def learnable(fn: Callable | None = None, *, privileged: tuple[str, ...] = ()) -
     if fn is None:
         return lambda f: Learnable(f, privileged)
     return Learnable(fn, privileged)
-
-
-def learnable_view(
-    fn: Learnable, arguments: dict[str, Any], formatter: Any = None
-) -> dict[str, Any]:
-    """What the student reads for a call of `fn`: `{"messages", "tools"}`.
-
-    The context argument's messages (OpenAI format) and the tools declared on
-    its components; then, if `fn` has structured arguments, one final user
-    message holding them as sorted-key JSON. No docstring, nothing privileged.
-    Format `VIEW`.
-
-    When ``formatter`` is given (the backend's ``TemplateFormatter``), the view
-    is rendered through the same path the backend uses, capturing tools from
-    the context's components.  Without one (self-checks), the view is a direct
-    conversion that may miss tool declarations.
-
-    Args:
-        fn: The learnable function.
-        arguments: The call's arguments by name (`self` not among them; any
-            privileged ones are left out).
-        formatter: The backend's formatter, or ``None`` for self-checks.
-
-    Returns:
-        The messages and the tools (`None` when the context declares none or
-        no formatter was given).
-
-    Raises:
-        TypeError: If the context argument is not a `Context`, or a structured
-            argument has no JSON form (`plain`).
-    """
-    spec = fn.spec
-    messages: list[dict[str, Any]] = []
-    tools = None
-    if spec.context is not None:
-        ctx = arguments[spec.context]
-        if not isinstance(ctx, Context):
-            raise TypeError(
-                f"{fn.name}: its context argument takes a Context, "
-                f"got {type(ctx).__name__}"
-            )
-        if formatter is not None:
-            messages, tools = _render_via_formatter(ctx, formatter)
-        else:
-            messages = _context_to_openai(ctx)
-    if spec.structured:
-        args = {n: plain(arguments[n]) for n in spec.structured}
-        messages = [
-            *messages,
-            {"role": "user", "content": json.dumps(args, sort_keys=True)},
-        ]
-    return {"messages": messages, "tools": tools}
-
-
-def _render_via_formatter(ctx: Context, formatter: Any) -> tuple[list[dict], list[dict] | None]:
-    """Render the context through the backend's formatter, extracting both
-    messages and tools from the components — the same path the backend uses."""
-    from ...backends.tools import add_tools_from_context_actions, convert_tools_to_json
-
-    # Messages: linearize → format → serialize.
-    linearized = ctx.view_for_generation()
-    if linearized is None:
-        linearized = ctx.as_list()
-    chat_messages = formatter.to_chat_messages(linearized)
-    messages = [message_to_openai_message(m) for m in chat_messages]
-
-    # Tools: read from the components' TemplateRepresentations.
-    tool_dict: dict = {}
-    add_tools_from_context_actions(tool_dict, ctx.actions_for_available_tools())
-    tools = convert_tools_to_json(tool_dict) if tool_dict else None
-
-    return messages, tools
