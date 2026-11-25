@@ -415,7 +415,7 @@ def test_sft_prompt_tokenizes_as_the_served_request():
         tokenize=True,
         adapter_name=adapter,
     )
-    if isinstance(trained, dict):
+    if not isinstance(trained, list):  # a BatchEncoding (transformers 5)
         trained = trained["input_ids"]
 
     served = _serving_backend(answer)
