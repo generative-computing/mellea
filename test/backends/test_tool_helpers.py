@@ -321,5 +321,41 @@ def test_parse_tools_enveloped_call_found_through_deeper_nesting():
     assert parse_tools(raw) == [("f", {"x": 1})]
 
 
+# --- parse_tools: calls inside lists are found, including parallel batches ---
+
+
+def test_parse_tools_envelope_list_single_call_found():
+    """OpenAI-style shape: a call inside a list in an envelope is found."""
+    raw = '{"tool_calls": [{"name": "f", "arguments": {"x": 1}}]}'
+    assert parse_tools(raw) == [("f", {"x": 1})]
+
+
+def test_parse_tools_envelope_list_parallel_batch_yields_every_call():
+    """A parallel batch in an envelope yields every call, in order."""
+    raw = (
+        '{"tool_calls": [{"name": "f", "arguments": {"x": 1}},'
+        ' {"name": "g", "arguments": {"y": 2}}]}'
+    )
+    assert parse_tools(raw) == [("f", {"x": 1}), ("g", {"y": 2})]
+
+
+def test_parse_tools_bare_top_level_list_yields_every_call():
+    """A bare top-level list of calls still parses fully (regression pin)."""
+    raw = '[{"name": "f", "arguments": {"x": 1}}, {"name": "g", "arguments": {"y": 2}}]'
+    assert parse_tools(raw) == [("f", {"x": 1}), ("g", {"y": 2})]
+
+
+def test_parse_tools_envelope_list_nested_deeper_still_found():
+    """The search descends dicts and lists alike, at any depth."""
+    raw = '{"outer": {"tool_calls": [{"name": "f", "arguments": {"x": 1}}]}}'
+    assert parse_tools(raw) == [("f", {"x": 1})]
+
+
+def test_parse_tools_envelope_list_without_calls_is_empty():
+    """Lists of non-call objects yield nothing — no false positives."""
+    raw = '{"tool_calls": [{"meta": 1}, {"other": 2}]}'
+    assert parse_tools(raw) == []
+
+
 if __name__ == "__main__":
     pytest.main([__file__])

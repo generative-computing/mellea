@@ -476,42 +476,48 @@ def json_extraction(text: str, *, strict: bool = True) -> Generator[dict, None, 
         index = text.find("{", index)
 
 
-def find_func(d: object) -> tuple[str | None, Mapping | None]:
-    """Find the first function in a json-like dictionary.
+def find_func(d: object) -> Generator[tuple[str, Mapping], None, None]:
+    """Find every function call record in a json-like object, in document order.
 
     Most llms output tool requests in the form `...{"name": string, "arguments": {}}...`
 
+    The search descends dict values and list items alike, so a call nested in
+    an envelope — under any key, or inside a list at any depth — is found.
+    Every call is yielded, so a parallel batch such as
+    `{"tool_calls": [{"name": ...}, {"name": ...}]}` produces one item per
+    call. A dict that is itself a call record is yielded whole without
+    descending further: its `arguments` values are data, not nested calls.
+
     Args:
-        d: A JSON-like Python object (typically a `dict`) to search for a function
-            call record.
+        d: A JSON-like Python object (typically a `dict`) to search for function
+            call records.
 
-    Returns:
-        A `(name, args)` tuple where `name` is the tool name string and `args`
-        is the arguments mapping, or `(None, None)` if no function call was found.
+    Yields:
+        `(name, args)` tuples where `name` is the tool name string and `args`
+        is the arguments mapping.
     """
-    if not isinstance(d, dict):
-        return None, None
+    if isinstance(d, dict):
+        name = d.get("name", None)
+        args = None
 
-    name = d.get("name", None)
-    args = None
+        args_names = ["arguments", "args", "parameters"]
+        for an in args_names:
+            args = d.get(an, None)
+            if isinstance(args, Mapping):
+                break
+            else:
+                args = None
 
-    args_names = ["arguments", "args", "parameters"]
-    for an in args_names:
-        args = d.get(an, None)
-        if isinstance(args, Mapping):
-            break
-        else:
-            args = None
+        if name is not None and args is not None:
+            # args is usually output as `{}` if none are required.
+            yield name, args
+            return
 
-    if name is not None and args is not None:
-        # args is usually output as `{}` if none are required.
-        return name, args
-
-    for v in d.values():
-        result = find_func(v)
-        if result != (None, None):
-            return result
-    return None, None
+        for v in d.values():
+            yield from find_func(v)
+    elif isinstance(d, list):
+        for item in d:
+            yield from find_func(item)
 
 
 # Granite 4.2's XML tool-call format:
@@ -541,8 +547,7 @@ def _json_tool_call_spans(text: str) -> list[tuple[int, int]]:
         except json.JSONDecodeError:
             index = text.find("{", index + 1)
             continue
-        name, args = find_func(obj)
-        if name is not None and args is not None:
+        if next(find_func(obj), None) is not None:
             spans.append((index, end))
         index = text.find("{", end)
     return spans
@@ -615,8 +620,7 @@ def _parse_tool_calls(llm_response: str) -> tuple[list[tuple[str, Mapping, bool]
     # rewrite whitespace inside JSON string values. strict=False keeps the
     # literal newlines that the collapse used to turn into spaces decodable.
     for possible_tool in json_extraction(remainder, strict=False):
-        tool_name, tool_arguments = find_func(possible_tool)
-        if tool_name is not None and tool_arguments is not None:
+        for tool_name, tool_arguments in find_func(possible_tool):
             tools.append((tool_name, tool_arguments, False))
     return tools, _count_unparsed_tool_call_tags(remainder)
 
