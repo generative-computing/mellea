@@ -110,7 +110,9 @@ weights. Requires `HF_TOKEN` set or a prior `hf auth login`.
 > data includes proprietary, confidential, or personal information. Language models can
 > memorize details from small domain-specific datasets.
 
-If you intend to use the adapter as a Mellea adapter function (so that it can be loaded by
+A plain upload cannot be loaded as a Mellea adapter function: `LocalFileBinding` looks
+for weights under `<name>/<base-model>/<lora|alora>/`, not the repository root. If you
+intend to use the adapter as a Mellea adapter function (so that it can be loaded by
 model ID rather than local path), pass `--intrinsic` and provide an `io.yaml` file:
 
 ```bash
