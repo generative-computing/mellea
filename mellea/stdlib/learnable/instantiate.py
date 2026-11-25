@@ -56,6 +56,7 @@ from contextlib import ExitStack
 from pathlib import Path
 from typing import Any
 
+from ...core import Backend
 from .capture import Scorer, capture, read_rows, walk_rows
 from .learnable import Learnable, Record, Student
 
@@ -158,6 +159,7 @@ def instantiate(
     score: Scorer | None = None,
     record: Callable[[Record], dict[str, Any]] | None = None,
     meta: dict[str, Any] | None = None,
+    student: Backend | None = None,
     log: Callable[[str], None] | None = print,
 ) -> dict[str, Student]:
     """Learn every learnable function the episodes call, inner functions first.
@@ -175,6 +177,9 @@ def instantiate(
         record: Passed to ``capture`` on every pass; it must keep each row's
             ``function`` and ``calls``.
         meta: Passed to ``capture`` on every pass.
+        student: The backend whose rendering defines every call's input,
+            passed to ``capture`` on every pass (``train`` reads the rows'
+            requests).
         log: Where progress goes (``None``: nowhere); passed to ``capture``.
 
     Returns:
@@ -196,7 +201,13 @@ def instantiate(
         if n > 0:  # depends on the students just installed: never resumed
             path.unlink(missing_ok=True)
         summary = capture(
-            episodes, path, score=score, record=record, meta=meta, log=log
+            episodes,
+            path,
+            score=score,
+            record=record,
+            meta=meta,
+            student=student,
+            log=log,
         )
         if summary["failed"]:
             raise RuntimeError(

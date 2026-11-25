@@ -11,6 +11,7 @@ import inspect
 import os
 import threading
 from collections.abc import Coroutine, Sequence
+from dataclasses import dataclass
 from typing import Any
 
 import openai
@@ -33,12 +34,14 @@ from ..core import (
     MelleaLogger,
     ModelOutputThunk,
     RawProviderResponse,
+    RenderedRequest,
     Requirement,
     Span,
 )
 from ..core.base import AbstractMelleaTool
 from ..formatters import ChatFormatter, TemplateFormatter, granite as granite_formatters
 from ..formatters.granite import intrinsics as intrinsics
+from ..formatters.granite.intrinsics.util import json_field as _json_field
 from ..helpers import (
     DEFAULT_CHUNK_TIMEOUT,
     ClientCache,
@@ -93,6 +96,27 @@ _VLLM_MIN_LOGPROB_TOKEN_IDS_VERSION = Version("0.30.0")
 
 _VLLM_MAX_LOGPROB_TOKEN_IDS = 128
 """vLLM rejects a `logprob_token_ids` list longer than this."""
+
+
+@dataclass
+class _IntrinsicRender:
+    """An intrinsic call rendered: the request, and what generating it needs."""
+
+    request: RenderedRequest
+    rewriter: Any  # granite_formatters.IntrinsicsRewriter
+    rewritten: Any  # granite_formatters.ChatCompletion
+    conversation: list[dict]
+    tools: dict[str, AbstractMelleaTool]
+
+
+@dataclass
+class _ChatRender:
+    """A chat call rendered: the request, and what generating it needs."""
+
+    request: RenderedRequest
+    conversation: list[dict]
+    tools: dict[str, AbstractMelleaTool]
+    response_format: dict[str, Any] | None
 
 
 class OpenAIBackend(FormatterBackend, AdapterMixin):
@@ -1046,6 +1070,140 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         self._label_token_id_cache[key] = ids
         return ids
 
+    def _intrinsic_messages(self, ctx: Context) -> tuple[list[Span], list[Message]]:
+        """The context's linearized spans and chat messages, for the intrinsic path.
+
+        Raises:
+            ValueError: If a message carries audio (intrinsics are evaluated
+                over a text-only conversation).
+        """
+        linearized_context = ctx.view_for_generation()
+        assert linearized_context is not None, (
+            "If ctx.is_chat_context, then the context should be linearizable."
+        )
+
+        # NOTE: Explicitly do not add the action to the context here.
+        #       Intrinsics modify the context through their rewriters.
+        messages: list[Message] = self.formatter.to_chat_messages(linearized_context)
+
+        # Intrinsics render through IntrinsicsRewriter, which validates the conversation
+        # against a strict ChatCompletion whose message `content` must be a plain string.
+        # Any multimodal content list fails that with a dozen pydantic errors naming
+        # message variants the caller never chose, so reject it here with something
+        # actionable. Mirrors LocalHFBackend, which guards its intrinsic path the same way
+        # (see `_check_no_multimodal_blocks`). Checked before the prefetch in
+        # `_generate_from_intrinsic` so a URL block is not downloaded only to be rejected.
+        if any(m.audio for m in messages):
+            raise ValueError(
+                "OpenAIBackend does not support audio on the intrinsic path: intrinsics "
+                "are evaluated over a text-only conversation. Remove audio from the "
+                "context before calling an intrinsic, or transcribe it and pass the "
+                "transcript as text."
+            )
+        return linearized_context, messages
+
+    def _render_intrinsic(
+        self,
+        action: Intrinsic,
+        ctx: Context,
+        messages: list[Message],
+        *,
+        adapter_name: str,
+        intrinsic_config: dict,
+        model_options: dict[str, Any],
+        tool_calls: bool,
+    ) -> "_IntrinsicRender":
+        """Render an intrinsic call: the conversation, rewritten, and its tools.
+
+        Shared by `render_request` and `_generate_from_intrinsic`, so what is
+        recorded is what is sent. Taken after the intrinsic's rewriter.
+        """
+        rewriter = granite_formatters.IntrinsicsRewriter(
+            config_dict=intrinsic_config, model_name=adapter_name
+        )
+
+        # Extract system prompt and prepend to conversation.
+        system_prompt = model_options.get(ModelOption.SYSTEM_PROMPT, "")
+        conversation: list[dict] = []
+        if system_prompt != "":
+            conversation.append({"role": "system", "content": system_prompt})
+        # Intrinsic/adapter calls are single-shot evaluations over a rewritten
+        # conversation, not multi-turn generation, so reasoning is never replayed
+        # here (no `replay_reasoning=`) — unlike the chat path in
+        # `_generate_from_context`, which applies `should_replay_reasoning`.
+        conversation.extend(
+            [message_to_openai_message(m, provider=self._provider) for m in messages]
+        )
+
+        docs = messages_to_docs(messages)
+
+        # Convert our conversation into a proper chat completions dict.
+        request_json: dict = {
+            "messages": conversation,
+            "extra_body": {"documents": docs},
+        }
+
+        rewritten = rewriter.transform(request_json, **action.intrinsic_kwargs)
+        MelleaLogger.get_logger().debug(
+            "Intrinsic '%s' rendered messages: %s",
+            action.intrinsic_name,
+            [m.content for m in rewritten.messages],
+        )
+
+        # Collect tools if tool_calls is enabled.
+        tools: dict[str, AbstractMelleaTool] = dict()
+        if tool_calls:
+            add_tools_from_model_options(tools, model_options)
+            add_tools_from_context_actions(tools, ctx.actions_for_available_tools())
+            MelleaLogger.get_logger().info(f"Tools for call: {tools.keys()}")
+
+        formatted_tools = convert_tools_to_json(tools)
+        # An adapter function's io.yaml may declare the tools it was trained
+        # with; a call that passes none is served with those.
+        if not formatted_tools and intrinsic_config.get("tools"):
+            formatted_tools = [dict(t) for t in intrinsic_config["tools"]]
+        use_tools = len(formatted_tools) > 0
+
+        # The rewriter may add instruction messages where 'role' is a default
+        # (e.g. UserMessage with role="user").  exclude_unset would drop it,
+        # so we always force 'role' into the serialized dict.
+        messages_dicts = []
+        for m in rewritten.messages:
+            d = m.model_dump(exclude_unset=True)
+            if "role" not in d:
+                d["role"] = m.role
+            messages_dicts.append(d)
+
+        # --- tool_choice for the intrinsic path ----------------------------
+        # An adapter function's io.yaml declares its `tool_choice`; without one
+        # it is "none": no catalog adapter generates tool calls, they only need
+        # the tool declarations in the prompt for context.  Without an explicit
+        # tool_choice, vLLM defaults to "auto" and rejects the request unless
+        # --enable-auto-tool-choice is set.
+        intrinsic_tool_choice = intrinsic_config.get("tool_choice") or "none"
+
+        tool_choice_value: str | None = intrinsic_tool_choice if use_tools else None
+
+        labels = intrinsics.input._first_token_labels(
+            intrinsic_config.get("transformations")
+        )
+        constraint: dict[str, Any] | None = None
+        if labels is not None:
+            constraint = {"labels": list(labels)}
+        elif intrinsic_config.get("response_format") is not None:
+            constraint = {
+                "json_schema": _json_field(intrinsic_config["response_format"])
+            }
+
+        request = RenderedRequest(
+            messages=messages_dicts,
+            tools=formatted_tools if use_tools else None,
+            tool_choice=tool_choice_value,
+            constraint=constraint,
+            adapter=adapter_name,
+        )
+        return _IntrinsicRender(request, rewriter, rewritten, conversation, tools)
+
     async def _generate_from_intrinsic(
         self,
         action: Intrinsic,
@@ -1121,37 +1279,11 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             adapter
         )
 
-        rewriter = granite_formatters.IntrinsicsRewriter(
-            config_dict=intrinsic_config, model_name=adapter_name
-        )
         result_processor = granite_formatters.IntrinsicsResultProcessor(
             config_dict=intrinsic_config
         )
 
-        # --- linearize context and build conversation ----------------------
-        linearized_context = ctx.view_for_generation()
-        assert linearized_context is not None, (
-            "If ctx.is_chat_context, then the context should be linearizable."
-        )
-
-        # NOTE: Explicitly do not add the action to the context here.
-        #       Intrinsics modify the context through their rewriters.
-        messages: list[Message] = self.formatter.to_chat_messages(linearized_context)
-
-        # Intrinsics render through IntrinsicsRewriter, which validates the conversation
-        # against a strict ChatCompletion whose message `content` must be a plain string.
-        # Any multimodal content list fails that with a dozen pydantic errors naming
-        # message variants the caller never chose, so reject it here with something
-        # actionable. Mirrors LocalHFBackend, which guards its intrinsic path the same way
-        # (see `_check_no_multimodal_blocks`). Checked before the prefetch below so a URL
-        # block is not downloaded only to be rejected.
-        if any(m.audio for m in messages):
-            raise ValueError(
-                "OpenAIBackend does not support audio on the intrinsic path: intrinsics "
-                "are evaluated over a text-only conversation. Remove audio from the "
-                "context before calling an intrinsic, or transcribe it and pass the "
-                "transcript as text."
-            )
+        linearized_context, messages = self._intrinsic_messages(ctx)
 
         # Same off-thread resolution as the chat path below. The shared cache makes this
         # a hit whenever a prior generation touched the URL, but an intrinsic run against
@@ -1159,33 +1291,19 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         # would otherwise download it inline and block the event loop.
         await prefetch_audio_urls(messages)
 
-        # Extract system prompt and prepend to conversation.
-        system_prompt = model_options.get(ModelOption.SYSTEM_PROMPT, "")
-        conversation: list[dict] = []
-        if system_prompt != "":
-            conversation.append({"role": "system", "content": system_prompt})
-        # Intrinsic/adapter calls are single-shot evaluations over a rewritten
-        # conversation, not multi-turn generation, so reasoning is never replayed
-        # here (no `replay_reasoning=`) — unlike the chat path in
-        # `_generate_from_context`, which applies `should_replay_reasoning`.
-        conversation.extend(
-            [message_to_openai_message(m, provider=self._provider) for m in messages]
+        render = self._render_intrinsic(
+            action,
+            ctx,
+            messages,
+            adapter_name=adapter_name,
+            intrinsic_config=intrinsic_config,
+            model_options=model_options,
+            tool_calls=tool_calls,
         )
-
-        docs = messages_to_docs(messages)
-
-        # Convert our conversation into a proper chat completions dict.
-        request_json: dict = {
-            "messages": conversation,
-            "extra_body": {"documents": docs},
-        }
-
-        rewritten = rewriter.transform(request_json, **action.intrinsic_kwargs)
-        MelleaLogger.get_logger().debug(
-            "Intrinsic '%s' rendered messages: %s",
-            action.intrinsic_name,
-            [m.content for m in rewritten.messages],
-        )
+        rewriter, rewritten = render.rewriter, render.rewritten
+        conversation, tools = render.conversation, render.tools
+        formatted_tools = render.request.tools or []
+        use_tools = len(formatted_tools) > 0
 
         # --- prepare extra_body and api_params --------------------------------
         extra_body = {}
@@ -1196,16 +1314,6 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         api_params: dict[str, Any] = {}
         if rewriter.parameters:
             api_params.update(rewriter.parameters)
-
-        # Collect tools if tool_calls is enabled.
-        tools: dict[str, AbstractMelleaTool] = dict()
-        if tool_calls:
-            add_tools_from_model_options(tools, model_options)
-            add_tools_from_context_actions(tools, ctx.actions_for_available_tools())
-            MelleaLogger.get_logger().info(f"Tools for call: {tools.keys()}")
-
-        formatted_tools = convert_tools_to_json(tools)
-        use_tools = len(formatted_tools) > 0
 
         # Remap and filter remaining model options, then overlay onto api_params
         # so user values override rewriter/io.yaml defaults.
@@ -1325,28 +1433,8 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         await adapter.weights.apply_activation(activation_request, adapter.identity)
 
         # --- call the OpenAI-compatible API --------------------------------
-        # The rewriter may add instruction messages where 'role' is a default
-        # (e.g. UserMessage with role="user").  exclude_unset would drop it,
-        # so we always force 'role' into the serialized dict.
-        messages_dicts = []
-        for m in rewritten.messages:
-            d = m.model_dump(exclude_unset=True)
-            if "role" not in d:
-                d["role"] = m.role
-            messages_dicts.append(d)
-
-        # --- tool_choice for the intrinsic path ----------------------------
-        # No current adapter generates tool calls; they potentially only
-        # need the tool declarations in the prompt for context.  Without an
-        # explicit tool_choice, vLLM defaults to "auto" and rejects the
-        # request unless --enable-auto-tool-choice is set.
-        #
-        # When an adapter that makes tool calls is added, its io.yaml
-        # should declare that; this block should then read the config and
-        # set tool_choice accordingly (e.g. "auto" or "required").
-        intrinsic_tool_choice = "none"
-
-        tool_choice_value: str | None = intrinsic_tool_choice if use_tools else None
+        messages_dicts = render.request.messages
+        tool_choice_value = render.request.tool_choice
 
         chat_response = _await_generation_reporting_error(
             self._async_client.chat.completions.create(
@@ -1505,43 +1593,23 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         )
         return mot, ctx.add(action).add(mot)
 
-    async def _generate_from_chat_context_standard(
+    def _render_chat(
         self,
         action: Span,
         ctx: Context,
+        messages: list[Message],
         *,
-        _format: type[BaseModelSubclass]
-        | None = None,  # Type[BaseModelSubclass] is a class object of a subclass of BaseModel
-        model_options: dict | None = None,
-        tool_calls: bool = False,
-    ) -> ModelOutputThunk:
-        model_opts = self._simplify_and_merge(
-            model_options, is_chat_context=ctx.is_chat_context
-        )
-        linearized_context = ctx.view_for_generation()
-        assert linearized_context is not None, (
-            "Cannot generate from a non-linear context in a FormatterBackend."
-        )
-        # Convert our linearized context into a sequence of chat messages. Template formatters have a standard way of doing this.
-        messages: list[Message] = self.formatter.to_chat_messages(linearized_context)
-        messages.extend(self.formatter.to_chat_messages([action]))
+        model_opts: dict[str, Any],
+        _format: type[BaseModelSubclass] | None,
+        tool_calls: bool,
+    ) -> _ChatRender:
+        """Render a chat call: its conversation, response format and tools.
 
-        # Issue #1597: refuse to send an empty user prompt; see
-        # `has_user_content` for why whitespace-only text still counts as empty.
-        if not has_user_content(messages):
-            raise ValueError(
-                "Refusing to call the model: no user-role content in the assembled "
-                "conversation. This usually means a stateless context (e.g. "
-                "SimpleContext) was combined with an empty or whitespace-only "
-                "action; recorded turns are not forwarded to the model."
-            )
-
+        Shared by `render_request` and `_generate_from_chat_context_standard`,
+        so what is recorded is what is sent. `messages` are the context's and
+        the action's, as chat messages.
+        """
         conversation: list[dict] = []
-
-        # Resolve any audio URLs off-thread so the sync serializer below hits the cache
-        # instead of blocking the event loop on a download.
-        await prefetch_audio_urls(messages)
-
         system_prompt = model_opts.get(ModelOption.SYSTEM_PROMPT, "")
         if system_prompt != "":
             conversation.append({"role": "system", "content": system_prompt})
@@ -1555,7 +1623,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             ]
         )
 
-        extra_params: dict[str, Any] = {}
+        response_format: dict[str, Any] | None = None
         if _format is not None:
             if self._server_type == _ServerType.OPENAI:
                 # The OpenAI platform requires that additionalProperties=False on all response_format schemas.
@@ -1569,7 +1637,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 # https://platform.openai.com/docs/guides/structured-outputs?api-mode=chat
                 monkey_patched_response_schema = _format.model_json_schema()  # type: ignore
                 monkey_patched_response_schema["additionalProperties"] = False
-                extra_params["response_format"] = {
+                response_format = {
                     "type": "json_schema",
                     "json_schema": {
                         "name": _format.__name__,
@@ -1578,7 +1646,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                     },
                 }
             else:
-                extra_params["response_format"] = {
+                response_format = {
                     "type": "json_schema",
                     "json_schema": {
                         "name": _format.__name__,
@@ -1604,6 +1672,158 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             MelleaLogger.get_logger().info(f"Tools for call: {tools.keys()}")
 
         formatted_tools = convert_tools_to_json(tools)
+        constraint = (
+            None
+            if response_format is None
+            else {"json_schema": response_format["json_schema"]["schema"]}
+        )
+        request = RenderedRequest(
+            messages=conversation, tools=formatted_tools or None, constraint=constraint
+        )
+        return _ChatRender(request, conversation, tools, response_format)
+
+    def _chat_messages(
+        self, action: Span, ctx: Context
+    ) -> tuple[list[Span], list[Message]]:
+        """The context's linearized spans, and its and the action's chat messages.
+
+        Raises:
+            ValueError: If no user-role message has non-whitespace text,
+                images, audio, or documents.
+        """
+        linearized_context = ctx.view_for_generation()
+        assert linearized_context is not None, (
+            "Cannot generate from a non-linear context in a FormatterBackend."
+        )
+        # Convert our linearized context into a sequence of chat messages. Template formatters have a standard way of doing this.
+        messages: list[Message] = self.formatter.to_chat_messages(linearized_context)
+        messages.extend(self.formatter.to_chat_messages([action]))
+
+        # Issue #1597: refuse to send an empty user prompt; see
+        # `has_user_content` for why whitespace-only text still counts as empty.
+        if not has_user_content(messages):
+            raise ValueError(
+                "Refusing to call the model: no user-role content in the assembled "
+                "conversation. This usually means a stateless context (e.g. "
+                "SimpleContext) was combined with an empty or whitespace-only "
+                "action; recorded turns are not forwarded to the model."
+            )
+        return linearized_context, messages
+
+    def render_request(
+        self,
+        action: Component[C] | CBlock | ModelOutputThunk,
+        ctx: Context,
+        *,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+    ) -> RenderedRequest:
+        """The request `generate_from_context` would send, without sending it.
+
+        The same rendering the generate path uses: for an `Intrinsic`, taken
+        after its rewriter. An `Intrinsic` with no adapter registered under its
+        name renders with the `io_config` it declares (an adapter function not
+        yet trained). Audio URLs in a chat context are fetched inline.
+
+        Args:
+            action: The component to generate from, passed separately from `ctx`.
+            ctx: The rest of the context, excluding `action` (a chat context).
+            format: A response format for structured outputs (chat path only).
+            model_options: Per-call model options.
+            tool_calls: Whether the call exposes tools to the model.
+
+        Returns:
+            The request, as the generate path would send it.
+
+        Raises:
+            NotImplementedError: For a non-chat context, or for a `Requirement`
+                action (whose rerouting to a requirement adapter is the
+                generate path's decision).
+            ValueError: For an `Intrinsic` with no adapter registered and no
+                `io_config`; or when the conversation is empty or, on the
+                intrinsic path, carries audio.
+            TypeError: If the registered adapter is not a composed `Adapter`.
+        """
+        if not ctx.is_chat_context:
+            raise NotImplementedError("render_request needs a chat context.")
+        if isinstance(action, Requirement):
+            raise NotImplementedError(
+                "render_request does not render a Requirement: rerouting it to "
+                "a requirement adapter is decided when generating."
+            )
+        if isinstance(action, Intrinsic):
+            model_opts = self._simplify_and_merge(model_options, is_chat_context=True)
+            allowed_types = tuple(at.value for at in action.adapter_types)
+            adapter = self._find_adapter(action.intrinsic_name, allowed_types)
+            if adapter is None:
+                if action.io_config is None:
+                    raise ValueError(
+                        f"backend ({self}) has no adapter for processing adapter "
+                        f"function: {action.intrinsic_name}, and the call declares "
+                        "no io_config to render it with"
+                    )
+                adapter_name, config = action.intrinsic_name, action.io_config
+            else:
+                if not isinstance(adapter, _AdapterCore):
+                    raise TypeError(
+                        "OpenAIBackend only supports a composed Adapter, "
+                        f"got: {type(adapter).__name__}"
+                    )
+                adapter_name, config = self._intrinsic_adapter_name_and_config(adapter)
+            _, messages = self._intrinsic_messages(ctx)
+            return self._render_intrinsic(
+                action,
+                ctx,
+                messages,
+                adapter_name=adapter_name,
+                intrinsic_config=config,
+                model_options=model_opts,
+                tool_calls=tool_calls,
+            ).request
+        model_opts = self._simplify_and_merge(model_options, is_chat_context=True)
+        _, messages = self._chat_messages(action, ctx)
+        return self._render_chat(
+            action,
+            ctx,
+            messages,
+            model_opts=model_opts,
+            _format=format,
+            tool_calls=tool_calls,
+        ).request
+
+    async def _generate_from_chat_context_standard(
+        self,
+        action: Span,
+        ctx: Context,
+        *,
+        _format: type[BaseModelSubclass]
+        | None = None,  # Type[BaseModelSubclass] is a class object of a subclass of BaseModel
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+    ) -> ModelOutputThunk:
+        model_opts = self._simplify_and_merge(
+            model_options, is_chat_context=ctx.is_chat_context
+        )
+        linearized_context, messages = self._chat_messages(action, ctx)
+
+        # Resolve any audio URLs off-thread so the sync serializer below hits the cache
+        # instead of blocking the event loop on a download.
+        await prefetch_audio_urls(messages)
+
+        render = self._render_chat(
+            action,
+            ctx,
+            messages,
+            model_opts=model_opts,
+            _format=_format,
+            tool_calls=tool_calls,
+        )
+        conversation, tools = render.conversation, render.tools
+        extra_params: dict[str, Any] = {}
+        if render.response_format is not None:
+            extra_params["response_format"] = render.response_format
+        formatted_tools = render.request.tools or []
         use_tools = len(formatted_tools) > 0
 
         # NOTE: don't pass THINKING to non-reasoning models (e.g. gpt-4o).

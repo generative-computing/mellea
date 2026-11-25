@@ -24,22 +24,24 @@ def run(ticket):
         ...
 
 capture([(key, lambda t=t: run(t)) for key, t in tickets],
-        Path("shard_0.jsonl.gz"), shard="0/8", score=score)
+        Path("shard_0.jsonl.gz"), shard="0/8", score=score, student=backend)
 ```
 
-``sft_rows`` turns the kept thunks of one function, at any depth, into TRL's
-conversational prompt-completion rows; ``preference_rows`` pairs a call's kept
-thunks with its others into TRL's preference rows, deriving the prompt from the
-thunk's captured context. Every thunk is written, kept or not: those not kept
-are the other side of preferences, and later of RL.
+``student=backend`` names the backend whose rendering defines the student's
+input (the base model's chat template): each call is rendered by it before its
+body runs, and that request is the prompt. ``sft_rows`` turns the kept thunks
+of one function, at any depth, into TRL's conversational prompt-completion
+rows; ``preference_rows`` pairs a call's kept thunks with its others into TRL's
+preference rows. Every thunk is written, kept or not: those not kept are the
+other side of preferences, and later of RL.
 
 The name is a CUDA graph's: run the real operations once, under a recording
 mode, and keep a replayable record of them for a later step (``instantiate``,
 then training) to learn from. Nothing is trained here.
 
 An output path ending in ``.gz`` is written gzip-compressed (``read_rows``
-reads either): every record holds its thunks' full context, so the records of a
-long conversation repeat it, and compress well.
+reads either): every record holds its request's full conversation, so the
+records of a long conversation repeat it, and compress well.
 """
 
 from __future__ import annotations
@@ -52,6 +54,7 @@ from collections.abc import Callable, Iterable, Iterator
 from pathlib import Path
 from typing import Any
 
+from ...core import Backend
 from .learnable import Keep, Learnable, Record, Recorder, Score
 
 Scorer = Callable[[Record, list[Record]], list[Score]]
@@ -104,9 +107,8 @@ def read_rows(path: Path | str) -> list[dict[str, Any]]:
         path: The file `capture` wrote.
 
     Returns:
-        Its rows, in the order written. Rows written before records said who
-        answered hold no `policy`: they read back with `policy: None`, as a
-        call its body answered, at every depth.
+        Its rows, in the order written. A row with no `policy` or `request`
+        reads back with `None` for it, at every depth.
 
     Raises:
         json.JSONDecodeError: If a row before the last is not JSON.
@@ -114,6 +116,7 @@ def read_rows(path: Path | str) -> list[dict[str, Any]]:
     rows = _read(Path(path))[0]
     for r in walk_rows(rows):
         r.setdefault("policy", None)
+        r.setdefault("request", None)
     return rows
 
 
@@ -191,6 +194,7 @@ def capture(
     record: Callable[[Record], dict[str, Any]] | None = None,
     meta: dict[str, Any] | None = None,
     keep: dict[Learnable, Keep] | None = None,
+    student: Backend | None = None,
     log: Callable[[str], None] | None = print,
 ) -> dict[str, Any]:
     """Run the episodes, and write every learnable call they made to ``out``.
@@ -218,6 +222,10 @@ def capture(
             with every row as ``run``.
         keep: Which calls of each function are written (``Recorder``'s
             ``keep``; ``every(n)`` writes one in n), counted per episode.
+        student: The backend whose rendering defines the student's input
+            (``Recorder``'s ``student``): each call's ``request``, what
+            ``sft_rows`` trains on. One per capture; without it, the rows hold
+            no request and cannot be trained on.
         log: Where a line per episode goes (``None``: nowhere).
 
     Returns:
@@ -245,7 +253,7 @@ def capture(
             if key in done:
                 continue
             try:
-                with Recorder(keep=keep) as rec:
+                with Recorder(keep=keep, student=student) as rec:
                     run()
                 episode = rec.records
                 if score is not None:
@@ -290,30 +298,21 @@ def _of(rows: Iterable[dict[str, Any]], function: Learnable | str) -> list[dict]
     return [r for r in walk_rows(rows) if r["function"] == name]
 
 
-def _strip_privileged(
-    context: list[dict[str, Any]], arguments: dict[str, Any], privileged: list[str]
-) -> list[dict[str, Any]]:
-    """Strip privileged argument keys from the context's structured-arguments message.
+def _request(r: dict[str, Any]) -> dict[str, Any]:
+    """A written record's rendered request: the student's input.
 
-    When the last user message is a JSON dict containing privileged keys, those
-    keys are removed so the student's training prompt carries only visible
-    arguments.
+    Raises:
+        ValueError: If the record holds none (recorded without a student
+            backend).
     """
-    if not privileged or not context:
-        return context
-    last = context[-1]
-    if last.get("role") == "user":
-        try:
-            parsed = json.loads(last["content"])
-            if isinstance(parsed, dict) and any(k in parsed for k in privileged):
-                stripped = {k: v for k, v in parsed.items() if k not in privileged}
-                return [
-                    *context[:-1],
-                    {"role": "user", "content": json.dumps(stripped, sort_keys=True)},
-                ]
-        except (json.JSONDecodeError, KeyError, TypeError):
-            pass
-    return context
+    request = r.get("request")
+    if request is None:
+        raise ValueError(
+            f"{r['function']}: recorded with no student backend, so no request "
+            f"to train on; record with capture(..., student=backend) or "
+            f"Recorder(student=backend)"
+        )
+    return request
 
 
 def sft_rows(
@@ -321,29 +320,34 @@ def sft_rows(
 ) -> list[dict[str, Any]]:
     """The kept thunks of ``function`` as TRL's conversational prompt-completion rows.
 
-    Each is ``{"prompt": messages, "completion": [assistant message], "tools"}``.
-    The prompt is derived from each thunk's captured context, with privileged
-    argument keys stripped. The calls of ``function`` are found at any depth.
+    Each is ``{"prompt": messages, "completion": [assistant message], "tools"}``:
+    the prompt and the tools are the call's rendered request (the student's
+    input, as its backend sends it; nothing privileged is in it), the
+    completion a thunk's response. The calls of ``function`` are found at any
+    depth.
 
     Args:
         rows: Written rows (as ``Record.to_json`` writes them: ``function``,
-            ``thunks``, ``scores`` and the nested ``calls``).
+            ``request``, ``thunks``, ``scores`` and the nested ``calls``).
         function: The learnable function, or its qualified name.
 
     Returns:
         One row per thunk kept, in order.
+
+    Raises:
+        ValueError: If a record of ``function`` holds no request (recorded
+            without a student backend).
     """
     out = []
     for r in _of(rows, function):
+        request = _request(r)
         for t, kept in zip(r["thunks"], _kept(r)):
             if kept:
                 out.append(
                     {
-                        "prompt": _strip_privileged(
-                            t["context"], r["arguments"], r["privileged"]
-                        ),
+                        "prompt": request["messages"],
                         "completion": [t["response"]],
-                        "tools": t["tools"],
+                        "tools": request["tools"],
                     }
                 )
     return out
@@ -356,9 +360,8 @@ def preference_rows(
 
     Each is ``{"prompt": messages, "chosen": [assistant message], "rejected":
     [assistant message], "tools", "meta"}`` (``meta``: the two thunks' own,
-    for analysis). The prompt is derived from the first thunk's captured
-    context, with privileged argument keys stripped. The calls of ``function``
-    are found at any depth.
+    for analysis). The prompt and the tools are the call's rendered request,
+    as for ``sft_rows``. The calls of ``function`` are found at any depth.
 
     Args:
         rows: Written rows, as for ``sft_rows``.
@@ -366,16 +369,18 @@ def preference_rows(
 
     Returns:
         One row per (kept, not kept) pair of a call's thunks, in order.
+
+    Raises:
+        ValueError: If a record of ``function`` holds no request (recorded
+            without a student backend).
     """
     out = []
     for r in _of(rows, function):
         kept_flags = _kept(r)
         good = [t for t, k in zip(r["thunks"], kept_flags) if k]
         bad = [t for t, k in zip(r["thunks"], kept_flags) if not k]
-        prompt = _strip_privileged(
-            r["thunks"][0]["context"], r["arguments"], r["privileged"]
-        )
-        tools = r["thunks"][0]["tools"]
+        request = _request(r)
+        prompt, tools = request["messages"], request["tools"]
         for g in good:
             for b in bad:
                 out.append(
