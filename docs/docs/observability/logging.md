@@ -76,7 +76,7 @@ Sampling was successful.
 
 ### JSON format (`MELLEA_LOGS_JSON=1`)
 
-With structured JSON output enabled, the `SUCCESS` record looks like:
+With structured JSON output enabled, the record looks like:
 
 ```json
 {
