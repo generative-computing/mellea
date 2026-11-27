@@ -4,7 +4,7 @@
 
 In an OpenAI-compatible request the client sends a `model` string, e.g.:
 
-    client.chat.completions.create(model="granite4.1:8b", messages=[...])
+    client.chat.completions.create(model="granite4.2:8b", messages=[...])
 
 That string is **routing / metadata** from the server's perspective: `m serve`
 echoes it back in the response but does NOT include it in `model_options` (which
@@ -19,8 +19,8 @@ omit the `client_options` parameter (see the simple/ examples).
 
 Prerequisites:
     ollama serve
-    ollama pull granite4.1:3b
-    ollama pull granite4.1:8b
+    ollama pull granite4.2:3b
+    ollama pull granite4.2:8b
 
 Usage:
     Run the server:
@@ -33,15 +33,15 @@ Usage:
 from typing import Any
 
 import mellea
-from mellea.backends.model_ids import IBM_GRANITE_4_1_3B, IBM_GRANITE_4_1_8B
+from mellea.backends.model_ids import IBM_GRANITE_4_2_3B, IBM_GRANITE_4_2_8B
 from mellea.core import ModelOutputThunk
 from mellea.serve import ChatMessage
 
-_DEFAULT_MODEL = IBM_GRANITE_4_1_3B
+_DEFAULT_MODEL = IBM_GRANITE_4_2_3B
 
 _ALLOWED_MODELS: dict[str, Any] = {
-    IBM_GRANITE_4_1_3B.ollama_name: IBM_GRANITE_4_1_3B,  # type: ignore[dict-item]
-    IBM_GRANITE_4_1_8B.ollama_name: IBM_GRANITE_4_1_8B,  # type: ignore[dict-item]
+    IBM_GRANITE_4_2_3B.ollama_name: IBM_GRANITE_4_2_3B,  # type: ignore[dict-item]
+    IBM_GRANITE_4_2_8B.ollama_name: IBM_GRANITE_4_2_8B,  # type: ignore[dict-item]
 }
 
 
@@ -54,7 +54,7 @@ def serve(
     """Serve with backend selected from the standard client `model` field.
 
     Reads `client_options["model"]` (the standard OpenAI `model` field) and
-    routes to an allowlisted Ollama backend.  Falls back to `granite4.1:3b`
+    routes to an allowlisted Ollama backend.  Falls back to `granite4.2:3b`
     when the value is unrecognised.  `model_options` is clean — it contains
     only backend generation parameters, never routing metadata.
 

@@ -61,7 +61,7 @@ environments — use the explicit form:
 ```python
 import mellea
 
-with mellea.start_session("ollama", mellea.model_ids.IBM_GRANITE_4_1_3B) as m:
+with mellea.start_session("ollama", mellea.model_ids.IBM_GRANITE_4_2_3B) as m:
     email = m.instruct("Write an email inviting interns to an office party at 3:30pm.")
     print(str(email))
 ```

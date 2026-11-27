@@ -110,7 +110,7 @@ def main():
 
     resp = make_request(
         {
-            "model": "granite4.1:3b",
+            "model": "granite4.2:3b",
             "input": question,
             "tools": tools,
             "tool_choice": {"type": "function", "function": {"name": "get_weather"}},
@@ -140,7 +140,7 @@ def main():
 
     resp = make_request(
         {
-            "model": "granite4.1:3b",
+            "model": "granite4.2:3b",
             "input": question,
             "tools": tools,
             "tool_choice": {
@@ -169,7 +169,7 @@ def main():
 
     resp = make_request(
         {
-            "model": "granite4.1:3b",
+            "model": "granite4.2:3b",
             "input": question,
             "tools": tools,
             "tool_choice": {"type": "function", "function": {"name": "get_weather"}},
@@ -195,7 +195,7 @@ def main():
             "Answer the original question directly using only that tool result."
         )
         print("\nGetting final response after tool execution...")
-        resp2 = make_request({"model": "granite4.1:3b", "input": follow_up})
+        resp2 = make_request({"model": "granite4.2:3b", "input": follow_up})
         print(f"Assistant: {resp2['output_text']}")
     else:
         print(f"Assistant: {resp['output_text']}")

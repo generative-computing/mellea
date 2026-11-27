@@ -39,8 +39,8 @@ register([
 **Output:**
 
 ```text
-[📤 GEN-PRE-CALL gen_id=abc123...] model=granite4.1:3b | prompt=Write a thank you note
-[📥 GEN-POST-CALL gen_id=abc123...] model=granite4.1:3b | latency=397ms | tokens=(47+19=66) | response=hello there thank you...
+== 17:07:54-DEBUG ======
+[📤 GEN-PRE-CALL gen_id=45debb7f-4082-4ecf-9dbc-932be4ac8db7] model=granite4.2:3b | prompt=Write an email inviting interns to an office party at 3:30pm.
 ```
 
 **Logs:**

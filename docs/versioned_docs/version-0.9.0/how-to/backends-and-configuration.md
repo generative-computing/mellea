@@ -13,7 +13,7 @@ configure the backend when you create a session.
 
 ## Default backend
 
-`start_session()` defaults to **Ollama** with **IBM Granite 4 Micro** (`granite4.1:3b`).
+`start_session()` defaults to **Ollama** with **IBM Granite 4 Micro** (`granite4.2:3b`).
 No API keys needed — just have Ollama running:
 
 ```python

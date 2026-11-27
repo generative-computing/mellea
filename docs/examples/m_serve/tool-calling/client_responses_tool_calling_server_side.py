@@ -104,7 +104,7 @@ def main():
 
     resp = make_request(
         {
-            "model": "granite4.1:3b",
+            "model": "granite4.2:3b",
             "input": question,
             "tools": tools,
             "tool_choice": {"type": "function", "function": {"name": "get_weather"}},
@@ -132,7 +132,7 @@ def main():
 
     resp = make_request(
         {
-            "model": "granite4.1:3b",
+            "model": "granite4.2:3b",
             "input": question,
             "tools": tools,
             "tool_choice": {
@@ -150,7 +150,7 @@ def main():
     question = "What is the capital of France?"
     print(f"User: {question}")
 
-    resp = make_request({"model": "granite4.1:3b", "input": question})
+    resp = make_request({"model": "granite4.2:3b", "input": question})
 
     print(f"Assistant: {resp['output_text']}")
 

@@ -113,7 +113,7 @@ Requires both models pulled locally:
 
 ```bash
 ollama pull hf.co/ibm-granite/granite-speech-4.1-2b-GGUF:Q4_K_M
-ollama pull granite4.1:3b
+ollama pull granite4.2:3b
 ```
 
 ```bash
@@ -293,7 +293,7 @@ client = openai.OpenAI(api_key="na", base_url="http://localhost:8080/v1")
 # Enable streaming with stream=True
 stream = client.chat.completions.create(
     messages=[{"role": "user", "content": "Tell me a story"}],
-    model="granite4.1:3b",
+    model="granite4.2:3b",
     stream=True,
 )
 
@@ -319,13 +319,13 @@ import openai
 client = openai.OpenAI(api_key="na", base_url="http://localhost:8080/v1")
 
 # Turn 1
-r1 = client.responses.create(model="granite4.1:3b", input="My name is Alice.")
+r1 = client.responses.create(model="granite4.2:3b", input="My name is Alice.")
 print(r1.output_text)    # "Nice to meet you, Alice!"
 print(r1.expires_at)     # Unix timestamp when the session will be evicted
 
 # Turn 2 — only send the new message, not the history
 r2 = client.responses.create(
-    model="granite4.1:3b",
+    model="granite4.2:3b",
     input="What is my name?",
     previous_response_id=r1.id,
 )
@@ -336,7 +336,7 @@ Pass `store=False` if you don't need history chaining and want to skip storing
 the response altogether (e.g. for sensitive inputs):
 
 ```python
-r = client.responses.create(model="granite4.1:3b", input="...", store=False)
+r = client.responses.create(model="granite4.2:3b", input="...", store=False)
 # r.expires_at is None — response is never persisted
 ```
 

@@ -28,14 +28,14 @@ print("-" * 50)
 
 if streaming:
     with client.responses.stream(
-        model="granite4.1:3b", input="Count down from 10 using words not digits."
+        model="granite4.2:3b", input="Count down from 10 using words not digits."
     ) as stream:
         for event in stream:
             if event.type == "response.output_text.delta":
                 print(event.delta, end="", flush=True)
 else:
     response = client.responses.create(
-        model="granite4.1:3b",
+        model="granite4.2:3b",
         input="Count down from 10 using words not digits.",
         stream=False,
     )

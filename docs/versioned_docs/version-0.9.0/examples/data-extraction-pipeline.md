@@ -20,7 +20,7 @@ runtime exactly what shape the result must have.
 ## Prerequisites
 
 - [Quick Start](../getting-started/quickstart.md) complete
-- Ollama running locally with `granite4.1:3b` pulled
+- Ollama running locally with `granite4.2:3b` pulled
 
 ## The full example
 

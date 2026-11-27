@@ -22,7 +22,7 @@ PORT = 8080
 
 client = openai.OpenAI(api_key="na", base_url=f"http://localhost:{PORT}/v1")
 
-MODEL = "granite4.1:3b"
+MODEL = "granite4.2:3b"
 
 # ── Turn 1: ask a question ──────────────────────────────────────────────────
 

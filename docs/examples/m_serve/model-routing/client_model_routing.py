@@ -22,7 +22,7 @@ print("=== Pattern A: standard model field routes via client_options ===")
 # The standard `model` field is read by the server via
 # client_options and used to select the backend.
 response_a = client.chat.completions.create(
-    model="granite4.1:8b", messages=[{"role": "user", "content": "What is 2 + 2?"}]
+    model="granite4.2:8b", messages=[{"role": "user", "content": "What is 2 + 2?"}]
 )
 print(f"model echoed back : {response_a.model}")
 print(f"response          : {response_a.choices[0].message.content}\n")

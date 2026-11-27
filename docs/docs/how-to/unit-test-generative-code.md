@@ -46,7 +46,7 @@ import pytest
 from mellea import MelleaSession
 from mellea.backends.ollama import OllamaModelBackend
 
-_MODEL_ID = "granite4.1:3b"
+_MODEL_ID = "granite4.2:3b"
 
 
 @pytest.fixture(scope="module")
@@ -360,8 +360,8 @@ from mellea.stdlib.components.unit_test_eval import TestBasedEval
 
 test_evals = TestBasedEval.from_json_file("tests/eval_data/email_writer.json")
 
-judge_session = start_session(backend_name="ollama", model_id="granite4.1:3b")
-generation_session = start_session(backend_name="ollama", model_id="granite4.1:3b")
+judge_session = start_session(backend_name="ollama", model_id="granite4.2:3b")
+generation_session = start_session(backend_name="ollama", model_id="granite4.2:3b")
 
 for eval_case in test_evals:
     for idx, input_text in enumerate(eval_case.inputs):
@@ -382,7 +382,7 @@ for eval_case in test_evals:
 > **Note:** `TestBasedEval` calls the judge model once per input. For large
 > evaluation sets, consider batching or running evaluations asynchronously.
 > **CLI alternative:** The same evaluation can be run without writing Python:
-> `m eval run tests/eval_data/email_writer.json --backend ollama --model granite4.1:3b`
+> `m eval run tests/eval_data/email_writer.json --backend ollama --model granite4.2:3b`
 > See `m eval run --help` for full options.
 
 ## CI strategy
